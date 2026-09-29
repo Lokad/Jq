@@ -1,4 +1,5 @@
 using Lokad.Jq;
+using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -170,5 +171,48 @@ public sealed partial class JqTests
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal("1.7976931348623157E+308\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public void Jq_RepeatedEvaluationYieldsIndependentValues()
+    {
+        var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
+        var budget = new JqBudget(CancellationToken.None);
+        using var context = new JqContext(variables, JqProgramSource.Inline, budget);
+        JqFilter filter = new JqParser("{\"a\":[1]}", JqProgramSource.Inline, variables, budget).Parse();
+
+        List<System.Text.Json.Nodes.JsonNode?> first = filter.Evaluate(null, context).ToList();
+        List<System.Text.Json.Nodes.JsonNode?> second = filter.Evaluate(null, context).ToList();
+
+        Assert.Single(first);
+        Assert.Single(second);
+        Assert.NotSame(first[0], second[0]);
+        JsonObject firstObject = Assert.IsType<JsonObject>(first[0]);
+        firstObject.Add("b", 2);
+        Assert.Equal("{\"a\":[1],\"b\":2}", firstObject.ToJsonString());
+        JsonObject secondObject = Assert.IsType<JsonObject>(second[0]);
+        Assert.Equal("{\"a\":[1]}", secondObject.ToJsonString());
+    }
+
+    [Fact]
+    public void Jq_NumericSyntaxIgnoresAmbientCulture()
+    {
+        System.Globalization.CultureInfo previous = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
+            var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
+            var budget = new JqBudget(CancellationToken.None);
+            using var context = new JqContext(variables, JqProgramSource.Inline, budget);
+            JqFilter filter = new JqParser("1.5 + 2.5", JqProgramSource.Inline, variables, budget).Parse();
+            List<System.Text.Json.Nodes.JsonNode?> results = filter.Evaluate(null, context).ToList();
+
+            Assert.Single(results);
+            Assert.Equal(4.0, JqRuntime.Number(results[0]));
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = previous;
+        }
     }
 }
