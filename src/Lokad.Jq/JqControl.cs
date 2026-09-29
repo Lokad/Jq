@@ -74,6 +74,39 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
         }
     }
 
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        using IEnumerator<JqValuePath> results = Body.EvaluatePaths(pair, context, environment).GetEnumerator();
+        while (true)
+        {
+            bool moved;
+            JqValuePath? failure = null;
+            bool faulted = false;
+            try
+            {
+                moved = results.MoveNext();
+            }
+            catch (Exception exception) when (JqErrors.IsCatchable(exception))
+            {
+                moved = false;
+                if (Handler is not null)
+                {
+                    faulted = true;
+                    failure = new JqValuePath(pair.Segments, exception is JqErrorException user ? context.Runtime.Clone(user.Payload) : JsonValue.Create(exception.Message), pair.Tracked);
+                }
+            }
+            if (faulted && failure is not null && Handler is JqFilter handler)
+            {
+                foreach (JqValuePath next in handler.EvaluatePaths(failure, context, environment))
+                    yield return next;
+                yield break;
+            }
+            if (!moved)
+                yield break;
+            yield return results.Current;
+        }
+    }
+
     internal JqFilter TryBody => Body;
 
     internal JqFilter? CatchHandler => Handler;
@@ -112,6 +145,12 @@ internal sealed class LabelFilter(string Name, JqFilter Body) : JqFilter
                 yield break;
             yield return results.Current;
         }
+    }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        foreach (JqValuePath next in Body.EvaluatePaths(pair, context, environment))
+            yield return next;
     }
 
     internal JqFilter LabelBody => Body;

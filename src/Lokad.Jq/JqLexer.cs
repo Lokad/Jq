@@ -142,13 +142,19 @@ if (c == '"')
                 i += 3;
                 continue;
             }
-            if (two is "==" or "!=" or "<=" or ">=" or "//")
+            if (i + 3 <= source.Length && source.Substring(i, 3) == "//=")
+            {
+                tokens.Add(new Token(TokenKind.Symbol, "//=", JqSourceSpan.FromOffset(source, i)));
+                i += 3;
+                continue;
+            }
+            if (two is "==" or "!=" or "<=" or ">=" or "//" or "|=" or "+=" or "-=" or "*=" or "/=" or "%=")
             {
                 tokens.Add(new Token(TokenKind.Symbol, two, JqSourceSpan.FromOffset(source, i)));
                 i += 2;
                 continue;
             }
-            if (".,|+-*/%()[]{}:;$?<>@".Contains(c, StringComparison.Ordinal))
+            if (".,|+-*/%()[]{}:;$?<>@=".Contains(c, StringComparison.Ordinal))
             {
                 tokens.Add(new Token(TokenKind.Symbol, c.ToString(), JqSourceSpan.FromOffset(source, i)));
                 i++;

@@ -393,11 +393,11 @@ internal sealed class JqParser(
 
     private JqFilter ParseDictValue()
     {
-        // Object values mirror DictExpr: pipes of alternatives without
-        // top-level commas or bindings (those need parentheses).
-        var left = ParseAlternative();
+        // Object values mirror DictExpr: pipes of update-level expressions
+        // without top-level commas or bindings (those need parentheses).
+        var left = ParseUpdate();
         while (Match("|"))
-            left = new PipeFilter(left, ParseAlternative());
+            left = new PipeFilter(left, ParseUpdate());
         return left;
     }
 
@@ -415,10 +415,26 @@ internal sealed class JqParser(
 
     private JqFilter ParseAlternative()
     {
-        var left = ParseOr();
+        var left = ParseUpdate();
         // Right-associative alternatives: `a // b // c` groups as `a // (b // c)`.
         if (Match("//"))
             return new AlternativeFilter(left, ParseAlternative());
+        return left;
+    }
+
+    // Assignment binds tighter than `//` but looser than `or`: the left
+    // and right sides are update-free, and chaining updates is an error.
+    private JqFilter ParseUpdate()
+    {
+        var left = ParseOr();
+        if (Peek().Text is "=" or "|=" or "+=" or "-=" or "*=" or "/=" or "%=" or "//=")
+        {
+            var op = Next().Text;
+            var right = ParseOr();
+            if (Peek().Text is "=" or "|=" or "+=" or "-=" or "*=" or "/=" or "%=" or "//=")
+                throw Error($"unexpected token {Peek().Text}", Peek().Span);
+            return new AssignFilter(op, left, right);
+        }
         return left;
     }
 
@@ -647,10 +663,10 @@ internal sealed class JqParser(
         }
         if (MatchIdentifier("try"))
         {
-            // `try` binds tightly: the operand is one alternative, so
-            // pipes, commas, bindings, and definitions need parentheses.
-            var body = ParseAlternative();
-            JqFilter? handler = MatchIdentifier("catch") ? ParseAlternative() : null;
+            // `try` binds tightly: the operand is one update-level expression,
+            // so pipes, commas, bindings, and definitions need parentheses.
+            var body = ParseUpdate();
+            JqFilter? handler = MatchIdentifier("catch") ? ParseUpdate() : null;
             return new TryFilter(body, handler);
         }
 
@@ -802,6 +818,36 @@ internal sealed class JqParser(
         if (name == "test")
         {
             return new TestFilter(args);
+        }
+
+        if (name == "path")
+        {
+            return new PathBuiltinFilter(args[0]);
+        }
+
+        if (name == "del")
+        {
+            return new DelBuiltinFilter(args);
+        }
+
+        if (name == "getpath")
+        {
+            return new GetpathBuiltinFilter(args[0]);
+        }
+
+        if (name == "setpath")
+        {
+            return new SetpathBuiltinFilter(args[0], args[1]);
+        }
+
+        if (name == "delpaths")
+        {
+            return new DelpathsBuiltinFilter(args[0]);
+        }
+
+        if (name == "pick")
+        {
+            return new PickFilter(args);
         }
 
         return new FunctionFilter(name, args);

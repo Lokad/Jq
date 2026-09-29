@@ -61,6 +61,12 @@ internal static class JqBuiltinRegistry
         ["strptime"] = (1, 1),
         ["strftime"] = (1, 1),
         ["test"] = (1, 2),
+        ["path"] = (1, 1),
+        ["del"] = (1, 1),
+        ["getpath"] = (1, 1),
+        ["setpath"] = (2, 2),
+        ["delpaths"] = (1, 1),
+        ["pick"] = (1, 1),
         ["gsub"] = (2, 3),
     };
 

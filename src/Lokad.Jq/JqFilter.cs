@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using static Lokad.Jq.JqRuntime;
+using static Lokad.Jq.JqPaths;
 
 namespace Lokad.Jq;
 
@@ -31,6 +32,35 @@ internal abstract class JqFilter
 
     /// <summary>Evaluates within the caller's shared budget; charge before growing intermediate values.</summary>
     protected abstract IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment);
+
+    internal IEnumerable<JqValuePath> EvaluatePaths(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(pair);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        context.Budget.EnterEvaluation();
+        try
+        {
+            foreach (JqValuePath path in EvaluatePathsCore(pair, context, environment))
+            {
+                context.Budget.ChargeNode();
+                yield return path;
+            }
+        }
+        finally
+        {
+            context.Budget.LeaveEvaluation();
+        }
+    }
+
+    // Default path transparency: ordinary evaluation, keeping tracking
+    // only for outputs identical to the incoming value. Fresh values travel
+    // untracked and fail at the next path boundary.
+    protected virtual IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        foreach (JsonNode? value in Evaluate(pair.Value, context, environment))
+            yield return new JqValuePath(pair.Segments, value, pair.Tracked && context.Runtime.JsonEquals(value, pair.Value));
+    }
 }
 
 internal sealed class IdentityFilter : JqFilter
@@ -118,89 +148,133 @@ internal sealed class AsFilter(
 
         IEnumerable<JsonNode?> RunAlternative(BindingPattern alternative, JsonNode? bound, JqEnvironment prebound)
         {
-            foreach (JqEnvironment scope in Match(alternative, bound, prebound))
+            foreach (JqEnvironment scope in Match(alternative, bound, prebound, context))
                 foreach (JsonNode? output in body.Evaluate(input, context, scope))
                     yield return output;
         }
-
-        IEnumerable<JqEnvironment> Match(BindingPattern pattern, JsonNode? value, JqEnvironment scope)
-        {
-            switch (pattern)
-            {
-                case VariablePattern variable:
-                    yield return scope.Extend(variable.Name, context.Runtime.Clone(value));
-                    break;
-                case AliasPattern alias:
-                    JqEnvironment aliased = scope.Extend(alias.Name, context.Runtime.Clone(value));
-                    foreach (JqEnvironment inner in Match(alias.Inner, value, aliased))
-                        yield return inner;
-                    break;
-                case ArrayPattern array:
-                    foreach (JqEnvironment bound in MatchItems(array.Items, 0, value, scope))
-                        yield return bound;
-                    break;
-                case ObjectPattern obj:
-                    foreach (JqEnvironment bound in MatchProperties(obj.Properties, 0, value, scope))
-                        yield return bound;
-                    break;
-                default:
-                    throw new InvalidOperationException("Unknown binding pattern.");
-            }
-        }
-
-        IEnumerable<JqEnvironment> MatchItems(IReadOnlyList<BindingPattern> items, int index, JsonNode? value, JqEnvironment scope)
-        {
-            if (index == items.Count)
-            {
-                yield return scope;
-                yield break;
-            }
-            JsonNode? element = ElementAt(value, index);
-            foreach (JqEnvironment bound in Match(items[index], element, scope))
-                foreach (JqEnvironment rest in MatchItems(items, index + 1, value, bound))
-                    yield return rest;
-        }
-
-        IEnumerable<JqEnvironment> MatchProperties(IReadOnlyList<ObjectPatternProperty> properties, int index, JsonNode? value, JqEnvironment scope)
-        {
-            if (index == properties.Count)
-            {
-                yield return scope;
-                yield break;
-            }
-            ObjectPatternProperty property = properties[index];
-            foreach (JqEnvironment keyed in MatchKeys(property, value, scope))
-                foreach (JqEnvironment rest in MatchProperties(properties, index + 1, value, keyed))
-                    yield return rest;
-        }
-
-        IEnumerable<JqEnvironment> MatchKeys(ObjectPatternProperty property, JsonNode? value, JqEnvironment scope)
-        {
-            foreach (JsonNode? keyValue in property.Key.Evaluate(value, context, scope))
-            {
-                if (!TryGetString(keyValue, out string key))
-                    throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
-                JsonNode? field = ExtractField(value, key);
-                foreach (JqEnvironment bound in Match(property.Value, field, scope))
-                    yield return bound;
-            }
-        }
-
-        static JsonNode? ElementAt(JsonNode? value, int index) => value switch
-        {
-            JsonArray array => index < array.Count ? array[index] : null,
-            null => null,
-            _ => throw new JqRuntimeException($"cannot index {TypeName(value)} with number {index}"),
-        };
-
-        static JsonNode? ExtractField(JsonNode? value, string key) => value switch
-        {
-            JsonObject obj => obj.TryGetPropertyValue(key, out JsonNode? child) ? child : null,
-            null => null,
-            _ => throw new JqRuntimeException($"cannot index {TypeName(value)} with string \"{key}\""),
-        };
     }
 
+    private static IEnumerable<JqEnvironment> Match(BindingPattern pattern, JsonNode? value, JqEnvironment scope, JqContext context)
+    {
+        switch (pattern)
+        {
+            case VariablePattern variable:
+                yield return scope.Extend(variable.Name, context.Runtime.Clone(value));
+                break;
+            case AliasPattern alias:
+                JqEnvironment aliased = scope.Extend(alias.Name, context.Runtime.Clone(value));
+                foreach (JqEnvironment inner in Match(alias.Inner, value, aliased, context))
+                    yield return inner;
+                break;
+            case ArrayPattern array:
+                foreach (JqEnvironment bound in MatchItems(array.Items, 0, value, scope, context))
+                    yield return bound;
+                break;
+            case ObjectPattern obj:
+                foreach (JqEnvironment bound in MatchProperties(obj.Properties, 0, value, scope, context))
+                    yield return bound;
+                break;
+            default:
+                throw new InvalidOperationException("Unknown binding pattern.");
+        }
+    }
+
+    private static IEnumerable<JqEnvironment> MatchItems(IReadOnlyList<BindingPattern> items, int index, JsonNode? value, JqEnvironment scope, JqContext context)
+    {
+        if (index == items.Count)
+        {
+            yield return scope;
+            yield break;
+        }
+        JsonNode? element = ElementAt(value, index);
+        foreach (JqEnvironment bound in Match(items[index], element, scope, context))
+            foreach (JqEnvironment rest in MatchItems(items, index + 1, value, bound, context))
+                yield return rest;
+    }
+
+    private static IEnumerable<JqEnvironment> MatchProperties(IReadOnlyList<ObjectPatternProperty> properties, int index, JsonNode? value, JqEnvironment scope, JqContext context)
+    {
+        if (index == properties.Count)
+        {
+            yield return scope;
+            yield break;
+        }
+        ObjectPatternProperty property = properties[index];
+        foreach (JqEnvironment keyed in MatchKeys(property, value, scope, context))
+            foreach (JqEnvironment rest in MatchProperties(properties, index + 1, value, keyed, context))
+                yield return rest;
+    }
+
+    private static IEnumerable<JqEnvironment> MatchKeys(ObjectPatternProperty property, JsonNode? value, JqEnvironment scope, JqContext context)
+    {
+        foreach (JsonNode? keyValue in property.Key.Evaluate(value, context, scope))
+        {
+            if (!TryGetString(keyValue, out string key))
+                throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
+            JsonNode? field = ExtractField(value, key);
+            foreach (JqEnvironment bound in Match(property.Value, field, scope, context))
+                yield return bound;
+        }
+    }
+
+    private static JsonNode? ElementAt(JsonNode? value, int index) => value switch
+    {
+        JsonArray array => index < array.Count ? array[index] : null,
+        null => null,
+        _ => throw new JqRuntimeException($"cannot index {TypeName(value)} with number {index}"),
+    };
+
+    private static JsonNode? ExtractField(JsonNode? value, string key) => value switch
+    {
+        JsonObject obj => obj.TryGetPropertyValue(key, out JsonNode? child) ? child : null,
+        null => null,
+        _ => throw new JqRuntimeException($"cannot index {TypeName(value)} with string \"{key}\""),
+    };
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        // The source binds in value mode; the body extends the incoming path
+        // against the outer input, mirroring upstream binding behavior.
+        JqEnvironment prebound = environment;
+        foreach (string name in _allNames)
+            prebound = prebound.Extend(name, null);
+        foreach (JsonNode? bound in source.Evaluate(pair.Value, context, environment))
+        {
+            bool completed = false;
+            for (int index = 0; index < alternatives.Count && !completed; index++)
+            {
+                bool isLast = index == alternatives.Count - 1;
+                using IEnumerator<JqValuePath> results = RunPathAlternative(alternatives[index], bound, prebound, pair, context).GetEnumerator();
+                while (true)
+                {
+                    bool moved;
+                    try
+                    {
+                        moved = results.MoveNext();
+                    }
+                    catch (Exception exception) when (JqErrors.IsCatchable(exception))
+                    {
+                        if (isLast)
+                            throw;
+                        break;
+                    }
+                    if (!moved)
+                    {
+                        completed = true;
+                        break;
+                    }
+                    yield return results.Current;
+                }
+            }
+        }
+    }
+
+    private IEnumerable<JqValuePath> RunPathAlternative(BindingPattern alternative, JsonNode? bound, JqEnvironment prebound, JqValuePath pair, JqContext context)
+    {
+        foreach (JqEnvironment scope in Match(alternative, bound, prebound, context))
+            foreach (JqValuePath next in body.EvaluatePaths(new JqValuePath(pair.Segments, pair.Value, pair.Tracked), context, scope))
+                yield return next;
+    }
 }
 
 // A `def name[(params)]: body; rest` definition: forges no values itself but
@@ -216,6 +290,13 @@ internal sealed class DefFilter(JqFunctionDefinition Definition, JqFilter Contin
         JqEnvironment extended = environment.ExtendFunction(Definition.Name, Definition.Arity, Definition);
         foreach (JsonNode? value in Continuation.Evaluate(input, context, extended))
             yield return value;
+    }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        JqEnvironment extended = environment.ExtendFunction(Definition.Name, Definition.Arity, Definition);
+        foreach (JqValuePath next in Continuation.EvaluatePaths(pair, context, extended))
+            yield return next;
     }
 
     internal JqFunctionDefinition FunctionDefinition => Definition;
@@ -247,6 +328,18 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
             throw new JqException($"undefined function {Name}/{Arity}");
         foreach (JsonNode? value in EvaluateCallLoop(closure, input, Args, environment, context))
             yield return value;
+    }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        if (!environment.TryGetFunction(Name, Arity, out JqUserClosure? closure) || closure is null)
+            throw new JqException($"undefined function {Name}/{Arity}");
+        if (Args.Count != closure.Definition.Arity)
+            throw new JqException($"undefined function {Name}/{Arity}");
+        foreach (JqValuePath next in EvaluatePathsCallLoop(closure, pair, Args, environment, context))
+            yield return next;
     }
 
     // Shared call driver: streams one body run per value combination and
@@ -307,6 +400,88 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
     internal IReadOnlyList<JqFilter> CallArgs => Args;
 
     private sealed record CallFrame(JsonNode? Input, JsonNode?[] Values, IReadOnlyList<int> ValuePositions, JqFilterClosure?[] Filters);
+
+    // Path-mode call driver: mirrors the value loop, threading segment
+    // lists through body runs and tail chains instead of bare values.
+    internal static IEnumerable<JqValuePath> EvaluatePathsCallLoop(JqUserClosure closure, JqValuePath pair, IReadOnlyList<JqFilter> args, JqEnvironment callerEnvironment, JqContext context)
+    {
+        ArgumentNullException.ThrowIfNull(closure);
+        ArgumentNullException.ThrowIfNull(pair);
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(callerEnvironment);
+        ArgumentNullException.ThrowIfNull(context);
+        JqFunctionDefinition definition = closure.Definition;
+        PartitionArgs(definition, args, callerEnvironment, out List<JqFilter> values, out List<int> valuePositions, out JqFilterClosure?[] filters);
+        var pending = new Stack<PathCallFrame>();
+        foreach (JsonNode?[] combo in EvaluateValueCombos(values, pair.Value, context, callerEnvironment))
+        {
+            PathCallFrame? current = new(pair, combo, valuePositions, filters);
+            while (true)
+            {
+                if (current is null)
+                {
+                    if (!pending.TryPop(out current))
+                        break;
+                }
+                using IEnumerator<JqValuePath> outputs = EvaluatePathsFrame(definition, closure, current, context).GetEnumerator();
+                while (true)
+                {
+                    bool moved;
+                    try
+                    {
+                        moved = outputs.MoveNext();
+                    }
+                    catch (TailCallSignal signal) when (signal.Definition.Name == definition.Name && signal.Definition.Arity == definition.Arity)
+                    {
+                        current = PushSignalPathFrames(signal, pair, context, pending);
+                        break;
+                    }
+                    if (!moved)
+                    {
+                        current = null;
+                        break;
+                    }
+                    yield return outputs.Current;
+                }
+            }
+        }
+    }
+
+    private sealed record PathCallFrame(JqValuePath Pair, JsonNode?[] Values, IReadOnlyList<int> ValuePositions, JqFilterClosure?[] Filters);
+
+    private static IEnumerable<JqValuePath> EvaluatePathsFrame(JqFunctionDefinition definition, JqUserClosure closure, PathCallFrame frame, JqContext context)
+    {
+        JqEnvironment scope = closure.Environment;
+        for (int position = 0; position < frame.ValuePositions.Count; position++)
+            scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, context.Runtime.Clone(frame.Values[position]));
+        for (int index = 0; index < frame.Filters.Length; index++)
+            if (frame.Filters[index] is not null)
+                scope = scope.ExtendFilter(definition.Parameters[index].Name, frame.Filters[index]!);
+        foreach (JqValuePath next in definition.Body.EvaluatePaths(new JqValuePath(frame.Pair.Segments, frame.Pair.Value, frame.Pair.Tracked), context, scope))
+            yield return next;
+    }
+
+    private static PathCallFrame? PushSignalPathFrames(TailCallSignal signal, JqValuePath pair, JqContext context, Stack<PathCallFrame> pending)
+    {
+        var combos = new List<JsonNode?[]>();
+        foreach (JsonNode?[] combo in EvaluateValueCombos(signal.ValueArgs, signal.Input, context, signal.Environment))
+        {
+            context.Budget.ChargeNode();
+            combos.Add(combo);
+        }
+        // Tail frames restart the body against the signal input but keep
+        // accumulating onto the call-site segments, exactly like the
+        // initial frames do.
+        for (int index = combos.Count - 1; index >= 1; index--)
+        {
+            context.Budget.ChargeNode();
+            pending.Push(new PathCallFrame(new JqValuePath(pair.Segments, signal.Input, pair.Tracked), combos[index], signal.ValuePositions, signal.FilterArgs));
+        }
+        if (combos.Count == 0)
+            return null;
+        context.Budget.ChargeNode();
+        return new PathCallFrame(new JqValuePath(pair.Segments, signal.Input, pair.Tracked), combos[0], signal.ValuePositions, signal.FilterArgs);
+    }
 
     // Peeks up to two value combinations (budget-charged) to decide whether
     // a final pipe value may unwind flat. Returns false unless exactly one
@@ -411,6 +586,16 @@ internal sealed class FilterParamCallFilter(string Name) : JqFilter
         foreach (JsonNode? value in closure.Filter.Evaluate(input, context, closure.Environment))
             yield return value;
     }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        if (!environment.TryGetFilter(Name, out JqFilterClosure? closure) || closure is null)
+            throw new JqException($"undefined filter {Name}");
+        foreach (JqValuePath next in closure.Filter.EvaluatePaths(pair, context, closure.Environment))
+            yield return next;
+    }
 }
 
 // A tail-position self-call unwinds to the owning call loop instead of
@@ -458,6 +643,13 @@ internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
         foreach (var value in left.Evaluate(input, context, environment))
             foreach (var output in right.Evaluate(value, context, environment))
                 yield return output;
+    }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        foreach (JqValuePath left in left.EvaluatePaths(pair, context, environment))
+            foreach (JqValuePath right in right.EvaluatePaths(left, context, environment))
+                yield return right;
     }
 
     internal JqFilter Left => left;
@@ -518,6 +710,14 @@ internal sealed class CommaFilter(JqFilter left, JqFilter right) : JqFilter
             yield return value;
     }
 
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        foreach (JqValuePath left in left.EvaluatePaths(pair, context, environment))
+            yield return left;
+        foreach (JqValuePath right in right.EvaluatePaths(pair, context, environment))
+            yield return right;
+    }
+
     internal JqFilter Right => right;
 
     internal CommaFilter WithRight(JqFilter next)
@@ -541,6 +741,20 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
                 throw new JqRuntimeException($"cannot index {TypeName(value)} with string \"{name}\"");
         }
     }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        foreach (JqValuePath source in source.EvaluatePaths(pair, context, environment))
+        {
+            RequireTracked(source, new KeySegment(name), context);
+            if (source.Value is JsonObject obj)
+                yield return new JqValuePath(Extend(source.Segments, new KeySegment(name)), obj.TryGetPropertyValue(name, out JsonNode? child) ? child : null, true);
+            else if (source.Value == null)
+                yield return new JqValuePath(Extend(source.Segments, new KeySegment(name)), null, true);
+            else
+                throw new JqRuntimeException($"cannot index {TypeName(source.Value)} with string \"{name}\"");
+        }
+    }
 }
 
 internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional) : JqFilter
@@ -557,6 +771,11 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                     if (ix < 0) ix = arr.Count + ix;
                     yield return ix >= 0 && ix < arr.Count ? context.Runtime.Clone(arr[ix]) : null;
                 }
+                else if (value is JsonArray && key is JsonValue nan && nan.TryGetValue<double>(out double missing) && double.IsNaN(missing))
+                {
+                    // A NaN index reads null instead of failing.
+                    yield return null;
+                }
                 else if (value is JsonObject obj && TryGetString(key, out var name))
                 {
                     yield return context.Runtime.Clone(obj.TryGetPropertyValue(name, out var child) ? child : null);
@@ -570,6 +789,40 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                     throw new JqRuntimeException($"cannot index {TypeName(value)}");
                 }
             }
+    }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
+    {
+        foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
+            foreach (JsonNode? key in index.Evaluate(pair.Value, context, environment))
+            {
+                JqValueSegment segment = PathSegmentFor(key);
+                RequireTracked(pair, segment, context);
+                if (segment is KeySegment name && pair.Value is JsonObject obj)
+                    yield return new JqValuePath(Extend(pair.Segments, segment), obj.TryGetPropertyValue(name.Key, out JsonNode? child) ? child : null, true);
+                else if (segment is IndexSegment number && pair.Value is JsonArray arr && !number.IsNaN)
+                {
+                    long resolved = number.Index < 0 ? arr.Count + number.Index : number.Index;
+                    yield return new JqValuePath(Extend(pair.Segments, segment), resolved >= 0 && resolved < arr.Count ? arr[(int)resolved] : null, true);
+                }
+                else if (segment is IndexSegment nan && nan.IsNaN && pair.Value is JsonArray)
+                    yield return new JqValuePath(Extend(pair.Segments, segment), null, true);
+                else if (pair.Value == null)
+                    yield return new JqValuePath(Extend(pair.Segments, segment), null, true);
+                else if (segment is KeySegment field)
+                    throw new JqRuntimeException($"cannot index {TypeName(pair.Value)} with string \"{field.Key}\"");
+                else
+                    throw new JqRuntimeException($"cannot index {TypeName(pair.Value)}");
+            }
+    }
+
+    private static JqValueSegment PathSegmentFor(JsonNode? key)
+    {
+        if (TryGetString(key, out string? name))
+            return new KeySegment(name);
+        if (TryGetIndex(key, out long index, out bool isNaN))
+            return new IndexSegment(index, isNaN);
+        return new InvalidSegment(key?.DeepClone());
     }
 }
 
@@ -633,7 +886,8 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 yield return bound == null ? 0 : (int)Number(bound);
         }
 
-        // A null item means the container length; null values still map to zero.
+        // A missing, null, or NaN end means the container length, matching
+        // slice defaults; other bounds truncate toward zero.
         IEnumerable<int?> EndBounds()
         {
             if (end == null)
@@ -642,7 +896,12 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 yield break;
             }
             foreach (var bound in end.Evaluate(input, context, environment))
-                yield return bound == null ? 0 : (int)Number(bound);
+            {
+                if (bound == null || (bound is JsonValue edge && edge.TryGetValue<double>(out double nan) && double.IsNaN(nan)))
+                    yield return null;
+                else
+                    yield return (int)Number(bound);
+            }
         }
     }
 
@@ -653,6 +912,63 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
         start = Math.Clamp(start, 0, count);
         end = Math.Clamp(end, 0, count);
         if (end < start) end = start;
+    }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
+    {
+        foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
+            foreach (long? lower in SliceBoundValues(start, pair.Value, context, environment))
+                foreach (long? upper in SliceBoundValues(end, pair.Value, context, environment))
+                {
+                    var segment = new SliceSegment(lower, upper);
+                    RequireTracked(pair, segment, context);
+                    if (pair.Value is JsonArray arr)
+                    {
+                        JqPaths.ResolveSlice(arr.Count, lower, upper, out int from, out int to);
+                        var part = new JsonArray();
+                        for (int position = from; position < to; position++)
+                            part.Add(arr[position]?.DeepClone());
+                        yield return new JqValuePath(Extend(pair.Segments, segment), part, true);
+                    }
+                    else if (pair.Value is JsonValue scalar && scalar.TryGetValue<string>(out string? text) && text is not null)
+                    {
+                        var runes = new List<System.Text.Rune>();
+                        foreach (var rune in text.EnumerateRunes())
+                            runes.Add(rune);
+                        JqPaths.ResolveSlice(runes.Count, lower, upper, out int from, out int to);
+                        var builder = new System.Text.StringBuilder();
+                        for (int position = from; position < to; position++)
+                            builder.Append(runes[position].ToString());
+                        yield return new JqValuePath(Extend(pair.Segments, segment), JsonValue.Create(builder.ToString()), true);
+                    }
+                    else if (pair.Value == null)
+                        yield return new JqValuePath(Extend(pair.Segments, segment), null, true);
+                    else
+                        throw new JqRuntimeException($"cannot slice {TypeName(pair.Value)}");
+                }
+    }
+
+    private static IEnumerable<long?> SliceBoundValues(JqFilter? bound, JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        if (bound == null)
+        {
+            yield return null;
+            yield break;
+        }
+        foreach (JsonNode? edge in bound.Evaluate(input, context, environment))
+        {
+            if (edge is null)
+            {
+                yield return null;
+                continue;
+            }
+            if (edge is JsonValue number && number.TryGetValue<double>(out double index) && double.IsNaN(index))
+            {
+                yield return null;
+                continue;
+            }
+            yield return (long)Number(edge);
+        }
     }
 }
 
@@ -676,6 +992,29 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
                 throw new JqRuntimeException($"cannot iterate over {TypeName(value)}");
         }
     }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
+    {
+        foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
+        {
+            if (pair.Value is JsonArray arr)
+            {
+                for (int index = 0; index < arr.Count; index++)
+                    yield return new JqValuePath(Extend(pair.Segments, new IndexSegment(index, false)), arr[index], true);
+            }
+            else if (pair.Value is JsonObject obj)
+            {
+                foreach (var property in obj)
+                    yield return new JqValuePath(Extend(pair.Segments, new KeySegment(property.Key)), property.Value, true);
+            }
+            else if (pair.Value is not null)
+            {
+                if (!pair.Tracked)
+                    throw new JqException(InvalidIterate(pair.Value, context));
+                throw new JqRuntimeException($"cannot iterate over {TypeName(pair.Value)}");
+            }
+        }
+    }
 }
 
 // Pre-order depth-first traversal: the value itself, then each child in
@@ -695,6 +1034,32 @@ internal sealed class RecursiveDescentFilter : JqFilter
         {
             foreach (var property in obj)
                 foreach (JsonNode? descendant in new RecursiveDescentFilter().Evaluate(property.Value, context, environment))
+                    yield return descendant;
+        }
+    }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        foreach (JqValuePath descendant in Expand(pair))
+            yield return descendant;
+    }
+
+    // Pre-order structural threading: the pair itself, then each child with
+    // an extended path. Trackedness flows through untouched; scalars and
+    // nulls simply have no children.
+    private static IEnumerable<JqValuePath> Expand(JqValuePath pair)
+    {
+        yield return pair;
+        if (pair.Value is JsonArray arr)
+        {
+            for (int index = 0; index < arr.Count; index++)
+                foreach (JqValuePath descendant in Expand(new JqValuePath(Extend(pair.Segments, new IndexSegment(index, false)), arr[index], pair.Tracked)))
+                    yield return descendant;
+        }
+        else if (pair.Value is JsonObject obj)
+        {
+            foreach (var property in obj)
+                foreach (JqValuePath descendant in Expand(new JqValuePath(Extend(pair.Segments, new KeySegment(property.Key)), property.Value, pair.Tracked)))
                     yield return descendant;
         }
     }
@@ -892,6 +1257,12 @@ internal sealed class OptionalFilter(JqFilter inner) : JqFilter
         }
     }
 
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        foreach (JqValuePath next in inner.EvaluatePaths(pair, context, environment))
+            yield return next;
+    }
+
     internal JqFilter Inner => inner;
 
     internal OptionalFilter WithInner(JqFilter next)
@@ -919,6 +1290,22 @@ internal sealed class AlternativeFilter(JqFilter left, JqFilter right) : JqFilte
         if (!found)
             foreach (JsonNode? value in right.Evaluate(input, context, environment))
                 yield return value;
+    }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        bool found = false;
+        foreach (JqValuePath left in left.EvaluatePaths(pair, context, environment))
+        {
+            if (Truthy(left.Value))
+            {
+                found = true;
+                yield return left;
+            }
+        }
+        if (!found)
+            foreach (JqValuePath right in right.EvaluatePaths(pair, context, environment))
+                yield return right;
     }
 
     internal JqFilter Right => right;
@@ -967,6 +1354,21 @@ internal sealed class IfFilter(
 
     // Rewrites tail positions (branch bodies and the final else) while
     // leaving conditions untouched.
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        foreach (var (condition, then) in branches)
+        {
+            if (condition.Evaluate(pair.Value, context, environment).Any(Truthy))
+            {
+                foreach (JqValuePath next in then.EvaluatePaths(pair, context, environment))
+                    yield return next;
+                yield break;
+            }
+        }
+        foreach (JqValuePath next in otherwise.EvaluatePaths(pair, context, environment))
+            yield return next;
+    }
+
     internal IfFilter WithTails(Func<JqFilter, JqFilter> rewrite)
     {
         ArgumentNullException.ThrowIfNull(rewrite);
@@ -1024,6 +1426,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 throw NewHalt(context, input, HaltCode(value));
             yield break;
         }
+
 
         // Cartesian argument streams: the last argument is outer (slow) and
         // the first argument inner (fast), matching reversed call prelude
@@ -1139,8 +1542,44 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             }
         }
     }
-}
 
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        if (name == "select")
+        {
+            if (args.Count != 1)
+                throw new JqException("select expects one argument");
+            // Predicates run in value mode; surviving pairs keep paths.
+            foreach (JsonNode? probe in args[0].Evaluate(pair.Value, context, environment))
+                if (Truthy(probe))
+                    yield return pair;
+            yield break;
+        }
+        if (name == "getpath")
+        {
+            if (args.Count != 1)
+                throw new JqException("getpath expects one argument");
+            if (!pair.Tracked)
+                throw new JqException(InvalidResult(pair.Value, context));
+            // Path synthesis: the argument supplies segments directly.
+            foreach (JsonNode? paths in args[0].Evaluate(pair.Value, context, environment))
+            {
+                List<JqValueSegment> extra = ParsePathValue(paths, context);
+                var segments = new List<JqValueSegment>(pair.Segments.Count + extra.Count);
+                foreach (JqValueSegment existing in pair.Segments)
+                    segments.Add(existing);
+                foreach (JqValueSegment added in extra)
+                    segments.Add(added);
+                yield return new JqValuePath(segments, JqPathReads.GetPath(pair.Value, extra), true);
+            }
+            yield break;
+        }
+        foreach (JqValuePath next in base.EvaluatePathsCore(pair, context, environment))
+            yield return next;
+    }
+}
 internal sealed class FormatFilter(string format) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
