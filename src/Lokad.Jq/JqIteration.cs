@@ -344,3 +344,28 @@ internal sealed class PathsFilter(JqFilter? Condition) : JqFilter
         }
     }
 }
+
+// `skip($n; EXPR)`: drops n outputs, then streams the rest.
+internal sealed class SkipFilter(JqFilter Count, JqFilter Body) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? count in Count.Evaluate(input, context, environment))
+        {
+            double total = Number(count);
+            if (total < 0)
+                throw new JqException("skip doesn't support negative count");
+            long skip = (long)total;
+            using IEnumerator<JsonNode?> results = Body.Evaluate(input, context, environment).GetEnumerator();
+            for (long dropped = 0; dropped < skip; dropped++)
+            {
+                if (!results.MoveNext())
+                    break;
+            }
+            while (results.MoveNext())
+                yield return results.Current;
+        }
+    }
+}

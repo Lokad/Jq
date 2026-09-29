@@ -72,6 +72,8 @@ internal static class JqBuiltinRegistry
         ["last"] = (0, 0),
         ["nth"] = (1, 2),
         ["isempty"] = (1, 1),
+        ["rindex"] = (1, 1),
+        ["skip"] = (2, 2),
         ["while"] = (2, 2),
         ["until"] = (2, 2),
         ["repeat"] = (1, 1),
