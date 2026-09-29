@@ -147,6 +147,9 @@ public sealed partial class JqTests
     [InlineData("((-1) | sqrt) < false", "true\n")]
     [InlineData("1 % ((-1) | sqrt)", "null\n")]
     [InlineData("1e1000", "1.7976931348623157E+308\n")]
+    [InlineData("[((-1) | sqrt), 1]", "[null,1]\n")]
+    [InlineData("{\"x\":((-1) | sqrt)}", "{\"x\":null}\n")]
+    [InlineData("[1e1000]", "[1.7976931348623157E+308]\n")]
     public async Task Jq_NonFiniteValuesRenderAsJson(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -154,6 +157,18 @@ public sealed partial class JqTests
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_NonFiniteInputClampsOnOutput()
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("1e1000");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".")));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("1.7976931348623157E+308\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 }

@@ -338,13 +338,16 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("--argjson", 2)]
-    [InlineData("--jsonargs", 2)]
-    [InlineData("stdin", 4)]
-    [InlineData("fromjson", 5)]
-    public async Task Jq_DuplicateJsonPropertiesReturnDiagnostics(string source, int expectedExit)
+    [InlineData("--argjson")]
+    [InlineData("--jsonargs")]
+    [InlineData("stdin")]
+    [InlineData("fromjson")]
+    public async Task Jq_DuplicateJsonPropertiesKeepLastValue(string source)
     {
-        const string json = """{"outer":{"a":1,"\u0061":2}}""";
+        // The reference resolves duplicate keys last-wins at first position
+        // (object assignment semantics); escapes decode before comparison.
+        const string json = """{"outer":{"a":1,"\u0061":2},"b":1,"b":2}""";
+        const string expected = """{"outer":{"a":2},"b":2}""" + "\n";
         var host = new MockFileSystem();
         host.SetStandardInput(json);
         var invocation = source switch
@@ -356,9 +359,9 @@ public sealed partial class JqTests
         };
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
-        Assert.Equal(expectedExit, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("duplicate", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Theory]

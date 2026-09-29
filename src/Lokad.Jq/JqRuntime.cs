@@ -107,7 +107,8 @@ internal sealed class JqRuntime(JqBudget budget)
         return node?.DeepClone();
     }
 
-    // Scan and charge tokens before allocating a DOM, including when reading a sequence of values.
+    // Single-pass decode: builds values while charging, so duplicate object
+    // keys resolve last-wins at first position like object assignment.
     internal JsonNode? ReadJsonValue(ReadOnlySpan<byte> text, out int consumed)
     {
         try
@@ -118,43 +119,82 @@ internal sealed class JqRuntime(JqBudget budget)
                 AllowMultipleValues = true,
                 MaxDepth = JqBudget.MaximumDepth
             });
-            if (!reader.Read()) throw new JqException("expected a JSON value");
+            if (!reader.Read())
+                throw new JqException("expected a JSON value");
             var start = (int)reader.TokenStartIndex;
-            do
-            {
-                budget.ChargeNode();
-                if (reader.TokenType is JsonTokenType.String or JsonTokenType.PropertyName)
-                    budget.ChargeString(DecodedStringLength(reader.ValueSpan));
-                if (reader.CurrentDepth == 0 && reader.TokenType is not (JsonTokenType.StartArray or JsonTokenType.StartObject))
-                    break;
-            } while (reader.Read());
+            JsonNode? value = ReadValue(ref reader, 0);
             consumed = (int)reader.BytesConsumed;
             budget.ChargeBytes(consumed - start);
-            return JsonNode.Parse(text[start..consumed], documentOptions: new JsonDocumentOptions
-            {
-                AllowDuplicateProperties = false,
-                AllowTrailingCommas = true,
-                MaxDepth = JqBudget.MaximumDepth
-            });
+            return value;
         }
-        // Duplicate-property validation decodes names and can reject invalid UTF-16 escapes.
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
             throw new JqException(ex.Message);
         }
 
-        static int DecodedStringLength(ReadOnlySpan<byte> value)
+        JsonNode? ReadValue(ref Utf8JsonReader reader, int depth)
         {
-            var length = Encoding.UTF8.GetCharCount(value);
-            // Utf8JsonReader has validated the escapes. Each represents one UTF-16 code unit;
-            // a surrogate pair uses two Unicode escapes and therefore counts as two units.
-            while (true)
+            switch (reader.TokenType)
             {
-                var escape = value.IndexOf((byte)'\\');
-                if (escape < 0) return length;
-                var encodedLength = value[escape + 1] == (byte)'u' ? 6 : 2;
-                length -= encodedLength - 1;
-                value = value[(escape + encodedLength)..];
+                case JsonTokenType.StartObject:
+                    if (depth >= JqBudget.MaximumDepth)
+                        throw new JqException("value nesting limit exceeded");
+                    budget.ChargeNode();
+                    var obj = new JsonObject();
+                    while (reader.Read())
+                    {
+                        if (reader.TokenType == JsonTokenType.EndObject)
+                            return obj;
+                        if (reader.TokenType != JsonTokenType.PropertyName)
+                            throw new JqException("expected object key");
+                        string? name = reader.GetString();
+                        if (name is null)
+                            throw new JqException("expected object key");
+                        budget.ChargeString(name.Length);
+                        if (!reader.Read())
+                            throw new JqException("truncated JSON value");
+                        obj[name] = ReadValue(ref reader, depth + 1);
+                    }
+                    throw new JqException("truncated JSON value");
+                case JsonTokenType.StartArray:
+                    if (depth >= JqBudget.MaximumDepth)
+                        throw new JqException("value nesting limit exceeded");
+                    budget.ChargeNode();
+                    var array = new JsonArray();
+                    while (reader.Read())
+                    {
+                        if (reader.TokenType == JsonTokenType.EndArray)
+                            return array;
+                        array.Add(ReadValue(ref reader, depth + 1));
+                    }
+                    throw new JqException("truncated JSON value");
+                case JsonTokenType.String:
+                    budget.ChargeNode();
+                    string? textValue = reader.GetString();
+                    if (textValue is null)
+                        throw new JqException("expected a JSON string");
+                    budget.ChargeString(textValue.Length);
+                    return JsonValue.Create(textValue);
+                case JsonTokenType.Number:
+                    budget.ChargeNode();
+                    if (reader.TryGetInt64(out long whole))
+                    {
+                        if (whole == 0 && reader.ValueSpan.Length > 0 && reader.ValueSpan[0] == (byte)'-' )
+                            return JsonValue.Create(reader.GetDouble());
+                        return JsonValue.Create(whole);
+                    }
+                    return JsonValue.Create(reader.GetDouble());
+                case JsonTokenType.True:
+                    budget.ChargeNode();
+                    return JsonValue.Create(true);
+                case JsonTokenType.False:
+                    budget.ChargeNode();
+                    return JsonValue.Create(false);
+                case JsonTokenType.Null:
+                    budget.ChargeNode();
+                    return null;
+                default:
+                    throw new JqException("expected a JSON value");
             }
         }
     }
