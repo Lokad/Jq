@@ -80,4 +80,49 @@ public sealed partial class JqTests
         Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Contains("cannot iterate", host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Theory]
+    [InlineData("\"foobar\" | contains(\"foo\", \"baz\")", "true\nfalse\n")]
+    [InlineData("\"foobar\" | startswith((\"foo\", \"bar\"))", "true\nfalse\n")]
+    [InlineData("[1,2,3] | indices((1, 3))", "[0]\n[2]\n")]
+    [InlineData("\"a,b\" | split((\",\", \";\"))", "[\"a\",\"b\"]\n[\"a,b\"]\n")]
+    [InlineData("\"aA\" | test((\"a\", \"b\"); (\"\", \"i\"))", "true\nfalse\ntrue\nfalse\n")]
+    [InlineData("range((0, 2); 3)", "0\n1\n2\n2\n")]
+    public async Task Jq_FunctionArgumentsDistribute(string filter, string expected)
+    {
+        // The last argument is outer (slow), the first inner (fast),
+        // matching reversed call prelude order with backtracking.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("\"x\" | contains(empty)")]
+    [InlineData("\"x\" | split(empty)")]
+    [InlineData("range(empty; 3)")]
+    [InlineData("range(0; empty)")]
+    public async Task Jq_EmptyArgumentsYieldNoOutputs(string filter)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_GsubFlagStreamIsOuter()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", "\"aA\" | gsub(\"a\"; \"X\"; (\"\", \"i\"))")));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("XA\nXX\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }

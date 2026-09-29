@@ -396,57 +396,89 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             yield break;
         }
 
-        var evaluated = args.Select(a => a.Evaluate(input, context).ToList()).ToList();
-        JsonNode? Arg(int i) => evaluated.Count > i && evaluated[i].Count > 0 ? evaluated[i][0] : null;
+        // Cartesian argument streams: the last argument is outer (slow) and
+        // the first argument inner (fast), matching reversed call prelude
+        // order with backtracking. An empty argument yields no outputs.
+        foreach (var combo in ArgumentCombos())
+            foreach (var output in EvaluateWith(combo))
+                yield return output;
 
-        switch (name)
+        yield break;
+
+        IEnumerable<JsonNode?[]> ArgumentCombos()
         {
-            case "length": yield return JsonValue.Create(Length(input)); break;
-            case "type": yield return JsonValue.Create(TypeName(input)); break;
-            case "tonumber": yield return JsonValue.Create(ToNumber(input)); break;
-            case "toboolean": yield return JsonValue.Create(ToBoolean(input)); break;
-            case "tostring": yield return JsonValue.Create(context.Runtime.ToJqString(input)); break;
-            case "tojson": yield return JsonValue.Create(context.Runtime.Serialize(input, false, null, false)); break;
-            case "fromjson": yield return context.Runtime.ParseJson(String(input)); break;
-            case "abs": yield return JsonValue.Create(Math.Abs(Number(input))); break;
-            case "floor": yield return JsonValue.Create(Math.Floor(Number(input))); break;
-            case "sqrt": yield return JsonValue.Create(Math.Sqrt(Number(input))); break;
-            case "add": yield return context.Runtime.AddAll(input); break;
-            case "flatten": yield return context.Runtime.Flatten(input); break;
-            case "min": yield return context.Runtime.MinMax(input, false); break;
-            case "max": yield return context.Runtime.MinMax(input, true); break;
-            case "reverse": yield return context.Runtime.Reverse(input); break;
-            case "contains": yield return JsonValue.Create(context.Runtime.Contains(input, Arg(0))); break;
-            case "inside": yield return JsonValue.Create(context.Runtime.Contains(Arg(0), input)); break;
-            case "indices": yield return context.Runtime.Indices(input, Arg(0)); break;
-            case "index": yield return context.Runtime.Index(input, Arg(0)); break;
-            case "startswith": yield return JsonValue.Create(String(input).StartsWith(String(Arg(0)), StringComparison.Ordinal)); break;
-            case "endswith": yield return JsonValue.Create(String(input).EndsWith(String(Arg(0)), StringComparison.Ordinal)); break;
-            case "ltrimstr": yield return JsonValue.Create(TrimString(input, Arg(0), true, false)); break;
-            case "rtrimstr": yield return JsonValue.Create(TrimString(input, Arg(0), false, true)); break;
-            case "trimstr": yield return JsonValue.Create(TrimString(input, Arg(0), true, true)); break;
-            case "trim": yield return JsonValue.Create(String(input).Trim()); break;
-            case "ltrim": yield return JsonValue.Create(String(input).TrimStart()); break;
-            case "rtrim": yield return JsonValue.Create(String(input).TrimEnd()); break;
-            case "explode": yield return context.Runtime.Explode(input); break;
-            case "implode": yield return context.Runtime.Implode(input); break;
-            case "split": yield return context.Runtime.Split(input, Arg(0)); break;
-            case "join": yield return context.Runtime.Join(input, Arg(0)); break;
-            case "ascii_downcase": yield return JsonValue.Create(String(input).ToLowerInvariant()); break;
-            case "ascii_upcase": yield return JsonValue.Create(String(input).ToUpperInvariant()); break;
-            case "range":
-                foreach (var value in context.Runtime.Range(evaluated))
-                    yield return value;
-                break;
-            case "any": yield return JsonValue.Create(AnyAll(input, true)); break;
-            case "all": yield return JsonValue.Create(AnyAll(input, false)); break;
-            case "fromdate":
-            case "fromdateiso8601": yield return JsonValue.Create(DateTimeOffset.Parse(String(input), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal).ToUnixTimeSeconds()); break;
-            case "todate":
-            case "todateiso8601": yield return JsonValue.Create(DateTimeOffset.FromUnixTimeSeconds((long)Number(input)).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)); break;
-            case "strptime": yield return context.Runtime.Strptime(input, Arg(0)); break;
-            case "strftime": yield return JsonValue.Create(UnixDate(input).ToString(context.Runtime.ConvertDateFormat(String(Arg(0))), CultureInfo.InvariantCulture)); break;
-            default: throw new JqException($"unsupported function {name}");
+            var current = new JsonNode?[args.Count];
+            return Combine(args.Count - 1);
+
+            IEnumerable<JsonNode?[]> Combine(int index)
+            {
+                if (index < 0)
+                {
+                    yield return (JsonNode?[])current.Clone();
+                    yield break;
+                }
+                foreach (var value in args[index].Evaluate(input, context))
+                {
+                    current[index] = value;
+                    foreach (var combo in Combine(index - 1))
+                        yield return combo;
+                }
+            }
+        }
+
+        IEnumerable<JsonNode?> EvaluateWith(JsonNode?[] combo)
+        {
+            JsonNode? Arg(int i) => combo[i];
+
+            switch (name)
+            {
+                case "length": yield return JsonValue.Create(Length(input)); break;
+                case "type": yield return JsonValue.Create(TypeName(input)); break;
+                case "tonumber": yield return JsonValue.Create(ToNumber(input)); break;
+                case "toboolean": yield return JsonValue.Create(ToBoolean(input)); break;
+                case "tostring": yield return JsonValue.Create(context.Runtime.ToJqString(input)); break;
+                case "tojson": yield return JsonValue.Create(context.Runtime.Serialize(input, false, null, false)); break;
+                case "fromjson": yield return context.Runtime.ParseJson(String(input)); break;
+                case "abs": yield return JsonValue.Create(Math.Abs(Number(input))); break;
+                case "floor": yield return JsonValue.Create(Math.Floor(Number(input))); break;
+                case "sqrt": yield return JsonValue.Create(Math.Sqrt(Number(input))); break;
+                case "add": yield return context.Runtime.AddAll(input); break;
+                case "flatten": yield return context.Runtime.Flatten(input); break;
+                case "min": yield return context.Runtime.MinMax(input, false); break;
+                case "max": yield return context.Runtime.MinMax(input, true); break;
+                case "reverse": yield return context.Runtime.Reverse(input); break;
+                case "contains": yield return JsonValue.Create(context.Runtime.Contains(input, Arg(0))); break;
+                case "inside": yield return JsonValue.Create(context.Runtime.Contains(Arg(0), input)); break;
+                case "indices": yield return context.Runtime.Indices(input, Arg(0)); break;
+                case "index": yield return context.Runtime.Index(input, Arg(0)); break;
+                case "startswith": yield return JsonValue.Create(String(input).StartsWith(String(Arg(0)), StringComparison.Ordinal)); break;
+                case "endswith": yield return JsonValue.Create(String(input).EndsWith(String(Arg(0)), StringComparison.Ordinal)); break;
+                case "ltrimstr": yield return JsonValue.Create(TrimString(input, Arg(0), true, false)); break;
+                case "rtrimstr": yield return JsonValue.Create(TrimString(input, Arg(0), false, true)); break;
+                case "trimstr": yield return JsonValue.Create(TrimString(input, Arg(0), true, true)); break;
+                case "trim": yield return JsonValue.Create(String(input).Trim()); break;
+                case "ltrim": yield return JsonValue.Create(String(input).TrimStart()); break;
+                case "rtrim": yield return JsonValue.Create(String(input).TrimEnd()); break;
+                case "explode": yield return context.Runtime.Explode(input); break;
+                case "implode": yield return context.Runtime.Implode(input); break;
+                case "split": yield return context.Runtime.Split(input, Arg(0)); break;
+                case "join": yield return context.Runtime.Join(input, Arg(0)); break;
+                case "ascii_downcase": yield return JsonValue.Create(String(input).ToLowerInvariant()); break;
+                case "ascii_upcase": yield return JsonValue.Create(String(input).ToUpperInvariant()); break;
+                case "range":
+                    foreach (var value in context.Runtime.Range(combo.Select(item => new List<JsonNode?> { item }).ToList()))
+                        yield return value;
+                    break;
+                case "any": yield return JsonValue.Create(AnyAll(input, true)); break;
+                case "all": yield return JsonValue.Create(AnyAll(input, false)); break;
+                case "fromdate":
+                case "fromdateiso8601": yield return JsonValue.Create(DateTimeOffset.Parse(String(input), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal).ToUnixTimeSeconds()); break;
+                case "todate":
+                case "todateiso8601": yield return JsonValue.Create(DateTimeOffset.FromUnixTimeSeconds((long)Number(input)).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)); break;
+                case "strptime": yield return context.Runtime.Strptime(input, Arg(0)); break;
+                case "strftime": yield return JsonValue.Create(UnixDate(input).ToString(context.Runtime.ConvertDateFormat(String(Arg(0))), CultureInfo.InvariantCulture)); break;
+                default: throw new JqException($"unsupported function {name}");
+            }
         }
     }
 }
