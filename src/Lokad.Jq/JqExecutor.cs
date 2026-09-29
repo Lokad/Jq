@@ -41,7 +41,7 @@ internal static class JqExecutor
                 filterText = Utf8Text.Decode(bytes);
             }
             stage = 3;
-            var filter = new JqParser(filterText, programSource, invocation.Variables, budget).Parse();
+            var filter = new JqParser(filterText, programSource, context.RootEnvironment, budget).Parse();
             stage = 4;
             foreach (var value in invocation.Variables.Values) budget.ChargeTree(value);
             await using var inputs = ReadInputsAsync(host, invocation, context, cancellationToken).GetAsyncEnumerator(cancellationToken);
@@ -50,7 +50,7 @@ internal static class JqExecutor
                 stage = 4;
                 if (!await inputs.MoveNextAsync().ConfigureAwait(false)) break;
                 stage = 5;
-                foreach (var output in filter.Evaluate(inputs.Current, context))
+                foreach (var output in filter.Evaluate(inputs.Current, context, context.RootEnvironment))
                 {
                     ReadOnlyMemory<byte> rendered;
                     if (invocation.RawOutput && JqRuntime.TryGetString(output, out var text))

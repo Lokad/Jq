@@ -8,11 +8,12 @@ namespace Lokad.Jq;
 internal sealed class JqParser(
     string source,
     JqProgramSource programSource,
-    IReadOnlyDictionary<string, JsonNode?> variables,
+    JqEnvironment environment,
     JqBudget budget)
 {
     private readonly JqProgramSource _programSource = programSource ?? throw new ArgumentNullException(nameof(programSource));
-    private readonly IReadOnlyDictionary<string, JsonNode?> _variables = variables ?? throw new ArgumentNullException(nameof(variables));
+    private readonly JqEnvironment _environment = environment ?? throw new ArgumentNullException(nameof(environment));
+    private readonly Stack<HashSet<string>> _scopes = new();
     private readonly List<Token> _tokens = Lexer.Tokenize(source, programSource, budget);
     private int _index;
     private int _depth;
@@ -26,6 +27,30 @@ internal sealed class JqParser(
 
     private JqCompileException Error(string message, JqSourceSpan span) =>
         new(message, span, _programSource);
+
+    private bool IsBound(string name)
+    {
+        foreach (var scope in _scopes)
+            if (scope.Contains(name))
+                return true;
+        return _environment.TryGetValue(name, out _);
+    }
+
+    private void EnterScope() => _scopes.Push(new HashSet<string>(StringComparer.Ordinal));
+
+    private void Declare(string name)
+    {
+        if (_scopes.Count == 0)
+            throw new InvalidOperationException("No open binding scope.");
+        _scopes.Peek().Add(name);
+    }
+
+    private void ExitScope()
+    {
+        if (_scopes.Count == 0)
+            throw new InvalidOperationException("No open binding scope.");
+        _scopes.Pop();
+    }
 
     private JqFilter ParseComma()
     {
@@ -218,7 +243,7 @@ internal sealed class JqParser(
         {
             var dollar = Next();
             var name = Expect(TokenKind.Identifier);
-            if (!_variables.ContainsKey(name.Text))
+            if (!IsBound(name.Text))
                 throw Error($"undefined variable ${name.Text}", dollar.Span);
             return new VariableFilter(name.Text);
         }

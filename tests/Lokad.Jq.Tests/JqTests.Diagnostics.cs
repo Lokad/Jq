@@ -249,9 +249,9 @@ public sealed partial class JqTests
         var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
         var budget = new JqBudget(CancellationToken.None);
         using var context = new JqContext(variables, JqProgramSource.Inline, budget);
-        JqFilter filter = new JqParser("1 | .foo", JqProgramSource.Inline, variables, budget).Parse();
+        JqFilter filter = new JqParser("1 | .foo", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
 
-        JqRuntimeException error = Assert.Throws<JqRuntimeException>(() => { filter.Evaluate(null, context).ToList(); });
+        JqRuntimeException error = Assert.Throws<JqRuntimeException>(() => { filter.Evaluate(null, context, context.RootEnvironment).ToList(); });
         Assert.Contains("cannot index number", error.Message);
         Assert.Null(error.Payload);
     }

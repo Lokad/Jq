@@ -11,12 +11,12 @@ namespace Lokad.Jq;
 
 internal abstract class JqFilter
 {
-    public IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context)
+    public IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         context.Budget.EnterEvaluation();
         try
         {
-            foreach (var value in EvaluateCore(input, context))
+            foreach (var value in EvaluateCore(input, context, environment))
             {
                 context.Budget.ChargeNode();
                 if (TryGetString(value, out var text)) context.Budget.ChargeString(text.Length);
@@ -30,12 +30,12 @@ internal abstract class JqFilter
     }
 
     /// <summary>Evaluates within the caller's shared budget; charge before growing intermediate values.</summary>
-    protected abstract IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context);
+    protected abstract IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment);
 }
 
 internal sealed class IdentityFilter : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         yield return context.Runtime.Clone(input);
     }
@@ -43,7 +43,7 @@ internal sealed class IdentityFilter : JqFilter
 
 internal sealed class LiteralFilter(JsonNode? value) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         yield return context.Runtime.Clone(value);
     }
@@ -51,9 +51,9 @@ internal sealed class LiteralFilter(JsonNode? value) : JqFilter
 
 internal sealed class VariableFilter(string name) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        if (!context.Variables.TryGetValue(name, out var value))
+        if (!environment.TryGetValue(name, out JsonNode? value))
             throw new JqException($"undefined variable ${name}");
         yield return context.Runtime.Clone(value);
     }
@@ -61,30 +61,30 @@ internal sealed class VariableFilter(string name) : JqFilter
 
 internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        foreach (var value in left.Evaluate(input, context))
-            foreach (var output in right.Evaluate(value, context))
+        foreach (var value in left.Evaluate(input, context, environment))
+            foreach (var output in right.Evaluate(value, context, environment))
                 yield return output;
     }
 }
 
 internal sealed class CommaFilter(JqFilter left, JqFilter right) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        foreach (var value in left.Evaluate(input, context))
+        foreach (var value in left.Evaluate(input, context, environment))
             yield return value;
-        foreach (var value in right.Evaluate(input, context))
+        foreach (var value in right.Evaluate(input, context, environment))
             yield return value;
     }
 }
 
 internal sealed class FieldFilter(JqFilter source, string name, bool optional) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        foreach (var value in source.Evaluate(input, context))
+        foreach (var value in source.Evaluate(input, context, environment))
         {
             if (value is JsonObject obj)
                 yield return context.Runtime.Clone(obj.TryGetPropertyValue(name, out var child) ? child : null);
@@ -98,12 +98,12 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
 
 internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         // Key-major order: each key combines with every source value,
         // matching index-then-source evaluation with backtracking.
-        foreach (var key in index.Evaluate(input, context))
-            foreach (var value in source.Evaluate(input, context))
+        foreach (var key in index.Evaluate(input, context, environment))
+            foreach (var value in source.Evaluate(input, context, environment))
             {
                 if (value is JsonArray arr && TryGetInt(key, out var ix))
                 {
@@ -128,13 +128,13 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
 
 internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? end, bool optional) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         // Bound-major order: each start combines with every end, then every
         // source value, matching key-object construction with backtracking.
         foreach (var startIndex in StartIndexes())
             foreach (var endBound in EndBounds())
-                foreach (var value in source.Evaluate(input, context))
+                foreach (var value in source.Evaluate(input, context, environment))
                 {
                     int fromStart = startIndex;
                     int endIndex;
@@ -182,7 +182,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 yield return 0;
                 yield break;
             }
-            foreach (var bound in start.Evaluate(input, context))
+            foreach (var bound in start.Evaluate(input, context, environment))
                 yield return bound == null ? 0 : (int)Number(bound);
         }
 
@@ -194,7 +194,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 yield return null;
                 yield break;
             }
-            foreach (var bound in end.Evaluate(input, context))
+            foreach (var bound in end.Evaluate(input, context, environment))
                 yield return bound == null ? 0 : (int)Number(bound);
         }
     }
@@ -211,9 +211,9 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
 
 internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        foreach (var value in source.Evaluate(input, context))
+        foreach (var value in source.Evaluate(input, context, environment))
         {
             if (value is JsonArray arr)
             {
@@ -235,19 +235,19 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
 // order, matching recursive descent through iteration.
 internal sealed class RecursiveDescentFilter : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         yield return context.Runtime.Clone(input);
         if (input is JsonArray array)
         {
             foreach (JsonNode? child in array)
-                foreach (JsonNode? descendant in new RecursiveDescentFilter().Evaluate(child, context))
+                foreach (JsonNode? descendant in new RecursiveDescentFilter().Evaluate(child, context, environment))
                     yield return descendant;
         }
         else if (input is JsonObject obj)
         {
             foreach (var property in obj)
-                foreach (JsonNode? descendant in new RecursiveDescentFilter().Evaluate(property.Value, context))
+                foreach (JsonNode? descendant in new RecursiveDescentFilter().Evaluate(property.Value, context, environment))
                     yield return descendant;
         }
     }
@@ -255,10 +255,10 @@ internal sealed class RecursiveDescentFilter : JqFilter
 
 internal sealed class ArrayFilter(JqFilter item) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         var array = new JsonArray();
-        foreach (var value in item.Evaluate(input, context))
+        foreach (var value in item.Evaluate(input, context, environment))
             array.Add(context.Runtime.Clone(value));
         yield return array;
     }
@@ -268,7 +268,7 @@ internal sealed record ObjectProperty(string? StaticKey, JqFilter? KeyFilter, Jq
 
 internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         foreach (var obj in Build(0, new JsonObject()))
             yield return obj;
@@ -285,7 +285,7 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
             if (property is { StaticKey: string key, KeyFilter: null })
             {
                 // Lazy cartesian: an empty value stream yields no objects.
-                foreach (var value in property.Value.Evaluate(input, context))
+                foreach (var value in property.Value.Evaluate(input, context, environment))
                 {
                     if (context.Runtime.Clone(current) is not JsonObject next)
                         throw new InvalidOperationException("Expected object clone.");
@@ -296,11 +296,11 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
             }
             else if (property.KeyFilter is JqFilter keyFilter)
             {
-                foreach (var keyValue in keyFilter.Evaluate(input, context))
+                foreach (var keyValue in keyFilter.Evaluate(input, context, environment))
                 {
                     if (!TryGetString(keyValue, out string keyName))
                         throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
-                    foreach (var value in property.Value.Evaluate(input, context))
+                    foreach (var value in property.Value.Evaluate(input, context, environment))
                     {
                         if (context.Runtime.Clone(current) is not JsonObject next)
                             throw new InvalidOperationException("Expected object clone.");
@@ -316,21 +316,21 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
 
 internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         // Value operators distribute with the left operand inner (fast),
         // matching reversed call prelude order with backtracking. Boolean
         // and/or keep their pairwise shape pending a later increment.
         if (op is "and" or "or")
         {
-            foreach (var l in left.Evaluate(input, context))
-                foreach (var r in right.Evaluate(input, context))
+            foreach (var l in left.Evaluate(input, context, environment))
+                foreach (var r in right.Evaluate(input, context, environment))
                     yield return Eval(l, r);
         }
         else
         {
-            foreach (var r in right.Evaluate(input, context))
-                foreach (var l in left.Evaluate(input, context))
+            foreach (var r in right.Evaluate(input, context, environment))
+                foreach (var l in left.Evaluate(input, context, environment))
                     yield return Eval(l, r);
         }
 
@@ -404,9 +404,9 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
 // Quota, compile, cancellation, and host failures still propagate.
 internal sealed class OptionalFilter(JqFilter inner) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        using IEnumerator<JsonNode?> results = inner.Evaluate(input, context).GetEnumerator();
+        using IEnumerator<JsonNode?> results = inner.Evaluate(input, context, environment).GetEnumerator();
         while (true)
         {
             bool moved;
@@ -414,7 +414,7 @@ internal sealed class OptionalFilter(JqFilter inner) : JqFilter
             {
                 moved = results.MoveNext();
             }
-            catch (Exception exception) when (IsSuppressible(exception))
+            catch (Exception exception) when (JqErrors.IsCatchable(exception))
             {
                 yield break;
             }
@@ -424,19 +424,16 @@ internal sealed class OptionalFilter(JqFilter inner) : JqFilter
         }
     }
 
-    private static bool IsSuppressible(Exception exception) =>
-        exception is JsonException or FormatException or ArgumentException or OverflowException
-        || (exception is JqException && exception is not JqQuotaException && exception is not JqCompileException);
 }
 
 // Defined-or: non-false, non-null left outputs pass through; the right side
 // runs only when no such output exists.
 internal sealed class AlternativeFilter(JqFilter left, JqFilter right) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         bool found = false;
-        foreach (JsonNode? value in left.Evaluate(input, context))
+        foreach (JsonNode? value in left.Evaluate(input, context, environment))
         {
             if (Truthy(value))
             {
@@ -445,16 +442,16 @@ internal sealed class AlternativeFilter(JqFilter left, JqFilter right) : JqFilte
             }
         }
         if (!found)
-            foreach (JsonNode? value in right.Evaluate(input, context))
+            foreach (JsonNode? value in right.Evaluate(input, context, environment))
                 yield return value;
     }
 }
 
 internal sealed class UnaryFilter(string op, JqFilter inner) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        foreach (var value in inner.Evaluate(input, context))
+        foreach (var value in inner.Evaluate(input, context, environment))
         {
             yield return op switch
             {
@@ -470,26 +467,26 @@ internal sealed class IfFilter(
     IReadOnlyList<(JqFilter Condition, JqFilter Then)> branches,
     JqFilter otherwise) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         foreach (var (condition, then) in branches)
         {
-            if (condition.Evaluate(input, context).Any(Truthy))
+            if (condition.Evaluate(input, context, environment).Any(Truthy))
             {
-                foreach (var value in then.Evaluate(input, context))
+                foreach (var value in then.Evaluate(input, context, environment))
                     yield return value;
                 yield break;
             }
         }
 
-        foreach (var value in otherwise.Evaluate(input, context))
+        foreach (var value in otherwise.Evaluate(input, context, environment))
             yield return value;
     }
 }
 
 internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         if (name == "empty")
             yield break;
@@ -499,7 +496,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             if (args.Count != 1)
                 throw new JqException("select expects one argument");
             // Predicates can yield multiple results; consume them without buffering.
-            foreach (var value in args[0].Evaluate(input, context))
+            foreach (var value in args[0].Evaluate(input, context, environment))
                 if (Truthy(value))
                     yield return context.Runtime.Clone(input);
             yield break;
@@ -526,7 +523,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     yield return (JsonNode?[])current.Clone();
                     yield break;
                 }
-                foreach (var value in args[index].Evaluate(input, context))
+                foreach (var value in args[index].Evaluate(input, context, environment))
                 {
                     current[index] = value;
                     foreach (var combo in Combine(index - 1))
@@ -595,7 +592,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
 
 internal sealed class FormatFilter(string format) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         yield return JsonValue.Create(context.Runtime.Format(format, input));
     }
@@ -610,7 +607,7 @@ internal sealed class InterpolatedStringFilter(string template, string? format) 
 
     private sealed record Interpolation(JqFilter Filter) : Segment;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         // Split once per evaluation; each interpolation parses a single filter.
         var segments = new List<Segment>();
@@ -643,7 +640,7 @@ for (; i < template.Length; i++)
                     segments.Add(new Literal(literal.ToString()));
                     literal.Clear();
                 }
-                var parsed = new JqParser(template[start..i], context.ProgramSource, context.Variables, context.Budget).Parse();
+                var parsed = new JqParser(template[start..i], context.ProgramSource, environment, context.Budget).Parse();
                 segments.Add(new Interpolation(parsed));
             }
             else
@@ -684,7 +681,7 @@ for (; i < template.Length; i++)
             }
             if (segments[index] is Interpolation interpolation)
             {
-                foreach (var value in interpolation.Filter.Evaluate(input, context))
+                foreach (var value in interpolation.Filter.Evaluate(input, context, environment))
                 {
                     string rendered = Render(value);
                     foreach (var prefix in Combine(index - 1))

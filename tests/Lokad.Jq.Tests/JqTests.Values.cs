@@ -179,10 +179,10 @@ public sealed partial class JqTests
         var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
         var budget = new JqBudget(CancellationToken.None);
         using var context = new JqContext(variables, JqProgramSource.Inline, budget);
-        JqFilter filter = new JqParser("{\"a\":[1]}", JqProgramSource.Inline, variables, budget).Parse();
+        JqFilter filter = new JqParser("{\"a\":[1]}", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
 
-        List<System.Text.Json.Nodes.JsonNode?> first = filter.Evaluate(null, context).ToList();
-        List<System.Text.Json.Nodes.JsonNode?> second = filter.Evaluate(null, context).ToList();
+        List<System.Text.Json.Nodes.JsonNode?> first = filter.Evaluate(null, context, context.RootEnvironment).ToList();
+        List<System.Text.Json.Nodes.JsonNode?> second = filter.Evaluate(null, context, context.RootEnvironment).ToList();
 
         Assert.Single(first);
         Assert.Single(second);
@@ -204,8 +204,8 @@ public sealed partial class JqTests
             var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
             var budget = new JqBudget(CancellationToken.None);
             using var context = new JqContext(variables, JqProgramSource.Inline, budget);
-            JqFilter filter = new JqParser("1.5 + 2.5", JqProgramSource.Inline, variables, budget).Parse();
-            List<System.Text.Json.Nodes.JsonNode?> results = filter.Evaluate(null, context).ToList();
+            JqFilter filter = new JqParser("1.5 + 2.5", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
+            List<System.Text.Json.Nodes.JsonNode?> results = filter.Evaluate(null, context, context.RootEnvironment).ToList();
 
             Assert.Single(results);
             Assert.Equal(4.0, JqRuntime.Number(results[0]));

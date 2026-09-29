@@ -11,6 +11,7 @@ internal sealed class JqContext(
 {
     public IReadOnlyDictionary<string, JsonNode?> Variables { get; } = variables;
     public JqProgramSource ProgramSource { get; } = programSource ?? throw new ArgumentNullException(nameof(programSource));
+    public JqEnvironment RootEnvironment { get; } = JqEnvironment.CreateRoot(variables);
     public JqBudget Budget { get; } = budget;
     public JqRuntime Runtime { get; } = new(budget);
     public JqRegexCache Regexes { get; } = new(budget, TimeProvider.System);

@@ -166,7 +166,7 @@ public sealed partial class JqTests
     {
         using var cancellation = new CancellationTokenSource();
         using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), JqProgramSource.Inline, new JqBudget(cancellation.Token));
-        using var values = new JqParser(filter, JqProgramSource.Inline, context.Variables, context.Budget).Parse().Evaluate(null, context).GetEnumerator();
+        using var values = new JqParser(filter, JqProgramSource.Inline, context.RootEnvironment, context.Budget).Parse().Evaluate(null, context, context.RootEnvironment).GetEnumerator();
         Assert.True(values.MoveNext());
         cancellation.Cancel();
 

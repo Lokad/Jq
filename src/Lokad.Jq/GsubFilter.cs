@@ -9,13 +9,13 @@ namespace Lokad.Jq;
 
 internal sealed class GsubFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         if (args.Count is not (2 or 3))
             throw new JqException("gsub expects two or three arguments");
         var text = String(input);
-        foreach (var flags in args.Count == 3 ? args[2].Evaluate(input, context) : [(JsonNode?)null])
-        foreach (var pattern in args[0].Evaluate(input, context))
+        foreach (var flags in args.Count == 3 ? args[2].Evaluate(input, context, environment) : [(JsonNode?)null])
+        foreach (var pattern in args[0].Evaluate(input, context, environment))
         {
             if (!JqRegexOptions.TryParse(flags == null ? string.Empty : String(flags), out var options, out var unsupportedFlag))
                 throw new JqException($"unsupported gsub flag '{unsupportedFlag}'");
@@ -53,7 +53,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args) : JqFilter
 
                 // All match positions and captures are now copied. A nested gsub may reuse the buffer.
                 var index = 0;
-                foreach (var replacement in args[1].Evaluate(captures, context))
+                foreach (var replacement in args[1].Evaluate(captures, context, environment))
                 {
                     if (index == results.Count)
                     {
