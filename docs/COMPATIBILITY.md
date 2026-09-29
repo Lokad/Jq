@@ -15,8 +15,9 @@ Known gaps to investigate and close:
 
 - User-defined functions, lexical variable binding/destructuring, reductions,
   recursion/control flow, assignment/update paths, modules, and many builtins.
-- Generic function arguments currently collect streams and often select the
-  first value. jq generator semantics require a broader evaluator contract.
+- Function arguments, index keys, slice bounds, object properties, and
+  interpolations distribute lazily over cartesian streams. Boolean `and`/`or`/`//`
+  keep their pairwise shape pending later increments.
 - Default output is compact; upstream-compatible formatting needs separate work.
   Pretty JSON currently uses platform newlines inside formatted values.
 - Duplicate object keys resolve last-wins. Numbers use doubles with integral storage for integers;
