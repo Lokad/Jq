@@ -20,6 +20,10 @@ internal sealed class JqRuntime(JqBudget budget)
     internal ReadOnlyMemory<byte> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs)
     {
         budget.ChargeTree(node);
+        // The JSON writer rejects non-finite doubles while the reference
+        // renders NaN as null and clamps infinities to the finite
+        // extremes. Sanitize a charged clone only when needed.
+        JsonNode? clean = ContainsNonFinite(node) ? SanitizeNonFinite(node) : node;
         var buffer = new JqJsonBuffer(budget);
         using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
         {
@@ -30,12 +34,71 @@ internal sealed class JqRuntime(JqBudget budget)
             MaxDepth = JqBudget.MaximumDepth
         }))
         {
-            if (node == null) writer.WriteNullValue();
-            else node.WriteTo(writer, ascii ? AsciiJson : CompactJson);
+            if (clean == null) writer.WriteNullValue();
+            else clean.WriteTo(writer, ascii ? AsciiJson : CompactJson);
             writer.Flush();
         }
         budget.ChargeString(Encoding.UTF8.GetCharCount(buffer.WrittenMemory.Span));
         return buffer.WrittenMemory;
+    }
+
+    private static bool ContainsNonFinite(JsonNode? node)
+    {
+        if (node is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
+            return true;
+        if (node is JsonArray array)
+        {
+            foreach (JsonNode? child in array)
+                if (ContainsNonFinite(child))
+                    return true;
+            return false;
+        }
+        if (node is JsonObject obj)
+        {
+            foreach (var property in obj)
+                if (ContainsNonFinite(property.Value))
+                    return true;
+            return false;
+        }
+        return false;
+    }
+
+    private JsonNode? SanitizeNonFinite(JsonNode? node)
+    {
+        if (node is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
+            return double.IsNaN(number) ? null : JsonValue.Create(number > 0 ? double.MaxValue : double.MinValue);
+        JsonNode? copy = Clone(node);
+        SanitizeInPlace(copy);
+        return copy;
+    }
+
+    private static void SanitizeInPlace(JsonNode? node)
+    {
+        if (node is JsonArray array)
+        {
+            for (var index = 0; index < array.Count; index++)
+            {
+                JsonNode? child = array[index];
+                if (child is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
+                    array[index] = double.IsNaN(number) ? null : JsonValue.Create(number > 0 ? double.MaxValue : double.MinValue);
+                else
+                    SanitizeInPlace(child);
+            }
+        }
+        else if (node is JsonObject obj)
+        {
+            List<string> keys = new List<string>(obj.Count);
+            foreach (var property in obj)
+                keys.Add(property.Key);
+            foreach (string key in keys)
+            {
+                JsonNode? child = obj[key];
+                if (child is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
+                    obj[key] = double.IsNaN(number) ? null : JsonValue.Create(number > 0 ? double.MaxValue : double.MinValue);
+                else
+                    SanitizeInPlace(child);
+            }
+        }
     }
 
     internal JsonNode? Clone(JsonNode? node)
@@ -183,10 +246,12 @@ internal sealed class JqRuntime(JqBudget budget)
         if (node == null) return "null";
         if (TryGetString(node, out var s)) return s;
         if (node is JsonValue v && v.TryGetValue<bool>(out var b)) return b ? "true" : "false";
-        if (node is JsonValue n && n.TryGetValue<double>(out var d)) return d.ToString(CultureInfo.InvariantCulture);
+        // Integral storage prints exactly; doubles use the shortest
+        // round-trip form, while non-finite values render as JSON.
         if (node is JsonValue i && i.TryGetValue<int>(out var intValue)) return intValue.ToString(CultureInfo.InvariantCulture);
         if (node is JsonValue l && l.TryGetValue<long>(out var longValue)) return longValue.ToString(CultureInfo.InvariantCulture);
         if (node is JsonValue m && m.TryGetValue<decimal>(out var decimalValue)) return decimalValue.ToString(CultureInfo.InvariantCulture);
+        if (node is JsonValue n && n.TryGetValue<double>(out var d)) return double.IsFinite(d) ? d.ToString(CultureInfo.InvariantCulture) : Serialize(node, false, null, false);
         return Serialize(node, false, null, false);
     }
 
@@ -201,10 +266,21 @@ internal sealed class JqRuntime(JqBudget budget)
         return false;
     }
 
+    // JsonValue conversions are storage-strict for created values but
+    // convertible for parsed ones, so probe each integral storage in turn.
     internal static bool TryGetInt(JsonNode? node, out int value)
     {
         value = 0;
-        if (node is JsonValue v && v.TryGetValue(out value)) return true;
+        if (node is JsonValue v && v.TryGetValue<int>(out int direct))
+        {
+            value = direct;
+            return true;
+        }
+        if (node is JsonValue l && l.TryGetValue<long>(out long whole) && whole >= int.MinValue && whole <= int.MaxValue)
+        {
+            value = (int)whole;
+            return true;
+        }
         if (node is JsonValue d && d.TryGetValue<double>(out var number))
         {
             value = (int)number;

@@ -228,6 +228,12 @@ internal sealed class JqParser(
         var token = Next();
         if (token.Kind == TokenKind.Number)
         {
+            // Integer literals keep integral storage (exact through identity
+            // and conversion); decimals and exponents use doubles. A signed
+            // zero stays a double so it renders with its sign.
+            if (long.TryParse(token.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long whole)
+                && (whole != 0 || !token.Text.StartsWith("-", StringComparison.Ordinal)))
+                return new LiteralFilter(JsonValue.Create(whole));
             if (!double.TryParse(token.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
                 throw Error($"invalid number {token.Text}", token.Span);
             return new LiteralFilter(JsonValue.Create(value));

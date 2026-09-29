@@ -268,8 +268,8 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
                 "+" => context.Runtime.Add(l, r),
                 "-" => JsonValue.Create(Number(l) - Number(r)),
                 "*" => context.Runtime.Multiply(l, r),
-                "/" => JsonValue.Create(Number(l) / Number(r)),
-                "%" => JsonValue.Create(Number(l) % Number(r)),
+                "/" => Divide(l, r),
+                "%" => Modulo(l, r),
                 "==" => JsonValue.Create(context.Runtime.JsonEquals(l, r)),
                 "!=" => JsonValue.Create(!context.Runtime.JsonEquals(l, r)),
                 "<" => JsonValue.Create(Compare(l, r) < 0),
@@ -281,6 +281,45 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
                 "//" => Truthy(l) ? context.Runtime.Clone(l) : context.Runtime.Clone(r),
                 _ => throw new JqException($"unsupported operator {op}")
             };
+
+            JsonNode? Divide(JsonNode? l, JsonNode? r)
+            {
+                double left = Number(l);
+                double right = Number(r);
+                if (right == 0.0 && TypeName(l) == "number" && TypeName(r) == "number")
+                    throw new JqRuntimeException($"number ({context.Runtime.ToJqString(l)}) and number ({context.Runtime.ToJqString(r)}) cannot be divided because the divisor is zero");
+                return JsonValue.Create(left / right);
+            }
+
+            // Integer remainder matching the reference: operands truncate
+            // toward zero with clamping, NaN propagates, zero divisors fail.
+            JsonNode? Modulo(JsonNode? l, JsonNode? r)
+            {
+                double left = Number(l);
+                double right = Number(r);
+                if (TypeName(l) == "number" && TypeName(r) == "number")
+                {
+                    if (double.IsNaN(left) || double.IsNaN(right))
+                        return JsonValue.Create(double.NaN);
+                    long divisor = Truncate(right);
+                    if (divisor == 0)
+                        throw new JqRuntimeException($"number ({context.Runtime.ToJqString(l)}) and number ({context.Runtime.ToJqString(r)}) cannot be divided (remainder) because the divisor is zero");
+                    if (divisor == -1)
+                        return JsonValue.Create(0L);
+                    return JsonValue.Create(Truncate(left) % divisor);
+                }
+                return JsonValue.Create(left % right);
+            }
+
+            static long Truncate(double value)
+            {
+                const double MinAsDouble = -9223372036854775808.0;
+                if (value < MinAsDouble)
+                    return long.MinValue;
+                if (-value <= MinAsDouble)
+                    return long.MaxValue;
+                return (long)value;
+            }
         }
     }
 }
