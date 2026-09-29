@@ -1,0 +1,2 @@
+# Disable MSBuild Terminal Logger for repository command-line builds.
+-tl:off

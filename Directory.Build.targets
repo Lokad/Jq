@@ -1,0 +1,12 @@
+<Project>
+  <ItemGroup>
+    <AllowedPackageReference Include="BenchmarkDotNet;Lokad.Cli;PCRE.NET;Microsoft.SourceLink.GitHub;Microsoft.NET.Test.Sdk;xunit;xunit.runner.visualstudio" />
+  </ItemGroup>
+  <Target Name="EnforcePackageAllowlist" BeforeTargets="CollectPackageReferences">
+    <ItemGroup>
+      <DisallowedPackageReference Include="@(PackageReference)" Exclude="@(AllowedPackageReference)" />
+    </ItemGroup>
+    <Error Condition="'@(DisallowedPackageReference)' != ''"
+           Text="PackageReference(s) not in allowlist: @(DisallowedPackageReference). Update Directory.Packages.props intentionally." />
+  </Target>
+</Project>

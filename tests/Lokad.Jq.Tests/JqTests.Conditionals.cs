@@ -1,0 +1,93 @@
+using Lokad.Jq;
+
+namespace Lokad.Jq.Tests;
+
+public sealed partial class JqTests
+{
+    [Theory]
+    [InlineData("7", "if true then . else empty end", "7\n")]
+    [InlineData("7", "if false then empty else . end", "7\n")]
+    [InlineData("true", "if . then . else empty end", "true\n")]
+    [InlineData("false", "if . then empty else . end", "false\n")]
+    [InlineData("7", "if false then . elif true then . else empty end", "7\n")]
+    [InlineData("true", "if false then empty elif . then . else empty end", "true\n")]
+    [InlineData("true", "if . and true then . else empty end", "true\n")]
+    [InlineData("false", "if . or true then . else empty end", "false\n")]
+    [InlineData("7", "if true then if false then empty else . end else empty end", "7\n")]
+    [InlineData("7", "if true then .\nelse empty end", "7\n")]
+    [InlineData("7", "if true then .\telse empty end", "7\n")]
+    [InlineData("7", "if true then (.) else empty end", "7\n")]
+    public async Task Jq_IdentityAtConditionalBoundaries(string input, string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        var status = await tool.ExecuteAsync(host, CancellationToken.None);
+
+        Assert.Equal(0, status);
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("[.if,.then,.else,.elif,.end,.and,.or]", "[1,2,3,4,5,6,7]\n")]
+    [InlineData("if true then .else else .end end", "3\n")]
+    [InlineData(".child.then.end", "8\n")]
+    [InlineData(".child.then.end?", "8\n")]
+    [InlineData(".[\"else\"]", "3\n")]
+    [InlineData(".items[0].end", "9\n")]
+    public async Task Jq_ConditionalWordsRemainFieldNames(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("""
+            {"if":1,"then":2,"else":3,"elif":4,"end":5,"and":6,"or":7,
+             "child":{"then":{"end":8}},"items":[{"end":9}]}
+            """);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        var status = await tool.ExecuteAsync(host, CancellationToken.None);
+
+        Assert.Equal(0, status);
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("1.and true", "true\n")]
+    [InlineData("1.or false", "true\n")]
+    [InlineData("if 1.then 2 else 3 end", "2\n")]
+    [InlineData("if -1.then 2 else 3 end", "2\n")]
+    public async Task Jq_DecimalPointsDoNotTurnKeywordsIntoFieldNames(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        var status = await tool.ExecuteAsync(host, CancellationToken.None);
+
+        Assert.Equal(0, status);
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_ConditionalIdentityFiltersNestedObjects()
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("""
+            {"items":[
+              {"kind":"book","book":{"language":"French"}},
+              {"kind":"book","book":{"language":"English"}},
+              {"kind":"magazine"}
+            ]}
+            """);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq",
+            """[.items[] | if .kind=="book" and .book.language=="French" then . else empty end] | length""")));
+
+        var status = await tool.ExecuteAsync(host, CancellationToken.None);
+
+        Assert.Equal(0, status);
+        Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+}

@@ -1,0 +1,70 @@
+using Lokad.Jq;
+
+namespace Lokad.Jq.Tests;
+
+public sealed partial class JqTests
+{
+    [Theory]
+    [InlineData("[1,2,3] | .[] | select(. > 1)", "2\n3\n")]
+    [InlineData("[null,false,0,\"\",[],{},true] | .[] | select(.)", "0\n\"\"\n[]\n{}\ntrue\n")]
+    [InlineData("{id:7,keep:true} | select(.keep)", "{\"id\":7,\"keep\":true}\n")]
+    [InlineData("false | select(true)", "false\n")]
+    [InlineData("null | select(true)", "null\n")]
+    [InlineData("\"kept\" | select(false,null,true,false,true)", "\"kept\"\n\"kept\"\n")]
+    [InlineData("\"dropped\" | select(false,null)", "")]
+    [InlineData("[1,2] | select(empty)", "")]
+    [InlineData("[1,2] | [select(true,true)]", "[[1,2],[1,2]]\n")]
+    public async Task Jq_SelectPreservesMatchingInput(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_SelectCountsMatchingNestedObjects()
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("""
+            {"items":[
+              {"kind":"book","book":{"language":"French"}},
+              {"kind":"book","book":{"language":"English"}},
+              {"kind":"magazine"}
+            ]}
+            """);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq",
+            """[.items[] | select(.kind=="book" and .book.language=="French")] | length""")));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("select")]
+    [InlineData("select()")]
+    [InlineData("select(true;false)")]
+    public async Task Jq_SelectRequiresOnePredicate(string filter)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("jq: select expects one argument\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
+    public async Task Jq_SelectReportsPredicateErrorsAfterEarlierResults()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "7 | select(true, missing)")));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("7\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: unsupported function missing\n", host.GetOutput(JqFileDescriptor.StdErr));
+    }
+}
