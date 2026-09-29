@@ -25,4 +25,5 @@ internal sealed class JqInvocation
     public IReadOnlyList<JsonNode?> PositionalArguments { get; init; } = [];
     public IReadOnlyList<JqResolvedPath> InputFiles { get; init; } = [];
     public string? Error { get; init; }
+    public JqClock? Clock { get; init; }
 }

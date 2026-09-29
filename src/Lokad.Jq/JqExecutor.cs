@@ -29,7 +29,7 @@ internal static class JqExecutor
         JqProgramSource programSource = invocation.FilterFile is { } programPath
             ? JqProgramSource.File(Utf8Text.Decode(programPath.Display))
             : JqProgramSource.Inline;
-        using var context = new JqContext(invocation.Variables, programSource, budget);
+        using var context = new JqContext(invocation.Variables, programSource, budget) { Clock = invocation.Clock };
         var stage = 2;
         try
         {
@@ -66,8 +66,12 @@ internal static class JqExecutor
                     }
                     var appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken)).ConfigureAwait(false);
                     if (!appended.CanAcceptMore) return appended.ExitCode;
+                    if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int stopped)
+                        return stopped;
                 }
             }
+            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int tailStopped)
+                return tailStopped;
             return 0;
         }
         catch (JqHaltException ex)
@@ -75,6 +79,8 @@ internal static class JqExecutor
             // Immediate termination: pending outputs and remaining inputs
             // are abandoned. String payloads render raw; anything else was
             // already shaped at the throw site.
+            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int haltStopped)
+                return haltStopped;
             if (ex.StderrText is not null)
                 await host.AppendAsync(invocation.StdErr, Utf8Text.Encode(ex.StderrText), cancellationToken).ConfigureAwait(false);
             return ex.ExitCode;
@@ -86,10 +92,24 @@ internal static class JqExecutor
         }
         catch (Exception ex) when (ex is JqException or JsonException or FormatException or ArgumentException or OverflowException)
         {
+            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int errorStopped)
+                return errorStopped;
             await WriteErrorAsync(host, invocation, $"jq: {ex.Message}", cancellationToken).ConfigureAwait(false);
             return stage;
         }
 
+        static async Task<int?> DrainStderrAsync(IJqHost host, JqInvocation invocation, JqContext context, CancellationToken cancellationToken)
+        {
+            if (!context.HasPendingStderr)
+                return null;
+            foreach (ReadOnlyMemory<byte> chunk in context.TakePendingStderr())
+            {
+                JqAppendResult appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdErr, chunk, cancellationToken)).ConfigureAwait(false);
+                if (!appended.CanAcceptMore)
+                    return appended.ExitCode;
+            }
+            return null;
+        }
         static async IAsyncEnumerable<JsonNode?> ReadInputsAsync(
             IJqHost host, JqInvocation invocation, JqContext context,
             [EnumeratorCancellation] CancellationToken cancellationToken)

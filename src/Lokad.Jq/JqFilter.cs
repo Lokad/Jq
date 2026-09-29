@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Lokad.Jq.Helpers;
 using static Lokad.Jq.JqRuntime;
 using static Lokad.Jq.JqPaths;
 
@@ -1531,6 +1532,15 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "length": yield return JsonValue.Create(Length(input)); break;
                 case "type": yield return JsonValue.Create(TypeName(input)); break;
                 case "not": yield return JsonValue.Create(!Truthy(input)); break;
+                case "now": yield return JsonValue.Create(JqTime.Now(context)); break;
+                case "env": yield return context.Runtime.Clone(context.Variables.TryGetValue("ENV", out JsonNode? environment) ? environment : new JsonObject()); break;
+                case "stderr":
+                    if (TryGetString(input, out string? message) && message is not null)
+                        context.EmitStderr(Utf8Text.Encode(message).ToArray());
+                    else
+                        context.EmitStderr(context.Runtime.SerializeUtf8(input, false, null, false).ToArray());
+                    yield return context.Runtime.Clone(input);
+                    break;
                 case "tonumber": yield return context.Runtime.ToJsonNumber(input); break;
                 case "toboolean": yield return JsonValue.Create(context.Runtime.ToJsonBoolean(input)); break;
                 case "utf8bytelength": yield return JsonValue.Create(Utf8ByteLength(input, context)); break;

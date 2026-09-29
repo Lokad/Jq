@@ -20,7 +20,7 @@ public sealed class Jq
         if (!IsJqName(invocation.CommandName))
             return null;
 
-        return new Jq(JqCommandLineParser.Parse(invocation.Arguments, invocation.CurrentDirectory, invocation.StdIn, invocation.StdOut, invocation.StdErr));
+        return new Jq(JqCommandLineParser.Parse(invocation.Arguments, invocation.CurrentDirectory, invocation.StdIn, invocation.StdOut, invocation.StdErr, invocation.Environment, invocation.Clock));
     }
 
     /// <summary>Executes with host-mediated IO; cancellation propagates to the caller.</summary>

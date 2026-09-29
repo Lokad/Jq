@@ -14,6 +14,10 @@ internal static class JqBuiltinRegistry
     {
         ["empty"] = (0, 0),
         ["not"] = (0, 0),
+        ["now"] = (0, 0),
+        ["env"] = (0, 0),
+        ["debug"] = (0, 1),
+        ["stderr"] = (0, 0),
         ["error"] = (0, 1),
         ["halt"] = (0, 0),
         ["halt_error"] = (0, 1),

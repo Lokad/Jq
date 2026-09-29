@@ -893,6 +893,11 @@ internal sealed class JqParser(
             return new PathBuiltinFilter(args[0]);
         }
 
+        if (name == "debug")
+        {
+            return new DebugFilter(args);
+        }
+
         if (name == "del")
         {
             return new DelBuiltinFilter(args);

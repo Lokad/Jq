@@ -32,8 +32,11 @@ internal static class JqCommandLineParser
         JqPath currentDirectory,
         JqFileDescriptor stdIn,
         JqFileDescriptor stdOut,
-        JqFileDescriptor stdErr)
+        JqFileDescriptor stdErr,
+        IReadOnlyList<JqEnvironmentVariable> environment,
+        JqClock? clock)
     {
+        ArgumentNullException.ThrowIfNull(environment);
         var budget = new JqBudget(CancellationToken.None);
         var runtime = new JqRuntime(budget);
         try
@@ -80,6 +83,18 @@ internal static class JqCommandLineParser
             foreach (var (key, value) in special.Variables)
                 namedArguments[key] = runtime.Clone(value);
             special.Variables["ARGS"] = argsObject;
+            // Snapshot exported variables for $ENV unless the caller bound the name explicitly.
+            if (!special.Variables.ContainsKey("ENV"))
+            {
+                var environmentObject = new JsonObject();
+                foreach (JqEnvironmentVariable variable in environment)
+                {
+                    budget.ChargeNode();
+                    budget.ChargeString(variable.Name.Length + variable.Value.Length);
+                    environmentObject[variable.Name] = JsonValue.Create(variable.Value);
+                }
+                special.Variables["ENV"] = environmentObject;
+            }
 
             return new JqInvocation
             {
@@ -100,7 +115,8 @@ internal static class JqCommandLineParser
                 FilterFile = filterFile,
                 Variables = special.Variables,
                 PositionalArguments = special.Positional,
-                InputFiles = inputFiles
+                InputFiles = inputFiles,
+                Clock = clock
             };
         }
         catch (Exception ex) when (ex is JqException or FormatException or JqPathException)

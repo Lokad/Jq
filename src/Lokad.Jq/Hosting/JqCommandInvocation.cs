@@ -57,6 +57,29 @@ public sealed class JqCommandInvocation
             JqFileDescriptor.StdErr);
     }
 
+    /// <summary>
+    /// Creates an invocation with standard descriptors, a current directory derived from <c>PWD</c>,
+    /// and an explicit clock for time builtins.
+    /// </summary>
+    public static JqCommandInvocation CreateWithStandardDescriptors(
+        string commandName,
+        IReadOnlyList<string> arguments,
+        IReadOnlyList<JqEnvironmentVariable> environment,
+        JqClock clock)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(clock);
+        return new JqCommandInvocation(
+            commandName,
+            arguments,
+            environment,
+            JqPathResolution.ResolveCurrentDirectory(environment),
+            JqFileDescriptor.StdIn,
+            JqFileDescriptor.StdOut,
+            JqFileDescriptor.StdErr,
+            clock);
+    }
+
     /// <summary>Initializes an invocation with an explicit current directory and descriptors.</summary>
     public JqCommandInvocation(
         string commandName,
@@ -115,6 +138,25 @@ public sealed class JqCommandInvocation
 
     /// <summary>Gets an immutable snapshot of exported environment variables.</summary>
     public IReadOnlyList<JqEnvironmentVariable> Environment { get; }
+
+    /// <summary>Initializes an invocation with an explicit current directory, descriptors, and clock.</summary>
+    public JqCommandInvocation(
+        string commandName,
+        IReadOnlyList<string> arguments,
+        IReadOnlyList<JqEnvironmentVariable> environment,
+        JqPath currentDirectory,
+        JqFileDescriptor stdIn,
+        JqFileDescriptor stdOut,
+        JqFileDescriptor stdErr,
+        JqClock clock)
+        : this(commandName, arguments, environment, currentDirectory, stdIn, stdOut, stdErr)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        Clock = clock;
+    }
+
+    /// <summary>Gets the explicit clock for time builtins, or null when the host supplies none.</summary>
+    public JqClock? Clock { get; }
 
     /// <summary>Gets the canonical absolute current directory for the command.</summary>
     public JqPath CurrentDirectory { get; }
