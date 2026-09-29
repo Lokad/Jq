@@ -13,6 +13,7 @@ internal static class JqBuiltinRegistry
     private static readonly Dictionary<string, (int Minimum, int Maximum)> Definitions = new(StringComparer.Ordinal)
     {
         ["empty"] = (0, 0),
+        ["not"] = (0, 0),
         ["select"] = (1, 1),
         ["length"] = (0, 0),
         ["type"] = (0, 0),

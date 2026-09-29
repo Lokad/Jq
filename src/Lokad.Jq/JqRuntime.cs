@@ -209,10 +209,17 @@ internal sealed class JqRuntime(JqBudget budget)
         return node;
     }
 
+    // Kind-shaped operand diagnostics shared by arithmetic operators,
+    // matching the reference operand rendering.
+    internal string TypeError(JsonNode? l, JsonNode? r, string verb) =>
+        $"{TypeName(l)} ({ToJqString(l)}) and {TypeName(r)} ({ToJqString(r)}) {verb}";
+
     internal JsonNode? Add(JsonNode? l, JsonNode? r)
     {
         if (l == null) return Clone(r);
         if (r == null) return Clone(l);
+        if (TypeName(l) == "number" && TypeName(r) == "number")
+            return JsonValue.Create(Number(l) + Number(r));
         if (TryGetString(l, out var ls) && TryGetString(r, out var rs))
         {
             budget.ChargeString((long)ls.Length + rs.Length);
@@ -231,29 +238,87 @@ internal sealed class JqRuntime(JqBudget budget)
             foreach (var kv in ro) obj[kv.Key] = Clone(kv.Value);
             return obj;
         }
-        return JsonValue.Create(Number(l) + Number(r));
+        throw new JqRuntimeException(TypeError(l, r, "cannot be added"));
     }
 
-    internal JsonNode Multiply(JsonNode? l, JsonNode? r)
+    internal JsonNode? Subtract(JsonNode? l, JsonNode? r)
     {
-        if (TryGetString(l, out var s) && TryGetInt(r, out var n))
+        if (TypeName(l) == "number" && TypeName(r) == "number")
+            return JsonValue.Create(Number(l) - Number(r));
+        if (l is JsonArray la && r is JsonArray ra)
         {
-            var length = (long)s.Length * Math.Max(0, n);
-            budget.ChargeString(length);
-            if (length == 0)
-                return JsonValue.Create(string.Empty);
-            if (n == 1)
-                return JsonValue.Create(s);
-            if (s.Length == 1)
-                return JsonValue.Create(new string(s[0], n));
-
-            return JsonValue.Create(string.Create((int)length, s, static (destination, value) =>
+            var result = new JsonArray();
+            foreach (var item in la)
             {
-                for (var offset = 0; offset < destination.Length; offset += value.Length)
-                    value.AsSpan().CopyTo(destination[offset..]);
-            }));
+                bool excluded = false;
+                foreach (var needle in ra)
+                {
+                    if (JsonEquals(item, needle))
+                    {
+                        excluded = true;
+                        break;
+                    }
+                }
+                if (!excluded)
+                    result.Add(Clone(item));
+            }
+            return result;
         }
-        return JsonValue.Create(Number(l) * Number(r));
+        throw new JqRuntimeException(TypeError(l, r, "cannot be subtracted"));
+    }
+
+    internal JsonNode? Multiply(JsonNode? l, JsonNode? r)
+    {
+        if (TypeName(l) == "number" && TypeName(r) == "number")
+            return JsonValue.Create(Number(l) * Number(r));
+        if (TryGetString(l, out var leftText) && TypeName(r) == "number")
+            return Repeat(leftText, Number(r));
+        if (TryGetString(r, out var rightText) && TypeName(l) == "number")
+            return Repeat(rightText, Number(l));
+        if (l is JsonObject lo && r is JsonObject ro)
+            return MergeRecursive(lo, ro, 0);
+        throw new JqRuntimeException(TypeError(l, r, "cannot be multiplied"));
+    }
+
+    private JsonNode? Repeat(string value, double count)
+    {
+        // Truncation matches the reference repeat mapping; negative and NaN
+        // counts produce null.
+        int times = double.IsNaN(count) || count < 0 ? -1 : count > int.MaxValue ? int.MaxValue : (int)count;
+        if (times < 0)
+            return null;
+        var length = (long)value.Length * times;
+        budget.ChargeString(length);
+        if (length == 0)
+            return JsonValue.Create(string.Empty);
+        if (times == 1)
+            return JsonValue.Create(value);
+        if (value.Length == 1)
+            return JsonValue.Create(new string(value[0], times));
+
+        return JsonValue.Create(string.Create((int)length, value, static (destination, text) =>
+        {
+            for (var offset = 0; offset < destination.Length; offset += text.Length)
+                text.AsSpan().CopyTo(destination[offset..]);
+        }));
+    }
+
+    internal JsonNode MergeRecursive(JsonObject left, JsonObject right, int depth)
+    {
+        if (depth > JqBudget.MaximumDepth)
+            throw new JqException("value nesting limit exceeded");
+        if (Clone(left) is not JsonObject merged)
+            throw new InvalidOperationException("Expected object clone.");
+        foreach (var property in right)
+        {
+            if (merged.TryGetPropertyValue(property.Key, out JsonNode? existing)
+                && existing is JsonObject existingObject
+                && property.Value is JsonObject incomingObject)
+                merged[property.Key] = MergeRecursive(existingObject, incomingObject, depth + 1);
+            else
+                merged[property.Key] = Clone(property.Value);
+        }
+        return merged;
     }
 
     internal static double Number(JsonNode? node)
@@ -628,10 +693,23 @@ internal sealed class JqRuntime(JqBudget budget)
         var arr = new JsonArray();
         var text = String(input);
         var delimiter = String(separator);
+        if (text.Length == 0)
+            return arr;
+        if (delimiter.Length == 0)
+        {
+            // An empty separator splits into Unicode scalars.
+            foreach (var rune in text.EnumerateRunes())
+            {
+                budget.ChargeNode();
+                budget.ChargeString(rune.Utf16SequenceLength);
+                arr.Add(rune.ToString());
+            }
+            return arr;
+        }
         var start = 0;
         while (true)
         {
-            var end = delimiter.Length == 0 ? -1 : text.IndexOf(delimiter, start, StringComparison.Ordinal);
+            var end = text.IndexOf(delimiter, start, StringComparison.Ordinal);
             var length = (end < 0 ? text.Length : end) - start;
             budget.ChargeNode();
             budget.ChargeString(length);

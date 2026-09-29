@@ -16,7 +16,7 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>
     public void Advance(int count)
     {
         if (count > JqBudget.MaximumJsonBytes - _buffer.WrittenCount)
-            throw new JqException("JSON output exceeds the 32 MiB limit");
+            throw new JqQuotaException("JSON output exceeds the 32 MiB limit");
         _buffer.Advance(count);
     }
 
@@ -37,12 +37,12 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>
         budget.CheckCancellation();
         var count = Math.Max(1, sizeHint);
         if (count > JqBudget.MaximumJsonBufferBytes - _buffer.WrittenCount)
-            throw new JqException("JSON buffer exceeds the 64 MiB limit");
+            throw new JqQuotaException("JSON buffer exceeds the 64 MiB limit");
         if (count > _buffer.FreeCapacity)
         {
             var growth = Math.Max(count, Math.Max(256, _buffer.Capacity));
             if (growth > JqBudget.MaximumJsonBufferBytes - _buffer.Capacity)
-                throw new JqException("JSON buffer exceeds the 64 MiB limit");
+                throw new JqQuotaException("JSON buffer exceeds the 64 MiB limit");
             budget.ChargeBytes((long)_buffer.Capacity + growth);
         }
     }

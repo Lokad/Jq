@@ -70,18 +70,44 @@ internal static class Lexer
                 tokens.Add(new Token(TokenKind.Number, source[start..i], JqSourceSpan.FromOffset(source, start)));
                 continue;
             }
-            if (c == '"')
+if (c == '"')
             {
                 var start = i;
                 var sb = new StringBuilder();
                 i++;
                 var closed = false;
+                // Interpolation nesting: `\(` opens code mode where nested
+                // strings, comments, and parentheses stay raw for the inner
+                // parse; only the matching `)` returns to decoding.
+                var depth = 0;
                 while (i < source.Length)
                 {
                     c = source[i++];
-                    if (c == '"') { closed = true; break; }
+                    if (c == '"' && depth == 0) { closed = true; break; }
+                    if (c == '"')
+                    {
+                        sb.Append(c);
+                        while (i < source.Length)
+                        {
+                            char nested = source[i++];
+                            sb.Append(nested);
+                            if (nested == '\\' && i < source.Length) { sb.Append(source[i++]); continue; }
+                            if (nested == '"') break;
+                        }
+                        continue;
+                    }
+                    if (c == '#' && depth > 0)
+                    {
+                        sb.Append(c);
+                        while (i < source.Length && source[i] != '\n') { sb.Append(source[i++]); }
+                        continue;
+                    }
+                    if (c == '(' && depth > 0) { depth++; sb.Append(c); continue; }
+                    if (c == ')' && depth > 0) { depth--; sb.Append(c); continue; }
                     if (c == '\\' && i < source.Length)
                     {
+                        if (depth > 0) { sb.Append(c); sb.Append(source[i++]); continue; }
+                        if (source[i] == '(') { sb.Append("\\("); i++; depth++; continue; }
                         var e = source[i++];
                         sb.Append(e switch
                         {
@@ -93,7 +119,6 @@ internal static class Lexer
                             'n' => '\n',
                             'r' => '\r',
                             't' => '\t',
-                            '(' => "\\(",
                             'u' when i + 4 <= source.Length && int.TryParse(source[(i)..(i += 4)], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var codePoint) => (char)codePoint,
                             'u' => throw new JqCompileException("invalid unicode escape", JqSourceSpan.FromOffset(source, i - 2), programSource),
                             _ => throw new JqCompileException($"invalid escape '\\{e}'", JqSourceSpan.FromOffset(source, i - 2), programSource),

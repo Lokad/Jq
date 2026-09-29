@@ -29,7 +29,7 @@ internal sealed class JqBudget(CancellationToken cancellationToken)
     {
         CheckCancellation();
         if (count < 0 || count > _remainingBytes)
-            throw new JqException("memory budget exceeded");
+            throw new JqQuotaException("memory budget exceeded");
         _remainingBytes -= count;
     }
 
@@ -37,13 +37,13 @@ internal sealed class JqBudget(CancellationToken cancellationToken)
     {
         CheckCancellation();
         if (_remainingNodes-- <= 0)
-            throw new JqException("value budget exceeded");
+            throw new JqQuotaException("value budget exceeded");
     }
 
     internal void ChargeInput(int bytes)
     {
         if (bytes > _remainingInput)
-            throw new JqException("input exceeds the 16 MiB limit");
+            throw new JqQuotaException("input exceeds the 16 MiB limit");
         _remainingInput -= bytes;
         // Allow for the old and new backing arrays while the bounded input buffer grows.
         ChargeBytes(4L * bytes);
@@ -52,7 +52,7 @@ internal sealed class JqBudget(CancellationToken cancellationToken)
     internal void ChargeOutput(int bytes)
     {
         if (bytes > _remainingOutput)
-            throw new JqException("output exceeds the 32 MiB limit");
+            throw new JqQuotaException("output exceeds the 32 MiB limit");
         _remainingOutput -= bytes;
         ChargeBytes(bytes);
     }
@@ -60,7 +60,7 @@ internal sealed class JqBudget(CancellationToken cancellationToken)
     internal static void CheckStringLength(long length)
     {
         if (length > MaximumStringLength)
-            throw new JqException("string result exceeds the 16 MiB UTF-16 limit");
+            throw new JqQuotaException("string result exceeds the 16 MiB UTF-16 limit");
     }
 
     internal void ChargeString(long length)
@@ -89,7 +89,7 @@ internal sealed class JqBudget(CancellationToken cancellationToken)
         void Visit(JsonNode? value, int depth)
         {
             if (depth > MaximumDepth || depth == MaximumDepth && value is JsonArray or JsonObject)
-                throw new JqException("value nesting limit exceeded");
+                throw new JqQuotaException("value nesting limit exceeded");
             ChargeNode();
             switch (value)
             {
@@ -114,7 +114,7 @@ internal sealed class JqBudget(CancellationToken cancellationToken)
     {
         ChargeNode();
         if (_evaluationDepth >= 256)
-            throw new JqException("filter nesting limit exceeded");
+            throw new JqQuotaException("filter nesting limit exceeded");
         _evaluationDepth++;
     }
 

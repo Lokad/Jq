@@ -61,7 +61,7 @@ public sealed partial class JqTests
     [InlineData("\"é\U0001f680\" * 2", "\"é\\uD83D\\uDE80é\\uD83D\\uDE80\"\n")]
     [InlineData("\"same\" * 1", "\"same\"\n")]
     [InlineData("\"x\" * 0", "\"\"\n")]
-    [InlineData("\"x\" * -2", "\"\"\n")]
+    [InlineData("\"x\" * -2", "null\n")]
     [InlineData("\"\" * 1000000", "\"\"\n")]
     [InlineData("\"ab\" + \"cd\"", "\"abcd\"\n")]
     [InlineData("[2 * 3, 2 + 3, 2.5 * 4, -3 * 2]", "[6,5,10,-6]\n")]

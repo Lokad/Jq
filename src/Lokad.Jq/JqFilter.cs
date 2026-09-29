@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using static Lokad.Jq.JqRuntime;
 
@@ -87,9 +88,9 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
         {
             if (value is JsonObject obj)
                 yield return context.Runtime.Clone(obj.TryGetPropertyValue(name, out var child) ? child : null);
-            else if (optional || value == null)
+            else if (value == null)
                 yield return null;
-            else
+            else if (!optional)
                 throw new JqRuntimeException($"cannot index {TypeName(value)} with string \"{name}\"");
         }
     }
@@ -113,11 +114,11 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                 {
                     yield return context.Runtime.Clone(obj.TryGetPropertyValue(name, out var child) ? child : null);
                 }
-                else if (optional || value == null)
+                else if (value == null)
                 {
                     yield return null;
                 }
-                else
+                else if (!optional)
                 {
                     throw new JqRuntimeException($"cannot index {TypeName(value)}");
                 }
@@ -164,11 +165,11 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                         context.Budget.ChargeString(offset - first);
                         yield return JsonValue.Create(text[first..offset]);
                     }
-                    else if (optional || value == null)
+                    else if (value == null)
                     {
                         yield return null;
                     }
-                    else
+                    else if (!optional)
                     {
                         throw new JqRuntimeException($"cannot slice {TypeName(value)}");
                     }
@@ -230,6 +231,28 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
     }
 }
 
+// Pre-order depth-first traversal: the value itself, then each child in
+// order, matching recursive descent through iteration.
+internal sealed class RecursiveDescentFilter : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    {
+        yield return context.Runtime.Clone(input);
+        if (input is JsonArray array)
+        {
+            foreach (JsonNode? child in array)
+                foreach (JsonNode? descendant in new RecursiveDescentFilter().Evaluate(child, context))
+                    yield return descendant;
+        }
+        else if (input is JsonObject obj)
+        {
+            foreach (var property in obj)
+                foreach (JsonNode? descendant in new RecursiveDescentFilter().Evaluate(property.Value, context))
+                    yield return descendant;
+        }
+    }
+}
+
 internal sealed class ArrayFilter(JqFilter item) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
@@ -241,7 +264,9 @@ internal sealed class ArrayFilter(JqFilter item) : JqFilter
     }
 }
 
-internal sealed class ObjectFilter(IReadOnlyList<(string Key, JqFilter Value)> properties) : JqFilter
+internal sealed record ObjectProperty(string? StaticKey, JqFilter? KeyFilter, JqFilter Value);
+
+internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
     {
@@ -256,15 +281,34 @@ internal sealed class ObjectFilter(IReadOnlyList<(string Key, JqFilter Value)> p
                 yield break;
             }
 
-            var (key, filter) = properties[index];
-            // Lazy cartesian: an empty value stream yields no objects.
-            foreach (var value in filter.Evaluate(input, context))
+            ObjectProperty property = properties[index];
+            if (property is { StaticKey: string key, KeyFilter: null })
             {
-                if (context.Runtime.Clone(current) is not JsonObject next)
-                    throw new InvalidOperationException("Expected object clone.");
-                next[key] = context.Runtime.Clone(value);
-                foreach (var obj in Build(index + 1, next))
-                    yield return obj;
+                // Lazy cartesian: an empty value stream yields no objects.
+                foreach (var value in property.Value.Evaluate(input, context))
+                {
+                    if (context.Runtime.Clone(current) is not JsonObject next)
+                        throw new InvalidOperationException("Expected object clone.");
+                    next[key] = context.Runtime.Clone(value);
+                    foreach (var obj in Build(index + 1, next))
+                        yield return obj;
+                }
+            }
+            else if (property.KeyFilter is JqFilter keyFilter)
+            {
+                foreach (var keyValue in keyFilter.Evaluate(input, context))
+                {
+                    if (!TryGetString(keyValue, out string keyName))
+                        throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
+                    foreach (var value in property.Value.Evaluate(input, context))
+                    {
+                        if (context.Runtime.Clone(current) is not JsonObject next)
+                            throw new InvalidOperationException("Expected object clone.");
+                        next[keyName] = context.Runtime.Clone(value);
+                        foreach (var obj in Build(index + 1, next))
+                            yield return obj;
+                    }
+                }
             }
         }
     }
@@ -276,8 +320,8 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
     {
         // Value operators distribute with the left operand inner (fast),
         // matching reversed call prelude order with backtracking. Boolean
-        // and/or// keep their pairwise shape pending later increments.
-        if (op is "and" or "or" or "//")
+        // and/or keep their pairwise shape pending a later increment.
+        if (op is "and" or "or")
         {
             foreach (var l in left.Evaluate(input, context))
                 foreach (var r in right.Evaluate(input, context))
@@ -295,7 +339,7 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
             return op switch
             {
                 "+" => context.Runtime.Add(l, r),
-                "-" => JsonValue.Create(Number(l) - Number(r)),
+                "-" => context.Runtime.Subtract(l, r),
                 "*" => context.Runtime.Multiply(l, r),
                 "/" => Divide(l, r),
                 "%" => Modulo(l, r),
@@ -307,37 +351,40 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
                 ">=" => JsonValue.Create(Compare(l, r) >= 0),
                 "and" => JsonValue.Create(Truthy(l) && Truthy(r)),
                 "or" => JsonValue.Create(Truthy(l) || Truthy(r)),
-                "//" => Truthy(l) ? context.Runtime.Clone(l) : context.Runtime.Clone(r),
                 _ => throw new JqException($"unsupported operator {op}")
             };
 
+                
             JsonNode? Divide(JsonNode? l, JsonNode? r)
             {
-                double left = Number(l);
-                double right = Number(r);
-                if (right == 0.0 && TypeName(l) == "number" && TypeName(r) == "number")
-                    throw new JqRuntimeException($"number ({context.Runtime.ToJqString(l)}) and number ({context.Runtime.ToJqString(r)}) cannot be divided because the divisor is zero");
-                return JsonValue.Create(left / right);
+                if (TypeName(l) == "number" && TypeName(r) == "number")
+                {
+                    double divisor = Number(r);
+                    if (divisor == 0.0)
+                        throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided because the divisor is zero"));
+                    return JsonValue.Create(Number(l) / divisor);
+                }
+                if (TryGetString(l, out _) && TryGetString(r, out _))
+                    return context.Runtime.Split(l, r);
+                throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided"));
             }
 
             // Integer remainder matching the reference: operands truncate
             // toward zero with clamping, NaN propagates, zero divisors fail.
             JsonNode? Modulo(JsonNode? l, JsonNode? r)
             {
+                if (TypeName(l) != "number" || TypeName(r) != "number")
+                    throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided (remainder)"));
                 double left = Number(l);
                 double right = Number(r);
-                if (TypeName(l) == "number" && TypeName(r) == "number")
-                {
-                    if (double.IsNaN(left) || double.IsNaN(right))
-                        return JsonValue.Create(double.NaN);
-                    long divisor = Truncate(right);
-                    if (divisor == 0)
-                        throw new JqRuntimeException($"number ({context.Runtime.ToJqString(l)}) and number ({context.Runtime.ToJqString(r)}) cannot be divided (remainder) because the divisor is zero");
-                    if (divisor == -1)
-                        return JsonValue.Create(0L);
-                    return JsonValue.Create(Truncate(left) % divisor);
-                }
-                return JsonValue.Create(left % right);
+                if (double.IsNaN(left) || double.IsNaN(right))
+                    return JsonValue.Create(double.NaN);
+                long divisor = Truncate(right);
+                if (divisor == 0)
+                    throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided (remainder) because the divisor is zero"));
+                if (divisor == -1)
+                    return JsonValue.Create(0L);
+                return JsonValue.Create(Truncate(left) % divisor);
             }
 
             static long Truncate(double value)
@@ -350,6 +397,56 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
                 return (long)value;
             }
         }
+    }
+}
+
+// Postfix `?` on any term: catchable evaluation failures yield nothing.
+// Quota, compile, cancellation, and host failures still propagate.
+internal sealed class OptionalFilter(JqFilter inner) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    {
+        using IEnumerator<JsonNode?> results = inner.Evaluate(input, context).GetEnumerator();
+        while (true)
+        {
+            bool moved;
+            try
+            {
+                moved = results.MoveNext();
+            }
+            catch (Exception exception) when (IsSuppressible(exception))
+            {
+                yield break;
+            }
+            if (!moved)
+                yield break;
+            yield return results.Current;
+        }
+    }
+
+    private static bool IsSuppressible(Exception exception) =>
+        exception is JsonException or FormatException or ArgumentException or OverflowException
+        || (exception is JqException && exception is not JqQuotaException && exception is not JqCompileException);
+}
+
+// Defined-or: non-false, non-null left outputs pass through; the right side
+// runs only when no such output exists.
+internal sealed class AlternativeFilter(JqFilter left, JqFilter right) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
+    {
+        bool found = false;
+        foreach (JsonNode? value in left.Evaluate(input, context))
+        {
+            if (Truthy(value))
+            {
+                found = true;
+                yield return value;
+            }
+        }
+        if (!found)
+            foreach (JsonNode? value in right.Evaluate(input, context))
+                yield return value;
     }
 }
 
@@ -446,6 +543,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             {
                 case "length": yield return JsonValue.Create(Length(input)); break;
                 case "type": yield return JsonValue.Create(TypeName(input)); break;
+                case "not": yield return JsonValue.Create(!Truthy(input)); break;
                 case "tonumber": yield return JsonValue.Create(ToNumber(input)); break;
                 case "toboolean": yield return JsonValue.Create(ToBoolean(input)); break;
                 case "tostring": yield return JsonValue.Create(context.Runtime.ToJqString(input)); break;
@@ -524,9 +622,18 @@ internal sealed class InterpolatedStringFilter(string template, string? format) 
                 var start = i + 2;
                 var depth = 1;
                 i = start;
-                for (; i < template.Length; i++)
+for (; i < template.Length; i++)
                 {
-                    if (template[i] == '(') depth++;
+                    if (template[i] == '"')
+                    {
+                        i++;
+                        while (i < template.Length && template[i] != '"')
+                        {
+                            if (template[i] == '\\' && i + 1 < template.Length) i++;
+                            i++;
+                        }
+                    }
+                    else if (template[i] == '(') depth++;
                     else if (template[i] == ')' && --depth == 0) break;
                 }
                 if (depth != 0)

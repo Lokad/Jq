@@ -46,8 +46,9 @@ internal sealed class JqParser(
     private JqFilter ParseAlternative()
     {
         var left = ParseOr();
-        while (Match("//"))
-            left = new BinaryFilter(left, "//", ParseOr());
+        // Right-associative alternatives: `a // b // c` groups as `a // (b // c)`.
+        if (Match("//"))
+            return new AlternativeFilter(left, ParseAlternative());
         return left;
     }
 
@@ -70,10 +71,13 @@ internal sealed class JqParser(
     private JqFilter ParseComparison()
     {
         var left = ParseAdditive();
-        while (Peek().Text is "==" or "!=" or "<" or "<=" or ">" or ">=")
+        // Comparisons do not chain: a second comparison operator is an error.
+        if (Peek().Text is "==" or "!=" or "<" or "<=" or ">" or ">=")
         {
             var op = Next().Text;
             left = new BinaryFilter(left, op, ParseAdditive());
+            if (Peek().Text is "==" or "!=" or "<" or "<=" or ">" or ">=")
+                throw Error($"unexpected token {Peek().Text}", Peek().Span);
         }
         return left;
     }
@@ -108,8 +112,6 @@ internal sealed class JqParser(
         {
             if (Match("-"))
                 return new UnaryFilter("-", ParseUnary());
-            if (MatchIdentifier("not"))
-                return new UnaryFilter("not", ParseUnary());
             return ParsePostfix();
         }
         finally
@@ -131,6 +133,12 @@ internal sealed class JqParser(
                     var optional = Match("?");
                     filter = new FieldFilter(filter, name, optional);
                 }
+                else if (Peek().Kind == TokenKind.String)
+                {
+                    var name = Next().Text;
+                    var optional = Match("?");
+                    filter = new FieldFilter(filter, name, optional);
+                }
                 else if (Match("["))
                 {
                     filter = ParseBracket(filter);
@@ -144,6 +152,10 @@ internal sealed class JqParser(
             else if (Match("["))
             {
                 filter = ParseBracket(filter);
+            }
+            else if (Match("?"))
+            {
+                filter = new OptionalFilter(filter);
             }
             else
                 break;
@@ -191,8 +203,12 @@ internal sealed class JqParser(
         }
         if (Match("."))
         {
+            if (Match("."))
+                return new RecursiveDescentFilter();
             var identity = new IdentityFilter();
             if (Peek().Kind == TokenKind.FieldName)
+                return new FieldFilter(identity, Next().Text, Match("?"));
+            if (Peek().Kind == TokenKind.String)
                 return new FieldFilter(identity, Next().Text, Match("?"));
             if (Match("["))
                 return ParseBracket(identity);
@@ -256,28 +272,56 @@ internal sealed class JqParser(
 
     private JqFilter ParseObject()
     {
-        var properties = new List<(string, JqFilter)>();
+        var properties = new List<ObjectProperty>();
         if (Match("}"))
             return new LiteralFilter(new JsonObject());
         do
         {
-            var keyToken = Next();
-            string key;
-            JqFilter value;
-            if (keyToken.Kind == TokenKind.String || keyToken.Kind == TokenKind.Identifier)
-                key = keyToken.Text;
+            if (Match("("))
+            {
+                var key = ParseComma();
+                Expect(")");
+                Expect(":");
+                properties.Add(new ObjectProperty(null, key, ParsePipe()));
+            }
             else
-                throw Error("expected object key", keyToken.Span);
-
-            if (Match(":"))
-                value = ParsePipe();
-            else
-                value = new FieldFilter(new IdentityFilter(), key, true);
-            properties.Add((key, value));
+            {
+                var keyToken = Next();
+                if (keyToken.Kind != TokenKind.String && keyToken.Kind != TokenKind.Identifier)
+                    throw Error("expected object key", keyToken.Span);
+                if (Match(":"))
+                {
+                    // Interpolated string keys evaluate per combination; plain
+                    // keys stay static.
+                    bool isDynamic = KeyFilterForIsDynamic(keyToken);
+                    properties.Add(isDynamic
+                        ? new ObjectProperty(null, KeyFilterFor(keyToken), ParsePipe())
+                        : new ObjectProperty(keyToken.Text, null, ParsePipe()));
+                }
+                else if (keyToken.Kind == TokenKind.String)
+                {
+                    // Bare plain strings keep field access; interpolated keys
+                    // read through the evaluated key instead.
+                    bool interpolated = KeyFilterForIsDynamic(keyToken);
+                    properties.Add(interpolated
+                        ? new ObjectProperty(null, KeyFilterFor(keyToken), new IndexFilter(new IdentityFilter(), KeyFilterFor(keyToken), false))
+                        : new ObjectProperty(keyToken.Text, null, new FieldFilter(new IdentityFilter(), keyToken.Text, true)));
+                }
+                else
+                {
+                    properties.Add(new ObjectProperty(keyToken.Text, null, new FieldFilter(new IdentityFilter(), keyToken.Text, true)));
+                }
+            }
         } while (Match(","));
         Expect("}");
         return new ObjectFilter(properties);
     }
+
+    private static JqFilter KeyFilterFor(Token token) => token.Text.Contains("\\(", StringComparison.Ordinal)
+        ? new InterpolatedStringFilter(token.Text, null)
+        : new LiteralFilter(JsonValue.Create(token.Text));
+
+    private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && token.Text.Contains("\\(", StringComparison.Ordinal);
 
     private JqFilter ParseIf()
     {
