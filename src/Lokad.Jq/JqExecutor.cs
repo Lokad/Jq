@@ -61,7 +61,7 @@ internal static class JqExecutor
                         budget.ChargeOutput(body.Length + (invocation.JoinOutput ? 0 : 1));
                         rendered = invocation.JoinOutput ? body : ByteLines.AppendNewline(body);
                     }
-                    var appended = await host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken).ConfigureAwait(false);
+                    var appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken)).ConfigureAwait(false);
                     if (!appended.CanAcceptMore) return appended.ExitCode;
                 }
             }
@@ -135,7 +135,7 @@ internal static class JqExecutor
     private static async Task<ReadOnlyMemory<byte>> ReadFileAsync(
         JqResolvedPath path, IJqHost host, JqBudget budget, CancellationToken cancellationToken)
     {
-        var opened = await host.OpenReadAsync(path.Absolute, cancellationToken).ConfigureAwait(false);
+        var opened = await JqHostExtensions.GuardHostAsync(() => host.OpenReadAsync(path.Absolute, cancellationToken)).ConfigureAwait(false);
         if (opened.Error != null || opened.FileDescriptor == null)
             throw new JqException($"cannot open {Utf8Text.Decode(path.Display)}");
         Exception? failure = null;

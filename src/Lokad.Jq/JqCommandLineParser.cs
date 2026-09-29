@@ -103,7 +103,7 @@ internal static class JqCommandLineParser
                 InputFiles = inputFiles
             };
         }
-        catch (JqException ex)
+        catch (Exception ex) when (ex is JqException or FormatException or JqPathException)
         {
             return Error($"jq: {ex.Message}");
         }

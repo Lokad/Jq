@@ -4,6 +4,35 @@ namespace Lokad.Jq;
 
 internal static class JqHostExtensions
 {
+    // A host CLR failure (unexpected argument/overflow from IJqHost) escapes
+    // the jq error boundary instead of being mislabeled as a filter or input
+    // error. Cancellation and jq budgets always propagate unchanged.
+    internal static async Task<T> GuardHostAsync<T>(Func<Task<T>> operation)
+    {
+        try
+        {
+            return await operation().ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is ArgumentException or OverflowException)
+        {
+            throw new JqHostFailureException("host operation violated its contract", exception);
+        }
+    }
+
+    internal static async ValueTask<JqByteReadResult> GuardedReadAsync(
+        IJqHost host, JqFileDescriptor descriptor, Memory<byte> buffer, CancellationToken cancellationToken)
+    {
+        Task<JqByteReadResult> operation() =>
+            host.ReadBytesAsync(descriptor, buffer, cancellationToken).AsTask();
+        JqByteReadResult read = await GuardHostAsync(operation).ConfigureAwait(false);
+        if (!read.IsError && read.BytesRead > buffer.Length)
+        {
+            throw new JqHostFailureException("host read returned more bytes than requested", null);
+        }
+
+        return read;
+    }
+
     // Read with bounded requests and publish accumulated bytes only on successful EOF.
     internal static async ValueTask<BoundedReadResult> TryReadAllBytesAsync(
         this IJqHost host, JqFileDescriptor descriptor, int maximumBytes,
@@ -16,8 +45,7 @@ internal static class JqHostExtensions
         {
             cancellationToken.ThrowIfCancellationRequested();
             var length = Math.Min(buffer.Length, maximumBytes - (int)output.Length + 1);
-            var read = await host.ReadBytesAsync(descriptor, buffer.AsMemory(0, length), cancellationToken)
-                .ConfigureAwait(false);
+            var read = await GuardedReadAsync(host, descriptor, buffer.AsMemory(0, length), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (read.IsError)
                 return new BoundedReadResult.Failed(read);
@@ -33,8 +61,12 @@ internal static class JqHostExtensions
 
     internal static async Task<int> AppendAsync(
         this IJqHost host, JqFileDescriptor descriptor, ReadOnlyMemory<byte> content,
-        CancellationToken cancellationToken) =>
-        (await host.AppendWhileOpenAsync(descriptor, content, cancellationToken).ConfigureAwait(false)).ExitCode;
+        CancellationToken cancellationToken)
+    {
+        Task<JqAppendResult> operation() =>
+            host.AppendWhileOpenAsync(descriptor, content, cancellationToken);
+        return (await GuardHostAsync(operation).ConfigureAwait(false)).ExitCode;
+    }
 
     internal static async Task CloseOwnedDescriptorAsync(
         this IJqHost host, JqFileDescriptor descriptor, Exception? earlierException)

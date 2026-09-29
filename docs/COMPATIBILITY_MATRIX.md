@@ -101,7 +101,7 @@ to read this file.
 | Name/arity | Normative reference | Status | Tests | Caveats | Host | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | `length/0`, `type/0` | Manual: Builtin operators | implemented | JqTests basic/format cases | `length` on string counts runes, null is 0 | none | Passing |
-| `keys/0`, `keys_unsorted/0` | Manual: Builtin operators | unimplemented | — | Missing; single source of truth will be builtin registry (I11) | none | Unsupported function today |
+| `keys/0`, `keys_unsorted/0` | Manual: Builtin operators | unimplemented | — | Missing; the new builtin registry is the single source for implemented names and will extend in I11 | none | Unsupported function today |
 | `has/1`, `in/1`, `inside/1` (via `IN`/`inside`) | Manual: Builtin operators | partial | `contains`/`inside` narrow paths | `contains`/`inside` exist with limited semantics; `has`/`in`/`IN` missing | none | Needs I11 |
 | `contains/1`, `inside/1` | Manual: Builtin operators | partial | JqTests via functions | String/array/object containment simplified; heterogeneous cases open | none | Narrow cases pass |
 | `map/1`, `map_values/1` | Manual: Builtin operators (`builtin.jq`) | unimplemented | — | Missing; must use generator primitives, not eager shortcuts | none | Unsupported today |
@@ -164,9 +164,9 @@ to read this file.
 | --- | --- | --- | --- | --- | --- | --- |
 | Compact default, pretty indent, LF bytes | Manual: Invoking jq | partial | Compact/indent cases | Pretty uses platform newlines today; I19 must choose LF and byte-compare | stdout bytes | Needs I19 decision |
 | Raw/join/NUL output, sorted keys, ASCII, color | Manual: Invoking jq | partial | Raw/join/ascii paths | NUL/sorted/color/seq pending | stdout bytes + terminal profile | Needs I19 |
-| Exit categories: success, compile (3), input (4), runtime (5), system (2), halt codes, `-e` modes | Command parser exit codes | partial | Stages 2/3/4/5 covered | Current stages conflate compile/runtime/host/halt/input/policy/cancellation; I02/I19 must separate | status/stderr | Existing error tests pass |
-| Diagnostics bytes and source spans | Manual + parser errors | partial | Invalid filter/option/JSON cases | Stable messages exist; token spans and builtin-arity registry pending I02 | stderr bytes | Needs I02 |
-| Descriptor ownership, backpressure, closure, cancellation, budgets | Architecture + host contract | partial | HostBoundaryTests + memory tests | Whole-input buffering; incremental cursor, streaming, and full policy hardening pending I17/I21 | host descriptors | Boundary tests pass |
+| Exit categories: success, compile (3), input (4), runtime (5), system (2), halt codes, `-e` modes | Command parser exit codes | partial | Stages 2/3/4/5 covered; JqTests.Diagnostics | Unknown/wrong-arity now compile (3) via registry; host failures escape unstaged and cancellation propagates; halt/`-e` still open (I08/I19) | status/stderr | 336 tests pass |
+| Diagnostics bytes and source spans | Manual + parser errors | partial | Invalid filter/option/JSON/path cases; JqTests.Diagnostics | Registry complete for the current builtin set; token spans and inline/file source identity pending I02-b | stderr bytes | Arity/phase tests pass; spans open |
+| Descriptor ownership, backpressure, closure, cancellation, budgets | Architecture + host contract | partial | HostBoundaryTests + memory tests + JqTests.Diagnostics host cases | Host CLR/size violations throw a distinct host failure instead of a staged `jq:` error; whole-input buffering and incremental cursor still pending I17/I21 | host descriptors | Boundary + host-failure tests pass |
 
 ## Probe and differential evidence (I01)
 
