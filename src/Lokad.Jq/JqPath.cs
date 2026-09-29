@@ -247,6 +247,8 @@ internal static class JqPathUpdates
                 {
                     if (index.Index < 0)
                         throw new JqException("Out of bounds negative array index");
+                    if (index.Index > JqPaths.MaxArrayPad)
+                        throw new JqException("Array index too large");
                     frames.Push(new Frame(segment, PaddedArray(null, index.Index, context), (int)index.Index, 0, 0));
                     return null;
                 }
@@ -299,11 +301,11 @@ internal static class JqPathUpdates
                 var rebuilt = new JsonArray();
                 context.Budget.ChargeNode();
                 for (int index = 0; index < frame.From; index++)
-                    rebuilt.Add(arr[index]);
+                    rebuilt.Add(arr[index]?.DeepClone());
                 foreach (JsonNode? piece in pieces)
-                    rebuilt.Add(piece);
+                    rebuilt.Add(piece?.DeepClone());
                 for (int index = frame.To; index < arr.Count; index++)
-                    rebuilt.Add(arr[index]);
+                    rebuilt.Add(arr[index]?.DeepClone());
                 return rebuilt;
             default:
                 throw new InvalidOperationException("Mismatched path frame.");

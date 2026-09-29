@@ -997,6 +997,8 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
     {
         foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
         {
+            if ((pair.Value is JsonArray || pair.Value is JsonObject) && !pair.Tracked)
+                throw new JqException(InvalidIterate(pair.Value, context));
             if (pair.Value is JsonArray arr)
             {
                 for (int index = 0; index < arr.Count; index++)
@@ -1040,26 +1042,30 @@ internal sealed class RecursiveDescentFilter : JqFilter
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        foreach (JqValuePath descendant in Expand(pair))
+        foreach (JqValuePath descendant in Expand(pair, context))
             yield return descendant;
     }
 
     // Pre-order structural threading: the pair itself, then each child with
     // an extended path. Trackedness flows through untouched; scalars and
     // nulls simply have no children.
-    private static IEnumerable<JqValuePath> Expand(JqValuePath pair)
+    private static IEnumerable<JqValuePath> Expand(JqValuePath pair, JqContext context)
     {
         yield return pair;
+        if (pair.Value is null)
+            yield break;
+        if (!pair.Tracked)
+            throw new JqException(InvalidIterate(pair.Value, context));
         if (pair.Value is JsonArray arr)
         {
             for (int index = 0; index < arr.Count; index++)
-                foreach (JqValuePath descendant in Expand(new JqValuePath(Extend(pair.Segments, new IndexSegment(index, false)), arr[index], pair.Tracked)))
+                foreach (JqValuePath descendant in Expand(new JqValuePath(Extend(pair.Segments, new IndexSegment(index, false)), arr[index], true), context))
                     yield return descendant;
         }
         else if (pair.Value is JsonObject obj)
         {
             foreach (var property in obj)
-                foreach (JqValuePath descendant in Expand(new JqValuePath(Extend(pair.Segments, new KeySegment(property.Key)), property.Value, pair.Tracked)))
+                foreach (JqValuePath descendant in Expand(new JqValuePath(Extend(pair.Segments, new KeySegment(property.Key)), property.Value, true), context))
                     yield return descendant;
         }
     }
