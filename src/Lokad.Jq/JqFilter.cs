@@ -1526,8 +1526,9 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "length": yield return JsonValue.Create(Length(input)); break;
                 case "type": yield return JsonValue.Create(TypeName(input)); break;
                 case "not": yield return JsonValue.Create(!Truthy(input)); break;
-                case "tonumber": yield return JsonValue.Create(ToNumber(input)); break;
-                case "toboolean": yield return JsonValue.Create(ToBoolean(input)); break;
+                case "tonumber": yield return context.Runtime.ToJsonNumber(input); break;
+                case "toboolean": yield return JsonValue.Create(context.Runtime.ToJsonBoolean(input)); break;
+                case "utf8bytelength": yield return JsonValue.Create(Utf8ByteLength(input, context)); break;
                 case "tostring": yield return JsonValue.Create(context.Runtime.ToJqString(input)); break;
                 case "tojson": yield return JsonValue.Create(context.Runtime.Serialize(input, false, null, false)); break;
                 case "fromjson": yield return context.Runtime.ParseJson(String(input)); break;

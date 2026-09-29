@@ -23,6 +23,7 @@ internal static class JqBuiltinRegistry
         ["tonumber"] = (0, 0),
         ["toboolean"] = (0, 0),
         ["tostring"] = (0, 0),
+        ["utf8bytelength"] = (0, 0),
         ["tojson"] = (0, 0),
         ["fromjson"] = (0, 0),
         ["abs"] = (0, 0),

@@ -331,14 +331,88 @@ internal sealed class JqRuntime(JqBudget budget)
         throw new JqRuntimeException($"expected number, got {TypeName(node)}");
     }
 
-    internal static double ToNumber(JsonNode? node) => Number(node);
-
-    internal static bool ToBoolean(JsonNode? node)
+    internal JsonNode ToJsonNumber(JsonNode? node)
     {
-        if (node is JsonValue v && v.TryGetValue<bool>(out var b)) return b;
-        if (node is JsonValue s && s.TryGetValue<string>(out var text) && bool.TryParse(text, out var parsed)) return parsed;
-        throw new JqRuntimeException($"expected boolean, got {TypeName(node)}");
+        if (TypeName(node) == "number")
+            return Clone(node) ?? JsonValue.Create(0);
+        if (TryGetString(node, out string? text) && text is not null && !text.Contains('\0') && TryParseStrictNumber(text, out JsonNode? number) && number is not null)
+            return number;
+        throw new JqException($"{TypeName(node)} ({Serialize(node, false, null, false)}) cannot be parsed as a number");
     }
+
+    // Strict JSON-number grammar with an optional leading sign and no
+    // surrounding whitespace. Integral shapes keep integral storage.
+    private static bool TryParseStrictNumber(string text, out JsonNode? number)
+    {
+        number = null;
+        int position = 0;
+        if (position < text.Length && (text[position] == '+' || text[position] == '-'))
+            position++;
+        int whole = position;
+        while (position < text.Length && char.IsAsciiDigit(text[position]))
+            position++;
+        bool hasWhole = position > whole;
+        bool hasFraction = false;
+        if (position < text.Length && text[position] == '.')
+        {
+            position++;
+            int fraction = position;
+            while (position < text.Length && char.IsAsciiDigit(text[position]))
+                position++;
+            hasFraction = position > fraction;
+            if (!hasFraction)
+                return false;
+        }
+        if (!hasWhole)
+            return false;
+        if (position < text.Length && (text[position] == 'e' || text[position] == 'E'))
+        {
+            position++;
+            if (position < text.Length && (text[position] == '+' || text[position] == '-'))
+                position++;
+            int exponent = position;
+            while (position < text.Length && char.IsAsciiDigit(text[position]))
+                position++;
+            if (position == exponent)
+                return false;
+        }
+        if (position != text.Length)
+            return false;
+        if (!hasFraction && text.IndexOfAny(new[] { 'e', 'E' }) < 0 && long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long wholeValue))
+        {
+            number = JsonValue.Create(wholeValue);
+            return true;
+        }
+        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
+        {
+            number = JsonValue.Create(value);
+            return true;
+        }
+        return false;
+    }
+
+    internal bool ToJsonBoolean(JsonNode? node)
+    {
+        if (node is JsonValue boolean && boolean.TryGetValue<bool>(out bool value))
+            return value;
+        if (TryGetString(node, out string? text) && text is not null && !text.Contains('\0'))
+        {
+            if (text == "true")
+                return true;
+            if (text == "false")
+                return false;
+        }
+        throw new JqException($"{TypeName(node)} ({Serialize(node, false, null, false)}) cannot be parsed as a boolean");
+    }
+
+    internal static int Utf8ByteLength(JsonNode? input, JqContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (TryGetString(input, out string? text) && text is not null)
+            return System.Text.Encoding.UTF8.GetByteCount(text);
+        throw new JqException($"{TypeName(input)} ({context.Runtime.Serialize(input, false, null, false)}) only strings have UTF-8 byte length");
+    }
+
 
     internal static string String(JsonNode? node)
     {
