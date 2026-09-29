@@ -1520,6 +1520,11 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
         IEnumerable<JsonNode?> EvaluateWith(JsonNode?[] combo)
         {
             JsonNode? Arg(int i) => combo[i];
+            if (JqMath.TryEvaluate(context, name, combo, input, out JsonNode? math))
+            {
+                yield return math;
+                yield break;
+            }
 
             switch (name)
             {
@@ -1532,9 +1537,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "tostring": yield return JsonValue.Create(context.Runtime.ToJqString(input)); break;
                 case "tojson": yield return JsonValue.Create(context.Runtime.Serialize(input, false, null, false)); break;
                 case "fromjson": yield return context.Runtime.ParseJson(String(input)); break;
-                case "abs": yield return JsonValue.Create(Math.Abs(Number(input))); break;
-                case "floor": yield return JsonValue.Create(Math.Floor(Number(input))); break;
-                case "sqrt": yield return JsonValue.Create(Math.Sqrt(Number(input))); break;
                 case "min": yield return context.Runtime.MinMax(input, false); break;
                 case "max": yield return context.Runtime.MinMax(input, true); break;
                 case "reverse": yield return context.Runtime.Reverse(input); break;
