@@ -155,3 +155,192 @@ internal sealed class IsemptyFilter(JqFilter Body) : JqFilter
         yield return JsonValue.Create(!results.MoveNext());
     }
 }
+
+// `while(cond; update)`: yields each state while the condition holds,
+// branching depth-first over multi-valued updates on an explicit stack.
+internal sealed class WhileFilter(JqFilter Condition, JqFilter Update) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        var pending = new Stack<JsonNode?>();
+        pending.Push(input);
+        while (pending.TryPop(out JsonNode? state))
+        {
+            if (!AnyTruthy(Condition, state, context, environment))
+                continue;
+            yield return context.Runtime.Clone(state);
+            var next = new List<JsonNode?>();
+            foreach (JsonNode? updated in Update.Evaluate(state, context, environment))
+            {
+                context.Budget.ChargeNode();
+                next.Add(updated);
+            }
+            for (int index = next.Count - 1; index >= 0; index--)
+                pending.Push(next[index]);
+        }
+    }
+
+    internal static bool AnyTruthy(JqFilter condition, JsonNode? state, JqContext context, JqEnvironment environment)
+    {
+        foreach (JsonNode? probe in condition.Evaluate(state, context, environment))
+            if (Truthy(probe))
+                return true;
+        return false;
+    }
+}
+
+// `until(cond; next)`: yields the first state satisfying the condition per
+// branch, depth-first over multi-valued updates.
+internal sealed class UntilFilter(JqFilter Condition, JqFilter Next) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        var pending = new Stack<JsonNode?>();
+        pending.Push(input);
+        while (pending.TryPop(out JsonNode? state))
+        {
+            if (WhileFilter.AnyTruthy(Condition, state, context, environment))
+            {
+                yield return context.Runtime.Clone(state);
+                continue;
+            }
+            var next = new List<JsonNode?>();
+            foreach (JsonNode? updated in Next.Evaluate(state, context, environment))
+            {
+                context.Budget.ChargeNode();
+                next.Add(updated);
+            }
+            for (int index = next.Count - 1; index >= 0; index--)
+                pending.Push(next[index]);
+        }
+    }
+}
+
+// `repeat(filter)`: re-evaluates the argument against the original input
+// forever, yielding a constant stream per round. Long runs obey the value
+// budget through per-round charges.
+internal sealed class RepeatFilter(JqFilter Body) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        while (true)
+        {
+            context.Budget.ChargeNode();
+            foreach (JsonNode? value in Body.Evaluate(input, context, environment))
+                yield return value;
+        }
+    }
+}
+
+// `recurse(filter[; condition])`: depth-first pre-order traversal, flat on
+// an explicit stack. The condition filters expanded values like select.
+internal sealed class RecurseFilter(JqFilter Body, JqFilter? Condition) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        var pending = new Stack<JsonNode?>();
+        pending.Push(input);
+        while (pending.TryPop(out JsonNode? state))
+        {
+            yield return context.Runtime.Clone(state);
+            var next = new List<JsonNode?>();
+            foreach (JsonNode? expanded in Body.Evaluate(state, context, environment))
+            {
+                if (Condition is not null && !FirstTruthy(Condition, expanded, context, environment))
+                    continue;
+                context.Budget.ChargeNode();
+                next.Add(expanded);
+            }
+            for (int index = next.Count - 1; index >= 0; index--)
+                pending.Push(next[index]);
+        }
+    }
+
+    private static bool FirstTruthy(JqFilter condition, JsonNode? state, JqContext context, JqEnvironment environment)
+    {
+        foreach (JsonNode? probe in condition.Evaluate(state, context, environment))
+            return Truthy(probe);
+        return false;
+    }
+}
+
+// `walk(filter)`: bottom-up traversal. Children rebuild first (taking the
+// first walk output per child, dropping empties, like update assignment),
+// then the filter runs against each rebuilt node.
+internal sealed class WalkFilter(JqFilter Body) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? walked in Walk(input, context, environment))
+            yield return walked;
+    }
+
+    private IEnumerable<JsonNode?> Walk(JsonNode? node, JqContext context, JqEnvironment environment)
+    {
+        JsonNode? rebuilt = node;
+        if (node is JsonArray array)
+        {
+            var walked = new JsonArray();
+            context.Budget.ChargeNode();
+            foreach (JsonNode? child in array)
+            {
+                using IEnumerator<JsonNode?> outputs = Walk(child, context, environment).GetEnumerator();
+                if (outputs.MoveNext())
+                    walked.Add(outputs.Current);
+            }
+            rebuilt = walked;
+        }
+        else if (node is JsonObject obj)
+        {
+            var walked = new JsonObject();
+            context.Budget.ChargeNode();
+            foreach (var property in obj)
+            {
+                using IEnumerator<JsonNode?> outputs = Walk(property.Value, context, environment).GetEnumerator();
+                if (outputs.MoveNext())
+                    walked.Add(property.Key, outputs.Current);
+            }
+            rebuilt = walked;
+        }
+        foreach (JsonNode? value in Body.Evaluate(rebuilt, context, environment))
+            yield return value;
+    }
+}
+
+// `paths` and `paths(filter)`: non-empty descent paths, optionally keeping
+// only nodes that satisfy the filter (first-truthy, mirroring select).
+internal sealed class PathsFilter(JqFilter? Condition) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        var root = new JqValuePath(new List<JqValueSegment>(), input, true);
+        foreach (JqValuePath pair in new RecursiveDescentFilter().EvaluatePaths(root, context, environment))
+        {
+            if (pair.Segments.Count == 0)
+                continue;
+            if (Condition is null)
+            {
+                yield return JqPaths.PathToJson(pair.Segments);
+                continue;
+            }
+            foreach (JsonNode? probe in Condition.Evaluate(pair.Value, context, environment))
+            {
+                if (Truthy(probe))
+                    yield return JqPaths.PathToJson(pair.Segments);
+                break;
+            }
+        }
+    }
+}

@@ -72,6 +72,12 @@ internal static class JqBuiltinRegistry
         ["last"] = (0, 0),
         ["nth"] = (1, 2),
         ["isempty"] = (1, 1),
+        ["while"] = (2, 2),
+        ["until"] = (2, 2),
+        ["repeat"] = (1, 1),
+        ["recurse"] = (0, 2),
+        ["walk"] = (1, 1),
+        ["paths"] = (0, 1),
         ["gsub"] = (2, 3),
     };
 

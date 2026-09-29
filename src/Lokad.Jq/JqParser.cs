@@ -928,6 +928,45 @@ internal sealed class JqParser(
             return new IsemptyFilter(args[0]);
         }
 
+        if (name == "while")
+        {
+            return new WhileFilter(args[0], args[1]);
+        }
+
+        if (name == "until")
+        {
+            return new UntilFilter(args[0], args[1]);
+        }
+
+        if (name == "repeat")
+        {
+            return new RepeatFilter(args[0]);
+        }
+
+        if (name == "recurse" && args.Count == 0)
+        {
+            return new RecurseFilter(new IteratorFilter(new IdentityFilter(), true), null);
+        }
+
+        if (name == "recurse")
+        {
+            return args.Count == 1
+                ? new RecurseFilter(args[0], null)
+                : new RecurseFilter(args[0], args[1]);
+        }
+
+        if (name == "walk")
+        {
+            return new WalkFilter(args[0]);
+        }
+
+        if (name == "paths")
+        {
+            return args.Count == 0
+                ? new PathsFilter(null)
+                : new PathsFilter(args[0]);
+        }
+
         return new FunctionFilter(name, args);
     }
 

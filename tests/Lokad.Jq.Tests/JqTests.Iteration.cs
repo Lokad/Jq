@@ -74,4 +74,50 @@ public sealed partial class JqTests
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Theory]
+    [InlineData("1", "[while(.<100; .*2)]", "[1,2,4,8,16,32,64]\n")]
+    [InlineData("4", "[.,1]|until(.[0] < 1; [.[0] - 1, .[1] * .[0]])|.[1]", "24\n")]
+    [InlineData("0", "until(. > 3; . + 1)", "4\n")]
+    [InlineData("1", "[repeat(.*2, error)?]", "[2]\n")]
+    [InlineData("0", "limit(3; repeat(. + 1))", "1\n1\n1\n")]
+    [InlineData("0", "limit(3; repeat(1))", "1\n1\n1\n")]
+    [InlineData("[[1]]", "[recurse]", "[[[1]],[1],1]\n")]
+    [InlineData("1", "[recurse(if . < 3 then . + 1 else empty end)]", "[1,2,3]\n")]
+    [InlineData("1", "[recurse(. + 1; . < 4)]", "[1,2,3]\n")]
+    [InlineData("[1, [2]]", "walk(if type == \"number\" then . + 1 else . end)", "[2,[3]]\n")]
+    [InlineData("{\"a\": [1]}", "[paths]", "[[\"a\"],[\"a\",0]]\n")]
+    [InlineData("{\"a\": [1]}", "[paths(type == \"number\")]", "[[\"a\",0]]\n")]
+    public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_FirstRepeatIsLazy()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "first(repeat(1))")));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_ForeachLimitStopsProducers()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "limit(3; foreach (1, 2, 3, 4) as $x (0; . + $x))")));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("1\n3\n6\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
