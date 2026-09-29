@@ -133,10 +133,10 @@ to read this file.
 
 | Name/arity | Normative reference | Status | Tests | Caveats | Host | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `test/1..2` | Manual: Regular expressions (`builtin.jq` + `_match_impl`) | partial | JqTests.Test | Flag mapping and multi-result operands simplified; Oniguruma parity open (I13) | regex engine | Narrow tests pass |
-| `gsub/2..3` | Manual: Regular expressions | partial | JqTests.Gsub | Replacement-stream alignment implemented; global/flag/empty-match semantics need I13 | regex engine | Gsub tests pass |
-| `match/1..2`, `capture/1..2`, `scan/1..2`, `splits/1..2`, `split/2`, `sub/2..3` | Manual: Regular expressions | unimplemented | — | Missing overloads; shared cache/work accounting must be reused | regex engine | Unsupported today |
-| Flags, captures, scalar offsets, advanced syntax | Manual: Regular expressions; Oniguruma docs | partial | Gsub flag/offset cases | PCRE.NET with UTF/UCP, LF newlines, `NeverBackslashC`; full Oniguruma matrix open | regex engine | Needs I13 matrix |
+| `test/1..2` | Manual: Regular expressions (`builtin.jq` + `_match_impl`) | implemented | JqTests.Test | String and array `$val` dispatch with upstream errors; unified modifier, input, and pattern diagnostics | regex engine | I13 vectors pass |
+| `gsub/2..3` | Manual: Regular expressions | implemented | JqTests.Gsub | Replacement-stream alignment with global and empty-match handling; non-string replacements keep the positional diagnostic instead of the upstream add-shaped error | regex engine | I13 vectors pass |
+| `match/1..2`, `capture/1..2`, `scan/1..2`, `splits/1..2`, `split/2`, `sub/2..3` | Manual: Regular expressions | implemented | JqTests.Match, scan, splits, sub, syntax cases | Shared `_match_impl`-shaped core with scalar offsets and upstream diagnostics; sub replaces first unless an explicit g flag is present; capture key order is uniform but value-equal | regex engine | onig.test vectors pass |
+| Flags, captures, scalar offsets, advanced syntax | Manual: Regular expressions; Oniguruma docs | partial | Syntax, flag, and limit cases | Correct m/s/p mapping; backrefs, lookarounds, atomic and possessive groups, anchors, POSIX classes, and Unicode properties covered; `l` (longest match) stays explicitly rejected with no PCRE2 equivalent; `\C` stays rejected | regex engine | I13 vectors pass; full differential matrix open |
 
 ## Math
 
