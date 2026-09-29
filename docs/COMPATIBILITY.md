@@ -19,8 +19,8 @@ Known gaps to investigate and close:
   first value. jq generator semantics require a broader evaluator contract.
 - Default output is compact; upstream-compatible formatting needs separate work.
   Pretty JSON currently uses platform newlines inside formatted values.
-- Duplicate object keys are rejected. Numeric operations largely use double;
-  jq literal precision, ordering, non-finite values, and serialization need an audit.
+- Duplicate object keys resolve last-wins. Numbers use doubles with integral storage for integers;
+  literal precision, ordering, and non-finite rendering follow docs/NUMERIC_PROFILE.md, with deliberate decimal-build divergences recorded there.
 - `ascii_upcase`/`ascii_downcase` currently call Unicode case conversion.
 - Regex support uses PCRE.NET. jq's Oniguruma syntax, flags, captures, offsets,
   substitutions, and edge cases need explicit compatibility evidence.

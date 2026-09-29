@@ -89,10 +89,10 @@ to read this file.
 
 | Feature | Normative reference | Status | Tests | Caveats | Host | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| null vs missing vs empty stream; truthiness | Manual: Types and Values | partial | JqTests select cases | C# null is JSON null; zero outputs is empty; `select` preserves input correctly; full audit in I03 | none | Select tests pass |
-| Equality and total ordering | Manual: Conditionals and Comparisons | partial | Narrow min/max/contains cases | `JsonNode.DeepEquals` and numeric/string compare only; mixed-type ordering open | none | Needs I03 tests |
-| Number literals, precision, signed zero, non-finite | Manual: Types and Values | partial | String-limit arithmetic cases | Double-only; `2^53`, decimals, overflow, division-by-zero open | none | Needs I03/I14 |
-| Object key order, duplicate keys | Manual: Types and Values | partial | — | Insertion order preserved; duplicates currently rejected; reference precedence pending I03 | none | Rejection is historical, not verified parity |
+| null vs missing vs empty stream; truthiness | Manual: Types and Values | implemented | JqTests null/empty cases | C# null is JSON null; zero outputs is empty; missing fields read as null | none | Null/empty theory passes |
+| Equality and total ordering | Manual: Conditionals and Comparisons; sort order | implemented | JqTests equality/ordering/min-max cases | Kind-aware equality; total order null, false, true, numbers, scalar strings, lexical arrays, sorted-key objects; NaN unequal, sorts as null | none | Ordering/equality theories pass |
+| Number literals, precision, signed zero, non-finite | Manual: Types and Values; docs/NUMERIC_PROFILE.md | partial | JqTests double-profile/non-finite/division cases | Double domain with integral storage; deliberate decNumber divergences (literal text, >2^53 comparison, exponent case) recorded in the profile | none | Profile pins pass; math builtins pending I14 |
+| Object key order, duplicate keys | Manual: Types and Values | implemented | JqTests duplicate-key ingress cases | Insertion order kept; duplicates last-wins at first position with escapes decoded; equality order-insensitive | none | All four ingress paths pass |
 | Unicode scalar indexing, `length`, slices | Manual: Types and Values | partial | Slice/length cases | `length`/slices count runes; search uses UTF-16 offsets; audit in I03/I12 | none | Needs offset tests |
 | Compact vs pretty rendering, LF bytes, sorted keys, ASCII | Manual: Invoking jq | partial | Compact/indent/format cases | Compact default; pretty uses platform newlines; sorted/color pending | stdout bytes | Needs I19 byte tests |
 
