@@ -125,4 +125,61 @@ public sealed partial class JqTests
         Assert.Equal("XA\nXX\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Theory]
+    [InlineData("(1,2) + (10,20)", "11\n12\n21\n22\n")]
+    [InlineData("(1,2) * (10,20)", "10\n20\n20\n40\n")]
+    [InlineData("(\"a\",\"b\") + (\"c\",\"d\")", "\"ac\"\n\"bc\"\n\"ad\"\n\"bd\"\n")]
+    [InlineData("(1,3) < (2,4)", "true\nfalse\ntrue\ntrue\n")]
+    public async Task Jq_BinaryOperatorsDistribute(string filter, string expected)
+    {
+        // The left operand is inner (fast), matching reversed call
+        // prelude order with backtracking.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("\"\\(1,2)\"", "\"1\"\n\"2\"\n")]
+    [InlineData("\"\\(1,2)\\(3,4)\"", "\"13\"\n\"23\"\n\"14\"\n\"24\"\n")]
+    [InlineData("\"a\\(empty)b\"", "")]
+    public async Task Jq_InterpolationsDistribute(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_ErrorsFollowTheirPrefixOutputs()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "(1, (1 | .foo)) + (10, 20)")));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("11\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Contains("cannot index number", host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public void Jq_ConsumerStopHaltsGeneratorsPromptly()
+    {
+        var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
+        using var cancellation = new CancellationTokenSource();
+        var budget = new JqBudget(cancellation.Token);
+        using var context = new JqContext(variables, JqProgramSource.Inline, budget);
+        JqFilter filter = new JqParser("(range(0;1000000), 0) + (0, 0)", JqProgramSource.Inline, variables, budget).Parse();
+        using IEnumerator<System.Text.Json.Nodes.JsonNode?> results = filter.Evaluate(null, context).GetEnumerator();
+
+        Assert.True(results.MoveNext());
+        cancellation.Cancel();
+        Assert.ThrowsAny<OperationCanceledException>(() => results.MoveNext());
+    }
 }

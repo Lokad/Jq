@@ -274,9 +274,21 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
     {
-        foreach (var l in left.Evaluate(input, context))
+        // Value operators distribute with the left operand inner (fast),
+        // matching reversed call prelude order with backtracking. Boolean
+        // and/or// keep their pairwise shape pending later increments.
+        if (op is "and" or "or" or "//")
+        {
+            foreach (var l in left.Evaluate(input, context))
+                foreach (var r in right.Evaluate(input, context))
+                    yield return Eval(l, r);
+        }
+        else
+        {
             foreach (var r in right.Evaluate(input, context))
-                yield return Eval(l, r);
+                foreach (var l in left.Evaluate(input, context))
+                    yield return Eval(l, r);
+        }
 
         JsonNode? Eval(JsonNode? l, JsonNode? r)
         {
@@ -494,9 +506,17 @@ internal sealed class FormatFilter(string format) : JqFilter
 
 internal sealed class InterpolatedStringFilter(string template, string? format) : JqFilter
 {
+    private abstract record Segment;
+
+    private sealed record Literal(string Text) : Segment;
+
+    private sealed record Interpolation(JqFilter Filter) : Segment;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
     {
-        var sb = new StringBuilder();
+        // Split once per evaluation; each interpolation parses a single filter.
+        var segments = new List<Segment>();
+        var literal = new StringBuilder();
         for (var i = 0; i < template.Length; i++)
         {
             if (template[i] == '\\' && i + 1 < template.Length && template[i + 1] == '(')
@@ -511,26 +531,64 @@ internal sealed class InterpolatedStringFilter(string template, string? format) 
                 }
                 if (depth != 0)
                     throw new JqException("unterminated string interpolation");
-                var expr = template[start..i];
-                var values = new JqParser(expr, context.ProgramSource, context.Variables, context.Budget).Parse().Evaluate(input, context);
-                var found = false;
-                JsonNode? last = null;
-                foreach (var value in values)
+                if (literal.Length > 0)
                 {
-                    found = true;
-                    last = value;
+                    segments.Add(new Literal(literal.ToString()));
+                    literal.Clear();
                 }
-                if (found)
-                    context.Budget.Append(sb, format is null
-                        ? context.Runtime.ToJqString(last)
-                        : context.Runtime.Format(format, last));
+                var parsed = new JqParser(template[start..i], context.ProgramSource, context.Variables, context.Budget).Parse();
+                segments.Add(new Interpolation(parsed));
             }
             else
             {
-                context.Budget.Append(sb, template.AsSpan(i, 1));
+                literal.Append(template[i]);
             }
         }
+        if (literal.Length > 0)
+            segments.Add(new Literal(literal.ToString()));
 
-        yield return JsonValue.Create(context.Budget.Finish(sb));
+        foreach (var text in Combine(segments.Count - 1))
+            yield return JsonValue.Create(text);
+
+        string Render(JsonNode? value) => format is null
+            ? context.Runtime.ToJqString(value)
+            : context.Runtime.Format(format, value);
+
+        // Later occurrences are outer (slow); the first is inner (fast),
+        // matching nested concatenation with backtracking. An empty
+        // interpolation yields no strings.
+        IEnumerable<string> Combine(int index)
+        {
+            if (index < 0)
+            {
+                yield return "";
+                yield break;
+            }
+            if (segments[index] is Literal run)
+            {
+                foreach (var prefix in Combine(index - 1))
+                {
+                    StringBuilder assembled = new StringBuilder(prefix.Length + run.Text.Length);
+                    assembled.Append(prefix);
+                    context.Budget.Append(assembled, run.Text.AsSpan());
+                    yield return context.Budget.Finish(assembled);
+                }
+                yield break;
+            }
+            if (segments[index] is Interpolation interpolation)
+            {
+                foreach (var value in interpolation.Filter.Evaluate(input, context))
+                {
+                    string rendered = Render(value);
+                    foreach (var prefix in Combine(index - 1))
+                    {
+                        StringBuilder assembled = new StringBuilder(prefix.Length + rendered.Length);
+                        assembled.Append(prefix);
+                        context.Budget.Append(assembled, rendered.AsSpan());
+                        yield return context.Budget.Finish(assembled);
+                    }
+                }
+            }
+        }
     }
 }
