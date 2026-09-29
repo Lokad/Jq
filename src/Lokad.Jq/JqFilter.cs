@@ -202,6 +202,106 @@ internal sealed class AsFilter(
     }
 }
 
+// A `def name[(params)]: body; rest` definition: forges no values itself but
+// extends the environment with the definition before running the rest.
+// Closures forged later capture this extended environment, so each `def`
+// observes exactly the bindings visible at its own site.
+internal sealed class DefFilter(JqFunctionDefinition Definition, JqFilter Continuation) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        JqEnvironment extended = environment.ExtendFunction(Definition.Name, Definition.Arity, Definition);
+        foreach (JsonNode? value in Continuation.Evaluate(input, context, extended))
+            yield return value;
+    }
+}
+
+// A call to a user-defined function. Value arguments stream at the call
+// site (cartesian combinations drive one body run each, in the engine's
+// existing last-argument-outer order); filter arguments are captured with
+// the caller environment and re-evaluated afresh at every use. The body
+// runs against the call input in the closure environment, never the
+// caller's later bindings.
+internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFilter> Args) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        if (!environment.TryGetFunction(Name, Arity, out JqUserClosure? closure) || closure is null)
+            throw new JqException($"undefined function {Name}/{Arity}");
+        JqFunctionDefinition definition = closure.Definition;
+        if (Args.Count != definition.Arity)
+            throw new JqException($"undefined function {Name}/{Arity}");
+
+        var filters = new JqFilterClosure?[definition.Arity];
+        var values = new List<JqFilter>();
+        var valuePositions = new List<int>();
+        for (int index = 0; index < definition.Arity; index++)
+        {
+            if (definition.Parameters[index].IsValue)
+            {
+                values.Add(Args[index]);
+                valuePositions.Add(index);
+            }
+            else
+            {
+                filters[index] = new JqFilterClosure(Args[index], environment);
+            }
+        }
+
+        foreach (JsonNode?[] combo in EvaluateValueCombos(values, input, context, environment))
+        {
+            JqEnvironment frame = closure.Environment;
+            for (int position = 0; position < valuePositions.Count; position++)
+                frame = frame.Extend(definition.Parameters[valuePositions[position]].Name, context.Runtime.Clone(combo[position]));
+            for (int index = 0; index < filters.Length; index++)
+                if (filters[index] is not null)
+                    frame = frame.ExtendFilter(definition.Parameters[index].Name, filters[index]!);
+            foreach (JsonNode? value in definition.Body.Evaluate(input, context, frame))
+                yield return value;
+        }
+    }
+
+    private static IEnumerable<JsonNode?[]> EvaluateValueCombos(IReadOnlyList<JqFilter> values, JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        var current = new JsonNode?[values.Count];
+        return Combine(values.Count - 1);
+
+        IEnumerable<JsonNode?[]> Combine(int index)
+        {
+            if (index < 0)
+            {
+                yield return (JsonNode?[])current.Clone();
+                yield break;
+            }
+            foreach (JsonNode? value in values[index].Evaluate(input, context, environment))
+            {
+                current[index] = value;
+                foreach (JsonNode?[] combo in Combine(index - 1))
+                    yield return combo;
+            }
+        }
+    }
+}
+
+// A use of a filter parameter: re-evaluates the captured argument against
+// the current input in the caller environment from the call site.
+internal sealed class FilterParamCallFilter(string Name) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        if (!environment.TryGetFilter(Name, out JqFilterClosure? closure) || closure is null)
+            throw new JqException($"undefined filter {Name}");
+        foreach (JsonNode? value in closure.Filter.Evaluate(input, context, closure.Environment))
+            yield return value;
+    }
+}
+
 internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)

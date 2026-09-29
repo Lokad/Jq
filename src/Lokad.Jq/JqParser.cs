@@ -13,7 +13,7 @@ internal sealed class JqParser(
 {
     private readonly JqProgramSource _programSource = programSource ?? throw new ArgumentNullException(nameof(programSource));
     private readonly JqEnvironment _environment = environment ?? throw new ArgumentNullException(nameof(environment));
-    private readonly Stack<HashSet<string>> _scopes = new();
+    private readonly Stack<ParserScope> _scopes = new();
     private readonly JqBudget _budget = budget ?? throw new ArgumentNullException(nameof(budget));
     private readonly List<Token> _tokens = Lexer.Tokenize(source, programSource, budget);
     private int _index;
@@ -21,7 +21,8 @@ internal sealed class JqParser(
 
     public JqFilter Parse()
     {
-        var filter = ParseComma();
+        SeedFunctionsFromEnvironment();
+        var filter = ParseQuery();
         Expect(TokenKind.End);
         return filter;
     }
@@ -29,21 +30,87 @@ internal sealed class JqParser(
     private JqCompileException Error(string message, JqSourceSpan span) =>
         new(message, span, _programSource);
 
+    private sealed class ParserScope
+    {
+        internal readonly HashSet<string> Variables = new(StringComparer.Ordinal);
+        internal readonly HashSet<string> FilterParams = new(StringComparer.Ordinal);
+        internal readonly Dictionary<(string Name, int Arity), JqFunctionDefinition> Functions = new();
+    }
+
     private bool IsBound(string name)
     {
         foreach (var scope in _scopes)
-            if (scope.Contains(name))
+            if (scope.Variables.Contains(name))
                 return true;
         return _environment.TryGetValue(name, out _);
     }
 
-    private void EnterScope() => _scopes.Push(new HashSet<string>(StringComparer.Ordinal));
+    private void EnterScope() => _scopes.Push(new ParserScope());
 
     private void Declare(string name)
     {
         if (_scopes.Count == 0)
             throw new InvalidOperationException("No open binding scope.");
-        _scopes.Peek().Add(name);
+        _scopes.Peek().Variables.Add(name);
+    }
+
+    private void DeclareFilterParam(string name)
+    {
+        if (_scopes.Count == 0)
+            throw new InvalidOperationException("No open binding scope.");
+        _scopes.Peek().FilterParams.Add(name);
+    }
+
+    private void DeclareFunction(JqFunctionDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (_scopes.Count == 0)
+            _scopes.Push(new ParserScope());
+        _scopes.Peek().Functions[(definition.Name, definition.Arity)] = definition;
+    }
+
+    // Resolves a bare `name` use: a zero-argument user function wins over a
+    // filter parameter in the same scope, matching definition-site lookup.
+    private bool TryLookupZeroArg(string name, out bool isFilterParam)
+    {
+        foreach (var scope in _scopes)
+        {
+            if (scope.Functions.ContainsKey((name, 0)))
+            {
+                isFilterParam = false;
+                return true;
+            }
+            if (scope.FilterParams.Contains(name))
+            {
+                isFilterParam = true;
+                return true;
+            }
+        }
+        isFilterParam = false;
+        return false;
+    }
+
+    private bool TryLookupFunction(string name, int arity)
+    {
+        foreach (var scope in _scopes)
+            if (scope.Functions.ContainsKey((name, arity)))
+                return true;
+        return false;
+    }
+
+    // Reparsed fragments (string interpolation re-enters the parser with the
+    // evaluation environment) reseed visible user definitions so `"\(f)"`
+    // keeps working inside function bodies. Nearest bindings win.
+    private void SeedFunctionsFromEnvironment()
+    {
+        var collected = new Dictionary<(string Name, int Arity), JqFunctionDefinition>();
+        _environment.CollectFunctions(collected);
+        if (collected.Count == 0)
+            return;
+        var scope = new ParserScope();
+        foreach (var entry in collected)
+            scope.Functions[entry.Key] = entry.Value;
+        _scopes.Push(scope);
     }
 
     private void ExitScope()
@@ -52,6 +119,87 @@ internal sealed class JqParser(
             throw new InvalidOperationException("No open binding scope.");
         _scopes.Pop();
     }
+
+    // Definitions bind loosest: `def f: ...; rest` scopes the definition over
+    // the whole following query, mirroring gojq `query: funcdef query`. This
+    // layer fronts every full-expression position (top level, parentheses,
+    // brackets, pipe right-hand sides starting with `def`, binding bodies,
+    // conditions, branches, and call arguments).
+    private JqFilter ParseQuery()
+    {
+        if (!PeekIsDef())
+            return ParseComma();
+        JqFunctionDefinition definition = ParseFuncDefHead();
+        DeclareFunction(definition);
+        EnterScope();
+        JqFilter body;
+        try
+        {
+            foreach (JqFunctionParameter parameter in definition.Parameters)
+            {
+                if (parameter.IsValue)
+                    Declare(parameter.Name);
+                else
+                    DeclareFilterParam(parameter.Name);
+            }
+            body = ParseQuery();
+        }
+        finally
+        {
+            ExitScope();
+        }
+        Expect(";");
+        var complete = AttachBody(definition, body);
+        DeclareFunction(complete);
+        return new DefFilter(complete, ParseQuery());
+    }
+
+    private static JqFunctionDefinition AttachBody(JqFunctionDefinition definition, JqFilter body)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(body);
+        return new JqFunctionDefinition(definition.Name, definition.Parameters, body);
+    }
+
+    private JqFunctionDefinition ParseFuncDefHead()
+    {
+        if (++_depth > JqBudget.MaximumDepth)
+            throw Error("filter nesting limit exceeded", Peek().Span);
+        try
+        {
+            ExpectIdentifier("def");
+            Token name = Expect(TokenKind.Identifier);
+            var parameters = new List<JqFunctionParameter>();
+            if (Match("("))
+            {
+                if (!Match(")"))
+                {
+                    do
+                    {
+                        if (Match("$"))
+                        {
+                            Token variable = Expect(TokenKind.Identifier);
+                            parameters.Add(new JqFunctionParameter(variable.Text, true));
+                        }
+                        else
+                        {
+                            Token filter = Expect(TokenKind.Identifier);
+                            parameters.Add(new JqFunctionParameter(filter.Text, false));
+                        }
+                    } while (Match(";"));
+                    Expect(")");
+                }
+            }
+            Expect(":");
+            return new JqFunctionDefinition(name.Text, parameters, new IdentityFilter());
+        }
+        finally
+        {
+            _depth--;
+        }
+    }
+
+    private bool PeekIsDef() => Peek() is { Kind: TokenKind.Identifier, Text: "def" };
 
     private JqFilter ParseComma()
     {
@@ -65,7 +213,12 @@ internal sealed class JqParser(
     {
         var left = ParseAs();
         while (Match("|"))
-            left = new PipeFilter(left, ParseAs());
+        {
+            // A right-hand side starting with `def` takes the whole rest of
+            // the query as its body, matching `query: funcdef query`.
+            JqFilter right = PeekIsDef() ? ParseQuery() : ParseAs();
+            left = new PipeFilter(left, right);
+        }
         return left;
     }
 
@@ -86,7 +239,7 @@ internal sealed class JqParser(
                 alternative.CollectBoundNames(declared);
             foreach (string name in declared)
                 Declare(name);
-            return new AsFilter(left, alternatives, ParseComma());
+            return new AsFilter(left, alternatives, ParseQuery());
         }
         finally
         {
@@ -394,7 +547,7 @@ internal sealed class JqParser(
         }
         if (Match("("))
         {
-            var inner = ParseComma();
+            var inner = ParseQuery();
             Expect(")");
             return inner;
         }
@@ -402,7 +555,7 @@ internal sealed class JqParser(
         {
             if (Match("]"))
                 return new LiteralFilter(new JsonArray());
-            var item = ParseComma();
+            var item = ParseQuery();
             Expect("]");
             return new ArrayFilter(item);
         }
@@ -509,17 +662,17 @@ internal sealed class JqParser(
     private JqFilter ParseIf()
     {
         var branches = new List<(JqFilter, JqFilter)>();
-        var condition = ParseComma();
+        var condition = ParseQuery();
         ExpectIdentifier("then");
-        branches.Add((condition, ParseComma()));
+        branches.Add((condition, ParseQuery()));
         while (MatchIdentifier("elif"))
         {
-            var elif = ParseComma();
+            var elif = ParseQuery();
             ExpectIdentifier("then");
-            branches.Add((elif, ParseComma()));
+            branches.Add((elif, ParseQuery()));
         }
         ExpectIdentifier("else");
-        var otherwise = ParseComma();
+        var otherwise = ParseQuery();
         ExpectIdentifier("end");
         return new IfFilter(branches, otherwise);
     }
@@ -531,8 +684,8 @@ internal sealed class JqParser(
         {
             do
             {
-                args.Add(ParseComma());
-            } while (Match(";") || Match(","));
+                args.Add(ParseQuery());
+            } while (Match(";"));
             Expect(")");
         }
         return CreateFunction(name, args, span);
@@ -540,6 +693,12 @@ internal sealed class JqParser(
 
     private JqFilter CreateFunction(string name, IReadOnlyList<JqFilter> args, JqSourceSpan span)
     {
+        // User definitions shadow builtins; a bare name also matches a filter
+        // parameter. Unknown names fail here at compile time, as before.
+        if (args.Count == 0 && TryLookupZeroArg(name, out bool isFilterParam))
+            return isFilterParam ? new FilterParamCallFilter(name) : new UserCallFilter(name, 0, args);
+        if (args.Count > 0 && TryLookupFunction(name, args.Count))
+            return new UserCallFilter(name, args.Count, args);
         if (!JqBuiltinRegistry.TryValidate(name, args.Count, out string error))
         {
             throw Error(error, span);
