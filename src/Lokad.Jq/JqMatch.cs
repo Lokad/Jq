@@ -1,31 +1,51 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.Json.Nodes;
 using PCRE;
 using static Lokad.Jq.JqRuntime;
 
 namespace Lokad.Jq;
 
-// Shared upstream-shaped regex search behind match, capture, and later
-// scan, splits, and sub. Offsets and lengths count Unicode scalars, and
-// global iteration advances by scalar after empty matches. Matches are
-// collected eagerly like the reference, which builds one array per call.
+// Shared upstream-shaped regex search behind match, capture, scan, splits,
+// and sub. Offsets and lengths count Unicode scalars, and global iteration
+// advances by scalar after empty matches. Matches are collected eagerly
+// like the reference, which builds one array per call.
 internal static class JqMatch
 {
     internal static List<JsonObject> Search(JqContext context, JsonNode? input, JsonNode? patternNode, JsonNode? modifiersNode)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (!TryGetString(input, out string? text) || text is null)
-            throw new JqException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") cannot be matched, as it is not a string");
+        string text = RequireText(context, input);
         if (!TryGetString(patternNode, out string? pattern) || pattern is null)
             throw new JqException(TypeName(patternNode) + " (" + context.Runtime.Serialize(patternNode, false, null, false) + ") is not a string");
-        string modifiers;
+        return SearchText(context, text, pattern, RequireModifiers(context, modifiersNode));
+    }
+
+    internal static string RequireText(JqContext context, JsonNode? input)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (!TryGetString(input, out string? text) || text is null)
+            throw new JqException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") cannot be matched, as it is not a string");
+        return text;
+    }
+
+    internal static string RequireModifiers(JqContext context, JsonNode? modifiersNode)
+    {
+        ArgumentNullException.ThrowIfNull(context);
         if (modifiersNode is null)
-            modifiers = string.Empty;
-        else if (TryGetString(modifiersNode, out string? flags) && flags is not null)
-            modifiers = flags;
-        else
-            throw new JqException(TypeName(modifiersNode) + " (" + context.Runtime.Serialize(modifiersNode, false, null, false) + ") is not a string");
+            return string.Empty;
+        if (TryGetString(modifiersNode, out string? flags) && flags is not null)
+            return flags;
+        throw new JqException(TypeName(modifiersNode) + " (" + context.Runtime.Serialize(modifiersNode, false, null, false) + ") is not a string");
+    }
+
+    internal static List<JsonObject> SearchText(JqContext context, string text, string pattern, string modifiers)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(pattern);
+        ArgumentNullException.ThrowIfNull(modifiers);
         if (!JqRegexOptions.TryParse(modifiers, out JqRegexOptions options, out _))
             throw new JqException(modifiers + " is not a valid modifier string");
         bool global = modifiers.Contains('g');
@@ -179,4 +199,73 @@ internal static class JqMatch
 
     private static int ScalarWidth(string text, int cursor) =>
         char.IsHighSurrogate(text[cursor]) && cursor + 1 < text.Length && char.IsLowSurrogate(text[cursor + 1]) ? 2 : 1;
+
+    // Scan streams one value per global match: the capture strings when the
+    // pattern defines groups, otherwise the whole match text.
+    internal static List<JsonNode?> Scan(JqContext context, JsonNode? input, JsonNode? patternNode, JsonNode? flagsNode)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        string text = RequireText(context, input);
+        if (!TryGetString(patternNode, out string? pattern) || pattern is null)
+            throw new JqException(TypeName(patternNode) + " (" + context.Runtime.Serialize(patternNode, false, null, false) + ") is not a string");
+        string flags = RequireModifiers(context, flagsNode);
+        var results = new List<JsonNode?>();
+        foreach (JsonObject match in SearchText(context, text, pattern, "g" + flags))
+        {
+            if (match["captures"] is JsonArray captures && captures.Count > 0)
+            {
+                var row = new JsonArray();
+                foreach (JsonNode? capture in captures)
+                {
+                    context.Budget.ChargeNode();
+                    row.Add(context.Runtime.Clone(capture is JsonObject item ? item["string"] : null));
+                }
+                results.Add(row);
+            }
+            else
+            {
+                results.Add(context.Runtime.Clone(match["string"]));
+            }
+        }
+        return results;
+    }
+
+    // Gap strings between global matches plus the final tail, sliced by scalar.
+    internal static List<string> SplitPieces(JqContext context, JsonNode? input, JsonNode? patternNode, JsonNode? flagsNode)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        string text = RequireText(context, input);
+        if (!TryGetString(patternNode, out string? pattern) || pattern is null)
+            throw new JqException(TypeName(patternNode) + " (" + context.Runtime.Serialize(patternNode, false, null, false) + ") is not a string");
+        string flags = RequireModifiers(context, flagsNode);
+        List<JsonObject> matches = SearchText(context, text, pattern, flags + "g");
+        var starts = new List<int>(text.Length + 1) { 0 };
+        foreach (Rune rune in text.EnumerateRunes())
+            starts.Add(starts[starts.Count - 1] + rune.Utf16SequenceLength);
+        var pieces = new List<string>();
+        int previous = 0;
+        foreach (JsonObject match in matches)
+        {
+            int offset = MatchField(match, "offset");
+            pieces.Add(SliceScalars(context, text, starts, previous, offset));
+            previous = offset + MatchField(match, "length");
+        }
+        pieces.Add(SliceScalars(context, text, starts, previous, starts.Count - 1));
+        return pieces;
+    }
+
+    private static int MatchField(JsonObject match, string name)
+    {
+        if (match[name] is JsonValue value && value.TryGetValue<int>(out int number))
+            return number;
+        throw new JqException("regex split produced a non-integer " + name);
+    }
+
+    private static string SliceScalars(JqContext context, string text, List<int> starts, int from, int to)
+    {
+        context.Budget.ChargeNode();
+        string piece = text.Substring(starts[from], starts[to] - starts[from]);
+        context.Budget.ChargeString(piece.Length);
+        return piece;
+    }
 }

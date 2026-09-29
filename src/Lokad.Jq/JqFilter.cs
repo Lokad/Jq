@@ -1568,7 +1568,20 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "rtrim": yield return JsonValue.Create(TrimSides(input, false, true)); break;
                 case "explode": yield return context.Runtime.Explode(input); break;
                 case "implode": yield return context.Runtime.Implode(input); break;
-                case "split": yield return context.Runtime.Split(input, Arg(0)); break;
+                case "split":
+                    if (combo.Length == 1)
+                    {
+                        yield return context.Runtime.Split(input, Arg(0));
+                        break;
+                    }
+                    else
+                    {
+                        var pieces = new JsonArray();
+                        foreach (string piece in JqMatch.SplitPieces(context, input, Arg(0), Arg(1)))
+                            pieces.Add(JsonValue.Create(piece));
+                        yield return pieces;
+                        break;
+                    }
                 case "join": yield return context.Runtime.Join(input, Arg(0)); break;
                 case "ascii_downcase": yield return JsonValue.Create(context.Runtime.AsciiCase(String(input), true)); break;
                 case "ascii_upcase": yield return JsonValue.Create(context.Runtime.AsciiCase(String(input), false)); break;

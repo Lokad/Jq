@@ -855,7 +855,7 @@ internal sealed class JqParser(
 
         if (name == "gsub")
         {
-            return new GsubFilter(args);
+            return new GsubFilter(args, false);
         }
 
         if (name == "test")
@@ -871,6 +871,21 @@ internal sealed class JqParser(
         if (name == "capture")
         {
             return new CaptureFilter(args);
+        }
+
+        if (name == "sub")
+        {
+            return new GsubFilter(args, true);
+        }
+
+        if (name == "scan")
+        {
+            return new ScanFilter(args);
+        }
+
+        if (name == "splits")
+        {
+            return new SplitsFilter(args);
         }
 
         if (name == "path")

@@ -7,19 +7,22 @@ using static Lokad.Jq.JqRuntime;
 
 namespace Lokad.Jq;
 
-internal sealed class GsubFilter(IReadOnlyList<JqFilter> args) : JqFilter
+internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
+        string filterName = firstOnly ? "sub" : "gsub";
         if (args.Count is not (2 or 3))
-            throw new JqException("gsub expects two or three arguments");
+            throw new JqException(filterName + " expects two or three arguments");
         var text = String(input);
         foreach (var flags in args.Count == 3 ? args[2].Evaluate(input, context, environment) : [(JsonNode?)null])
         foreach (var pattern in args[0].Evaluate(input, context, environment))
         {
-            if (!JqRegexOptions.TryParse(flags == null ? string.Empty : String(flags), out var options, out var unsupportedFlag))
-                throw new JqException($"unsupported gsub flag '{unsupportedFlag}'");
-
+            string flagText = flags == null ? string.Empty : String(flags);
+            if (!JqRegexOptions.TryParse(flagText, out var options, out var unsupportedFlag))
+                throw new JqException("unsupported " + filterName + " flag ('" + unsupportedFlag + "')");
+            // sub without an explicit g flag stops after the first match.
+            bool stopFirst = firstOnly && !flagText.Contains('g');
             var regex = context.Regexes.Get(String(pattern), options.Pattern);
             var matchOptions = options.Match;
             // jq aligns replacement streams by their result index across successive matches.
@@ -73,6 +76,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args) : JqFilter
                     start += char.IsHighSurrogate(text[start]) && start + 1 < text.Length
                              && char.IsLowSurrogate(text[start + 1]) ? 2 : 1;
                 }
+                if (stopFirst) break;
             }
 
             if (results.Count == 0)
