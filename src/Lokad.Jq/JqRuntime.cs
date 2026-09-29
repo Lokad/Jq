@@ -558,6 +558,114 @@ internal sealed class JqRuntime(JqBudget budget)
         return "number";
     }
 
+    internal JsonNode Keys(JsonNode? input, bool sorted)
+    {
+        if (input is JsonObject obj)
+        {
+            var names = new List<string>();
+            foreach (var property in obj)
+                names.Add(property.Key);
+            if (sorted)
+                names.Sort(StringComparer.Ordinal);
+            var keys = new JsonArray();
+            foreach (string name in names)
+            {
+                budget.ChargeNode();
+                keys.Add(JsonValue.Create(name));
+            }
+            return keys;
+        }
+        if (input is JsonArray arr)
+        {
+            var keys = new JsonArray();
+            for (int index = 0; index < arr.Count; index++)
+            {
+                budget.ChargeNode();
+                keys.Add(JsonValue.Create(index));
+            }
+            return keys;
+        }
+        throw new JqException($"{TypeName(input)} ({Serialize(input, false, null, false)}) has no keys");
+    }
+
+    internal bool Has(JsonNode? input, JsonNode? key)
+    {
+        if (input is null)
+            return false;
+        if (input is JsonObject obj && TryGetString(key, out string? name))
+            return obj.ContainsKey(name);
+        if (input is JsonArray arr && JqPaths.TryGetIndex(key, out long index, out bool isNaN))
+        {
+            if (isNaN)
+                return false;
+            long clamped = index < int.MinValue ? int.MinValue : index > int.MaxValue ? int.MaxValue : index;
+            return clamped >= 0 && clamped < arr.Count;
+        }
+        throw new JqException($"Cannot check whether {TypeName(input)} has a {TypeName(key)} key");
+    }
+
+    internal JsonArray ToEntries(JsonNode? input)
+    {
+        var entries = new JsonArray();
+        if (input is JsonObject obj)
+        {
+            foreach (var property in obj)
+            {
+                budget.ChargeNode();
+                var entry = new JsonObject();
+                entry["key"] = JsonValue.Create(property.Key);
+                entry["value"] = Clone(property.Value);
+                entries.Add(entry);
+            }
+            return entries;
+        }
+        if (input is JsonArray arr)
+        {
+            for (int index = 0; index < arr.Count; index++)
+            {
+                budget.ChargeNode();
+                var entry = new JsonObject();
+                entry["key"] = JsonValue.Create(index);
+                entry["value"] = Clone(arr[index]);
+                entries.Add(entry);
+            }
+            return entries;
+        }
+        throw new JqException($"{TypeName(input)} ({Serialize(input, false, null, false)}) has no keys");
+    }
+
+    internal JsonNode FromEntries(JsonNode? input)
+    {
+        if (input is not JsonArray arr)
+            throw new JqRuntimeException($"cannot iterate over {TypeName(input)}");
+        var result = new JsonObject();
+        foreach (JsonNode? element in arr)
+        {
+            if (element is not JsonObject entry)
+                throw new JqRuntimeException($"cannot index {TypeName(element)} with string \"key\"");
+            JsonNode? key = null;
+            foreach (string name in new[] { "key", "Key", "name", "Name" })
+            {
+                if (entry.TryGetPropertyValue(name, out JsonNode? candidate) && Truthy(candidate))
+                {
+                    key = candidate;
+                    break;
+                }
+            }
+            if (key is null || !TryGetString(key, out string? keyName) || keyName is null)
+            {
+                if (key is null)
+                    continue;
+                throw new JqException($"Cannot use {TypeName(key)} ({ToJqString(key)}) as object key");
+            }
+            budget.ChargeNode();
+            JsonNode? value = entry.TryGetPropertyValue("value", out JsonNode? direct) ? direct
+                : entry.TryGetPropertyValue("Value", out JsonNode? capitalized) ? capitalized : null;
+            result[keyName] = Clone(value);
+        }
+        return result;
+    }
+
     internal JsonNode? AddAll(JsonNode? input)
     {
         if (input is not JsonArray arr || arr.Count == 0) return null;
@@ -614,10 +722,19 @@ internal sealed class JqRuntime(JqBudget budget)
 
     internal bool Contains(JsonNode? container, JsonNode? contained)
     {
-        if (TryGetString(container, out var s) && TryGetString(contained, out var sub)) return s.Contains(sub, StringComparison.Ordinal);
-        if (container is JsonArray arr) return arr.Any(v => JsonEquals(v, contained));
+        if (TypeName(container) != TypeName(contained))
+            throw new JqException($"{TypeName(container)} ({Serialize(container, false, null, false)}) and {TypeName(contained)} ({Serialize(contained, false, null, false)}) cannot have their containment checked");
+        return ContainsSameKind(container, contained);
+    }
+
+    private bool ContainsSameKind(JsonNode? container, JsonNode? contained)
+    {
         if (container is JsonObject obj && contained is JsonObject needle)
-            return needle.All(kv => obj.TryGetPropertyValue(kv.Key, out var value) && Contains(value, kv.Value));
+            return needle.All(kv => obj.TryGetPropertyValue(kv.Key, out var value) && ContainsSameKind(value, kv.Value));
+        if (container is JsonArray haystack && contained is JsonArray needles)
+            return needles.All(needle => haystack.Any(candidate => ContainsSameKind(candidate, needle)));
+        if (TryGetString(container, out var text) && TryGetString(contained, out var fragment))
+            return fragment.Length == 0 || text.Contains(fragment, StringComparison.Ordinal);
         return JsonEquals(container, contained);
     }
 

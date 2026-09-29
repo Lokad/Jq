@@ -960,6 +960,26 @@ internal sealed class JqParser(
             return new WalkFilter(args[0]);
         }
 
+        if (name == "map")
+        {
+            return new MapFilter(args[0]);
+        }
+
+        if (name == "map_values")
+        {
+            return new MapValuesFilter(args[0]);
+        }
+
+        if (name == "with_entries")
+        {
+            return new WithEntriesFilter(args[0]);
+        }
+
+        if (name == "in")
+        {
+            return new InFilter(args[0]);
+        }
+
         if (name == "paths")
         {
             return args.Count == 0
