@@ -27,6 +27,9 @@ internal static class Lexer
                 throw new JqCompileException("filter exceeds the 4096-token limit", JqSourceSpan.FromOffset(source, i), programSource);
             var c = source[i];
             if (char.IsWhiteSpace(c)) { i++; continue; }
+            // Comments run to the end of the line (or input), matching the
+            // reference lexer; the newline itself stays whitespace.
+            if (c == '#') { while (i < source.Length && source[i] != '\n') i++; continue; }
             if (char.IsLetter(c) || c == '_')
             {
                 var start = i++;
@@ -41,11 +44,29 @@ internal static class Lexer
                 tokens.Add(new Token(kind, source[start..i], JqSourceSpan.FromOffset(source, start)));
                 continue;
             }
-            if (char.IsDigit(c) || c == '-' && i + 1 < source.Length && char.IsDigit(source[i + 1]))
+            // Numbers never take a sign; `-` stays an operator so `1+2` and
+            // `1 - -2` parse. A trailing dot stays literal (even before
+            // keywords, as in `1.then`), while `+`/`-` only continue exponents.
+            // Leading-dot fractions (`.5`) match the reference literal syntax.
+            if (char.IsDigit(c) || (c == '.' && i + 1 < source.Length && char.IsDigit(source[i + 1])))
             {
-                var start = i++;
-                while (i < source.Length && (char.IsDigit(source[i]) || source[i] is '.' or 'e' or 'E' or '+' or '-'))
+                var start = i;
+                while (i < source.Length && char.IsDigit(source[i]))
                     i++;
+                if (i < source.Length && source[i] == '.')
+                {
+                    i++;
+                    while (i < source.Length && char.IsDigit(source[i]))
+                        i++;
+                }
+                if (i < source.Length && source[i] is 'e' or 'E')
+                {
+                    i++;
+                    if (i < source.Length && source[i] is '+' or '-')
+                        i++;
+                    while (i < source.Length && char.IsDigit(source[i]))
+                        i++;
+                }
                 tokens.Add(new Token(TokenKind.Number, source[start..i], JqSourceSpan.FromOffset(source, start)));
                 continue;
             }
@@ -75,7 +96,7 @@ internal static class Lexer
                             '(' => "\\(",
                             'u' when i + 4 <= source.Length && int.TryParse(source[(i)..(i += 4)], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var codePoint) => (char)codePoint,
                             'u' => throw new JqCompileException("invalid unicode escape", JqSourceSpan.FromOffset(source, i - 2), programSource),
-                            _ => e
+                            _ => throw new JqCompileException($"invalid escape '\\{e}'", JqSourceSpan.FromOffset(source, i - 2), programSource),
                         });
                     }
                     else

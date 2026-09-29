@@ -231,11 +231,12 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    // `1+2` computes since signs no longer join numbers; `1e` stays invalid.
     public async Task Jq_InvalidNumberLiteralReturnsFilterParseError()
     {
         var fileSystem = new MockFileSystem();
 
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1+2")));
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1e")));
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.Equal(3, exitCode);
