@@ -14,6 +14,7 @@ internal static class JqBuiltinRegistry
     {
         ["empty"] = (0, 0),
         ["not"] = (0, 0),
+        ["error"] = (0, 1),
         ["select"] = (1, 1),
         ["length"] = (0, 0),
         ["type"] = (0, 0),

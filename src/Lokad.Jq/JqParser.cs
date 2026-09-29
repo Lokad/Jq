@@ -227,6 +227,8 @@ internal sealed class JqParser(
         }
         if (node is IfFilter iff)
             return iff.WithTails(branch => RewriteTailCalls(branch, definition));
+        if (node is TryFilter attempted)
+            return attempted.WithOperands(operand => RewriteTailCalls(operand, definition));
         if (node is CommaFilter comma)
             return comma.WithRight(RewriteTailCalls(comma.Right, definition));
         if (node is AlternativeFilter alternative)
@@ -605,6 +607,14 @@ internal sealed class JqParser(
             return ParseObject();
         if (MatchIdentifier("if"))
             return ParseIf();
+        if (MatchIdentifier("try"))
+        {
+            // `try` binds tightly: the operand is one alternative, so
+            // pipes, commas, bindings, and definitions need parentheses.
+            var body = ParseAlternative();
+            JqFilter? handler = MatchIdentifier("catch") ? ParseAlternative() : null;
+            return new TryFilter(body, handler);
+        }
 
         var token = Next();
         if (token.Kind == TokenKind.Number)

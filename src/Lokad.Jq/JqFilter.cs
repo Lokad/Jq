@@ -767,12 +767,35 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
     {
         // Value operators distribute with the left operand inner (fast),
         // matching reversed call prelude order with backtracking. Boolean
-        // and/or keep their pairwise shape pending a later increment.
-        if (op is "and" or "or")
+        // and/or short-circuit per left value: a decided left never touches
+        // the right side, while an undecided left streams it as booleans.
+        if (op is "and")
         {
-            foreach (var l in left.Evaluate(input, context, environment))
-                foreach (var r in right.Evaluate(input, context, environment))
-                    yield return Eval(l, r);
+            foreach (JsonNode? l in left.Evaluate(input, context, environment))
+            {
+                if (!Truthy(l))
+                {
+                    yield return JsonValue.Create(false);
+                    continue;
+                }
+                foreach (JsonNode? r in right.Evaluate(input, context, environment))
+                    yield return JsonValue.Create(Truthy(r));
+            }
+            yield break;
+        }
+        if (op is "or")
+        {
+            foreach (JsonNode? l in left.Evaluate(input, context, environment))
+            {
+                if (Truthy(l))
+                {
+                    yield return JsonValue.Create(true);
+                    continue;
+                }
+                foreach (JsonNode? r in right.Evaluate(input, context, environment))
+                    yield return JsonValue.Create(Truthy(r));
+            }
+            yield break;
         }
         else
         {
@@ -796,8 +819,6 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
                 "<=" => JsonValue.Create(Compare(l, r) <= 0),
                 ">" => JsonValue.Create(Compare(l, r) > 0),
                 ">=" => JsonValue.Create(Compare(l, r) >= 0),
-                "and" => JsonValue.Create(Truthy(l) && Truthy(r)),
-                "or" => JsonValue.Create(Truthy(l) || Truthy(r)),
                 _ => throw new JqException($"unsupported operator {op}")
             };
 
@@ -974,6 +995,20 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             yield break;
         }
 
+        if (name == "error")
+        {
+            if (args.Count > 1)
+                throw new JqException("error expects at most one argument");
+            // Bare `error` raises the input; otherwise the first argument
+            // value wins and the rest never runs. An empty argument stream
+            // yields nothing at all.
+            if (args.Count == 0)
+                throw NewError(context, input);
+            foreach (var value in args[0].Evaluate(input, context, environment))
+                throw NewError(context, value);
+            yield break;
+        }
+
         // Cartesian argument streams: the last argument is outer (slow) and
         // the first argument inner (fast), matching reversed call prelude
         // order with backtracking. An empty argument yields no outputs.
@@ -1002,6 +1037,17 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                         yield return combo;
                 }
             }
+        }
+
+        static JqErrorException NewError(JqContext context, JsonNode? payload)
+        {
+            JsonNode? held = context.Runtime.Clone(payload);
+            string rendered = held is null ? "null"
+                : TryGetString(held, out string? text) ? text
+                : context.Runtime.ToJqString(held);
+            string message = "error: " + rendered;
+            context.Budget.ChargeString(message.Length);
+            return new JqErrorException(held, message);
         }
 
         IEnumerable<JsonNode?> EvaluateWith(JsonNode?[] combo)
