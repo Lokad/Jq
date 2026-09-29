@@ -37,6 +37,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private readonly JqContext _context;
     private readonly JqFileDescriptor _stdin;
     private readonly bool _raw;
+    private readonly bool _seq;
     private readonly List<Source> _sources;
     private readonly CancellationToken _cancellationToken;
     private readonly byte[] _readBuffer = new byte[ChunkSize];
@@ -50,6 +51,16 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private JqFileDescriptor? _owned;
     private int _newlines;
     private bool _disposed;
+
+    // JSON-text-sequence state (RFC 7464 records separated by RS 0x1E).
+    // Raw mode wins over sequence framing; plain streaming scanners arrive
+    // with the sibling `--stream` increment.
+    private bool _seqWaiting = true;
+    private bool _seqDone;
+    private int _scanLine = 1;
+    private int _scanCol;
+    private readonly Queue<JsonNode?> _seqQueue = new();
+    private JqSeqResyncException? _seqError;
 
     private sealed record Source(string Name, bool IsStdin, JqPath? Path, string Display);
 
@@ -68,6 +79,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _context = context;
         _stdin = invocation.StdIn;
         _raw = invocation.RawInput;
+        _seq = invocation.Seq;
         _cancellationToken = cancellationToken;
         _sources = [];
         if (invocation.InputFiles.Count == 0)
@@ -98,7 +110,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         try
         {
-            return _raw ? await PullRawAsync().ConfigureAwait(false) : await PullJsonAsync().ConfigureAwait(false);
+            if (_raw)
+                return await PullRawAsync().ConfigureAwait(false);
+            if (_seq)
+                return await PullSeqAsync().ConfigureAwait(false);
+            return await PullJsonAsync().ConfigureAwait(false);
         }
         catch (Exception exception) when (ShouldAbandonSource(exception))
         {
@@ -129,7 +145,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private static bool ShouldAbandonSource(Exception exception) =>
         exception is not OperationCanceledException
         && exception is not JqQuotaException
-        && exception is not JqHostFailureException;
+        && exception is not JqHostFailureException
+        && exception is not JqSeqResyncException;
 
     private async Task<(bool HasValue, JsonNode? Value)> PullJsonAsync()
     {
@@ -229,8 +246,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _index++;
         if (_index >= _sources.Count)
             return false;
-        _start = 0;
-        _count = 0;
+        if (!_seq)
+        {
+            _start = 0;
+            _count = 0;
+        }
         _eof = false;
         _newlines = 0;
         _active = true;
@@ -345,6 +365,351 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 count++;
         }
         return count;
+    }
+
+    // Advances past length bytes, counting newlines for per-source input
+    // metadata and continuous scanner diagnostics alike.
+    private void Advance(int length)
+    {
+        for (var i = 0; i < length; i++)
+        {
+            if (_buffer[_start + i] == (byte)10)
+            {
+                _newlines++;
+                _scanLine++;
+                _scanCol = 0;
+            }
+            else
+            {
+                _scanCol++;
+            }
+        }
+        _start += length;
+        _count -= length;
+    }
+
+    private int IndexOfRs()
+    {
+        for (var i = 0; i < _count; i++)
+        {
+            if (_buffer[_start + i] == (byte)30)
+                return _start + i;
+        }
+        return -1;
+    }
+
+    private static bool IsSeqWhitespace(byte b) =>
+        b == (byte)32 || b == (byte)9 || b == (byte)10 || b == (byte)13;
+
+    // Structural scan of one sequence record: container depth, whether the
+    // record ends inside a string, and the length of a trailing literal run.
+    // Literal runs are maximal trailing LITERAL-class bytes (anything but
+    // whitespace, structure `[]{},:"`, or quotes).
+    private static void ScanSeqRecord(
+        ReadOnlySpan<byte> record, out int depth, out bool inString, out int trailingRun)
+    {
+        depth = 0;
+        inString = false;
+        trailingRun = 0;
+        bool escaped = false;
+        int runStart = -1;
+        for (var i = 0; i < record.Length; i++)
+        {
+            byte b = record[i];
+            if (inString)
+            {
+                if (escaped)
+                    escaped = false;
+                else if (b == (byte)92)
+                    escaped = true;
+                else if (b == (byte)34)
+                {
+                    inString = false;
+                    runStart = -1;
+                }
+                continue;
+            }
+            if (b == (byte)34)
+            {
+                inString = true;
+                runStart = -1;
+            }
+            else if (b == (byte)91 || b == (byte)123)
+            {
+                depth++;
+                runStart = -1;
+            }
+            else if (b == (byte)93 || b == (byte)125)
+            {
+                depth--;
+                runStart = -1;
+            }
+            else if (b == (byte)58 || b == (byte)44)
+            {
+                runStart = -1;
+            }
+            else if (IsSeqWhitespace(b))
+            {
+                runStart = -1;
+            }
+            else if (runStart < 0)
+            {
+                runStart = i;
+            }
+        }
+        trailingRun = runStart < 0 ? 0 : record.Length - runStart;
+    }
+
+    private async Task<(bool HasValue, JsonNode? Value)> PullSeqAsync()
+    {
+        while (true)
+        {
+            _budget.CheckCancellation();
+            if (_seqQueue.TryDequeue(out JsonNode? queued))
+                return (true, queued);
+            if (_seqError is not null)
+            {
+                JqSeqResyncException stashed = _seqError;
+                _seqError = null;
+                throw stashed;
+            }
+            if (_seqDone)
+                return (false, null);
+            if (!_active && !await ActivateNextAsync().ConfigureAwait(false))
+            {
+                FinishSeqTail();
+                continue;
+            }
+            int rs = IndexOfRs();
+            if (rs < 0)
+            {
+                if (_eof)
+                {
+                    await AdvanceSourceKeepBufferAsync().ConfigureAwait(false);
+                    continue;
+                }
+                await FillAsync().ConfigureAwait(false);
+                continue;
+            }
+            CompleteSeqRecord(rs);
+        }
+    }
+
+    private async Task AdvanceSourceKeepBufferAsync()
+    {
+        if (_owned is { } owned)
+        {
+            _owned = null;
+            await _host.CloseOwnedDescriptorAsync(owned, null).ConfigureAwait(false);
+        }
+        _active = false;
+    }
+
+    // Processes one RS-terminated record: values decode into the queue while
+    // a truncated or malformed tail is stashed for after the drain, matching
+    // reference value-before-error ordering. Only a literal run pending at the
+    // separator counts as truncation; trailing whitespace finalizes scalars.
+    // The span aliases the read buffer and stays valid: this path is fully
+    // synchronous, so no compaction can intervene before decoding finishes.
+    private void CompleteSeqRecord(int rsIdx)
+    {
+        int length = rsIdx - _start;
+        ReadOnlySpan<byte> record = _buffer.AsSpan(_start, length);
+        Advance(length + 1);
+        bool skippedPrefix = _seqWaiting;
+        _seqWaiting = false;
+        if (skippedPrefix)
+            return;
+        int begin = 0;
+        while (begin < length && IsSeqWhitespace(record[begin]))
+            begin++;
+        int end = length;
+        while (end > begin && IsSeqWhitespace(record[end - 1]))
+            end--;
+        if (begin == end)
+            return;
+        ScanSeqRecord(record, out int depth, out bool inString, out int trailingRun);
+        if (depth > 0 || inString)
+        {
+            StashSeqError("Truncated value (need RS to resync)");
+            return;
+        }
+        if (trailingRun > 0)
+        {
+            DecodeSeqPrefix(record[..^trailingRun]);
+            if (_seqError is not null)
+                return;
+            ReadOnlySpan<byte> run = record[^trailingRun..];
+            if (IsCompleteSeqNumber(run))
+                StashSeqError("Potentially truncated top-level numeric value (need RS to resync)");
+            else
+                StashSeqError("Truncated value (need RS to resync)");
+            return;
+        }
+        DecodeSeqValues(record, resyncSuffix: true);
+    }
+
+    // Decodes complete values ahead of a pending literal run. A malformed
+    // prefix keeps already-queued values ahead of its own stashed error.
+    private void DecodeSeqPrefix(ReadOnlySpan<byte> prefix)
+    {
+        int pos = 0;
+        while (pos < prefix.Length)
+        {
+            while (pos < prefix.Length && IsSeqWhitespace(prefix[pos]))
+                pos++;
+            if (pos >= prefix.Length)
+                return;
+            JsonNode? value;
+            int consumed;
+            try
+            {
+                value = _runtime.ReadJsonValue(prefix[pos..], out consumed);
+            }
+            catch (JqException ex) when (ex is not JqQuotaException)
+            {
+                StashSeqError(ex.Message + " (need RS to resync)");
+                return;
+            }
+            pos += consumed;
+            _seqQueue.Enqueue(value);
+        }
+    }
+
+    private void DecodeSeqValues(ReadOnlySpan<byte> stripped, bool resyncSuffix)
+    {
+        int pos = 0;
+        while (pos < stripped.Length)
+        {
+            while (pos < stripped.Length && IsSeqWhitespace(stripped[pos]))
+                pos++;
+            if (pos >= stripped.Length)
+                return;
+            JsonNode? value;
+            int consumed;
+            try
+            {
+                value = _runtime.ReadJsonValue(stripped[pos..], out consumed);
+            }
+            catch (JqException ex) when (ex is not JqQuotaException)
+            {
+                StashSeqError(ex.Message + (resyncSuffix ? " (need RS to resync)" : string.Empty));
+                return;
+            }
+            pos += consumed;
+            _seqQueue.Enqueue(value);
+        }
+    }
+
+    // Final partial record at global end-of-input, with end-of-input message
+    // variants instead of resync continuations.
+    private void FinishSeqTail()
+    {
+        int length = _count;
+        ReadOnlySpan<byte> tail = _buffer.AsSpan(_start, length);
+        int begin = 0;
+        while (begin < length && IsSeqWhitespace(tail[begin]))
+            begin++;
+        int end = length;
+        while (end > begin && IsSeqWhitespace(tail[end - 1]))
+            end--;
+        if (begin == end)
+        {
+            Advance(length);
+            if (_seqWaiting)
+            {
+                _seqDone = true;
+                throw new JqSeqResyncException(
+                    $"Unfinished abandoned text at EOF at line {_scanLine}, column {_scanCol}");
+            }
+            _seqDone = true;
+            return;
+        }
+        ScanSeqRecord(tail, out int depth, out bool inString, out int trailingRun);
+        if (inString)
+        {
+            Advance(length);
+            _seqDone = true;
+            StashSeqError($"Unfinished string at EOF at line {_scanLine}, column {_scanCol}");
+            return;
+        }
+        if (depth > 0)
+        {
+            Advance(length);
+            _seqDone = true;
+            StashSeqError($"Unfinished JSON term at EOF at line {_scanLine}, column {_scanCol}");
+            return;
+        }
+        if (trailingRun > 0)
+        {
+            ReadOnlySpan<byte> run = tail[^trailingRun..];
+            DecodeSeqPrefix(tail[..^trailingRun]);
+            if (_seqError is not null)
+            {
+                Advance(length);
+                _seqDone = true;
+                return;
+            }
+            if (IsCompleteSeqNumber(run))
+            {
+                Advance(length);
+                _seqDone = true;
+                StashSeqError($"Potentially truncated top-level numeric value at EOF at line {_scanLine}, column {_scanCol}");
+                return;
+            }
+            if (IsCompleteSeqLiteral(run))
+            {
+                JsonNode? literal = _runtime.ReadJsonValue(run, out _);
+                Advance(length);
+                _seqDone = true;
+                _seqQueue.Enqueue(literal);
+                return;
+            }
+            Advance(length);
+            _seqDone = true;
+            char first = (char)run[0];
+            bool numericStart = char.IsAsciiDigit(first) || first is '-' or '.';
+            StashSeqError(numericStart
+                ? $"Invalid numeric literal at EOF at line {_scanLine}, column {_scanCol}"
+                : $"Invalid literal at EOF at line {_scanLine}, column {_scanCol}");
+            return;
+        }
+        DecodeSeqValues(tail, resyncSuffix: false);
+        Advance(length);
+        _seqDone = true;
+    }
+
+    private static bool IsCompleteSeqNumber(ReadOnlySpan<byte> run)
+    {
+        if (run.IsEmpty)
+            return false;
+        try
+        {
+            var reader = new System.Text.Json.Utf8JsonReader(run, new System.Text.Json.JsonReaderOptions
+            {
+                AllowTrailingCommas = true,
+                AllowMultipleValues = true,
+                MaxDepth = JqBudget.MaximumDepth
+            });
+            if (!reader.Read() || reader.TokenType != System.Text.Json.JsonTokenType.Number)
+                return false;
+            return (long)reader.BytesConsumed == run.Length;
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsCompleteSeqLiteral(ReadOnlySpan<byte> run) =>
+        run.SequenceEqual("true"u8) || run.SequenceEqual("false"u8) || run.SequenceEqual("null"u8);
+
+    private void StashSeqError(string message)
+    {
+        _budget.CheckCancellation();
+        _budget.ChargeString(message.Length);
+        _seqError = new JqSeqResyncException(message);
+        SetPosition(1 + _newlines);
     }
 
     private void EnsureAdditional(int additional)

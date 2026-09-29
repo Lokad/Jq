@@ -12,6 +12,12 @@ internal sealed class JqErrorException(JsonNode? payload, string message) : JqEx
     internal JsonNode? Payload { get; } = payload;
 }
 
+// A sequence-record failure in `--seq` mode. The cursor has already
+// advanced past the record separator, so the remaining sources stay readable
+// and the executor reports `jq: ignoring parse error: ...` without aborting.
+// Catchable by user code like other evaluation failures.
+internal sealed class JqSeqResyncException(string message) : JqException(message);
+
 // `halt` or `halt_error[(code)]`: immediate termination that user code can
 // never observe or catch. The stderr text is rendered once at the throw
 // site (strings raw, other values as JSON) so the executor only writes.

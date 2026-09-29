@@ -12,6 +12,7 @@ internal sealed class JqInvocation
     public bool NullInput { get; init; }
     public bool RawInput { get; init; }
     public bool Slurp { get; init; }
+    public bool Seq { get; init; }
     public bool RawOutput { get; init; }
     public bool JoinOutput { get; init; }
     public bool AsciiOutput { get; init; }

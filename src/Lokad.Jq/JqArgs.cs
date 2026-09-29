@@ -11,6 +11,7 @@ internal partial record JqArgs
     [Argument("Use null as input.", Short = 'n', Long = "null-input")] public bool NullInput { get; init; }
     [Argument("Read input as raw strings.", Short = 'R', Long = "raw-input")] public bool RawInput { get; init; }
     [Argument("Slurp inputs into one value.", Short = 's', Long = "slurp")] public bool Slurp { get; init; }
+    [Argument("Read JSON text sequences.", Long = "seq")] public bool Seq { get; init; }
     [Argument("Write compact JSON output.", Short = 'c', Long = "compact-output")] public bool CompactOutput { get; init; }
     [Argument("Write raw strings.", Short = 'r', Long = "raw-output")] public bool RawOutput { get; init; }
     [Argument("Do not append newlines.", Short = 'j', Long = "join-output")] public bool JoinOutput { get; init; }

@@ -74,8 +74,10 @@ internal static class JqExecutor
                     else
                     {
                         var body = context.Runtime.SerializeUtf8(output, invocation.AsciiOutput, invocation.Indent, invocation.UseTabs);
-                        budget.ChargeOutput(body.Length + (invocation.JoinOutput ? 0 : 1));
-                        rendered = invocation.JoinOutput ? body : ByteLines.AppendNewline(body);
+                        int framing = (invocation.Seq ? 1 : 0) + (invocation.JoinOutput ? 0 : 1);
+                        budget.ChargeOutput(body.Length + framing);
+                        ReadOnlyMemory<byte> framed = invocation.Seq ? PrefixRecordSeparator(body) : body;
+                        rendered = invocation.JoinOutput ? framed : ByteLines.AppendNewline(framed);
                     }
                     var appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken)).ConfigureAwait(false);
                     if (!appended.CanAcceptMore) return appended.ExitCode;
@@ -139,10 +141,19 @@ internal static class JqExecutor
             {
                 while (true)
                 {
-                    (bool hasValue, JsonNode? current) = await cursor.PullAsync().ConfigureAwait(false);
-                    if (!hasValue)
+                    (bool HasValue, JsonNode? Value) pulled;
+                    try
+                    {
+                        pulled = await cursor.PullAsync().ConfigureAwait(false);
+                    }
+                    catch (JqSeqResyncException resync)
+                    {
+                        WarnIgnoringParseError(context, resync.Message);
+                        continue;
+                    }
+                    if (!pulled.HasValue)
                         break;
-                    yield return current;
+                    yield return pulled.Value;
                 }
                 yield break;
             }
@@ -167,15 +178,41 @@ internal static class JqExecutor
             var slurped = new JsonArray();
             while (true)
             {
-                (bool hasValue, JsonNode? current) = await cursor.PullAsync().ConfigureAwait(false);
-                if (!hasValue)
+                (bool HasValue, JsonNode? Value) pulled;
+                try
+                {
+                    pulled = await cursor.PullAsync().ConfigureAwait(false);
+                }
+                catch (JqSeqResyncException resync)
+                {
+                    WarnIgnoringParseError(context, resync.Message);
+                    continue;
+                }
+                if (!pulled.HasValue)
                     break;
-                slurped.Add(current);
+                slurped.Add(pulled.Value);
             }
             context.InputFilename = cursor.LastName;
             context.InputLineNumber = cursor.LastLine;
             yield return slurped;
         }
+    }
+
+    private static ReadOnlyMemory<byte> PrefixRecordSeparator(ReadOnlyMemory<byte> body)
+    {
+        var framed = new byte[body.Length + 1];
+        framed[0] = 30;
+        body.Span.CopyTo(framed.AsSpan(1));
+        return framed;
+    }
+
+    // Sequence-mode record failures are warnings, never fatal: the cursor
+    // already resynchronized past the separator, so outer iteration continues.
+    private static void WarnIgnoringParseError(JqContext context, string message)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(message);
+        context.EmitStderr(Utf8Text.Encode("jq: ignoring parse error: " + message + "\n").ToArray());
     }
 
     private static string ParentDir(string canonicalPath)
