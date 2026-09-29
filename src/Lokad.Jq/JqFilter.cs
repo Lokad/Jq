@@ -101,7 +101,7 @@ internal sealed class AsFilter(
 {
     private readonly HashSet<string> _allNames = CollectAll(alternatives);
 
-    private static HashSet<string> CollectAll(IReadOnlyList<BindingPattern> alternatives)
+    internal static HashSet<string> CollectAll(IReadOnlyList<BindingPattern> alternatives)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (BindingPattern alternative in alternatives)
@@ -111,46 +111,71 @@ internal sealed class AsFilter(
 
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        // Every alternative name starts null so unmatched bindings read null.
-        JqEnvironment prebound = environment;
-        foreach (string name in _allNames)
-            prebound = prebound.Extend(name, null);
-
         foreach (JsonNode? bound in source.Evaluate(input, context, environment))
+            foreach (var (_, output) in DriveAlternatives(alternatives, _allNames, bound, environment, context, scope => body.Evaluate(input, context, scope)))
+                yield return output;
+    }
+
+    // Shared alternative driver for bindings and reductions: every name
+    // starts null, the first non-erroring alternative wins (even when it
+    // yields nothing), and catchable match or body errors retry later
+    // alternatives. Reduction drivers reuse it with collecting bodies.
+    internal static IEnumerable<(JqEnvironment Scope, JsonNode? Output)> DriveAlternatives(IReadOnlyList<BindingPattern> alternatives, HashSet<string> allNames, JsonNode? bound, JqEnvironment environment, JqContext context, Func<JqEnvironment, IEnumerable<JsonNode?>> body)
+    {
+        ArgumentNullException.ThrowIfNull(alternatives);
+        ArgumentNullException.ThrowIfNull(allNames);
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(body);
+        JqEnvironment prebound = environment;
+        foreach (string name in allNames)
+            prebound = prebound.Extend(name, null);
+        bool completed = false;
+        for (int index = 0; index < alternatives.Count && !completed; index++)
         {
-            bool completed = false;
-            for (int index = 0; index < alternatives.Count && !completed; index++)
+            bool isLast = index == alternatives.Count - 1;
+            using IEnumerator<JqEnvironment> scopes = Match(alternatives[index], bound, prebound, context).GetEnumerator();
+            while (true)
             {
-                bool isLast = index == alternatives.Count - 1;
-                using IEnumerator<JsonNode?> results = RunAlternative(alternatives[index], bound, prebound).GetEnumerator();
+                bool moved;
+                try
+                {
+                    moved = scopes.MoveNext();
+                }
+                catch (Exception exception) when (JqErrors.IsCatchable(exception))
+                {
+                    if (isLast)
+                        throw;
+                    break;
+                }
+                if (!moved)
+                {
+                    completed = true;
+                    break;
+                }
+                bool bodyFailed = false;
+                using IEnumerator<JsonNode?> results = body(scopes.Current).GetEnumerator();
                 while (true)
                 {
-                    bool moved;
+                    bool produced;
                     try
                     {
-                        moved = results.MoveNext();
+                        produced = results.MoveNext();
                     }
                     catch (Exception exception) when (JqErrors.IsCatchable(exception))
                     {
                         if (isLast)
                             throw;
+                        bodyFailed = true;
                         break;
                     }
-                    if (!moved)
-                    {
-                        completed = true;
+                    if (!produced)
                         break;
-                    }
-                    yield return results.Current;
+                    yield return (scopes.Current, results.Current);
                 }
+                if (bodyFailed)
+                    break;
             }
-        }
-
-        IEnumerable<JsonNode?> RunAlternative(BindingPattern alternative, JsonNode? bound, JqEnvironment prebound)
-        {
-            foreach (JqEnvironment scope in Match(alternative, bound, prebound, context))
-                foreach (JsonNode? output in body.Evaluate(input, context, scope))
-                    yield return output;
         }
     }
 

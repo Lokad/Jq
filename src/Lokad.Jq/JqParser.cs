@@ -281,11 +281,7 @@ internal sealed class JqParser(
         EnterScope();
         try
         {
-            var declared = new HashSet<string>(StringComparer.Ordinal);
-            foreach (BindingPattern alternative in alternatives)
-                alternative.CollectBoundNames(declared);
-            foreach (string name in declared)
-                Declare(name);
+            DeclarePatterns(alternatives);
             return new AsFilter(left, alternatives, ParseQuery());
         }
         finally
@@ -661,6 +657,10 @@ internal sealed class JqParser(
                 throw Error($"undefined label ${name.Text}", dollar.Span);
             return new BreakFilter(name.Text);
         }
+        if (MatchIdentifier("reduce"))
+            return ParseReduce(isForeach: false);
+        if (MatchIdentifier("foreach"))
+            return ParseReduce(isForeach: true);
         if (MatchIdentifier("try"))
         {
             // `try` binds tightly: the operand is one update-level expression,
@@ -764,6 +764,49 @@ internal sealed class JqParser(
         : new LiteralFilter(JsonValue.Create(token.Text));
 
     private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && token.Text.Contains("\\(", StringComparison.Ordinal);
+
+    // Reduction sources are update-level expressions with binding patterns;
+    // initializers run outside the pattern scope while updates (and the
+    // optional extraction) run inside it.
+    private JqFilter ParseReduce(bool isForeach)
+    {
+        var source = ParseUpdate();
+        ExpectIdentifier("as");
+        List<BindingPattern> patterns = ParsePatterns();
+        Expect("(");
+        JqFilter init = ParseQuery();
+        Expect(";");
+        EnterScope();
+        try
+        {
+            DeclarePatterns(patterns);
+            JqFilter update = ParseQuery();
+            JqFilter? extract = null;
+            if (!isForeach)
+            {
+                Expect(")");
+                return new ReduceFilter(source, patterns, init, update);
+            }
+            if (Match(";"))
+                extract = ParseQuery();
+            Expect(")");
+            return new ForeachFilter(source, patterns, init, update, extract);
+        }
+        finally
+        {
+            ExitScope();
+        }
+    }
+
+    private void DeclarePatterns(List<BindingPattern> patterns)
+    {
+        ArgumentNullException.ThrowIfNull(patterns);
+        var declared = new HashSet<string>(StringComparer.Ordinal);
+        foreach (BindingPattern alternative in patterns)
+            alternative.CollectBoundNames(declared);
+        foreach (string name in declared)
+            Declare(name);
+    }
 
     private JqFilter ParseIf()
     {
