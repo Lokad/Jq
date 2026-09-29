@@ -4,9 +4,13 @@ using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
-internal sealed class JqContext(IReadOnlyDictionary<string, JsonNode?> variables, JqBudget budget) : IDisposable
+internal sealed class JqContext(
+    IReadOnlyDictionary<string, JsonNode?> variables,
+    JqProgramSource programSource,
+    JqBudget budget) : IDisposable
 {
     public IReadOnlyDictionary<string, JsonNode?> Variables { get; } = variables;
+    public JqProgramSource ProgramSource { get; } = programSource ?? throw new ArgumentNullException(nameof(programSource));
     public JqBudget Budget { get; } = budget;
     public JqRuntime Runtime { get; } = new(budget);
     public JqRegexCache Regexes { get; } = new(budget, TimeProvider.System);

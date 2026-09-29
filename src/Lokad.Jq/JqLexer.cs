@@ -7,21 +7,24 @@ namespace Lokad.Jq;
 
 internal enum TokenKind { Identifier, FieldName, Number, String, Symbol, End }
 
-internal readonly record struct Token(TokenKind Kind, string Text);
+internal readonly record struct Token(TokenKind Kind, string Text, JqSourceSpan Span);
 
 internal static class Lexer
 {
-    public static List<Token> Tokenize(string source, JqBudget budget)
+    public static List<Token> Tokenize(string source, JqProgramSource programSource, JqBudget budget)
     {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(programSource);
+        ArgumentNullException.ThrowIfNull(budget);
         if (source.Length > 1024 * 1024)
-            throw new JqException("filter exceeds the 1 Mi-character limit");
+            throw new JqCompileException("filter exceeds the 1 Mi-character limit", JqSourceSpan.FromOffset(source, 0), programSource);
         budget.ChargeBytes(2L * source.Length);
         var tokens = new List<Token>();
         for (var i = 0; i < source.Length;)
         {
             budget.CheckCancellation();
             if (tokens.Count >= 4096)
-                throw new JqException("filter exceeds the 4096-token limit");
+                throw new JqCompileException("filter exceeds the 4096-token limit", JqSourceSpan.FromOffset(source, i), programSource);
             var c = source[i];
             if (char.IsWhiteSpace(c)) { i++; continue; }
             if (char.IsLetter(c) || c == '_')
@@ -35,7 +38,7 @@ internal static class Lexer
                     && tokens[^1] is { Kind: TokenKind.Symbol, Text: "." }
                     ? TokenKind.FieldName
                     : TokenKind.Identifier;
-                tokens.Add(new Token(kind, source[start..i]));
+                tokens.Add(new Token(kind, source[start..i], JqSourceSpan.FromOffset(source, start)));
                 continue;
             }
             if (char.IsDigit(c) || c == '-' && i + 1 < source.Length && char.IsDigit(source[i + 1]))
@@ -43,17 +46,19 @@ internal static class Lexer
                 var start = i++;
                 while (i < source.Length && (char.IsDigit(source[i]) || source[i] is '.' or 'e' or 'E' or '+' or '-'))
                     i++;
-                tokens.Add(new Token(TokenKind.Number, source[start..i]));
+                tokens.Add(new Token(TokenKind.Number, source[start..i], JqSourceSpan.FromOffset(source, start)));
                 continue;
             }
             if (c == '"')
             {
+                var start = i;
                 var sb = new StringBuilder();
                 i++;
+                var closed = false;
                 while (i < source.Length)
                 {
                     c = source[i++];
-                    if (c == '"') break;
+                    if (c == '"') { closed = true; break; }
                     if (c == '\\' && i < source.Length)
                     {
                         var e = source[i++];
@@ -69,33 +74,35 @@ internal static class Lexer
                             't' => '\t',
                             '(' => "\\(",
                             'u' when i + 4 <= source.Length && int.TryParse(source[(i)..(i += 4)], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var codePoint) => (char)codePoint,
-                            'u' => throw new JqException("invalid unicode escape"),
+                            'u' => throw new JqCompileException("invalid unicode escape", JqSourceSpan.FromOffset(source, i - 2), programSource),
                             _ => e
                         });
                     }
                     else
                         sb.Append(c);
                 }
-                tokens.Add(new Token(TokenKind.String, sb.ToString()));
+                if (!closed)
+                    throw new JqCompileException("unterminated string", JqSourceSpan.FromOffset(source, start), programSource);
+                tokens.Add(new Token(TokenKind.String, sb.ToString(), JqSourceSpan.FromOffset(source, start)));
                 continue;
             }
 
             var two = i + 1 < source.Length ? source.Substring(i, 2) : string.Empty;
             if (two is "==" or "!=" or "<=" or ">=" or "//")
             {
-                tokens.Add(new Token(TokenKind.Symbol, two));
+                tokens.Add(new Token(TokenKind.Symbol, two, JqSourceSpan.FromOffset(source, i)));
                 i += 2;
                 continue;
             }
             if (".,|+-*/%()[]{}:;$?<>@".Contains(c, StringComparison.Ordinal))
             {
-                tokens.Add(new Token(TokenKind.Symbol, c.ToString()));
+                tokens.Add(new Token(TokenKind.Symbol, c.ToString(), JqSourceSpan.FromOffset(source, i)));
                 i++;
                 continue;
             }
-            throw new JqException($"invalid character {c}");
+            throw new JqCompileException($"invalid character {c}", JqSourceSpan.FromOffset(source, i), programSource);
         }
-        tokens.Add(new Token(TokenKind.End, "<end>"));
+        tokens.Add(new Token(TokenKind.End, "<end>", JqSourceSpan.FromOffset(source, source.Length)));
         return tokens;
     }
 }

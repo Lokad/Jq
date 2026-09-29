@@ -140,8 +140,8 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GsubValidatesTheWholeInputBeforeSkippingRepeatedUtfChecks()
     {
-        using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), new JqBudget(CancellationToken.None));
-        var filter = new JqParser("gsub(\"a\";\"x\")", context.Budget).Parse();
+        using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), JqProgramSource.Inline, new JqBudget(CancellationToken.None));
+        var filter = new JqParser("gsub(\"a\";\"x\")", JqProgramSource.Inline, context.Variables, context.Budget).Parse();
         var input = System.Text.Json.Nodes.JsonValue.Create("a\ud800");
 
         var error = Assert.Throws<JqException>(() => filter.Evaluate(input, context).ToList());

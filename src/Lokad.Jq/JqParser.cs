@@ -5,9 +5,15 @@ using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
-internal sealed class JqParser(string source, JqBudget budget)
+internal sealed class JqParser(
+    string source,
+    JqProgramSource programSource,
+    IReadOnlyDictionary<string, JsonNode?> variables,
+    JqBudget budget)
 {
-    private readonly List<Token> _tokens = Lexer.Tokenize(source, budget);
+    private readonly JqProgramSource _programSource = programSource ?? throw new ArgumentNullException(nameof(programSource));
+    private readonly IReadOnlyDictionary<string, JsonNode?> _variables = variables ?? throw new ArgumentNullException(nameof(variables));
+    private readonly List<Token> _tokens = Lexer.Tokenize(source, programSource, budget);
     private int _index;
     private int _depth;
 
@@ -17,6 +23,9 @@ internal sealed class JqParser(string source, JqBudget budget)
         Expect(TokenKind.End);
         return filter;
     }
+
+    private JqCompileException Error(string message, JqSourceSpan span) =>
+        new(message, span, _programSource);
 
     private JqFilter ParseComma()
     {
@@ -94,7 +103,7 @@ internal sealed class JqParser(string source, JqBudget budget)
     private JqFilter ParseUnary()
     {
         if (++_depth > JqBudget.MaximumDepth)
-            throw new JqException("filter nesting limit exceeded");
+            throw Error("filter nesting limit exceeded", Peek().Span);
         try
         {
             if (Match("-"))
@@ -189,8 +198,14 @@ internal sealed class JqParser(string source, JqBudget budget)
                 return ParseBracket(identity);
             return identity;
         }
-        if (Match("$"))
-            return new VariableFilter(Expect(TokenKind.Identifier).Text);
+        if (Peek() is { Kind: TokenKind.Symbol, Text: "$" })
+        {
+            var dollar = Next();
+            var name = Expect(TokenKind.Identifier);
+            if (!_variables.ContainsKey(name.Text))
+                throw Error($"undefined variable ${name.Text}", dollar.Span);
+            return new VariableFilter(name.Text);
+        }
         if (Match("("))
         {
             var inner = ParseComma();
@@ -214,7 +229,7 @@ internal sealed class JqParser(string source, JqBudget budget)
         if (token.Kind == TokenKind.Number)
         {
             if (!double.TryParse(token.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
-                throw new JqException($"invalid number {token.Text}");
+                throw Error($"invalid number {token.Text}", token.Span);
             return new LiteralFilter(JsonValue.Create(value));
         }
         if (token.Kind == TokenKind.String)
@@ -227,10 +242,10 @@ internal sealed class JqParser(string source, JqBudget budget)
             if (token.Text == "true") return new LiteralFilter(JsonValue.Create(true));
             if (token.Text == "false") return new LiteralFilter(JsonValue.Create(false));
             if (Match("("))
-                return ParseFunction(token.Text);
-            return CreateFunction(token.Text, []);
+                return ParseFunction(token.Text, token.Span);
+            return CreateFunction(token.Text, [], token.Span);
         }
-        throw new JqException($"unexpected token {token.Text}");
+        throw Error($"unexpected token {token.Text}", token.Span);
     }
 
     private JqFilter ParseObject()
@@ -246,7 +261,7 @@ internal sealed class JqParser(string source, JqBudget budget)
             if (keyToken.Kind == TokenKind.String || keyToken.Kind == TokenKind.Identifier)
                 key = keyToken.Text;
             else
-                throw new JqException("expected object key");
+                throw Error("expected object key", keyToken.Span);
 
             if (Match(":"))
                 value = ParsePipe();
@@ -276,7 +291,7 @@ internal sealed class JqParser(string source, JqBudget budget)
         return new IfFilter(branches, otherwise);
     }
 
-    private JqFilter ParseFunction(string name)
+    private JqFilter ParseFunction(string name, JqSourceSpan span)
     {
         var args = new List<JqFilter>();
         if (!Match(")"))
@@ -287,14 +302,14 @@ internal sealed class JqParser(string source, JqBudget budget)
             } while (Match(";") || Match(","));
             Expect(")");
         }
-        return CreateFunction(name, args);
+        return CreateFunction(name, args, span);
     }
 
-    private static JqFilter CreateFunction(string name, IReadOnlyList<JqFilter> args)
+    private JqFilter CreateFunction(string name, IReadOnlyList<JqFilter> args, JqSourceSpan span)
     {
         if (!JqBuiltinRegistry.TryValidate(name, args.Count, out string error))
         {
-            throw new JqException(error);
+            throw Error(error, span);
         }
 
         if (name == "gsub")
@@ -330,20 +345,20 @@ internal sealed class JqParser(string source, JqBudget budget)
     {
         var token = Next();
         if (token.Kind != kind)
-            throw new JqException($"expected {kind}, got {token.Text}");
+            throw Error($"expected {kind}, got {token.Text}", token.Span);
         return token;
     }
 
     private void Expect(string text)
     {
         if (!Match(text))
-            throw new JqException($"expected {text}, got {Peek().Text}");
+            throw Error($"expected {text}, got {Peek().Text}", Peek().Span);
     }
 
     private void ExpectIdentifier(string text)
     {
         if (!MatchIdentifier(text))
-            throw new JqException($"expected {text}, got {Peek().Text}");
+            throw Error($"expected {text}, got {Peek().Text}", Peek().Span);
     }
 
     private Token Peek() => _tokens[_index];

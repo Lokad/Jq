@@ -26,7 +26,10 @@ internal static class JqExecutor
         }
 
         var budget = new JqBudget(cancellationToken);
-        using var context = new JqContext(invocation.Variables, budget);
+        JqProgramSource programSource = invocation.FilterFile is { } programPath
+            ? JqProgramSource.File(Utf8Text.Decode(programPath.Display))
+            : JqProgramSource.Inline;
+        using var context = new JqContext(invocation.Variables, programSource, budget);
         var stage = 2;
         try
         {
@@ -38,7 +41,7 @@ internal static class JqExecutor
                 filterText = Utf8Text.Decode(bytes);
             }
             stage = 3;
-            var filter = new JqParser(filterText, budget).Parse();
+            var filter = new JqParser(filterText, programSource, invocation.Variables, budget).Parse();
             stage = 4;
             foreach (var value in invocation.Variables.Values) budget.ChargeTree(value);
             await using var inputs = ReadInputsAsync(host, invocation, context, cancellationToken).GetAsyncEnumerator(cancellationToken);
@@ -66,6 +69,11 @@ internal static class JqExecutor
                 }
             }
             return 0;
+        }
+        catch (JqCompileException ex)
+        {
+            await WriteErrorAsync(host, invocation, "jq: " + ex.Message + " at line " + ex.Span.Line + " column " + ex.Span.Column + " (" + ex.ProgramSource.Label + ")", cancellationToken).ConfigureAwait(false);
+            return stage;
         }
         catch (Exception ex) when (ex is JqException or JsonException or FormatException or ArgumentException or OverflowException)
         {

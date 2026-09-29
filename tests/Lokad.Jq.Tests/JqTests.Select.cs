@@ -53,7 +53,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
         Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("jq: select expects one argument\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: select expects one argument at line 1 column 1 (filter)\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 

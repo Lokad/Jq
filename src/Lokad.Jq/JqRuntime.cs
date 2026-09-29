@@ -160,7 +160,7 @@ internal sealed class JqRuntime(JqBudget budget)
         if (node is JsonValue l && l.TryGetValue<long>(out var longValue)) return longValue;
         if (node is JsonValue m && m.TryGetValue<decimal>(out var decimalValue)) return (double)decimalValue;
         if (node is JsonValue s && s.TryGetValue<string>(out var text) && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)) return parsed;
-        throw new JqException($"expected number, got {TypeName(node)}");
+        throw new JqRuntimeException($"expected number, got {TypeName(node)}");
     }
 
     internal static double ToNumber(JsonNode? node) => Number(node);
@@ -169,13 +169,13 @@ internal sealed class JqRuntime(JqBudget budget)
     {
         if (node is JsonValue v && v.TryGetValue<bool>(out var b)) return b;
         if (node is JsonValue s && s.TryGetValue<string>(out var text) && bool.TryParse(text, out var parsed)) return parsed;
-        throw new JqException($"expected boolean, got {TypeName(node)}");
+        throw new JqRuntimeException($"expected boolean, got {TypeName(node)}");
     }
 
     internal static string String(JsonNode? node)
     {
         if (TryGetString(node, out var s)) return s;
-        throw new JqException($"expected string, got {TypeName(node)}");
+        throw new JqRuntimeException($"expected string, got {TypeName(node)}");
     }
 
     internal string ToJqString(JsonNode? node)
@@ -303,7 +303,7 @@ internal sealed class JqRuntime(JqBudget budget)
             for (var i = arr.Count - 1; i >= 0; i--) rev.Add(Clone(arr[i]));
             return rev;
         }
-        throw new JqException($"cannot reverse {TypeName(input)}");
+        throw new JqRuntimeException($"cannot reverse {TypeName(input)}");
     }
 
     internal bool Contains(JsonNode? container, JsonNode? contained)
@@ -351,7 +351,7 @@ internal sealed class JqRuntime(JqBudget budget)
                 }
             yield break;
         }
-        throw new JqException($"cannot search {TypeName(input)}");
+        throw new JqRuntimeException($"cannot search {TypeName(input)}");
     }
 
     internal static string TrimString(JsonNode? input, JsonNode? trim, bool left, bool right)
@@ -376,7 +376,7 @@ internal sealed class JqRuntime(JqBudget budget)
 
     internal JsonNode Implode(JsonNode? input)
     {
-        if (input is not JsonArray arr) throw new JqException("implode expects an array");
+        if (input is not JsonArray arr) throw new JqRuntimeException("implode expects an array");
         var sb = new StringBuilder();
         foreach (var item in arr) budget.Append(sb, char.ConvertFromUtf32((int)Number(item)));
         return JsonValue.Create(budget.Finish(sb));
@@ -403,7 +403,7 @@ internal sealed class JqRuntime(JqBudget budget)
 
     internal JsonNode Join(JsonNode? input, JsonNode? separator)
     {
-        if (input is not JsonArray arr) throw new JqException("join expects an array");
+        if (input is not JsonArray arr) throw new JqRuntimeException("join expects an array");
         var delimiter = String(separator);
         var builder = new StringBuilder();
         for (var i = 0; i < arr.Count; i++)

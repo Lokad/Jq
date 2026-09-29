@@ -2,4 +2,4 @@ using System;
 
 namespace Lokad.Jq;
 
-internal sealed class JqException(string message) : Exception(message);
+internal class JqException(string message) : Exception(message);

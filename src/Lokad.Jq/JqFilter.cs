@@ -90,7 +90,7 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
             else if (optional || value == null)
                 yield return null;
             else
-                throw new JqException($"cannot index {TypeName(value)} with string \"{name}\"");
+                throw new JqRuntimeException($"cannot index {TypeName(value)} with string \"{name}\"");
         }
     }
 }
@@ -120,7 +120,7 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
             }
             else
             {
-                throw new JqException($"cannot index {TypeName(value)}");
+                throw new JqRuntimeException($"cannot index {TypeName(value)}");
             }
         }
     }
@@ -167,7 +167,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
             }
             else
             {
-                throw new JqException($"cannot slice {TypeName(value)}");
+                throw new JqRuntimeException($"cannot slice {TypeName(value)}");
             }
         }
     }
@@ -205,7 +205,7 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
                     yield return context.Runtime.Clone(child.Value);
             }
             else if (!optional && value != null)
-                throw new JqException($"cannot iterate over {TypeName(value)}");
+                throw new JqRuntimeException($"cannot iterate over {TypeName(value)}");
         }
     }
 }
@@ -424,7 +424,7 @@ internal sealed class InterpolatedStringFilter(string template, string? format) 
                 if (depth != 0)
                     throw new JqException("unterminated string interpolation");
                 var expr = template[start..i];
-                var values = new JqParser(expr, context.Budget).Parse().Evaluate(input, context);
+                var values = new JqParser(expr, context.ProgramSource, context.Variables, context.Budget).Parse().Evaluate(input, context);
                 var found = false;
                 JsonNode? last = null;
                 foreach (var value in values)
