@@ -224,13 +224,138 @@ internal sealed class JqRuntime(JqBudget budget)
     {
         budget.ChargeTree(l);
         budget.ChargeTree(r);
-        return JsonNode.DeepEquals(l, r);
+        return EqualsValue(l, r);
     }
 
+    // Mirrors the reference value equality: kind-sensitive, objects
+    // order-insensitive, arrays ordered, numbers by double value with
+    // NaN unequal to everything including itself.
+    private static bool EqualsValue(JsonNode? left, JsonNode? right)
+    {
+        if (left is null || right is null)
+            return left is null && right is null;
+        if (left is JsonArray leftArray && right is JsonArray rightArray)
+        {
+            if (leftArray.Count != rightArray.Count)
+                return false;
+            for (var index = 0; index < leftArray.Count; index++)
+                if (!EqualsValue(leftArray[index], rightArray[index]))
+                    return false;
+            return true;
+        }
+        if (left is JsonObject leftObject && right is JsonObject rightObject)
+        {
+            if (leftObject.Count != rightObject.Count)
+                return false;
+            foreach (var property in leftObject)
+            {
+                if (!rightObject.TryGetPropertyValue(property.Key, out JsonNode? other))
+                    return false;
+                if (!EqualsValue(property.Value, other))
+                    return false;
+            }
+            return true;
+        }
+        if (TryGetString(left, out string leftText) && TryGetString(right, out string rightText))
+            return string.Equals(leftText, rightText, StringComparison.Ordinal);
+        if (left is JsonValue leftScalar && right is JsonValue rightScalar
+            && leftScalar.TryGetValue<bool>(out bool leftBool) && rightScalar.TryGetValue<bool>(out bool rightBool))
+            return leftBool == rightBool;
+        if (TypeName(left) == "number" && TypeName(right) == "number")
+            return Number(left) == Number(right);
+        return false;
+    }
+
+    // Total order shared by comparison operators and min/max: null, false,
+    // true, numbers, strings (Unicode scalar order), arrays (lexical),
+    // objects (sorted keys, then values). NaN sorts as null but never
+    // equals anything, matching the reference.
     internal static int Compare(JsonNode? l, JsonNode? r)
     {
-        if (TryGetString(l, out var ls) && TryGetString(r, out var rs)) return string.CompareOrdinal(ls, rs);
-        return Number(l).CompareTo(Number(r));
+        int leftRank = ValueRank(l);
+        int rightRank = ValueRank(r);
+        if (leftRank != rightRank)
+            return leftRank.CompareTo(rightRank);
+        if (l is JsonArray leftArray && r is JsonArray rightArray)
+        {
+            int shared = Math.Min(leftArray.Count, rightArray.Count);
+            for (var index = 0; index < shared; index++)
+            {
+                int order = Compare(leftArray[index], rightArray[index]);
+                if (order != 0)
+                    return order;
+            }
+            return leftArray.Count.CompareTo(rightArray.Count);
+        }
+        if (l is JsonObject leftObject && r is JsonObject rightObject)
+        {
+            List<string> leftKeys = new List<string>(leftObject.Count);
+            foreach (var property in leftObject)
+                leftKeys.Add(property.Key);
+            List<string> rightKeys = new List<string>(rightObject.Count);
+            foreach (var property in rightObject)
+                rightKeys.Add(property.Key);
+            leftKeys.Sort(CompareScalars);
+            rightKeys.Sort(CompareScalars);
+            int shared = Math.Min(leftKeys.Count, rightKeys.Count);
+            for (var index = 0; index < shared; index++)
+            {
+                int order = CompareScalars(leftKeys[index], rightKeys[index]);
+                if (order != 0)
+                    return order;
+            }
+            if (leftKeys.Count != rightKeys.Count)
+                return leftKeys.Count.CompareTo(rightKeys.Count);
+            foreach (string key in leftKeys)
+            {
+                int order = Compare(leftObject[key], rightObject[key]);
+                if (order != 0)
+                    return order;
+            }
+            return 0;
+        }
+        if (TryGetString(l, out string leftText) && TryGetString(r, out string rightText))
+            return CompareScalars(leftText, rightText);
+        if (TypeName(l) == "number" && TypeName(r) == "number")
+            return Number(l).CompareTo(Number(r));
+        return 0;
+    }
+
+    private static int ValueRank(JsonNode? node)
+    {
+        if (node is null || IsNaNNumber(node))
+            return 0;
+        if (node is JsonValue scalar && scalar.TryGetValue<bool>(out bool boolean))
+            return boolean ? 2 : 1;
+        if (TypeName(node) == "number")
+            return 3;
+        if (TryGetString(node, out _))
+            return 4;
+        if (node is JsonArray)
+            return 5;
+        return 6;
+    }
+
+    private static bool IsNaNNumber(JsonNode? node) =>
+        node is JsonValue scalar && scalar.TryGetValue<double>(out double number) && double.IsNaN(number);
+
+    // Ordinal comparison by Unicode scalar value, matching byte order
+    // for valid UTF-8. UTF-16 unit order would misorder BMP suffix
+    // characters against supplementary characters.
+    private static int CompareScalars(string left, string right)
+    {
+        ReadOnlySpan<char> first = left.AsSpan();
+        ReadOnlySpan<char> second = right.AsSpan();
+        while (!first.IsEmpty && !second.IsEmpty)
+        {
+            System.Text.Rune.DecodeFromUtf16(first, out System.Text.Rune leftRune, out int leftLength);
+            System.Text.Rune.DecodeFromUtf16(second, out System.Text.Rune rightRune, out int rightLength);
+            if (leftRune.Value != rightRune.Value)
+                return leftRune.Value.CompareTo(rightRune.Value);
+            first = first[leftLength..];
+            second = second[rightLength..];
+        }
+        return first.IsEmpty && second.IsEmpty ? 0 : (first.IsEmpty ? -1 : 1);
     }
 
     internal static int Length(JsonNode? node) => node switch
