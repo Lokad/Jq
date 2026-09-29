@@ -149,7 +149,7 @@ internal sealed class JqParser(
             ExitScope();
         }
         Expect(";");
-        var complete = AttachBody(definition, body);
+        var complete = AttachBody(definition, RewriteTailCalls(body, definition));
         DeclareFunction(complete);
         return new DefFilter(complete, ParseQuery());
     }
@@ -200,6 +200,48 @@ internal sealed class JqParser(
     }
 
     private bool PeekIsDef() => Peek() is { Kind: TokenKind.Identifier, Text: "def" };
+
+    // Marks direct self-calls in tail positions so long recursive runs loop
+    // on the heap instead of nesting evaluator frames. Sound positions hold
+    // no pending output work when the call fires: the body root, `if` branch
+    // bodies (conditions yield no outputs), comma right-hand sides (the left
+    // side is fully drained), `//` right-hand sides (same), postfix `?`, and
+    // nested definition continuations. Pipe right-hand sides become dedicated
+    // per-value loops so sources are never abandoned. Sources, arguments,
+    // collected positions, and binding bodies stay regular depth-bounded
+    // calls; a nested rebinding stops the descent.
+    private static JqFilter RewriteTailCalls(JqFilter node, JqFunctionDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(definition);
+        if (node is UserCallFilter call
+            && call.FunctionName == definition.Name
+            && call.FunctionArity == definition.Arity)
+            return new TailSelfCallFilter(definition, call.CallArgs);
+        if (node is PipeFilter pipe)
+        {
+            JqFilter right = RewriteTailCalls(pipe.Right, definition);
+            if (right is TailSelfCallFilter tail)
+                return new PipeTailLoop(pipe.Left, tail.TailDefinition, tail.TailArgs);
+            return pipe.WithRight(right);
+        }
+        if (node is IfFilter iff)
+            return iff.WithTails(branch => RewriteTailCalls(branch, definition));
+        if (node is CommaFilter comma)
+            return comma.WithRight(RewriteTailCalls(comma.Right, definition));
+        if (node is AlternativeFilter alternative)
+            return alternative.WithRight(RewriteTailCalls(alternative.Right, definition));
+        if (node is OptionalFilter optional)
+            return optional.WithInner(RewriteTailCalls(optional.Inner, definition));
+        if (node is DefFilter nested)
+        {
+            if (nested.FunctionDefinition.Name == definition.Name
+                && nested.FunctionDefinition.Arity == definition.Arity)
+                return nested;
+            return nested.WithContinuation(RewriteTailCalls(nested.ContinuationBody, definition));
+        }
+        return node;
+    }
 
     private JqFilter ParseComma()
     {

@@ -146,6 +146,33 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
+    [Theory]
+    [InlineData("def sum($n; $a): if $n <= 0 then $a else sum($n - 1; $a + $n) end; sum(2000; 0)", "2001000\n")]
+    [InlineData("def down: if . <= 0 then . else . - 1 | down end; 10000 | down", "0\n")]
+    [InlineData("def f($n): if $n == 0 then 0 else (1, 2) as $x | f($n - 1) end; f(2)", "0\n0\n0\n0\n")]
+    [InlineData("def d: if . <= 0 then . else . - 1 | d end; (2, 5) | d", "0\n0\n")]
+    [InlineData("def f($n): if $n == 0 then \"done\" else (10, 20) | f($n - 1) end; f(1)", "\"done\"\n\"done\"\n")]
+    public async Task Jq_TailCallsRunWithoutNesting(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_NonTailRecursionExhaustsNesting()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "def f($n): if $n == 0 then 0 else [$n] + f($n - 1) end; f(1000)")));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("filter nesting limit exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
     [Fact]
     public async Task Jq_UnboundedRecursionExhaustsQuota()
     {
@@ -153,7 +180,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "def r: r; r")));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("filter nesting limit exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 }
