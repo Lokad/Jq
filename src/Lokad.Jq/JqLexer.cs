@@ -134,6 +134,14 @@ if (c == '"')
             }
 
             var two = i + 1 < source.Length ? source.Substring(i, 2) : string.Empty;
+            // The destructuring alternative is one token only when contiguous;
+            // spaced `?` and `//` stay a postfix suppression plus alternative.
+            if (i + 3 <= source.Length && source.Substring(i, 3) == "?//")
+            {
+                tokens.Add(new Token(TokenKind.Symbol, "?//", JqSourceSpan.FromOffset(source, i)));
+                i += 3;
+                continue;
+            }
             if (two is "==" or "!=" or "<=" or ">=" or "//")
             {
                 tokens.Add(new Token(TokenKind.Symbol, two, JqSourceSpan.FromOffset(source, i)));

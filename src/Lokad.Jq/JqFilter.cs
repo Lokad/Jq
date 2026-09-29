@@ -43,6 +43,7 @@ internal sealed class IdentityFilter : JqFilter
 
 internal sealed class LiteralFilter(JsonNode? value) : JqFilter
 {
+    internal JsonNode? Value => value;
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         yield return context.Runtime.Clone(value);
@@ -56,6 +57,148 @@ internal sealed class VariableFilter(string name) : JqFilter
         if (!environment.TryGetValue(name, out JsonNode? value))
             throw new JqException($"undefined variable ${name}");
         yield return context.Runtime.Clone(value);
+    }
+}
+
+// Lexical bindings: each source value extends the environment through the
+// first matching alternative, then runs the body against the outer input.
+// Later alternatives run only when the pattern or body reports a catchable
+// error; final errors propagate.
+internal sealed class AsFilter(
+    JqFilter source,
+    IReadOnlyList<BindingPattern> alternatives,
+    JqFilter body) : JqFilter
+{
+    private readonly HashSet<string> _allNames = CollectAll(alternatives);
+
+    private static HashSet<string> CollectAll(IReadOnlyList<BindingPattern> alternatives)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (BindingPattern alternative in alternatives)
+            alternative.CollectBoundNames(names);
+        return names;
+    }
+
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        // Every alternative name starts null so unmatched bindings read null.
+        JqEnvironment prebound = environment;
+        foreach (string name in _allNames)
+            prebound = prebound.Extend(name, null);
+
+        foreach (JsonNode? bound in source.Evaluate(input, context, environment))
+        {
+            bool completed = false;
+            for (int index = 0; index < alternatives.Count && !completed; index++)
+            {
+                bool isLast = index == alternatives.Count - 1;
+                using IEnumerator<JsonNode?> results = RunAlternative(alternatives[index], bound, prebound).GetEnumerator();
+                while (true)
+                {
+                    bool moved;
+                    try
+                    {
+                        moved = results.MoveNext();
+                    }
+                    catch (Exception exception) when (JqErrors.IsCatchable(exception))
+                    {
+                        if (isLast)
+                            throw;
+                        break;
+                    }
+                    if (!moved)
+                    {
+                        completed = true;
+                        break;
+                    }
+                    yield return results.Current;
+                }
+            }
+        }
+
+        IEnumerable<JsonNode?> RunAlternative(BindingPattern alternative, JsonNode? bound, JqEnvironment prebound)
+        {
+            foreach (JqEnvironment scope in Match(alternative, bound, prebound))
+                foreach (JsonNode? output in body.Evaluate(input, context, scope))
+                    yield return output;
+        }
+
+        IEnumerable<JqEnvironment> Match(BindingPattern pattern, JsonNode? value, JqEnvironment scope)
+        {
+            switch (pattern)
+            {
+                case VariablePattern variable:
+                    yield return scope.Extend(variable.Name, context.Runtime.Clone(value));
+                    break;
+                case AliasPattern alias:
+                    JqEnvironment aliased = scope.Extend(alias.Name, context.Runtime.Clone(value));
+                    foreach (JqEnvironment inner in Match(alias.Inner, value, aliased))
+                        yield return inner;
+                    break;
+                case ArrayPattern array:
+                    foreach (JqEnvironment bound in MatchItems(array.Items, 0, value, scope))
+                        yield return bound;
+                    break;
+                case ObjectPattern obj:
+                    foreach (JqEnvironment bound in MatchProperties(obj.Properties, 0, value, scope))
+                        yield return bound;
+                    break;
+                default:
+                    throw new InvalidOperationException("Unknown binding pattern.");
+            }
+        }
+
+        IEnumerable<JqEnvironment> MatchItems(IReadOnlyList<BindingPattern> items, int index, JsonNode? value, JqEnvironment scope)
+        {
+            if (index == items.Count)
+            {
+                yield return scope;
+                yield break;
+            }
+            JsonNode? element = ElementAt(value, index);
+            foreach (JqEnvironment bound in Match(items[index], element, scope))
+                foreach (JqEnvironment rest in MatchItems(items, index + 1, value, bound))
+                    yield return rest;
+        }
+
+        IEnumerable<JqEnvironment> MatchProperties(IReadOnlyList<ObjectPatternProperty> properties, int index, JsonNode? value, JqEnvironment scope)
+        {
+            if (index == properties.Count)
+            {
+                yield return scope;
+                yield break;
+            }
+            ObjectPatternProperty property = properties[index];
+            foreach (JqEnvironment keyed in MatchKeys(property, value, scope))
+                foreach (JqEnvironment rest in MatchProperties(properties, index + 1, value, keyed))
+                    yield return rest;
+        }
+
+        IEnumerable<JqEnvironment> MatchKeys(ObjectPatternProperty property, JsonNode? value, JqEnvironment scope)
+        {
+            foreach (JsonNode? keyValue in property.Key.Evaluate(value, context, scope))
+            {
+                if (!TryGetString(keyValue, out string key))
+                    throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
+                JsonNode? field = ExtractField(value, key);
+                foreach (JqEnvironment bound in Match(property.Value, field, scope))
+                    yield return bound;
+            }
+        }
+
+        static JsonNode? ElementAt(JsonNode? value, int index) => value switch
+        {
+            JsonArray array => index < array.Count ? array[index] : null,
+            null => null,
+            _ => throw new JqRuntimeException($"cannot index {TypeName(value)} with number {index}"),
+        };
+
+        static JsonNode? ExtractField(JsonNode? value, string key) => value switch
+        {
+            JsonObject obj => obj.TryGetPropertyValue(key, out JsonNode? child) ? child : null,
+            null => null,
+            _ => throw new JqRuntimeException($"cannot index {TypeName(value)} with string \"{key}\""),
+        };
     }
 }
 

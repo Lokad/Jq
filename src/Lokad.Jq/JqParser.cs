@@ -14,6 +14,7 @@ internal sealed class JqParser(
     private readonly JqProgramSource _programSource = programSource ?? throw new ArgumentNullException(nameof(programSource));
     private readonly JqEnvironment _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly Stack<HashSet<string>> _scopes = new();
+    private readonly JqBudget _budget = budget ?? throw new ArgumentNullException(nameof(budget));
     private readonly List<Token> _tokens = Lexer.Tokenize(source, programSource, budget);
     private int _index;
     private int _depth;
@@ -62,10 +63,154 @@ internal sealed class JqParser(
 
     private JqFilter ParsePipe()
     {
+        var left = ParseAs();
+        while (Match("|"))
+            left = new PipeFilter(left, ParseAs());
+        return left;
+    }
+
+    // Bindings sit between pipes and alternatives: `a | b as $x | c` groups
+    // as `a | (b as $x | c)`, while the bound source stays pipe-free.
+    private JqFilter ParseAs()
+    {
+        var left = ParseAlternative();
+        if (!MatchIdentifier("as"))
+            return left;
+        var alternatives = ParsePatterns();
+        Expect("|");
+        EnterScope();
+        try
+        {
+            var declared = new HashSet<string>(StringComparer.Ordinal);
+            foreach (BindingPattern alternative in alternatives)
+                alternative.CollectBoundNames(declared);
+            foreach (string name in declared)
+                Declare(name);
+            return new AsFilter(left, alternatives, ParseComma());
+        }
+        finally
+        {
+            ExitScope();
+        }
+    }
+
+    private List<BindingPattern> ParsePatterns()
+    {
+        var alternatives = new List<BindingPattern> { ParsePattern() };
+        while (Match("?//"))
+            alternatives.Add(ParsePattern());
+        return alternatives;
+    }
+
+    private BindingPattern ParsePattern()
+    {
+        if (Match("$"))
+        {
+            var name = Expect(TokenKind.Identifier);
+            return new VariablePattern(name.Text);
+        }
+        if (Match("["))
+        {
+            if (++_depth > JqBudget.MaximumDepth)
+                throw Error("filter nesting limit exceeded", Peek().Span);
+            try
+            {
+                var items = new List<BindingPattern>();
+                if (!Match("]"))
+                {
+                    do
+                    {
+                        items.Add(ParsePattern());
+                    } while (Match(","));
+                    Expect("]");
+                }
+                else
+                {
+                    throw Error("expected pattern, got ]", Peek().Span);
+                }
+                return new ArrayPattern(items);
+            }
+            finally
+            {
+                _depth--;
+            }
+        }
+        if (Match("{"))
+        {
+            if (++_depth > JqBudget.MaximumDepth)
+                throw Error("filter nesting limit exceeded", Peek().Span);
+            try
+            {
+                var properties = new List<ObjectPatternProperty>();
+                if (!Match("}"))
+                {
+                    do
+                    {
+                        properties.Add(ParseObjectPatternProperty());
+                    } while (Match(","));
+                    Expect("}");
+                }
+                else
+                {
+                    throw Error("expected pattern, got }", Peek().Span);
+                }
+                return new ObjectPattern(properties);
+            }
+            finally
+            {
+                _depth--;
+            }
+        }
+        throw Error($"expected pattern, got {Peek().Text}", Peek().Span);
+    }
+
+    private ObjectPatternProperty ParseObjectPatternProperty()
+    {
+        if (Match("$"))
+        {
+            var name = Expect(TokenKind.Identifier);
+            if (Match(":"))
+                return new ObjectPatternProperty(new LiteralFilter(JsonValue.Create(name.Text)), new AliasPattern(name.Text, ParsePattern()));
+            return new ObjectPatternProperty(new LiteralFilter(JsonValue.Create(name.Text)), new VariablePattern(name.Text));
+        }
+        JqFilter key;
+        if (Peek() is { Kind: TokenKind.Symbol, Text: "(" })
+        {
+            Token open = Next();
+            key = ParseComma();
+            Expect(")");
+        }
+        else
+        {
+            var keyToken = Next();
+            if (keyToken.Kind != TokenKind.String && keyToken.Kind != TokenKind.Identifier)
+                throw Error("expected object key", keyToken.Span);
+            key = KeyFilterFor(keyToken);
+        }
+        Expect(":");
+        return new ObjectPatternProperty(key, ParsePattern());
+    }
+
+    private JqFilter ParseDictValue()
+    {
+        // Object values mirror DictExpr: pipes of alternatives without
+        // top-level commas or bindings (those need parentheses).
         var left = ParseAlternative();
         while (Match("|"))
             left = new PipeFilter(left, ParseAlternative());
         return left;
+    }
+
+    private void CheckConstantKey(JqFilter key, JqSourceSpan span)
+    {
+        // Constant non-string keys fail at compile time; computed keys
+        // report the same shape at runtime instead.
+        if (key is not LiteralFilter literal)
+            return;
+        if (literal.Value is JsonValue scalar && scalar.TryGetValue<string>(out _))
+            return;
+        string text = new JqRuntime(_budget).ToJqString(literal.Value);
+        throw Error($"Cannot use {JqRuntime.TypeName(literal.Value)} ({text}) as object key", span);
     }
 
     private JqFilter ParseAlternative()
@@ -302,12 +447,25 @@ internal sealed class JqParser(
             return new LiteralFilter(new JsonObject());
         do
         {
-            if (Match("("))
+            if (Peek() is { Kind: TokenKind.Symbol, Text: "$" })
             {
+                Token dollar = Next();
+                Token name = Expect(TokenKind.Identifier);
+                if (!IsBound(name.Text))
+                    throw Error($"undefined variable ${name.Text}", dollar.Span);
+                if (Match(":"))
+                    properties.Add(new ObjectProperty(null, new VariableFilter(name.Text), ParseDictValue()));
+                else
+                    properties.Add(new ObjectProperty(name.Text, null, new VariableFilter(name.Text)));
+            }
+            else if (Peek() is { Kind: TokenKind.Symbol, Text: "(" })
+            {
+                Token open = Next();
                 var key = ParseComma();
                 Expect(")");
                 Expect(":");
-                properties.Add(new ObjectProperty(null, key, ParsePipe()));
+                CheckConstantKey(key, open.Span);
+                properties.Add(new ObjectProperty(null, key, ParseDictValue()));
             }
             else
             {
@@ -320,8 +478,8 @@ internal sealed class JqParser(
                     // keys stay static.
                     bool isDynamic = KeyFilterForIsDynamic(keyToken);
                     properties.Add(isDynamic
-                        ? new ObjectProperty(null, KeyFilterFor(keyToken), ParsePipe())
-                        : new ObjectProperty(keyToken.Text, null, ParsePipe()));
+                        ? new ObjectProperty(null, KeyFilterFor(keyToken), ParseDictValue())
+                        : new ObjectProperty(keyToken.Text, null, ParseDictValue()));
                 }
                 else if (keyToken.Kind == TokenKind.String)
                 {

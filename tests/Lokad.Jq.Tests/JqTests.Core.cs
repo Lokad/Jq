@@ -169,15 +169,15 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("{(0):1}", "Cannot use number (0) as object key")]
-    [InlineData("{(true):1}", "Cannot use boolean (true) as object key")]
-    public async Task Jq_NonStringDynamicKeysFail(string filter, string diagnostic)
+    // Constant non-string keys fail at compile time, matching key validation.
+    [InlineData("{(0):1}", "jq: Cannot use number (0) as object key at line 1 column 2 (filter)\n")]
+    [InlineData("{(true):1}", "jq: Cannot use boolean (true) as object key at line 1 column 2 (filter)\n")]
+    public async Task Jq_ConstantNonStringKeysFailAtCompile(string filter, string expectedError)
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expectedError, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
