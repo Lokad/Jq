@@ -14,10 +14,10 @@ internal readonly record struct JqRegexOptions(PcreOptions Pattern, PcreMatchOpt
             switch (flag)
             {
                 case 'g': break; // Match iteration belongs to the caller.
-                case 's': break; // Anchors already refer to the whole string.
                 case 'i': pattern |= PcreOptions.IgnoreCase; break;
-                case 'm':
-                case 'p': pattern |= PcreOptions.DotAll; break;
+                case 'm': pattern |= PcreOptions.MultiLine; break;
+                case 's': pattern |= PcreOptions.Singleline; break;
+                case 'p': pattern |= PcreOptions.MultiLine | PcreOptions.Singleline; break;
                 case 'x': pattern |= PcreOptions.Extended; break;
                 case 'n': match |= PcreMatchOptions.NotEmpty; break;
                 default:

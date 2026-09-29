@@ -62,6 +62,8 @@ internal static class JqBuiltinRegistry
         ["strptime"] = (1, 1),
         ["strftime"] = (1, 1),
         ["test"] = (1, 2),
+        ["match"] = (1, 2),
+        ["capture"] = (1, 2),
         ["path"] = (1, 1),
         ["del"] = (1, 1),
         ["getpath"] = (1, 1),

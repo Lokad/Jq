@@ -9,7 +9,7 @@ public sealed partial class JqTests
     [InlineData("\"Inventory\" | test(\"inventory\")", "false\n")]
     [InlineData("\"Inventory\" | test(\"vent\")", "true\n")]
     [InlineData("\"DÉSOLÉ 🚀\" | test(\"désolé .\";\"i\")", "true\n")]
-    [InlineData("\"a\\nb\" | [test(\"^b\"),test(\"^b\";\"s\"),test(\"a.b\"),test(\"a.b\";\"m\"),test(\"^a.b$\";\"p\")]", "[false,false,false,true,true]\n")]
+    [InlineData("\"a\\nb\" | [test(\"^b\"),test(\"^b\";\"s\"),test(\"a.b\"),test(\"a.b\";\"m\"),test(\"^a.b$\";\"p\")]", "[false,false,false,false,true]\n")]
     [InlineData("\"AB\" | test(\"a b # comment\";\"ix\")", "true\n")]
     [InlineData("\"\" | [test(\"\"),test(\"\";\"n\")]", "[true,false]\n")]
     [InlineData("\"ba\" | test(\"a*\";\"ng\")", "true\n")]

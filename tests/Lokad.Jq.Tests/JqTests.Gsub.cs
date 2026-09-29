@@ -26,7 +26,7 @@ public sealed partial class JqTests
     [InlineData("\"aA\" | gsub(\"a\"; \"X\"; \"ig\")", "XX\n")]
     [InlineData("\"a\\nb\\n\" | gsub(\"^\"; \"X\")", "Xa\nb\n\n")]
     [InlineData("\"a\\nb\\n\" | gsub(\"$\"; \"X\"; \"s\")", "a\nbX\nX\n")]
-    [InlineData("\"a\\nb\" | gsub(\".\"; \"X\"; \"m\")", "XXX\n")]
+    [InlineData("\"a\\nb\" | gsub(\".\"; \"X\"; \"m\")", "X\nX\n")]
     [InlineData("\"a\\nb\" | gsub(\".\"; \"X\"; \"p\")", "XXX\n")]
     [InlineData("\"ab\" | gsub(\"a b # comment\"; \"X\"; \"x\")", "X\n")]
     [InlineData("\"a\" | gsub(\"a\"; \"$1\\\\\"; null)", "$1\\\n")]

@@ -863,6 +863,16 @@ internal sealed class JqParser(
             return new TestFilter(args);
         }
 
+        if (name == "match")
+        {
+            return new MatchFilter(args);
+        }
+
+        if (name == "capture")
+        {
+            return new CaptureFilter(args);
+        }
+
         if (name == "path")
         {
             return new PathBuiltinFilter(args[0]);
