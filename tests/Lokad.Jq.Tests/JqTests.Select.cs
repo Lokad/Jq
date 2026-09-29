@@ -52,7 +52,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal("jq: select expects one argument\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -61,10 +61,10 @@ public sealed partial class JqTests
     public async Task Jq_SelectReportsPredicateErrorsAfterEarlierResults()
     {
         var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "7 | select(true, missing)")));
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "7 | select(true, (1 | .foo))")));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal("7\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: unsupported function missing\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: cannot index number with string \"foo\"\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
 }

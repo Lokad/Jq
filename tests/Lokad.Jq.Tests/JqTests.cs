@@ -297,14 +297,14 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_RangeWithoutArgumentsReturnsRuntimeError()
+    public async Task Jq_RangeWithoutArgumentsReturnsCompileError()
     {
         var fileSystem = new MockFileSystem();
 
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "range()")));
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
-        Assert.Equal(5, exitCode);
+        Assert.Equal(3, exitCode);
         Assert.Contains("jq:", fileSystem.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(string.Empty, fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }

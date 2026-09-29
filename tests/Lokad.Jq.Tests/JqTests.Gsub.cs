@@ -56,10 +56,22 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
+
     [Theory]
     [InlineData("\"x\" | gsub", "expects two or three")]
     [InlineData("\"x\" | gsub(\"x\")", "expects two or three")]
     [InlineData("\"x\" | gsub(\"x\";\"y\";\"i\";\"g\")", "expects two or three")]
+    public async Task Jq_GsubArityMismatchesAreCompileErrors(string filter, string diagnostic)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Theory]
     [InlineData("null | gsub(\"x\";\"y\")", "expected string")]
     [InlineData("\"x\" | gsub(1;\"y\")", "expected string")]
     [InlineData("\"x\" | gsub(\"x\";1)", "expected string")]
@@ -83,7 +95,6 @@ public sealed partial class JqTests
         Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
-
     [Theory]
     [InlineData("<p>x</p>", "gsub(\"<[^>]+>\";\" \") | gsub(\"&nbsp;\";\" \") | gsub(\"[[:space:]]+\";\" \")", " x ")]
     [InlineData("ab", "gsub(\"(?<x>.)\"; .x | gsub(\"(?<x>.)\"; \"y\"))", "yy")]

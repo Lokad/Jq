@@ -36,6 +36,17 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("\"x\" | test", "expects one or two")]
     [InlineData("\"x\" | test(\"x\";\"i\";\"g\")", "expects one or two")]
+    public async Task Jq_TestArityMismatchesAreCompileErrors(string filter, string diagnostic)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Theory]
     [InlineData("null | test(\"x\")", "expected string")]
     [InlineData("\"x\" | test(1)", "expected string")]
     [InlineData("\"x\" | test(\"x\";1)", "expected string")]
@@ -55,7 +66,6 @@ public sealed partial class JqTests
         Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
-
     [Fact]
     public async Task Jq_TestAndGsubSharePatternsAcrossInputRecords()
     {

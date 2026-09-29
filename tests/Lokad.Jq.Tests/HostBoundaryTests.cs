@@ -19,7 +19,7 @@ public sealed class HostBoundaryTests
 
     [Theory]
     [InlineData(".", "7\n", "", 0)]
-    [InlineData("missing_function", "", "jq: unsupported function missing_function\n", 5)]
+    [InlineData("missing_function", "", "jq: unsupported function missing_function\n", 3)]
     public async Task ExecutionUsesCallerDescriptorsWithoutClosingThem(
         string filter, string expectedOutput, string expectedError, int expectedExit)
     {

@@ -290,12 +290,25 @@ internal sealed class JqParser(string source, JqBudget budget)
         return CreateFunction(name, args);
     }
 
-    private static JqFilter CreateFunction(string name, IReadOnlyList<JqFilter> args) => name switch
+    private static JqFilter CreateFunction(string name, IReadOnlyList<JqFilter> args)
     {
-        "gsub" => new GsubFilter(args),
-        "test" => new TestFilter(args),
-        _ => new FunctionFilter(name, args)
-    };
+        if (!JqBuiltinRegistry.TryValidate(name, args.Count, out string error))
+        {
+            throw new JqException(error);
+        }
+
+        if (name == "gsub")
+        {
+            return new GsubFilter(args);
+        }
+
+        if (name == "test")
+        {
+            return new TestFilter(args);
+        }
+
+        return new FunctionFilter(name, args);
+    }
 
     private bool Match(string text)
     {
