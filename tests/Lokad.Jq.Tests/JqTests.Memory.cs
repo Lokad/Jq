@@ -312,7 +312,7 @@ public sealed partial class JqTests
         var text = new string('x', 1023) + "🚀<";
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", "--arg", "text", text, $"$text | @{format}")));
-        var expected = format == "html" ? System.Net.WebUtility.HtmlEncode(text) : Uri.EscapeDataString(text);
+        var expected = format == "html" ? text.Replace("<", "&lt;") : Uri.EscapeDataString(text);
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal(expected + "\n", host.GetOutput(JqFileDescriptor.StdOut));

@@ -1176,23 +1176,16 @@ internal sealed class JqRuntime(JqBudget budget)
     internal string Format(string format, JsonNode? value)
     {
         if (format == "json") return Serialize(value, false, null, false);
-        if (format == "csv") return Delimited(value, ",");
+        if (format == "csv") return Csv(value);
         if (format == "tsv") return Tsv(value);
+        if (format == "sh") return Sh(value);
+        if (format == "urid") return UriDecode(ToJqString(value), value);
         var text = ToJqString(value);
         switch (format)
         {
             case "text": return text;
-            case "html": return EncodeChunks(System.Net.WebUtility.HtmlEncode);
+            case "html": return Html(text);
             case "uri": return EncodeChunks(Uri.EscapeDataString);
-            case "sh":
-            {
-                var builder = new StringBuilder();
-                budget.Append(builder, "'");
-                foreach (var ch in text)
-                    budget.Append(builder, ch == '\'' ? "'\\''" : new ReadOnlySpan<char>(in ch));
-                budget.Append(builder, "'");
-                return budget.Finish(builder);
-            }
             case "base64":
             {
                 var bytes = Encoding.UTF8.GetByteCount(text);
@@ -1200,13 +1193,7 @@ internal sealed class JqRuntime(JqBudget budget)
                 budget.ChargeBytes(bytes);
                 return Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
             }
-            case "base64d":
-            {
-                budget.ChargeBytes(3L * text.Length / 4);
-                var bytes = Convert.FromBase64String(text);
-                budget.ChargeString(Encoding.UTF8.GetCharCount(bytes));
-                return Encoding.UTF8.GetString(bytes);
-            }
+            case "base64d": return Base64Decode(text, value);
             default: throw new JqException($"unsupported format @{format}");
         }
 
@@ -1225,18 +1212,210 @@ internal sealed class JqRuntime(JqBudget budget)
             return budget.Finish(builder);
         }
 
-        string Tsv(JsonNode? value)
+        // Upstream escapes only ampersand, angle brackets, quote and apostrophe,
+        // leaving UTF-8 bytes raw. Codes: 38 is &, 60 is <, 62 is >, 39 is apostrophe, 34 is quote.
+        string Html(string source)
         {
-            if (value is not JsonArray array)
-                throw new JqException("@tsv requires an array");
+            var builder = new StringBuilder();
+            foreach (char ch in source)
+            {
+                if (ch == (char)38) budget.Append(builder, "&amp;");
+                else if (ch == (char)60) budget.Append(builder, "&lt;");
+                else if (ch == (char)62) budget.Append(builder, "&gt;");
+                else if (ch == (char)39) budget.Append(builder, "&apos;");
+                else if (ch == (char)34) budget.Append(builder, "&quot;");
+                else budget.Append(builder, new ReadOnlySpan<char>(in ch));
+            }
+            return budget.Finish(builder);
+        }
+
+        // Manual decoder matching the reference: stops at the first padding mark,
+        // rejects non-alphabet bytes, and reports a dangling single quantum.
+        // Codes: 61 is =, 65 to 90 are A-Z, 97 to 122 are a-z, 48 to 57 are 0-9, 43 is +, 47 is /.
+        string Base64Decode(string source, JsonNode? original)
+        {
+            budget.ChargeBytes(2L * source.Length + 8);
+            var decoded = new List<byte>(source.Length);
+            uint code = 0;
+            int pending = 0;
+            for (int index = 0; index < source.Length && source[index] != (char)61; index++)
+            {
+                if ((index & 4095) == 0) budget.CheckCancellation();
+                int digit = Base64Value(source[index]);
+                if (digit < 0)
+                    throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") is not valid base64 data");
+                code = (code << 6) | (uint)digit;
+                pending++;
+                if (pending == 4)
+                {
+                    decoded.Add((byte)((code >> 16) & 0xFF));
+                    decoded.Add((byte)((code >> 8) & 0xFF));
+                    decoded.Add((byte)(code & 0xFF));
+                    pending = 0;
+                    code = 0;
+                }
+            }
+            if (pending == 3)
+            {
+                decoded.Add((byte)((code >> 10) & 0xFF));
+                decoded.Add((byte)((code >> 2) & 0xFF));
+            }
+            else if (pending == 2)
+            {
+                decoded.Add((byte)((code >> 4) & 0xFF));
+            }
+            else if (pending == 1)
+            {
+                throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") trailing base64 byte found");
+            }
+            byte[] bytes = decoded.ToArray();
+            budget.ChargeString(Encoding.UTF8.GetCharCount(bytes));
+            // Invalid UTF-8 becomes U+FFFD, matching the reference replacement.
+            return Encoding.UTF8.GetString(bytes);
+        }
+
+        int Base64Value(char ch)
+        {
+            if (ch >= (char)65 && ch <= (char)90) return ch - 65;
+            if (ch >= (char)97 && ch <= (char)122) return ch - 97 + 26;
+            if (ch >= (char)48 && ch <= (char)57) return ch - 48 + 52;
+            if (ch == (char)43) return 62;
+            if (ch == (char)47) return 63;
+            return -1;
+        }
+
+        // Strict percent decoder: a dangling mark, short or non-hex digits,
+        // and bytes that are not valid UTF-8 all fail with the same diagnostic.
+        // Code 37 is percent.
+        string UriDecode(string source, JsonNode? original)
+        {
+            budget.ChargeBytes(3L * source.Length + 8);
+            var decoded = new List<byte>(source.Length);
+            for (int index = 0; index < source.Length; index++)
+            {
+                if ((index & 4095) == 0) budget.CheckCancellation();
+                char ch = source[index];
+                if (ch == (char)37)
+                {
+                    if (index + 2 >= source.Length)
+                        throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") is not a valid uri encoding");
+                    int hi = HexValue(source[index + 1]);
+                    int lo = HexValue(source[index + 2]);
+                    if (hi < 0 || lo < 0)
+                        throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") is not a valid uri encoding");
+                    decoded.Add((byte)((hi << 4) | lo));
+                    index += 2;
+                }
+                else if (ch < (char)128)
+                {
+                    decoded.Add((byte)ch);
+                }
+                else
+                {
+                    // Non-ASCII scalars pass through as their UTF-8 bytes.
+                    int length = char.IsHighSurrogate(ch) && index + 1 < source.Length && char.IsLowSurrogate(source[index + 1]) ? 2 : 1;
+                    byte[] raw = Encoding.UTF8.GetBytes(source.Substring(index, length));
+                    decoded.AddRange(raw);
+                    index += length - 1;
+                }
+            }
+            byte[] bytes = decoded.ToArray();
+            budget.ChargeString(bytes.Length);
+            try
+            {
+                return new UTF8Encoding(false, true).GetString(bytes);
+            }
+            catch (DecoderFallbackException)
+            {
+                throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") is not a valid uri encoding");
+            }
+        }
+
+        int HexValue(char ch)
+        {
+            if (ch >= (char)48 && ch <= (char)57) return ch - 48;
+            if (ch >= (char)97 && ch <= (char)102) return ch - 97 + 10;
+            if (ch >= (char)65 && ch <= (char)70) return ch - 65 + 10;
+            return -1;
+        }
+
+        // Scalars are wrapped as single-element rows; only strings take quotes.
+        string Sh(JsonNode? input)
+        {
+            if (input is JsonArray items)
+            {
+                var builder = new StringBuilder();
+                for (int index = 0; index < items.Count; index++)
+                {
+                    if (index > 0) budget.Append(builder, " ");
+                    AppendShell(builder, items[index]);
+                }
+                return budget.Finish(builder);
+            }
+            var single = new StringBuilder();
+            AppendShell(single, input);
+            return budget.Finish(single);
+        }
+
+        void AppendShell(StringBuilder builder, JsonNode? element)
+        {
+            if (element is null || TypeName(element) == "boolean" || TypeName(element) == "number")
+            {
+                budget.Append(builder, Serialize(element, false, null, false));
+                return;
+            }
+            if (TryGetString(element, out string? raw) && raw is not null)
+            {
+                budget.Append(builder, "'");
+                foreach (char ch in raw)
+                    budget.Append(builder, ch == (char)39 ? "'\\''" : new ReadOnlySpan<char>(in ch));
+                budget.Append(builder, "'");
+                return;
+            }
+            throw new JqException(TypeName(element) + " (" + Serialize(element, false, null, false) + ") can not be escaped for shell");
+        }
+
+        // String fields are always quoted with embedded quotes doubled.
+        string Csv(JsonNode? rows)
+        {
+            if (rows is not JsonArray array)
+                throw new JqException(TypeName(rows) + " (" + Serialize(rows, false, null, false) + ") cannot be csv-formatted, only array");
+            var builder = new StringBuilder();
+            for (int index = 0; index < array.Count; index++)
+            {
+                if (index > 0) budget.Append(builder, ",");
+                JsonNode? field = array[index];
+                if (field is null || IsNaNNumber(field)) continue;
+                if (TypeName(field) == "boolean" || TypeName(field) == "number")
+                {
+                    budget.Append(builder, Serialize(field, false, null, false));
+                }
+                else if (TryGetString(field, out string? cell) && cell is not null)
+                {
+                    budget.Append(builder, "\"");
+                    budget.Append(builder, cell.Replace("\"", "\"\""));
+                    budget.Append(builder, "\"");
+                }
+                else
+                {
+                    throw new JqException(TypeName(field) + " (" + Serialize(field, false, null, false) + ") is not valid in a csv row");
+                }
+            }
+            return budget.Finish(builder);
+        }
+
+        string Tsv(JsonNode? rows)
+        {
+            if (rows is not JsonArray array)
+                throw new JqException(TypeName(rows) + " (" + Serialize(rows, false, null, false) + ") cannot be tsv-formatted, only array");
             var builder = new StringBuilder();
             for (var i = 0; i < array.Count; i++)
             {
                 if (i > 0) budget.Append(builder, "\t");
                 var field = array[i];
-                if (field is null) continue;
+                if (field is null || IsNaNNumber(field)) continue;
                 if (field is JsonArray or JsonObject)
-                    throw new JqException($"@tsv cannot format {TypeName(field)} as a field");
+                    throw new JqException(TypeName(field) + " (" + Serialize(field, false, null, false) + ") is not valid in a csv row");
 
                 ReadOnlySpan<char> remaining = ToJqString(field);
                 while (true)
@@ -1256,27 +1435,6 @@ internal sealed class JqRuntime(JqBudget budget)
                         _ => "\\\\"
                     });
                     remaining = remaining[(escape + 1)..];
-                }
-            }
-            return budget.Finish(builder);
-        }
-
-        string Delimited(JsonNode? value, string separator)
-        {
-            if (value is not JsonArray arr) return ToJqString(value);
-            var builder = new StringBuilder();
-            for (var i = 0; i < arr.Count; i++)
-            {
-                if (i > 0) budget.Append(builder, separator);
-                var text = ToJqString(arr[i]);
-                if (!text.Contains('"') && !text.Contains('\n') && !text.Contains(separator, StringComparison.Ordinal))
-                    budget.Append(builder, text);
-                else
-                {
-                    budget.Append(builder, "\"");
-                    foreach (var ch in text)
-                        budget.Append(builder, ch == '"' ? "\"\"" : new ReadOnlySpan<char>(in ch));
-                    budget.Append(builder, "\"");
                 }
             }
             return budget.Finish(builder);
