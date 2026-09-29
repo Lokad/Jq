@@ -1557,20 +1557,20 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "has": yield return JsonValue.Create(context.Runtime.Has(input, Arg(0))); break;
                 case "indices": yield return context.Runtime.Indices(input, Arg(0)); break;
                 case "index": yield return context.Runtime.Index(input, Arg(0)); break;
-                case "startswith": yield return JsonValue.Create(String(input).StartsWith(String(Arg(0)), StringComparison.Ordinal)); break;
-                case "endswith": yield return JsonValue.Create(String(input).EndsWith(String(Arg(0)), StringComparison.Ordinal)); break;
-                case "ltrimstr": yield return JsonValue.Create(TrimString(input, Arg(0), true, false)); break;
-                case "rtrimstr": yield return JsonValue.Create(TrimString(input, Arg(0), false, true)); break;
-                case "trimstr": yield return JsonValue.Create(TrimString(input, Arg(0), true, true)); break;
-                case "trim": yield return JsonValue.Create(String(input).Trim()); break;
-                case "ltrim": yield return JsonValue.Create(String(input).TrimStart()); break;
-                case "rtrim": yield return JsonValue.Create(String(input).TrimEnd()); break;
+                case "startswith": yield return JsonValue.Create(StartsEndsWith(input, Arg(0), true)); break;
+                case "endswith": yield return JsonValue.Create(StartsEndsWith(input, Arg(0), false)); break;
+                case "ltrimstr": yield return JsonValue.Create(TrimAffix(input, Arg(0), true, false)); break;
+                case "rtrimstr": yield return JsonValue.Create(TrimAffix(input, Arg(0), false, true)); break;
+                case "trimstr": yield return JsonValue.Create(TrimAffix(input, Arg(0), true, true)); break;
+                case "trim": yield return JsonValue.Create(TrimSides(input, true, true)); break;
+                case "ltrim": yield return JsonValue.Create(TrimSides(input, true, false)); break;
+                case "rtrim": yield return JsonValue.Create(TrimSides(input, false, true)); break;
                 case "explode": yield return context.Runtime.Explode(input); break;
                 case "implode": yield return context.Runtime.Implode(input); break;
                 case "split": yield return context.Runtime.Split(input, Arg(0)); break;
                 case "join": yield return context.Runtime.Join(input, Arg(0)); break;
-                case "ascii_downcase": yield return JsonValue.Create(String(input).ToLowerInvariant()); break;
-                case "ascii_upcase": yield return JsonValue.Create(String(input).ToUpperInvariant()); break;
+                case "ascii_downcase": yield return JsonValue.Create(context.Runtime.AsciiCase(String(input), true)); break;
+                case "ascii_upcase": yield return JsonValue.Create(context.Runtime.AsciiCase(String(input), false)); break;
                 case "range":
                     foreach (var value in context.Runtime.Range(combo.Select(item => new List<JsonNode?> { item }).ToList()))
                         yield return value;

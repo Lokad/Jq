@@ -864,13 +864,81 @@ internal sealed class JqRuntime(JqBudget budget)
         throw new JqRuntimeException($"cannot search {TypeName(input)}");
     }
 
-    internal static string TrimString(JsonNode? input, JsonNode? trim, bool left, bool right)
+    internal string AsciiCase(string text, bool lower)
     {
-        var value = String(input);
-        var t = String(trim);
-        if (left && value.StartsWith(t, StringComparison.Ordinal)) value = value[t.Length..];
-        if (right && value.EndsWith(t, StringComparison.Ordinal)) value = value[..^t.Length];
-        return value;
+        ArgumentNullException.ThrowIfNull(text);
+        var builder = new StringBuilder(text.Length);
+        foreach (char ch in text)
+        {
+            if (lower && ch >= 'A' && ch <= 'Z')
+                builder.Append((char)(ch + 32));
+            else if (!lower && ch >= 'a' && ch <= 'z')
+                builder.Append((char)(ch - 32));
+            else
+                builder.Append(ch);
+        }
+        budget.ChargeString(builder.Length);
+        return budget.Finish(builder);
+    }
+
+    internal static bool StartsEndsWith(JsonNode? input, JsonNode? affix, bool fromStart)
+    {
+        if (!TryGetString(input, out string? text) || text is null || !TryGetString(affix, out string? fix) || fix is null)
+            throw new JqException((fromStart ? "startswith" : "endswith") + "() requires string inputs");
+        return fromStart
+            ? text.StartsWith(fix, StringComparison.Ordinal)
+            : text.EndsWith(fix, StringComparison.Ordinal);
+    }
+
+    internal static string TrimAffix(JsonNode? input, JsonNode? affix, bool left, bool right)
+    {
+        if (!TryGetString(input, out string? text) || text is null || !TryGetString(affix, out string? fix) || fix is null)
+            throw new JqException((left ? "startswith" : "endswith") + "() requires string inputs");
+        if (left && text.StartsWith(fix, StringComparison.Ordinal))
+            text = text[fix.Length..];
+        if (right && text.EndsWith(fix, StringComparison.Ordinal))
+            text = text[..^fix.Length];
+        return text;
+    }
+
+    internal static bool IsJqWhitespace(int codepoint) =>
+        (codepoint is >= 0x09 and <= 0x0D)
+        || codepoint == 0x20
+        || codepoint == 0x85
+        || codepoint == 0xA0
+        || codepoint == 0x1680
+        || codepoint is >= 0x2000 and <= 0x200A
+        || codepoint == 0x2028
+        || codepoint == 0x2029
+        || codepoint == 0x202F
+        || codepoint == 0x205F
+        || codepoint == 0x3000;
+
+    internal static string TrimSides(JsonNode? input, bool left, bool right)
+    {
+        if (!TryGetString(input, out string? text) || text is null)
+            throw new JqException("trim input must be a string");
+        var units = new List<(int Offset, int Length, bool Whitespace)>();
+        int cursor = 0;
+        while (cursor < text.Length)
+        {
+            if (Rune.DecodeFromUtf16(text.AsSpan(cursor), out Rune rune, out int consumed) == System.Buffers.OperationStatus.Done)
+                units.Add((cursor, consumed, IsJqWhitespace(rune.Value)));
+            else
+                units.Add((cursor, 1, false));
+            cursor += units[units.Count - 1].Length;
+        }
+        int first = 0;
+        int last = units.Count;
+        if (left)
+            while (first < last && units[first].Whitespace)
+                first++;
+        if (right)
+            while (last > first && units[last - 1].Whitespace)
+                last--;
+        int start = first < units.Count ? units[first].Offset : text.Length;
+        int end = last > 0 ? units[last - 1].Offset + units[last - 1].Length : 0;
+        return text[start..end];
     }
 
     internal JsonNode Explode(JsonNode? input)
