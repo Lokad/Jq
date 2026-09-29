@@ -113,6 +113,8 @@ internal static class JqCommandLineParser
                 RawInput = parsed.RawInput,
                 Slurp = parsed.Slurp,
                 Seq = parsed.Seq,
+                Stream = parsed.Stream || parsed.StreamErrors,
+                StreamErrors = parsed.StreamErrors,
                 RawOutput = parsed.RawOutput,
                 JoinOutput = parsed.JoinOutput,
                 AsciiOutput = parsed.AsciiOutput,

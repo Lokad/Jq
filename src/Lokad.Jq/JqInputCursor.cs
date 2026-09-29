@@ -38,6 +38,9 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private readonly JqFileDescriptor _stdin;
     private readonly bool _raw;
     private readonly bool _seq;
+    private readonly bool _stream;
+    private readonly JqStreamScanner? _scanner;
+    private bool _streamEofDone;
     private readonly List<Source> _sources;
     private readonly CancellationToken _cancellationToken;
     private readonly byte[] _readBuffer = new byte[ChunkSize];
@@ -80,6 +83,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _stdin = invocation.StdIn;
         _raw = invocation.RawInput;
         _seq = invocation.Seq;
+        _stream = invocation.Stream;
+        _scanner = invocation.Stream ? new JqStreamScanner(context.Budget, context.Runtime, invocation.Seq, invocation.StreamErrors) : null;
         _cancellationToken = cancellationToken;
         _sources = [];
         if (invocation.InputFiles.Count == 0)
@@ -112,6 +117,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
         {
             if (_raw)
                 return await PullRawAsync().ConfigureAwait(false);
+            if (_stream)
+                return await PullStreamAsync().ConfigureAwait(false);
             if (_seq)
                 return await PullSeqAsync().ConfigureAwait(false);
             return await PullJsonAsync().ConfigureAwait(false);
@@ -246,7 +253,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _index++;
         if (_index >= _sources.Count)
             return false;
-        if (!_seq)
+        if (!_seq && !_stream)
         {
             _start = 0;
             _count = 0;
@@ -492,6 +499,73 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 continue;
             }
             CompleteSeqRecord(rs);
+        }
+    }
+
+    private async Task<(bool HasValue, JsonNode? Value)> PullStreamAsync()
+    {
+        ArgumentNullException.ThrowIfNull(_scanner);
+        while (true)
+        {
+            _budget.CheckCancellation();
+            if (_scanner.TryDrainStash(out JsonNode? stashed))
+            {
+                SetPosition(1 + _newlines);
+                return (true, stashed);
+            }
+            if (_streamEofDone)
+                return (false, null);
+            if (!_active && !await ActivateNextAsync().ConfigureAwait(false))
+            {
+                StreamScanOutcome end;
+                try
+                {
+                    end = _scanner.FinishFinal();
+                }
+                catch (JqException)
+                {
+                    _streamEofDone = true;
+                    throw;
+                }
+                if (end.ErrorEvent is not null)
+                {
+                    SetPosition(1 + _newlines);
+                    return (true, end.ErrorEvent);
+                }
+                if (end.Event is not null)
+                {
+                    SetPosition(1 + _newlines);
+                    return (true, end.Event);
+                }
+                _streamEofDone = true;
+                return (false, null);
+            }
+            if (_count == 0)
+            {
+                if (_eof)
+                {
+                    await AdvanceSourceKeepBufferAsync().ConfigureAwait(false);
+                    continue;
+                }
+                await FillAsync().ConfigureAwait(false);
+                continue;
+            }
+            StreamScanOutcome outcome = _scanner.Consume(_buffer.AsSpan(_start, _count), isFinal: false);
+            Advance(outcome.Consumed);
+            if (outcome.DropRest && _count > 0)
+                Advance(_count);
+            if (outcome.Error is not null)
+                throw outcome.Error;
+            if (outcome.ErrorEvent is not null)
+            {
+                SetPosition(1 + _newlines);
+                return (true, outcome.ErrorEvent);
+            }
+            if (outcome.Event is not null)
+            {
+                SetPosition(1 + _newlines);
+                return (true, outcome.Event);
+            }
         }
     }
 

@@ -39,7 +39,9 @@ requests with a one-byte overflow probe. Implicit outer iteration and explicit
 operands reuse borrowed stdin at its current position and are never closed,
 while file operands open lazily and close when exhausted, abandoned, or
 disposed. JSON values and raw lines may span chunk boundaries; slurp
-aggregates the cursor. No real filesystem implementation, shell
+aggregates the cursor. With --stream, a byte-level scanner emits path and
+leaf events without a document DOM; with --seq, records split at RS
+separators with resync recovery. No real filesystem implementation, shell
 parser, subprocess launcher, or reference-jq binary belongs in this library.
 
 ## Project structure
@@ -53,3 +55,4 @@ The tests reference the built assembly. Most exercise the public command API;
 existing parser/budget/regex white-box tests use a friend assembly declaration.
 The test host implements only the small jq IO contract. Shell parsing and
 pipeline orchestration are responsibilities of an embedding application.
+

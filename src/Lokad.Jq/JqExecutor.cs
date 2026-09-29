@@ -151,6 +151,10 @@ internal static class JqExecutor
                         WarnIgnoringParseError(context, resync.Message);
                         continue;
                     }
+                    catch (JqException input) when (input is not JqQuotaException)
+                    {
+                        throw new JqException("parse error: " + input.Message);
+                    }
                     if (!pulled.HasValue)
                         break;
                     yield return pulled.Value;
@@ -187,6 +191,10 @@ internal static class JqExecutor
                 {
                     WarnIgnoringParseError(context, resync.Message);
                     continue;
+                }
+                catch (JqException input) when (input is not JqQuotaException)
+                {
+                    throw new JqException("parse error: " + input.Message);
                 }
                 if (!pulled.HasValue)
                     break;

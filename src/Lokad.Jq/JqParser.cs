@@ -1301,6 +1301,21 @@ internal sealed class JqParser(
             return new TransposeFilter();
         }
 
+        if (name == "tostream" && args.Count == 0)
+        {
+            return new TostreamFilter();
+        }
+
+        if (name == "fromstream" && args.Count == 1)
+        {
+            return new FromstreamFilter(args[0]);
+        }
+
+        if (name == "truncate_stream" && args.Count == 1)
+        {
+            return new TruncateStreamFilter(args[0]);
+        }
+
         if (name == "bsearch")
         {
             return new BsearchFilter(args[0]);

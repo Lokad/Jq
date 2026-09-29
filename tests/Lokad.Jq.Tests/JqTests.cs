@@ -197,7 +197,7 @@ public sealed partial class JqTests
     {
         var fileSystem = new MockFileSystem();
 
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--stream", ".")));
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--sort-keys", ".")));
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.Equal(2, exitCode);
@@ -209,11 +209,11 @@ public sealed partial class JqTests
     {
         var fileSystem = new MockFileSystem();
 
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "--stream")));
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "--sort-keys")));
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.Equal(2, exitCode);
-        Assert.Contains("unsupported option --stream", fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("unsupported option --sort-keys", fileSystem.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]
@@ -352,3 +352,4 @@ public sealed partial class JqTests
         return JqCommandInvocation.CreateWithStandardDescriptors(command, args, []);
     }
 }
+
