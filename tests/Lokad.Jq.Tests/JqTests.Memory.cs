@@ -75,7 +75,12 @@ public sealed partial class JqTests
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        // Lazy generators stream prefix results before the cumulative
+        // budget trips; every emitted record stays complete. The eager
+        // buffering that produced no output here was the bug, not the bound.
+        string stdout = host.GetOutput(JqFileDescriptor.StdOut);
+        foreach (string line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            Assert.True(int.TryParse(line, out _), "Partial output must stay record-complete: " + line);
     }
 
     [Fact]

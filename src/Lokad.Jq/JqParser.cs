@@ -161,7 +161,7 @@ internal sealed class JqParser(
         JqFilter? index = null;
         if (!Match(":"))
         {
-            index = ParsePipe();
+            index = ParseComma();
             if (!Match(":"))
             {
                 Expect("]");
@@ -173,7 +173,7 @@ internal sealed class JqParser(
         JqFilter? end = null;
         if (!Match("]"))
         {
-            end = ParsePipe();
+            end = ParseComma();
             Expect("]");
         }
         var sliceOptional = Match("?");

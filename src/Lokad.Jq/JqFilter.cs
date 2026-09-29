@@ -99,30 +99,29 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
     {
-        foreach (var value in source.Evaluate(input, context))
-        {
-            var indexes = index.Evaluate(input, context).ToList();
-            if (indexes.Count == 0)
-                yield break;
-            var key = indexes[0];
-            if (value is JsonArray arr && TryGetInt(key, out var ix))
+        // Key-major order: each key combines with every source value,
+        // matching index-then-source evaluation with backtracking.
+        foreach (var key in index.Evaluate(input, context))
+            foreach (var value in source.Evaluate(input, context))
             {
-                if (ix < 0) ix = arr.Count + ix;
-                yield return ix >= 0 && ix < arr.Count ? context.Runtime.Clone(arr[ix]) : null;
+                if (value is JsonArray arr && TryGetInt(key, out var ix))
+                {
+                    if (ix < 0) ix = arr.Count + ix;
+                    yield return ix >= 0 && ix < arr.Count ? context.Runtime.Clone(arr[ix]) : null;
+                }
+                else if (value is JsonObject obj && TryGetString(key, out var name))
+                {
+                    yield return context.Runtime.Clone(obj.TryGetPropertyValue(name, out var child) ? child : null);
+                }
+                else if (optional || value == null)
+                {
+                    yield return null;
+                }
+                else
+                {
+                    throw new JqRuntimeException($"cannot index {TypeName(value)}");
+                }
             }
-            else if (value is JsonObject obj && TryGetString(key, out var name))
-            {
-                yield return context.Runtime.Clone(obj.TryGetPropertyValue(name, out var child) ? child : null);
-            }
-            else if (optional || value == null)
-            {
-                yield return null;
-            }
-            else
-            {
-                throw new JqRuntimeException($"cannot index {TypeName(value)}");
-            }
-        }
     }
 }
 
@@ -130,52 +129,73 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context)
     {
-        foreach (var value in source.Evaluate(input, context))
-        {
-            var startIndex = start == null ? 0 : FirstInt(start.Evaluate(input, context));
-            int endIndex;
-            if (value is JsonArray arr)
-            {
-                endIndex = end == null ? arr.Count : FirstInt(end.Evaluate(input, context));
-                NormalizeRange(arr.Count, ref startIndex, ref endIndex);
-                var result = new JsonArray();
-                for (var i = startIndex; i < endIndex; i++)
-                    result.Add(context.Runtime.Clone(arr[i]));
-                yield return result;
-            }
-            else if (TryGetString(value, out var text))
-            {
-                var runeCount = text.EnumerateRunes().Count();
-                endIndex = end == null ? runeCount : FirstInt(end.Evaluate(input, context));
-                NormalizeRange(runeCount, ref startIndex, ref endIndex);
-                var offset = 0;
-                var first = 0;
-                var index = 0;
-                foreach (var rune in text.EnumerateRunes())
+        // Bound-major order: each start combines with every end, then every
+        // source value, matching key-object construction with backtracking.
+        foreach (var startIndex in StartIndexes())
+            foreach (var endBound in EndBounds())
+                foreach (var value in source.Evaluate(input, context))
                 {
-                    if (index == startIndex) first = offset;
-                    if (index++ == endIndex) break;
-                    offset += rune.Utf16SequenceLength;
+                    int fromStart = startIndex;
+                    int endIndex;
+                    if (value is JsonArray arr)
+                    {
+                        endIndex = endBound ?? arr.Count;
+                        NormalizeRange(arr.Count, ref fromStart, ref endIndex);
+                        var result = new JsonArray();
+                        for (var i = fromStart; i < endIndex; i++)
+                            result.Add(context.Runtime.Clone(arr[i]));
+                        yield return result;
+                    }
+                    else if (TryGetString(value, out var text))
+                    {
+                        var runeCount = text.EnumerateRunes().Count();
+                        endIndex = endBound ?? runeCount;
+                        NormalizeRange(runeCount, ref fromStart, ref endIndex);
+                        var offset = 0;
+                        var first = 0;
+                        var index = 0;
+                        foreach (var rune in text.EnumerateRunes())
+                        {
+                            if (index == fromStart) first = offset;
+                            if (index++ == endIndex) break;
+                            offset += rune.Utf16SequenceLength;
+                        }
+                        if (fromStart == runeCount) first = offset;
+                        context.Budget.ChargeString(offset - first);
+                        yield return JsonValue.Create(text[first..offset]);
+                    }
+                    else if (optional || value == null)
+                    {
+                        yield return null;
+                    }
+                    else
+                    {
+                        throw new JqRuntimeException($"cannot slice {TypeName(value)}");
+                    }
                 }
-                if (startIndex == runeCount) first = offset;
-                context.Budget.ChargeString(offset - first);
-                yield return JsonValue.Create(text[first..offset]);
+
+        IEnumerable<int> StartIndexes()
+        {
+            if (start == null)
+            {
+                yield return 0;
+                yield break;
             }
-            else if (optional || value == null)
+            foreach (var bound in start.Evaluate(input, context))
+                yield return bound == null ? 0 : (int)Number(bound);
+        }
+
+        // A null item means the container length; null values still map to zero.
+        IEnumerable<int?> EndBounds()
+        {
+            if (end == null)
             {
                 yield return null;
+                yield break;
             }
-            else
-            {
-                throw new JqRuntimeException($"cannot slice {TypeName(value)}");
-            }
+            foreach (var bound in end.Evaluate(input, context))
+                yield return bound == null ? 0 : (int)Number(bound);
         }
-    }
-
-    private static int FirstInt(IEnumerable<JsonNode?> values)
-    {
-        var value = values.FirstOrDefault();
-        return value == null ? 0 : (int)Number(value);
     }
 
     private static void NormalizeRange(int count, ref int start, ref int end)
@@ -237,11 +257,8 @@ internal sealed class ObjectFilter(IReadOnlyList<(string Key, JqFilter Value)> p
             }
 
             var (key, filter) = properties[index];
-            var values = filter.Evaluate(input, context).ToList();
-            if (values.Count == 0)
-                values.Add(null);
-
-            foreach (var value in values)
+            // Lazy cartesian: an empty value stream yields no objects.
+            foreach (var value in filter.Evaluate(input, context))
             {
                 if (context.Runtime.Clone(current) is not JsonObject next)
                     throw new InvalidOperationException("Expected object clone.");
