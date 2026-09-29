@@ -52,8 +52,8 @@ internal static class JqBuiltinRegistry
         ["ascii_downcase"] = (0, 0),
         ["ascii_upcase"] = (0, 0),
         ["range"] = (1, 3),
-        ["any"] = (0, 0),
-        ["all"] = (0, 0),
+        ["any"] = (0, 2),
+        ["all"] = (0, 2),
         ["fromdate"] = (0, 0),
         ["fromdateiso8601"] = (0, 0),
         ["todate"] = (0, 0),
@@ -106,6 +106,7 @@ internal static class JqBuiltinRegistry
         ["transpose"] = (0, 0),
         ["bsearch"] = (1, 1),
         ["combinations"] = (0, 1),
+        ["IN"] = (1, 2),
         ["gsub"] = (2, 3),
     };
 

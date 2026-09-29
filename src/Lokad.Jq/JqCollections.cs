@@ -379,3 +379,41 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
         yield return empty ? null : context.Runtime.Clone(best);
     }
 }
+
+// `any(generator; condition)`: true on the first truthy condition output,
+// short-circuiting the rest. Exhaustion yields false; errors propagate.
+internal sealed class AnyFilter(JqFilter Generator, JqFilter Condition) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? generated in Generator.Evaluate(input, context, environment))
+            foreach (JsonNode? probe in Condition.Evaluate(generated, context, environment))
+                if (Truthy(probe))
+                {
+                    yield return JsonValue.Create(true);
+                    yield break;
+                }
+        yield return JsonValue.Create(false);
+    }
+}
+
+// `all(generator; condition)`: false on the first falsy condition output,
+// short-circuiting the rest. Exhaustion yields true; errors propagate.
+internal sealed class AllFilter(JqFilter Generator, JqFilter Condition) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? generated in Generator.Evaluate(input, context, environment))
+            foreach (JsonNode? probe in Condition.Evaluate(generated, context, environment))
+                if (!Truthy(probe))
+                {
+                    yield return JsonValue.Create(false);
+                    yield break;
+                }
+        yield return JsonValue.Create(true);
+    }
+}

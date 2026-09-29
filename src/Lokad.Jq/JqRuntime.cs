@@ -957,11 +957,6 @@ internal sealed class JqRuntime(JqBudget budget)
         }
     }
 
-    internal static bool AnyAll(JsonNode? input, bool any)
-    {
-        if (input is not JsonArray arr) throw new JqException(any ? "any expects an array" : "all expects an array");
-        return any ? arr.Any(Truthy) : arr.All(Truthy);
-    }
 
     internal JsonNode Strptime(JsonNode? input, JsonNode? format)
     {

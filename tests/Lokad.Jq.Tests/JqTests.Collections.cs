@@ -116,4 +116,27 @@ public sealed partial class JqTests
         Assert.Equal("\"cannot be sorted, as it is not an array\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Theory]
+    [InlineData("\"badness\"", "any(true, error; .)", "true\n")]
+    [InlineData("\"badness\"", "all(false, error; .)", "false\n")]
+    [InlineData("[]", "any(not)", "false\n")]
+    [InlineData("[]", "all(not)", "true\n")]
+    [InlineData("[false]", "any(not)", "true\n")]
+    [InlineData("[false]", "all(not)", "true\n")]
+    [InlineData("[]", "[any, all]", "[false,true]\n")]
+    [InlineData("null", "range(5; 10) | IN(range(10))", "true\ntrue\ntrue\ntrue\ntrue\n")]
+    [InlineData("null", "range(5; 13) | IN(range(0; 10; 3))", "false\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\n")]
+    [InlineData("null", "IN(range(10; 20); range(10))", "false\n")]
+    [InlineData("null", "IN(range(5; 20); range(10))", "true\n")]
+    public async Task Jq_AnyAllShortCircuit(string input, string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }

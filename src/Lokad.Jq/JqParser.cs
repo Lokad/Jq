@@ -1030,6 +1030,46 @@ internal sealed class JqParser(
             return new BsearchFilter(args[0]);
         }
 
+        if (name == "any" && args.Count == 0)
+        {
+            return new AnyFilter(new IteratorFilter(new IdentityFilter(), false), new IdentityFilter());
+        }
+
+        if (name == "any" && args.Count == 1)
+        {
+            return new AnyFilter(new IteratorFilter(new IdentityFilter(), false), args[0]);
+        }
+
+        if (name == "any")
+        {
+            return new AnyFilter(args[0], args[1]);
+        }
+
+        if (name == "all" && args.Count == 0)
+        {
+            return new AllFilter(new IteratorFilter(new IdentityFilter(), false), new IdentityFilter());
+        }
+
+        if (name == "all" && args.Count == 1)
+        {
+            return new AllFilter(new IteratorFilter(new IdentityFilter(), false), args[0]);
+        }
+
+        if (name == "all")
+        {
+            return new AllFilter(args[0], args[1]);
+        }
+
+        if (name == "IN" && args.Count == 1)
+        {
+            return new AnyFilter(new BinaryFilter(args[0], "==", new IdentityFilter()), new IdentityFilter());
+        }
+
+        if (name == "IN")
+        {
+            return new AnyFilter(new BinaryFilter(args[0], "==", args[1]), new IdentityFilter());
+        }
+
         if (name == "combinations")
         {
             return args.Count == 0

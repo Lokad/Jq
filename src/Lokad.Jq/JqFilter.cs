@@ -1575,8 +1575,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     foreach (var value in context.Runtime.Range(combo.Select(item => new List<JsonNode?> { item }).ToList()))
                         yield return value;
                     break;
-                case "any": yield return JsonValue.Create(AnyAll(input, true)); break;
-                case "all": yield return JsonValue.Create(AnyAll(input, false)); break;
                 case "fromdate":
                 case "fromdateiso8601": yield return JsonValue.Create(DateTimeOffset.Parse(String(input), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal).ToUnixTimeSeconds()); break;
                 case "todate":
