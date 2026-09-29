@@ -70,6 +70,15 @@ internal static class JqExecutor
             }
             return 0;
         }
+        catch (JqHaltException ex)
+        {
+            // Immediate termination: pending outputs and remaining inputs
+            // are abandoned. String payloads render raw; anything else was
+            // already shaped at the throw site.
+            if (ex.StderrText is not null)
+                await host.AppendAsync(invocation.StdErr, Utf8Text.Encode(ex.StderrText), cancellationToken).ConfigureAwait(false);
+            return ex.ExitCode;
+        }
         catch (JqCompileException ex)
         {
             await WriteErrorAsync(host, invocation, "jq: " + ex.Message + " at line " + ex.Span.Line + " column " + ex.Span.Column + " (" + ex.ProgramSource.Label + ")", cancellationToken).ConfigureAwait(false);

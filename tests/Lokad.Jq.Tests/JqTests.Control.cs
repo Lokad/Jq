@@ -136,4 +136,100 @@ public sealed partial class JqTests
         Assert.Contains("expected End, got catch", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
+
+    [Theory]
+    [InlineData("0", "halt", 0, "", "")]
+    [InlineData("0", "1, halt", 0, "1\n", "")]
+    [InlineData("0", "halt, 1", 0, "", "")]
+    [InlineData("null", "halt_error(11)", 11, "", "")]
+    [InlineData("null", "halt_error", 5, "", "")]
+    [InlineData("null", "1, halt_error(3)", 3, "1\n", "")]
+    [InlineData("\"xy\"", "halt_error(1)", 1, "", "xy")]
+    [InlineData("{\"a\": \"xyz\"}", "halt_error(1)", 1, "", "{\"a\":\"xyz\"}\n")]
+    public async Task Jq_HaltTerminatesImmediately(string input, string filter, int exitCode, string expectedOut, string expectedErr)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        Assert.Equal(exitCode, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expectedOut, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(expectedErr, host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_HaltStopsLaterInputs()
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("1\n2\n");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "halt")));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_HaltEscapesTry()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "try halt catch 42")));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_HaltErrorRejectsNonNumbers()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "halt_error(\"x\")")));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("halt_error requires a numeric exit code", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Theory]
+    [InlineData("[0, 1, 2]", "[(label $here | .[] | if . > 1 then break $here else . end), \"hi!\"]", "[0,1,\"hi!\"]\n")]
+    [InlineData("[0, 2, 1]", "[(label $here | .[] | if . > 1 then break $here else . end), \"hi!\"]", "[0,\"hi!\"]\n")]
+    [InlineData("0", "[label $o | (label $i | (1, break $i)), 2]", "[1,2]\n")]
+    [InlineData("0", "[label $o | (label $i | (1, break $o)), 2]", "[1]\n")]
+    [InlineData("0", "5 | label $x | (1 | break $x)", "")]
+    [InlineData("0", "[label $o | ((1, break $o)?), 2]", "[1]\n")]
+    [InlineData("0", "[label $o | (try break $o catch 42)]", "[]\n")]
+    [InlineData("0", "label $x | def f: break $x; f", "")]
+    public async Task Jq_LabelBreakAbandonsCleanly(string input, string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_UnknownLabelFailsAtCompile()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", ". as $foo | break $foo")));
+
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("undefined label $foo", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
+    public async Task Jq_LabelBodyTailCallsStayFlat()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "def f($n): if $n == 0 then 0 else label $l | f($n - 1) end; f(5000)")));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("0\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }

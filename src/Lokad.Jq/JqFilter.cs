@@ -1009,6 +1009,22 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             yield break;
         }
 
+        if (name == "halt")
+            throw new JqHaltException(0, null);
+
+        if (name == "halt_error")
+        {
+            if (args.Count > 1)
+                throw new JqException("halt_error expects at most one argument");
+            // Bare `halt_error` exits 5 with the input rendered; otherwise
+            // the first code value wins and the rest never runs.
+            if (args.Count == 0)
+                throw NewHalt(context, input, 5);
+            foreach (var value in args[0].Evaluate(input, context, environment))
+                throw NewHalt(context, input, HaltCode(value));
+            yield break;
+        }
+
         // Cartesian argument streams: the last argument is outer (slow) and
         // the first argument inner (fast), matching reversed call prelude
         // order with backtracking. An empty argument yields no outputs.
@@ -1037,6 +1053,23 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                         yield return combo;
                 }
             }
+        }
+
+        static int HaltCode(JsonNode? value)
+        {
+            if (value is JsonValue scalar && TryGetString(scalar, out _))
+                throw new JqException("halt_error requires a numeric exit code");
+            return (int)Number(value);
+        }
+
+        static JqHaltException NewHalt(JqContext context, JsonNode? input, int code)
+        {
+            // Strings render raw with no prefix or newline; other values
+            // render as JSON with a newline; null renders nothing.
+            string? text = input is null ? null
+                : TryGetString(input, out string? raw) ? raw
+                : context.Runtime.Serialize(input, false, null, false) + "\n";
+            return new JqHaltException(code, text);
         }
 
         static JqErrorException NewError(JqContext context, JsonNode? payload)

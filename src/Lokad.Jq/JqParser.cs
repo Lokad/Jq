@@ -34,6 +34,7 @@ internal sealed class JqParser(
     {
         internal readonly HashSet<string> Variables = new(StringComparer.Ordinal);
         internal readonly HashSet<string> FilterParams = new(StringComparer.Ordinal);
+        internal readonly HashSet<string> Labels = new(StringComparer.Ordinal);
         internal readonly Dictionary<(string Name, int Arity), JqFunctionDefinition> Functions = new();
     }
 
@@ -229,6 +230,8 @@ internal sealed class JqParser(
             return iff.WithTails(branch => RewriteTailCalls(branch, definition));
         if (node is TryFilter attempted)
             return attempted.WithOperands(operand => RewriteTailCalls(operand, definition));
+        if (node is LabelFilter labeled)
+            return labeled.WithBody(RewriteTailCalls(labeled.LabelBody, definition));
         if (node is CommaFilter comma)
             return comma.WithRight(RewriteTailCalls(comma.Right, definition));
         if (node is AlternativeFilter alternative)
@@ -607,6 +610,41 @@ internal sealed class JqParser(
             return ParseObject();
         if (MatchIdentifier("if"))
             return ParseIf();
+        if (MatchIdentifier("label"))
+        {
+            Token dollar = Next();
+            if (dollar.Kind != TokenKind.Symbol || dollar.Text != "$")
+                throw Error($"expected $, got {dollar.Text}", dollar.Span);
+            Token name = Expect(TokenKind.Identifier);
+            Expect("|");
+            EnterScope();
+            try
+            {
+                _scopes.Peek().Labels.Add(name.Text);
+                return new LabelFilter(name.Text, ParseQuery());
+            }
+            finally
+            {
+                ExitScope();
+            }
+        }
+        if (MatchIdentifier("break"))
+        {
+            Token dollar = Next();
+            if (dollar.Kind != TokenKind.Symbol || dollar.Text != "$")
+                throw Error($"expected $, got {dollar.Text}", dollar.Span);
+            Token name = Expect(TokenKind.Identifier);
+            bool bound = false;
+            foreach (var scope in _scopes)
+                if (scope.Labels.Contains(name.Text))
+                {
+                    bound = true;
+                    break;
+                }
+            if (!bound)
+                throw Error($"undefined label ${name.Text}", dollar.Span);
+            return new BreakFilter(name.Text);
+        }
         if (MatchIdentifier("try"))
         {
             // `try` binds tightly: the operand is one alternative, so
