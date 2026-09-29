@@ -67,6 +67,11 @@ internal static class JqBuiltinRegistry
         ["setpath"] = (2, 2),
         ["delpaths"] = (1, 1),
         ["pick"] = (1, 1),
+        ["limit"] = (2, 2),
+        ["first"] = (0, 1),
+        ["last"] = (0, 0),
+        ["nth"] = (1, 2),
+        ["isempty"] = (1, 1),
         ["gsub"] = (2, 3),
     };
 

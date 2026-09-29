@@ -893,6 +893,41 @@ internal sealed class JqParser(
             return new PickFilter(args);
         }
 
+        if (name == "first" && args.Count == 0)
+        {
+            return new IndexFilter(new IdentityFilter(), new LiteralFilter(JsonValue.Create(0)), false);
+        }
+
+        if (name == "first")
+        {
+            return new FirstFilter(args[0]);
+        }
+
+        if (name == "last")
+        {
+            return new IndexFilter(new IdentityFilter(), new LiteralFilter(JsonValue.Create(-1)), false);
+        }
+
+        if (name == "nth" && args.Count == 1)
+        {
+            return new IndexFilter(new IdentityFilter(), args[0], false);
+        }
+
+        if (name == "nth")
+        {
+            return new NthFilter(args[0], args[1]);
+        }
+
+        if (name == "limit")
+        {
+            return new LimitFilter(args[0], args[1]);
+        }
+
+        if (name == "isempty")
+        {
+            return new IsemptyFilter(args[0]);
+        }
+
         return new FunctionFilter(name, args);
     }
 

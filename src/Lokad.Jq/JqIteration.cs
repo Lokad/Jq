@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
+using static Lokad.Jq.JqRuntime;
 
 namespace Lokad.Jq;
 
@@ -69,5 +70,88 @@ internal sealed class ForeachFilter(JqFilter Source, IReadOnlyList<BindingPatter
                 states = next;
             }
         }
+    }
+}
+
+// `limit($n; EXPR)`: at most ceil(n) outputs. Zero never evaluates the
+// argument; negative counts raise a catchable error.
+internal sealed class LimitFilter(JqFilter Count, JqFilter Body) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? count in Count.Evaluate(input, context, environment))
+        {
+            double total = Number(count);
+            if (total == 0)
+                continue;
+            if (!(total > 0))
+                throw new JqException("limit doesn't support negative count");
+            long pulled = 0;
+            foreach (JsonNode? value in Body.Evaluate(input, context, environment))
+            {
+                yield return value;
+                if (++pulled >= total)
+                    break;
+            }
+        }
+    }
+}
+
+// `first(EXPR)`: the first output only, pulled lazily.
+internal sealed class FirstFilter(JqFilter Body) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? value in Body.Evaluate(input, context, environment))
+        {
+            yield return value;
+            yield break;
+        }
+    }
+}
+
+// `nth($n; EXPR)`: drops n outputs, then yields the next once.
+internal sealed class NthFilter(JqFilter Index, JqFilter Body) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? index in Index.Evaluate(input, context, environment))
+        {
+            double position = Number(index);
+            if (position < 0)
+                throw new JqException("nth doesn't support negative indices");
+            long skip = (long)position;
+            using IEnumerator<JsonNode?> results = Body.Evaluate(input, context, environment).GetEnumerator();
+            bool exhausted = false;
+            for (long taken = 0; taken < skip; taken++)
+            {
+                if (!results.MoveNext())
+                {
+                    exhausted = true;
+                    break;
+                }
+            }
+            if (!exhausted && results.MoveNext())
+                yield return results.Current;
+        }
+    }
+}
+
+// `isempty(EXPR)`: true when the argument yields nothing. Pulls at most one
+// output; argument errors propagate instead of reading as empty.
+internal sealed class IsemptyFilter(JqFilter Body) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        using IEnumerator<JsonNode?> results = Body.Evaluate(input, context, environment).GetEnumerator();
+        yield return JsonValue.Create(!results.MoveNext());
     }
 }
