@@ -1017,8 +1017,10 @@ internal sealed class JqRuntime(JqBudget budget)
 
     internal JsonNode Explode(JsonNode? input)
     {
+        if (!TryGetString(input, out string? text) || text is null)
+            throw new JqException("explode input must be a string");
         var arr = new JsonArray();
-        foreach (var rune in String(input).EnumerateRunes())
+        foreach (var rune in text.EnumerateRunes())
         {
             budget.ChargeNode();
             arr.Add(rune.Value);
@@ -1028,17 +1030,29 @@ internal sealed class JqRuntime(JqBudget budget)
 
     internal JsonNode Implode(JsonNode? input)
     {
-        if (input is not JsonArray arr) throw new JqRuntimeException("implode expects an array");
+        if (input is not JsonArray arr)
+            throw new JqException("implode input must be an array");
         var sb = new StringBuilder();
-        foreach (var item in arr) budget.Append(sb, char.ConvertFromUtf32((int)Number(item)));
+        foreach (JsonNode? item in arr)
+        {
+            long point;
+            if (item is JsonValue number && number.TryGetValue<long>(out long whole))
+                point = whole;
+            else if (item is JsonValue real && real.TryGetValue<double>(out double value) && !double.IsNaN(value))
+                point = (long)value;
+            else
+                throw new JqException($"{TypeName(item)} ({Serialize(item, false, null, false)}) can't be imploded, unicode codepoint needs to be numeric");
+            int scalar = point < 0 || point > 0x10FFFF || (point >= 0xD800 && point <= 0xDFFF) ? 0xFFFD : (int)point;
+            budget.Append(sb, char.ConvertFromUtf32(scalar).AsSpan());
+        }
         return JsonValue.Create(budget.Finish(sb));
     }
 
     internal JsonNode Split(JsonNode? input, JsonNode? separator)
     {
+        if (!TryGetString(input, out string? text) || text is null || !TryGetString(separator, out string? delimiter) || delimiter is null)
+            throw new JqException("split input and separator must be strings");
         var arr = new JsonArray();
-        var text = String(input);
-        var delimiter = String(separator);
         if (text.Length == 0)
             return arr;
         if (delimiter.Length == 0)
@@ -1068,13 +1082,50 @@ internal sealed class JqRuntime(JqBudget budget)
 
     internal JsonNode Join(JsonNode? input, JsonNode? separator)
     {
-        if (input is not JsonArray arr) throw new JqRuntimeException("join expects an array");
-        var delimiter = String(separator);
-        var builder = new StringBuilder();
-        for (var i = 0; i < arr.Count; i++)
+        if (input is null)
+            return JsonValue.Create(string.Empty);
+        if (input is not JsonArray arr)
+            throw new JqRuntimeException("cannot iterate over " + TypeName(input));
+        bool hasSepText = separator is null;
+        string sepText = string.Empty;
+        if (separator is not null && TryGetString(separator, out string? sepCandidate) && sepCandidate is not null)
         {
-            if (i > 0) budget.Append(builder, delimiter);
-            budget.Append(builder, ToJqString(arr[i]));
+            hasSepText = true;
+            sepText = sepCandidate;
+        }
+        var builder = new StringBuilder();
+        bool first = true;
+        foreach (JsonNode? item in arr)
+        {
+            if (!first)
+            {
+                if (!hasSepText)
+                {
+                    JsonNode accNode = JsonValue.Create(builder.ToString());
+                    throw new JqRuntimeException(TypeName(accNode) + " (" + Serialize(accNode, false, null, false) + ") and " + TypeName(separator) + " (" + Serialize(separator, false, null, false) + ") cannot be added");
+                }
+                budget.Append(builder, sepText);
+            }
+            string elemText;
+            if (item is null)
+            {
+                elemText = string.Empty;
+            }
+            else if (TryGetString(item, out string? s) && s is not null)
+            {
+                elemText = s;
+            }
+            else if (TypeName(item) == "boolean" || TypeName(item) == "number")
+            {
+                elemText = ToJqString(item);
+            }
+            else
+            {
+                JsonNode leftNode = JsonValue.Create(builder.ToString());
+                throw new JqRuntimeException(TypeName(leftNode) + " (" + Serialize(leftNode, false, null, false) + ") and " + TypeName(item) + " (" + Serialize(item, false, null, false) + ") cannot be added");
+            }
+            budget.Append(builder, elemText);
+            first = false;
         }
         return JsonValue.Create(budget.Finish(builder));
     }

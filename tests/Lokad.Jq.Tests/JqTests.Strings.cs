@@ -79,4 +79,51 @@ public sealed partial class JqTests
         Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
+
+    [Theory]
+    [InlineData("[\"1\",2,true,false,3.4]", "join(\",\")", "\"1,2,true,false,3.4\"\n")]
+    [InlineData("[[],[null],[null,null],[null,null,null]]", ".[] | join(\",\")", "\"\"\n\"\"\n\",\"\n\",,\"\n")]
+    [InlineData("[[\"a\",null],[null,\"a\"]]", ".[] | join(\",\")", "\"a,\"\n\",a\"\n")]
+    [InlineData("[[],[\"\"],[\"\",\"\"],[\"\",\"\",\"\"]]", "[.[]|join(\"a\")]", "[\"\",\"\",\"a\",\"aa\"]\n")]
+    [InlineData("null", "join(\",\")", "\"\"\n")]
+    [InlineData("[]", "join(\",\")", "\"\"\n")]
+    [InlineData("\"a,b,c\"", "split(\",\")", "[\"a\",\"b\",\"c\"]\n")]
+    [InlineData("\"a,\"", "split(\",\")", "[\"a\",\"\"]\n")]
+    [InlineData("\"\"", "split(\",\")", "[]\n")]
+    [InlineData("\"a,,b\"", "split(\",\")", "[\"a\",\"\",\"b\"]\n")]
+    [InlineData("\"abc\"", "split(\"\")", "[\"a\",\"b\",\"c\"]\n")]
+    [InlineData("\"hello\"", "explode", "[104,101,108,108,111]\n")]
+    [InlineData("\"a\\u0000b\"", "explode", "[97,0,98]\n")]
+    [InlineData("[104,101]", "implode", "\"he\"\n")]
+    [InlineData("[-1,1114112,55296,1.9]", "implode|explode", "[65533,65533,65533,1]\n")]
+    public async Task Jq_SplitJoinExplode(string input, string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("1", "split(\",\")", "split input and separator must be strings")]
+    [InlineData("\"a\"", "split(1)", "split input and separator must be strings")]
+    [InlineData("5", "join(\",\")", "cannot iterate over number")]
+    [InlineData("[\"1\",\"2\",{\"a\":{\"b\":{\"c\":33}}}]", "join(\",\")", "string (\"1,2,\") and object ({\"a\":{\"b\":{\"c\":33}}}) cannot be added")]
+    [InlineData("[\"1\",\"2\",[3,4,5]]", "join(\",\")", "string (\"1,2,\") and array ([3,4,5]) cannot be added")]
+    [InlineData("5", "explode", "explode input must be a string")]
+    [InlineData("123", "implode", "implode input must be an array")]
+    [InlineData("[\"a\"]", "implode", "string (\"a\") can't be imploded, unicode codepoint needs to be numeric")]
+    public async Task Jq_SplitJoinExplodeFailures(string input, string filter, string diagnostic)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
 }
