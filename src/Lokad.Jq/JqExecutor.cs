@@ -49,7 +49,8 @@ internal static class JqExecutor
             var libraryDirs = new List<string>();
             foreach (var lib in invocation.LibraryDirs)
                 libraryDirs.Add(lib.Absolute.Path);
-            var loader = new JqModuleLoader(host, budget, context.Runtime, context.RootEnvironment, libraryDirs);
+            var loader = new JqModuleLoader(host, budget, context.Runtime, context.RootEnvironment, libraryDirs, invocation.WorkingDirectory.Path);
+            context.ModuleLoader = loader;
             JqEnvironment moduleEnv = await loader.LoadMainImportsAsync(mainImports, mainImporterDir, cancellationToken).ConfigureAwait(false);
             var filter = new JqParser(filterText, programSource, moduleEnv, budget).Parse();
             stage = 4;

@@ -1658,6 +1658,15 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     yield return array;
                     break;
                 }
+                case "modulemeta":
+                {
+                    if (!TryGetString(input, out string? moduleName) || moduleName is null)
+                        throw new JqException("modulemeta input module name must be a string");
+                    if (context.ModuleLoader is null)
+                        throw new JqException("modulemeta not available");
+                    yield return context.ModuleLoader.GetModuleMetadataSync(moduleName);
+                    break;
+                }
                 case "input_filename": yield return context.InputFilename is string filename ? JsonValue.Create(filename) : null; break;
                 case "input_line_number": yield return JsonValue.Create(context.InputLineNumber); break;
                 default: throw new JqException($"unsupported function {name}");

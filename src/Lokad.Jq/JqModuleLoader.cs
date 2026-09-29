@@ -11,15 +11,24 @@ namespace Lokad.Jq;
 // no ambient filesystem, home, or executable-origin lookups are performed.
 internal sealed class JqLoadedModule
 {
-    internal JqLoadedModule(string canonicalPath, JsonObject? metadata, JqEnvironment moduleEnv)
+    internal JqLoadedModule(
+        string canonicalPath,
+        JsonObject? metadata,
+        IReadOnlyList<JqModuleImport> imports,
+        IReadOnlyList<JqFunctionDefinition> definitions,
+        JqEnvironment moduleEnv)
     {
         CanonicalPath = canonicalPath;
         Metadata = metadata;
+        Imports = imports;
+        Definitions = definitions;
         ModuleEnv = moduleEnv;
     }
 
     internal string CanonicalPath { get; }
     internal JsonObject? Metadata { get; }
+    internal IReadOnlyList<JqModuleImport> Imports { get; }
+    internal IReadOnlyList<JqFunctionDefinition> Definitions { get; }
     internal JqEnvironment ModuleEnv { get; }
 }
 
@@ -28,7 +37,8 @@ internal sealed class JqModuleLoader(
     JqBudget budget,
     JqRuntime runtime,
     JqEnvironment rootEnvironment,
-    IReadOnlyList<string> libraryDirs)
+    IReadOnlyList<string> libraryDirs,
+    string workingDirectory)
 {
     private readonly Dictionary<string, JqLoadedModule> _cache = new(StringComparer.Ordinal);
     private readonly HashSet<string> _loading = new(StringComparer.Ordinal);
@@ -231,7 +241,7 @@ internal sealed class JqModuleLoader(
                 budget.CheckCancellation();
                 env = env.ExtendFunction(definition.Name, definition.Arity, definition);
             }
-            var loaded = new JqLoadedModule(canonicalPath, fullMetadata ?? metadata, env);
+            var loaded = new JqLoadedModule(canonicalPath, fullMetadata ?? metadata, fullImports, definitions, env);
             _cache[canonicalPath] = loaded;
             return loaded;
         }
@@ -393,5 +403,67 @@ internal sealed class JqModuleLoader(
                 return false;
         }
         return true;
+    }
+
+    internal async Task<JsonObject> GetModuleMetadataAsync(string relPath, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(relPath);
+        string? validation = JqModulePathValidation.Validate(relPath);
+        if (validation is not null)
+            throw new JqException(validation);
+        var probe = new JqModuleImport(relPath, null, false, null, default, default);
+        var found = await FindModuleFileAsync(probe, workingDirectory, ".jq", cancellationToken).ConfigureAwait(false);
+        if (found is null)
+            throw new JqException("module not found: " + relPath);
+        var loaded = await LoadFuncModuleAtPathAsync(found.Value.CanonicalPath, found.Value.Content, 0, cancellationToken).ConfigureAwait(false);
+        return BuildMetadataObject(loaded);
+    }
+
+    internal JsonObject GetModuleMetadataSync(string relPath)
+    {
+        ArgumentNullException.ThrowIfNull(relPath);
+        // Filters evaluate synchronously while module reads are host-async.
+        // In-memory hosts complete synchronously; blocking here keeps the
+        // evaluator shape while still mediating all bytes via IJqHost.
+        return GetModuleMetadataAsync(relPath, budget.CancellationToken).GetAwaiter().GetResult();
+    }
+
+    private JsonObject BuildMetadataObject(JqLoadedModule loaded)
+    {
+        ArgumentNullException.ThrowIfNull(loaded);
+        JsonObject baseObject = loaded.Metadata is not null
+            ? (JsonObject)loaded.Metadata.DeepClone()
+            : new JsonObject();
+        var deps = new JsonArray();
+        foreach (JqModuleImport import in loaded.Imports)
+        {
+            budget.CheckCancellation();
+            var dep = new JsonObject();
+            if (import.Metadata is not null)
+            {
+                foreach (var kv in import.Metadata)
+                    dep[kv.Key] = kv.Value?.DeepClone();
+            }
+            dep["relpath"] = JsonValue.Create(import.RelPath);
+            if (import.Alias is not null)
+                dep["as"] = JsonValue.Create(import.Alias);
+            dep["is_data"] = JsonValue.Create(import.IsData);
+            budget.ChargeNode();
+            budget.ChargeString(import.RelPath.Length + (import.Alias?.Length ?? 0) + 16);
+            deps.Add(dep);
+        }
+        var defs = new JsonArray();
+        foreach (JqFunctionDefinition definition in loaded.Definitions)
+        {
+            budget.CheckCancellation();
+            string entry = definition.Name + "/" + definition.Arity.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            budget.ChargeNode();
+            budget.ChargeString(entry.Length);
+            defs.Add(JsonValue.Create(entry));
+        }
+        baseObject["deps"] = deps;
+        baseObject["defs"] = defs;
+        budget.ChargeTree(baseObject);
+        return baseObject;
     }
 }

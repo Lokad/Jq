@@ -23,6 +23,8 @@ internal sealed class JqBudget(CancellationToken cancellationToken)
     private int _remainingOutput = MaximumJsonBytes;
     private int _evaluationDepth;
 
+    internal CancellationToken CancellationToken => cancellationToken;
+
     internal void CheckCancellation() => cancellationToken.ThrowIfCancellationRequested();
 
     internal void ChargeBytes(long count)

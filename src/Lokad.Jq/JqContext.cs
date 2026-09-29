@@ -19,6 +19,10 @@ internal sealed class JqContext(
     // Explicit host clock for time builtins; null means the capability is absent.
     public JqClock? Clock { get; init; }
 
+    // Link-time module loader for `modulemeta`. Set by the executor after
+    // resolving imports; null only for contexts that never evaluate filters.
+    internal JqModuleLoader? ModuleLoader { get; set; }
+
     // Input cursor metadata for input_filename and input_line_number. The
     // executor refreshes both before evaluating each input value.
     public string? InputFilename { get; set; }

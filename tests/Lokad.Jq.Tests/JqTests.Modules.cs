@@ -326,6 +326,44 @@ public sealed partial class JqTests
         Assert.True(exit != 0, "expected not-found with null search");
         Assert.Contains("module not found", stderr);
     }
+
+    [Fact]
+    public async Task Jq_Modules_Modulemeta()
+    {
+        var fs = new MockFileSystem();
+        fs.AddFile("/lib/a.jq", "module {\"version\":1.7}; def a: \"a\";");
+        fs.AddFile("/lib/sub/d.jq", "def meh: \"meh\";");
+        fs.AddFile("/lib/data.json", "{\"this\":\"is a test\"}");
+        fs.AddFile("/lib/mtest.jq", "module {\"whatever\":null}; import \"a\" as foo; import \"d\" as d {\"search\":\"./sub\"}; import \"data\" as $d; def a: 0; def c: 1;");
+        var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "\"mtest\" | modulemeta | .whatever");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("null\n", stdout);
+        var fs2 = new MockFileSystem();
+        fs2.AddFile("/lib/a.jq", "module {\"version\":1.7}; def a: \"a\";");
+        fs2.AddFile("/lib/sub/d.jq", "def meh: \"meh\";");
+        fs2.AddFile("/lib/data.json", "{\"this\":\"is a test\"}");
+        fs2.AddFile("/lib/mtest.jq", "module {\"whatever\":null}; import \"a\" as foo; import \"d\" as d {\"search\":\"./sub\"}; import \"data\" as $d; def a: 0; def c: 1;");
+        var (exit2, stdout2, stderr2) = await RunModulesAsync(fs2, "-n", "-L", "/lib", "\"mtest\" | modulemeta | .deps | length");
+        Assert.True(exit2 == 0, stderr2);
+        Assert.Equal("3\n", stdout2);
+        var fs3 = new MockFileSystem();
+        fs3.AddFile("/lib/a.jq", "def a: 1;");
+        fs3.AddFile("/lib/sub/d.jq", "def meh: \"meh\";");
+        fs3.AddFile("/lib/data.json", "{}");
+        fs3.AddFile("/lib/mtest.jq", "module {\"whatever\":null}; import \"a\" as foo; import \"d\" as d {\"search\":\"./sub\"}; import \"data\" as $d; def a: 0; def c: 1;");
+        var (exit3, stdout3, stderr3) = await RunModulesAsync(fs3, "-n", "-L", "/lib", "\"mtest\" | modulemeta | .defs | length");
+        Assert.True(exit3 == 0, stderr3);
+        Assert.Equal("2\n", stdout3);
+    }
+
+    [Fact]
+    public async Task Jq_Modules_ModulemetaNeedsString()
+    {
+        var fs = new MockFileSystem();
+        var (exit, _, stderr) = await RunModulesAsync(fs, "-n", "0 | modulemeta");
+        Assert.True(exit != 0, "expected failure");
+        Assert.Contains("modulemeta input module name must be a string", stderr);
+    }
 }
 
 
