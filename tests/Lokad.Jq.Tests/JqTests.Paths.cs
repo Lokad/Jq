@@ -176,4 +176,38 @@ public sealed partial class JqTests
         Assert.Contains("unexpected token =", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
+    [Theory]
+    [InlineData("{\"a\": 0, \"b\": {\"x\": 1}}", ".a = .b | .a.x = 99", "{\"a\":{\"x\":99},\"b\":{\"x\":1}}\n")]
+    [InlineData("{\"a\": {\"x\": 1}, \"b\": 0}", ".b = .a | .a.x = 99", "{\"a\":{\"x\":99},\"b\":{\"x\":1}}\n")]
+    [InlineData("{\"a\": 1}", ".a |= (2, 3)", "{\"a\":2}\n")]
+    [InlineData("{\"a\": 1}", "(.a, .a) |= . + 1", "{\"a\":3}\n")]
+    [InlineData("{\"a\": 1, \"b\": 2}", "(.a, .b) |= . + 10", "{\"a\":11,\"b\":12}\n")]
+    [InlineData("{}", ".a.b = 1", "{\"a\":{\"b\":1}}\n")]
+    [InlineData("{}", ".a[2] = 1", "{\"a\":[null,null,1]}\n")]
+    [InlineData("null", ".a.b.c.d.e = 1", "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":1}}}}}\n")]
+    [InlineData("{\"a\": 1}", "setpath([]; 5)", "5\n")]
+    [InlineData("[1, 2, 3]", "getpath([-1])", "3\n")]
+    [InlineData("[0, 1, 2, 3]", "del(.[1:3])", "[0,3]\n")]
+    public async Task Jq_AssignmentPreservesIsolation(string input, string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_AssignRejectsIncompatiblePaths()
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("{\"a\": 5}");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".a.b = 1")));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("cannot index number", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
 }
