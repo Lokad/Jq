@@ -19,12 +19,226 @@ internal sealed class JqParser(
     private int _index;
     private int _depth;
 
+    internal IReadOnlyList<JqModuleImport> ParsedImports { get; private set; } = [];
+
+    internal JsonObject? ParsedModuleMetadata { get; private set; }
+
     public JqFilter Parse()
     {
         SeedFunctionsFromEnvironment();
+        ParsedModuleMetadata = ParseModuleHeader();
+        ParsedImports = ParseImportList();
+        if (Peek().Kind == TokenKind.End)
+            throw Error("Top-level program not given (try \".\")", Peek().Span);
         var filter = ParseQuery();
         Expect(TokenKind.End);
         return filter;
+    }
+
+    // Pre-scan for the loader: parses only the module header and imports,
+    // leaving the body unparsed. Validates constant metadata and paths.
+    internal (JsonObject? Metadata, IReadOnlyList<JqModuleImport> Imports) ParseImportsOnly()
+    {
+        SeedFunctionsFromEnvironment();
+        var metadata = ParseModuleHeader();
+        var imports = ParseImportList();
+        ParsedModuleMetadata = metadata;
+        ParsedImports = imports;
+        return (metadata, imports);
+    }
+
+    // Library files contain only a module header, imports, and function
+    // definitions. Any main expression is rejected like the reference.
+    internal (JsonObject? Metadata, IReadOnlyList<JqModuleImport> Imports, IReadOnlyList<JqFunctionDefinition> Definitions) ParseModuleFile()
+    {
+        SeedFunctionsFromEnvironment();
+        var metadata = ParseModuleHeader();
+        var imports = ParseImportList();
+        ParsedModuleMetadata = metadata;
+        ParsedImports = imports;
+        var definitions = new List<JqFunctionDefinition>();
+        while (PeekIsDef())
+        {
+            JqFunctionDefinition definition = ParseFuncDefHead();
+            DeclareFunction(definition);
+            EnterScope();
+            JqFilter body;
+            try
+            {
+                foreach (JqFunctionParameter parameter in definition.Parameters)
+                {
+                    if (parameter.IsValue)
+                        Declare(parameter.Name);
+                    else
+                        DeclareFilterParam(parameter.Name);
+                }
+                body = ParseQuery();
+            }
+            finally
+            {
+                ExitScope();
+            }
+            Expect(";");
+            var complete = AttachBody(definition, RewriteTailCalls(body, definition));
+            DeclareFunction(complete);
+            definitions.Add(complete);
+        }
+        if (Peek().Kind != TokenKind.End)
+            throw Error("library should only have function definitions, not a main expression", Peek().Span);
+        return (metadata, imports, definitions);
+    }
+
+    private JsonObject? ParseModuleHeader()
+    {
+        if (!MatchIdentifier("module"))
+            return null;
+        var metaSpan = Peek().Span;
+        JqFilter metadata = ParseQuery();
+        Expect(";");
+        if (!TryGetConstant(metadata, out JsonNode? value))
+            throw Error("Module metadata must be constant", metaSpan);
+        if (value is not JsonObject obj)
+            throw Error("Module metadata must be an object", metaSpan);
+        return obj;
+    }
+
+    private IReadOnlyList<JqModuleImport> ParseImportList()
+    {
+        var imports = new List<JqModuleImport>();
+        while (true)
+        {
+            if (Peek() is { Kind: TokenKind.Identifier, Text: "import" })
+                imports.Add(ParseImportDirective(isInclude: false));
+            else if (Peek() is { Kind: TokenKind.Identifier, Text: "include" })
+                imports.Add(ParseImportDirective(isInclude: true));
+            else
+                break;
+        }
+        return imports;
+    }
+
+    private JqModuleImport ParseImportDirective(bool isInclude)
+    {
+        var head = Next();
+        if (Peek().Kind != TokenKind.String)
+            throw Error("Import path must be constant", Peek().Span);
+        var pathToken = Next();
+        if (pathToken.Text.Contains("\\(", StringComparison.Ordinal))
+            throw Error("Import path must be constant", pathToken.Span);
+        string relPath = pathToken.Text;
+        string? alias = null;
+        bool isData = false;
+        if (!isInclude)
+        {
+            ExpectIdentifier("as");
+            if (Match("$"))
+            {
+                var varName = Expect(TokenKind.Identifier);
+                alias = varName.Text;
+                isData = true;
+            }
+            else
+            {
+                var aliasToken = Expect(TokenKind.Identifier);
+                alias = aliasToken.Text;
+            }
+        }
+        JsonObject? metadata = null;
+        if (Match(";"))
+            return new JqModuleImport(relPath, alias, isData, metadata, head.Span, pathToken.Span);
+        var metaSpan = Peek().Span;
+        JqFilter metaFilter = ParseQuery();
+        Expect(";");
+        if (!TryGetConstant(metaFilter, out JsonNode? metaValue))
+            throw Error("Module metadata must be constant", metaSpan);
+        if (metaValue is not JsonObject metaObj)
+            throw Error("Module metadata must be an object", metaSpan);
+        metadata = metaObj;
+        return new JqModuleImport(relPath, alias, isData, metadata, head.Span, pathToken.Span);
+    }
+
+    private bool TryGetConstant(JqFilter filter, out JsonNode? value)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        if (filter is LiteralFilter literal)
+        {
+            value = literal.Value?.DeepClone();
+            return true;
+        }
+        if (filter is ArrayFilter array)
+        {
+            if (TryCollectConstantValues(array, out List<JsonNode?>? items) && items is not null)
+            {
+                var result = new JsonArray();
+                foreach (var item in items)
+                    result.Add(item?.DeepClone());
+                value = result;
+                return true;
+            }
+            value = null;
+            return false;
+        }
+        if (filter is ObjectFilter obj)
+        {
+            if (TryGetConstantObject(obj, out JsonObject? built) && built is not null)
+            {
+                value = built;
+                return true;
+            }
+            value = null;
+            return false;
+        }
+        value = null;
+        return false;
+    }
+
+    private bool TryCollectConstantValues(ArrayFilter array, out List<JsonNode?>? values)
+    {
+        ArgumentNullException.ThrowIfNull(array);
+        var collected = new List<JsonNode?>();
+        if (!TryCollectCommaValues(array.Item, collected))
+        {
+            values = null;
+            return false;
+        }
+        values = collected;
+        return true;
+    }
+
+    private bool TryCollectCommaValues(JqFilter filter, List<JsonNode?> collected)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(collected);
+        if (filter is CommaFilter comma)
+            return TryCollectCommaValues(comma.Left, collected) && TryCollectCommaValues(comma.Right, collected);
+        if (TryGetConstant(filter, out JsonNode? value))
+        {
+            collected.Add(value?.DeepClone());
+            return true;
+        }
+        return false;
+    }
+
+    private bool TryGetConstantObject(ObjectFilter obj, out JsonObject? built)
+    {
+        ArgumentNullException.ThrowIfNull(obj);
+        var result = new JsonObject();
+        foreach (ObjectProperty property in obj.Properties)
+        {
+            if (property.StaticKey is null || property.KeyFilter is not null)
+            {
+                built = null;
+                return false;
+            }
+            if (!TryGetConstant(property.Value, out JsonNode? value))
+            {
+                built = null;
+                return false;
+            }
+            result[property.StaticKey] = value?.DeepClone();
+        }
+        built = result;
+        return true;
     }
 
     private JqCompileException Error(string message, JqSourceSpan span) =>
@@ -600,7 +814,14 @@ internal sealed class JqParser(
         {
             var dollar = Next();
             var name = Expect(TokenKind.Identifier);
-            if (!IsBound(name.Text))
+            if (name.Text == "__loc__")
+            {
+                string file = _programSource.Path ?? "<top-level>";
+                return new LocFilter(file, name.Span.Line);
+            }
+            // Qualified data references (alias::name) resolve at runtime via
+            // module scopes; unqualified names still fail here when unbound.
+            if (!name.Text.Contains("::", StringComparison.Ordinal) && !IsBound(name.Text))
                 throw Error($"undefined variable ${name.Text}", dollar.Span);
             return new VariableFilter(name.Text);
         }
@@ -710,12 +931,22 @@ internal sealed class JqParser(
             {
                 Token dollar = Next();
                 Token name = Expect(TokenKind.Identifier);
-                if (!IsBound(name.Text))
-                    throw Error($"undefined variable ${name.Text}", dollar.Span);
-                if (Match(":"))
-                    properties.Add(new ObjectProperty(null, new VariableFilter(name.Text), ParseDictValue()));
+                JqFilter valueFilter;
+                if (name.Text == "__loc__")
+                {
+                    string locFile = _programSource.Path ?? "<top-level>";
+                    valueFilter = new LocFilter(locFile, name.Span.Line);
+                }
                 else
-                    properties.Add(new ObjectProperty(name.Text, null, new VariableFilter(name.Text)));
+                {
+                    if (!name.Text.Contains("::", StringComparison.Ordinal) && !IsBound(name.Text))
+                        throw Error($"undefined variable ${name.Text}", dollar.Span);
+                    valueFilter = new VariableFilter(name.Text);
+                }
+                if (Match(":"))
+                    properties.Add(new ObjectProperty(null, valueFilter, ParseDictValue()));
+                else
+                    properties.Add(new ObjectProperty(name.Text == "__loc__" ? "__loc__" : name.Text, null, valueFilter));
             }
             else if (Peek() is { Kind: TokenKind.Symbol, Text: "(" })
             {
@@ -842,6 +1073,11 @@ internal sealed class JqParser(
 
     private JqFilter CreateFunction(string name, IReadOnlyList<JqFilter> args, JqSourceSpan span)
     {
+        // Qualified references (alias::name) resolve at runtime via module
+        // scopes; parse them blind so link-time binding can shadow correctly.
+        // Later includes and same-alias imports win through environment order.
+        if (name.Contains("::", StringComparison.Ordinal))
+            return new UserCallFilter(name, args.Count, args);
         // User definitions shadow builtins; a bare name also matches a filter
         // parameter. Unknown names fail here at compile time, as before.
         if (args.Count == 0 && TryLookupZeroArg(name, out bool isFilterParam))

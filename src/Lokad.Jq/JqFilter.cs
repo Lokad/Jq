@@ -91,6 +91,25 @@ internal sealed class VariableFilter(string name) : JqFilter
     }
 }
 
+// Source location: a parse-time constant capturing the file and line where
+// `$__loc__` occurs. The file is the module display path or `<top-level>`
+// for inline filters; the line is 1-based.
+internal sealed class LocFilter(string file, int line) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var location = new JsonObject
+        {
+            ["file"] = JsonValue.Create(file),
+            ["line"] = JsonValue.Create(line),
+        };
+        context.Budget.ChargeNode();
+        context.Budget.ChargeString(file.Length + 8);
+        yield return location;
+    }
+}
+
 // Lexical bindings: each source value extends the environment through the
 // first matching alternative, then runs the body against the outer input.
 // Later alternatives run only when the pattern or body reports a catchable
@@ -348,7 +367,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (!environment.TryGetFunction(Name, Arity, out JqUserClosure? closure) || closure is null)
+        if (!TryResolve(environment, Name, Arity, out JqUserClosure? closure) || closure is null)
             throw new JqException($"undefined function {Name}/{Arity}");
         if (Args.Count != closure.Definition.Arity)
             throw new JqException($"undefined function {Name}/{Arity}");
@@ -360,12 +379,22 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (!environment.TryGetFunction(Name, Arity, out JqUserClosure? closure) || closure is null)
+        if (!TryResolve(environment, Name, Arity, out JqUserClosure? closure) || closure is null)
             throw new JqException($"undefined function {Name}/{Arity}");
         if (Args.Count != closure.Definition.Arity)
             throw new JqException($"undefined function {Name}/{Arity}");
         foreach (JqValuePath next in EvaluatePathsCallLoop(closure, pair, Args, environment, context))
             yield return next;
+    }
+
+    private static bool TryResolve(JqEnvironment environment, string name, int arity, out JqUserClosure? closure)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(name);
+        if (name.Contains("::", System.StringComparison.Ordinal))
+            return environment.TryGetFunctionQualified(name, arity, out closure);
+
+        return environment.TryGetFunction(name, arity, out closure);
     }
 
     // Shared call driver: streams one body run per value combination and
@@ -728,6 +757,7 @@ internal sealed class PipeTailLoop(JqFilter Source, JqFunctionDefinition Definit
 
 internal sealed class CommaFilter(JqFilter left, JqFilter right) : JqFilter
 {
+    internal JqFilter Left => left;
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         foreach (var value in left.Evaluate(input, context, environment))
@@ -1099,6 +1129,8 @@ internal sealed class RecursiveDescentFilter : JqFilter
 
 internal sealed class ArrayFilter(JqFilter item) : JqFilter
 {
+    internal JqFilter Item => item;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         var array = new JsonArray();
@@ -1112,6 +1144,8 @@ internal sealed record ObjectProperty(string? StaticKey, JqFilter? KeyFilter, Jq
 
 internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : JqFilter
 {
+    internal IReadOnlyList<ObjectProperty> Properties => properties;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         foreach (var obj in Build(0, new JsonObject()))
@@ -1611,6 +1645,19 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "gmtime": yield return JqTime.Gmtime(context, input); break;
                 case "localtime": yield return JqTime.Localtime(context, input); break;
                 case "mktime": yield return JqTime.MktimeUtc(context, input); break;
+                case "builtins":
+                {
+                    var names = JqBuiltinRegistry.ListAll();
+                    var array = new JsonArray();
+                    foreach (var entry in names)
+                    {
+                        context.Budget.ChargeNode();
+                        context.Budget.ChargeString(entry.Length);
+                        array.Add(JsonValue.Create(entry));
+                    }
+                    yield return array;
+                    break;
+                }
                 case "input_filename": yield return context.InputFilename is string filename ? JsonValue.Create(filename) : null; break;
                 case "input_line_number": yield return JsonValue.Create(context.InputLineNumber); break;
                 default: throw new JqException($"unsupported function {name}");

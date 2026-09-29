@@ -12,6 +12,7 @@ internal static class JqBuiltinRegistry
 {
     private static readonly Dictionary<string, (int Minimum, int Maximum)> Definitions = new(StringComparer.Ordinal)
     {
+        ["builtins"] = (0, 0),
         ["empty"] = (0, 0),
         ["not"] = (0, 0),
         ["now"] = (0, 0),
@@ -194,6 +195,18 @@ internal static class JqBuiltinRegistry
         ["IN"] = (1, 2),
         ["gsub"] = (2, 3),
     };
+
+    internal static IReadOnlyList<string> ListAll()
+    {
+        var names = new List<string>();
+        foreach (var entry in Definitions)
+        {
+            for (var arity = entry.Value.Minimum; arity <= entry.Value.Maximum; arity++)
+                names.Add(entry.Key + "/" + arity.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        names.Sort(System.StringComparer.Ordinal);
+        return names;
+    }
 
     internal static bool TryValidate(string name, int argumentCount, out string error)
     {

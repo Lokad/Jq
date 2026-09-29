@@ -37,10 +37,22 @@ internal static class Lexer
                     i++;
                 // An adjacent dot token distinguishes .else from . else without mistaking
                 // a numeric decimal point (1.then) for field access.
-                var kind = start > 0 && source[start - 1] == '.'
-                    && tokens[^1] is { Kind: TokenKind.Symbol, Text: "." }
-                    ? TokenKind.FieldName
-                    : TokenKind.Identifier;
+                var isField = start > 0 && source[start - 1] == '.'
+                    && tokens.Count > 0 && tokens[^1] is { Kind: TokenKind.Symbol, Text: "." };
+                if (!isField)
+                {
+                    // Qualified names (foo::bar) are single tokens when contiguous,
+                    // matching the reference IDENT rule. A trailing :: without a
+                    // following name stays separate symbols.
+                    while (i + 2 < source.Length && source[i] == ':' && source[i + 1] == ':'
+                        && (char.IsLetter(source[i + 2]) || source[i + 2] == '_'))
+                    {
+                        i += 2;
+                        while (i < source.Length && (char.IsLetterOrDigit(source[i]) || source[i] == '_'))
+                            i++;
+                    }
+                }
+                var kind = isField ? TokenKind.FieldName : TokenKind.Identifier;
                 tokens.Add(new Token(kind, source[start..i], JqSourceSpan.FromOffset(source, start)));
                 continue;
             }

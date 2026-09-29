@@ -41,7 +41,17 @@ internal static class JqExecutor
                 filterText = Utf8Text.Decode(bytes);
             }
             stage = 3;
-            var filter = new JqParser(filterText, programSource, context.RootEnvironment, budget).Parse();
+            var preParser = new JqParser(filterText, programSource, context.RootEnvironment, budget);
+            (_, IReadOnlyList<JqModuleImport> mainImports) = preParser.ParseImportsOnly();
+            string mainImporterDir = invocation.FilterFile is { } mainProgramPath
+                ? ParentDir(mainProgramPath.Absolute.Path)
+                : invocation.WorkingDirectory.Path;
+            var libraryDirs = new List<string>();
+            foreach (var lib in invocation.LibraryDirs)
+                libraryDirs.Add(lib.Absolute.Path);
+            var loader = new JqModuleLoader(host, budget, context.Runtime, context.RootEnvironment, libraryDirs);
+            JqEnvironment moduleEnv = await loader.LoadMainImportsAsync(mainImports, mainImporterDir, cancellationToken).ConfigureAwait(false);
+            var filter = new JqParser(filterText, programSource, moduleEnv, budget).Parse();
             stage = 4;
             foreach (var value in invocation.Variables.Values) budget.ChargeTree(value);
             await using var inputs = ReadInputsAsync(host, invocation, context, cancellationToken).GetAsyncEnumerator(cancellationToken);
@@ -50,7 +60,7 @@ internal static class JqExecutor
                 stage = 4;
                 if (!await inputs.MoveNextAsync().ConfigureAwait(false)) break;
                 stage = 5;
-                foreach (var output in filter.Evaluate(inputs.Current, context, context.RootEnvironment))
+                foreach (var output in filter.Evaluate(inputs.Current, context, moduleEnv))
                 {
                     ReadOnlyMemory<byte> rendered;
                     if (invocation.RawOutput && JqRuntime.TryGetString(output, out var text))
@@ -192,6 +202,15 @@ internal static class JqExecutor
                 yield return invocation.RawInput ? JsonValue.Create(context.Budget.Finish(rawSlurped)) : slurped;
             }
         }
+    }
+
+    private static string ParentDir(string canonicalPath)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalPath);
+        int slash = canonicalPath.LastIndexOf((char)47);
+        if (slash <= 0)
+            return "/";
+        return canonicalPath[..slash];
     }
 
     private static int CountNewlines(ReadOnlyMemory<byte> bytes, int start, int end)
