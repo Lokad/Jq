@@ -14,6 +14,8 @@ public sealed partial class JqTests
     [InlineData("true | not", "false\n")]
     [InlineData("1 | not", "false\n")]
     [InlineData("null | not", "true\n")]
+    [InlineData("1,2 | .+1", "2\n3\n")]
+    [InlineData("3 | ., .+1", "3\n4\n")]
     public async Task Jq_CorePrecedenceAndLiterals(string filter, string expected)
     {
         var host = new MockFileSystem();

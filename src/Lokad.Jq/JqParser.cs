@@ -129,7 +129,7 @@ internal sealed class JqParser(
     private JqFilter ParseQuery()
     {
         if (!PeekIsDef())
-            return ParseComma();
+            return ParsePipe();
         JqFunctionDefinition definition = ParseFuncDefHead();
         DeclareFunction(definition);
         EnterScope();
@@ -250,20 +250,20 @@ internal sealed class JqParser(
 
     private JqFilter ParseComma()
     {
-        var left = ParsePipe();
+        var left = ParseAs();
         while (Match(","))
-            left = new CommaFilter(left, ParsePipe());
+            left = new CommaFilter(left, ParseAs());
         return left;
     }
 
     private JqFilter ParsePipe()
     {
-        var left = ParseAs();
+        var left = ParseComma();
         while (Match("|"))
         {
             // A right-hand side starting with `def` takes the whole rest of
             // the query as its body, matching `query: funcdef query`.
-            JqFilter right = PeekIsDef() ? ParseQuery() : ParseAs();
+            JqFilter right = PeekIsDef() ? ParseQuery() : ParseComma();
             left = new PipeFilter(left, right);
         }
         return left;
@@ -373,7 +373,7 @@ internal sealed class JqParser(
         if (Peek() is { Kind: TokenKind.Symbol, Text: "(" })
         {
             Token open = Next();
-            key = ParseComma();
+            key = ParsePipe();
             Expect(")");
         }
         else
@@ -555,7 +555,7 @@ internal sealed class JqParser(
         JqFilter? index = null;
         if (!Match(":"))
         {
-            index = ParseComma();
+            index = ParsePipe();
             if (!Match(":"))
             {
                 Expect("]");
@@ -567,7 +567,7 @@ internal sealed class JqParser(
         JqFilter? end = null;
         if (!Match("]"))
         {
-            end = ParseComma();
+            end = ParsePipe();
             Expect("]");
         }
         var sliceOptional = Match("?");
@@ -720,7 +720,7 @@ internal sealed class JqParser(
             else if (Peek() is { Kind: TokenKind.Symbol, Text: "(" })
             {
                 Token open = Next();
-                var key = ParseComma();
+                var key = ParsePipe();
                 Expect(")");
                 Expect(":");
                 CheckConstantKey(key, open.Span);
