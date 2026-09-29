@@ -745,7 +745,7 @@ internal sealed class JqRuntime(JqBudget budget)
         var best = arr[0];
         foreach (var item in arr.Skip(1))
         {
-            if ((max && Compare(item, best) > 0) || (!max && Compare(item, best) < 0))
+            if ((max && Compare(item, best) >= 0) || (!max && Compare(item, best) < 0))
                 best = item;
         }
         return Clone(best);

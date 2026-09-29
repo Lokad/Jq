@@ -369,7 +369,7 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
         foreach (var (element, keys) in CollectionKeys.Keyed(input, Keys, context, environment))
         {
             int order = empty ? 0 : JqRuntime.Compare(keys, bestKeys);
-            if (empty || (TakeMax ? order > 0 : order < 0))
+            if (empty || (TakeMax ? order >= 0 : order < 0))
             {
                 best = element;
                 bestKeys = keys;
