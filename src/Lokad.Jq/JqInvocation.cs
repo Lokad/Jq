@@ -26,4 +26,6 @@ internal sealed class JqInvocation
     public IReadOnlyList<JqResolvedPath> InputFiles { get; init; } = [];
     public string? Error { get; init; }
     public JqClock? Clock { get; init; }
+    public List<JqResolvedPath> LibraryDirs { get; init; } = [];
+    public JqPath WorkingDirectory { get; init; } = JqPath.Root;
 }

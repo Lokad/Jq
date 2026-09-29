@@ -77,6 +77,14 @@ internal static class JqCommandLineParser
             var filterFile = filterFileArgument == null
                 ? (JqResolvedPath?)null
                 : JqPathResolution.ResolveArgument(filterFileArgument, currentDirectory);
+            var libraryDirs = new List<JqResolvedPath>();
+            foreach (string library in parsed.LibraryPath)
+            {
+                if (string.IsNullOrEmpty(library))
+                    continue;
+                ChargePathResolution(library);
+                libraryDirs.Add(JqPathResolution.ResolveArgument(library, currentDirectory));
+            }
 
             var namedArguments = new JsonObject();
             var argsObject = new JsonObject { ["positional"] = new JsonArray(special.Positional.Select(runtime.Clone).ToArray()), ["named"] = namedArguments };
@@ -116,6 +124,8 @@ internal static class JqCommandLineParser
                 Variables = special.Variables,
                 PositionalArguments = special.Positional,
                 InputFiles = inputFiles,
+                LibraryDirs = libraryDirs,
+                WorkingDirectory = currentDirectory,
                 Clock = clock
             };
         }

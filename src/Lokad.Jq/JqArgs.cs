@@ -18,5 +18,6 @@ internal partial record JqArgs
     [Argument("Indent with tabs.", Long = "tab")] public bool UseTabs { get; init; }
     [Argument("Pretty-print indentation width.", Long = "indent")] public int? Indent { get; init; }
     [Argument("Read filter from file.", Short = 'f', Long = "from-file")] public string? FilterFile { get; init; }
+    [Argument("Module library search directories.", Short = 'L', Long = "library-path")] public string[] LibraryPath { get; init; } = [];
     [Argument("Filter and input file arguments.", Name = "argument")] public string[] Arguments { get; init; } = [];
 }
