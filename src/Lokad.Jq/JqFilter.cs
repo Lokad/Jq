@@ -1667,6 +1667,23 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     yield return context.ModuleLoader.GetModuleMetadataSync(moduleName);
                     break;
                 }
+                case "input":
+                {
+                    var cursor = context.InputCursor ?? throw new JqException("input not available");
+                    if (cursor.TryPullSync(out JsonNode? next))
+                        yield return next;
+                    else
+                        throw new JqException("break");
+                    break;
+                }
+                case "inputs":
+                {
+                    var cursor = context.InputCursor ?? throw new JqException("input not available");
+                    JsonNode? next;
+                    while (cursor.TryPullSync(out next))
+                        yield return next;
+                    break;
+                }
                 case "input_filename": yield return context.InputFilename is string filename ? JsonValue.Create(filename) : null; break;
                 case "input_line_number": yield return JsonValue.Create(context.InputLineNumber); break;
                 default: throw new JqException($"unsupported function {name}");

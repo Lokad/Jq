@@ -25,6 +25,8 @@ internal sealed class JqBudget(CancellationToken cancellationToken)
 
     internal CancellationToken CancellationToken => cancellationToken;
 
+    internal int RemainingInput => _remainingInput;
+
     internal void CheckCancellation() => cancellationToken.ThrowIfCancellationRequested();
 
     internal void ChargeBytes(long count)

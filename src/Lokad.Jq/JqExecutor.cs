@@ -55,7 +55,9 @@ internal static class JqExecutor
             var filter = new JqParser(filterText, programSource, moduleEnv, budget).Parse();
             stage = 4;
             foreach (var value in invocation.Variables.Values) budget.ChargeTree(value);
-            await using var inputs = ReadInputsAsync(host, invocation, context, cancellationToken).GetAsyncEnumerator(cancellationToken);
+            await using var cursor = new JqInputCursor(host, invocation, context, cancellationToken);
+            context.InputCursor = cursor;
+            await using var inputs = OuterInputsAsync(cursor, invocation, context, cancellationToken).GetAsyncEnumerator(cancellationToken);
             while (true)
             {
                 stage = 4;
@@ -121,87 +123,58 @@ internal static class JqExecutor
             }
             return null;
         }
-        static async IAsyncEnumerable<JsonNode?> ReadInputsAsync(
-            IJqHost host, JqInvocation invocation, JqContext context,
+        static async IAsyncEnumerable<JsonNode?> OuterInputsAsync(
+            JqInputCursor cursor, JqInvocation invocation, JqContext context,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            ArgumentNullException.ThrowIfNull(cursor);
             if (invocation.NullInput)
             {
+                context.InputFilename = null;
+                context.InputLineNumber = 0;
                 yield return null;
                 yield break;
             }
-
+            if (!invocation.Slurp)
+            {
+                while (true)
+                {
+                    (bool hasValue, JsonNode? current) = await cursor.PullAsync().ConfigureAwait(false);
+                    if (!hasValue)
+                        break;
+                    yield return current;
+                }
+                yield break;
+            }
+            if (invocation.RawInput)
+            {
+                var rawSlurped = new StringBuilder();
+                while (true)
+                {
+                    (bool hasValue, string line, bool terminated) =
+                        await cursor.PullRawSegmentAsync().ConfigureAwait(false);
+                    if (!hasValue)
+                        break;
+                    context.Budget.Append(rawSlurped, line.AsSpan());
+                    if (terminated)
+                        context.Budget.Append(rawSlurped, "\n".AsSpan());
+                }
+                context.InputFilename = cursor.LastName;
+                context.InputLineNumber = cursor.LastLine;
+                yield return JsonValue.Create(context.Budget.Finish(rawSlurped));
+                yield break;
+            }
             var slurped = new JsonArray();
-            var rawSlurped = new StringBuilder();
-            string? lastName = null;
-            int lastLine = 0;
-            var count = Math.Max(1, invocation.InputFiles.Count);
-            for (var i = 0; i < count; i++)
+            while (true)
             {
-                var bytes = invocation.InputFiles.Count == 0
-                    ? await ReadAllAsync(host, invocation.StdIn, context.Budget, cancellationToken).ConfigureAwait(false)
-                    : await ReadFileAsync(invocation.InputFiles[i], host, context.Budget, cancellationToken).ConfigureAwait(false);
-                string name = invocation.InputFiles.Count == 0
-                    ? "<stdin>"
-                    : Utf8Text.Decode(invocation.InputFiles[i].Display);
-                int newlines = 0;
-                int scanned = 0;
-                if (invocation.RawInput)
-                {
-                    if (invocation.Slurp)
-                    {
-                        context.Budget.ChargeString(Encoding.UTF8.GetCharCount(bytes.Span));
-                        context.Budget.Append(rawSlurped, Utf8Text.Decode(bytes));
-                        newlines += CountNewlines(bytes, scanned, bytes.Length);
-                    }
-                    else
-                    {
-                        // Raw input is LF-only; CR is ordinary data.
-                        var start = 0;
-                        while (start < bytes.Length)
-                        {
-                            var length = bytes.Span[start..].IndexOf((byte)10);
-                            if (length < 0) length = bytes.Length - start;
-                            var line = bytes.Slice(start, length);
-                            context.Budget.ChargeNode();
-                            context.Budget.ChargeString(Encoding.UTF8.GetCharCount(line.Span));
-                            newlines += CountNewlines(bytes, scanned, start + length);
-                            scanned = start + length;
-                            context.InputFilename = name;
-                            context.InputLineNumber = 1 + newlines;
-                            yield return JsonValue.Create(Utf8Text.Decode(line));
-                            start += length + 1;
-                        }
-                    }
-                }
-                else
-                {
-                    var offset = 0;
-                    while (offset < bytes.Length)
-                    {
-                        if (bytes.Span[offset..].TrimStart(" \t\r\n"u8).IsEmpty) break;
-                        var node = context.Runtime.ReadJsonValue(bytes.Span[offset..], out var consumed);
-                        offset += consumed;
-                        newlines += CountNewlines(bytes, scanned, offset);
-                        scanned = offset;
-                        if (invocation.Slurp) slurped.Add(node);
-                        else
-                        {
-                            context.InputFilename = name;
-                            context.InputLineNumber = 1 + newlines;
-                            yield return node;
-                        }
-                    }
-                }
-                lastName = name;
-                lastLine = bytes.Length == 0 ? 0 : 1 + newlines;
+                (bool hasValue, JsonNode? current) = await cursor.PullAsync().ConfigureAwait(false);
+                if (!hasValue)
+                    break;
+                slurped.Add(current);
             }
-            if (invocation.Slurp)
-            {
-                context.InputFilename = lastName;
-                context.InputLineNumber = lastLine;
-                yield return invocation.RawInput ? JsonValue.Create(context.Budget.Finish(rawSlurped)) : slurped;
-            }
+            context.InputFilename = cursor.LastName;
+            context.InputLineNumber = cursor.LastLine;
+            yield return slurped;
         }
     }
 

@@ -138,6 +138,8 @@ internal static class JqBuiltinRegistry
         ["gmtime"] = (0, 0),
         ["localtime"] = (0, 0),
         ["mktime"] = (0, 0),
+        ["input"] = (0, 0),
+        ["inputs"] = (0, 0),
         ["input_filename"] = (0, 0),
         ["input_line_number"] = (0, 0),
         ["test"] = (1, 2),

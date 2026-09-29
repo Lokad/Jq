@@ -23,6 +23,11 @@ internal sealed class JqContext(
     // resolving imports; null only for contexts that never evaluate filters.
     internal JqModuleLoader? ModuleLoader { get; set; }
 
+    // Shared pull cursor over every input source. Set by the executor before
+    // evaluation so implicit iteration and explicit `input`/`inputs` calls
+    // draw from the same stream.
+    internal JqInputCursor? InputCursor { get; set; }
+
     // Input cursor metadata for input_filename and input_line_number. The
     // executor refreshes both before evaluating each input value.
     public string? InputFilename { get; set; }

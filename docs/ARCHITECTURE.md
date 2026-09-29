@@ -33,9 +33,13 @@ completion and may remain incomplete to apply backpressure. It distinguishes
 success, downstream closure, and failure; the evaluator stops producing output
 when the descriptor cannot accept more.
 
-Input is currently fully buffered per source using bounded 8 KiB requests with
-a one-byte overflow probe. Results are streamed from the filter but this does
-not make input parsing incremental. No real filesystem implementation, shell
+Input flows through a shared pull cursor (`JqInputCursor`) using chunked 8 KiB
+requests with a one-byte overflow probe. Implicit outer iteration and explicit
+`input`/`inputs` calls draw from the same cursor, so values interleave; `-`
+operands reuse borrowed stdin at its current position and are never closed,
+while file operands open lazily and close when exhausted, abandoned, or
+disposed. JSON values and raw lines may span chunk boundaries; slurp
+aggregates the cursor. No real filesystem implementation, shell
 parser, subprocess launcher, or reference-jq binary belongs in this library.
 
 ## Project structure
