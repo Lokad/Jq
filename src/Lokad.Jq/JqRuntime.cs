@@ -666,31 +666,82 @@ internal sealed class JqRuntime(JqBudget budget)
         return result;
     }
 
-    internal JsonNode? AddAll(JsonNode? input)
+    internal JsonNode? AddValues(IEnumerable<JsonNode?> values)
     {
-        if (input is not JsonArray arr || arr.Count == 0) return null;
         JsonNode? result = null;
-        foreach (var item in arr) result = Add(result, item);
+        foreach (JsonNode? value in values)
+            result = Add(result, value);
         return result;
     }
 
-    internal JsonNode Flatten(JsonNode? input)
+    internal JsonNode Flatten(JsonNode? input, double depth)
     {
-        var arr = new JsonArray();
-        void AddItems(JsonNode? node)
+        if (input is not JsonArray arr)
+            throw new JqRuntimeException($"cannot iterate over {TypeName(input)}");
+        var result = new JsonArray();
+        budget.ChargeNode();
+        foreach (JsonNode? child in arr)
+            FlattenInto(result, child, depth);
+        return result;
+    }
+
+    private void FlattenInto(JsonArray result, JsonNode? node, double depth)
+    {
+        if (node is JsonArray nested && depth != 0)
         {
-            if (node is JsonArray nested)
-                foreach (var child in nested) AddItems(child);
-            else
-                arr.Add(Clone(node));
+            foreach (JsonNode? child in nested)
+                FlattenInto(result, child, depth - 1);
+            return;
         }
-        AddItems(input);
-        return arr;
+        budget.ChargeNode();
+        result.Add(Clone(node));
+    }
+
+    internal JsonArray SortArray(JsonNode? input)
+    {
+        if (input is not JsonArray arr)
+            throw new JqException("cannot be sorted, as it is not an array");
+        var ordered = new List<JsonNode?>(arr.Count);
+        foreach (JsonNode? element in arr)
+        {
+            budget.ChargeNode();
+            ordered.Add(element);
+        }
+        var result = new JsonArray();
+        budget.ChargeNode();
+        foreach (JsonNode? element in ordered.OrderBy(static element => element, Comparer<JsonNode?>.Create((left, right) => Compare(left, right))))
+        {
+            budget.ChargeNode();
+            result.Add(Clone(element));
+        }
+        return result;
+    }
+
+    internal JsonNode UniqueArray(JsonNode? input)
+    {
+        if (input is not JsonArray)
+            throw new JqException("cannot be sorted, as it is not an array");
+        var ordered = new List<JsonNode?>();
+        foreach (JsonNode? element in SortArray(input))
+        {
+            if (ordered.Count == 0 || !JsonEquals(ordered[ordered.Count - 1], element))
+                ordered.Add(element);
+        }
+        var result = new JsonArray();
+        budget.ChargeNode();
+        foreach (JsonNode? element in ordered)
+        {
+            budget.ChargeNode();
+            result.Add(Clone(element));
+        }
+        return result;
     }
 
     internal JsonNode? MinMax(JsonNode? input, bool max)
     {
-        if (input is not JsonArray arr || arr.Count == 0) return null;
+        if (input is not JsonArray arr)
+            throw new JqException("cannot be iterated over");
+        if (arr.Count == 0) return null;
         var best = arr[0];
         foreach (var item in arr.Skip(1))
         {
@@ -741,7 +792,7 @@ internal sealed class JqRuntime(JqBudget budget)
     internal JsonNode Indices(JsonNode? input, JsonNode? needle)
     {
         var arr = new JsonArray();
-        foreach (var index in MatchingIndices(input, needle)) arr.Add(index);
+        foreach (var index in MatchingIndices(input, needle)) arr.Add(JsonValue.Create(index));
         return arr;
     }
 
@@ -753,19 +804,55 @@ internal sealed class JqRuntime(JqBudget budget)
 
     private IEnumerable<int> MatchingIndices(JsonNode? input, JsonNode? needle)
     {
-        if (TryGetString(input, out var s) && TryGetString(needle, out var n))
+        if (TryGetString(input, out var text) && text is not null && TryGetString(needle, out var fragment))
         {
-            var at = 0;
-            while (at <= s.Length && (at = s.IndexOf(n, at, StringComparison.Ordinal)) >= 0)
+            // Scalar offsets, matching rune-wise substring search.
+            var runes = new List<System.Text.Rune>();
+            foreach (var rune in text.EnumerateRunes())
+                runes.Add(rune);
+            var wanted = new List<System.Text.Rune>();
+            if (fragment is not null)
+                foreach (var rune in fragment.EnumerateRunes())
+                    wanted.Add(rune);
+            for (int start = 0; start + wanted.Count <= runes.Count; start++)
             {
+                bool match = true;
+                for (int offset = 0; offset < wanted.Count; offset++)
+                    if (!runes[start + offset].Equals(wanted[offset]))
+                    {
+                        match = false;
+                        break;
+                    }
+                if (!match)
+                    continue;
                 budget.ChargeNode();
-                yield return at;
-                at += Math.Max(1, n.Length);
+                yield return start;
+                start += Math.Max(0, wanted.Count - 1);
             }
             yield break;
         }
         if (input is JsonArray values)
         {
+            if (needle is JsonArray pattern)
+            {
+                // Contiguous subsequence search; empty needles match everywhere.
+                for (int start = 0; start + pattern.Count <= values.Count; start++)
+                {
+                    bool match = true;
+                    for (int offset = 0; offset < pattern.Count; offset++)
+                        if (!JsonEquals(values[start + offset], pattern[offset]))
+                        {
+                            match = false;
+                            break;
+                        }
+                    if (!match)
+                        continue;
+                    budget.ChargeNode();
+                    yield return start;
+                    start += Math.Max(0, pattern.Count - 1);
+                }
+                yield break;
+            }
             for (var i = 0; i < values.Count; i++)
                 if (JsonEquals(values[i], needle))
                 {

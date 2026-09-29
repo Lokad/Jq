@@ -1534,11 +1534,11 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "abs": yield return JsonValue.Create(Math.Abs(Number(input))); break;
                 case "floor": yield return JsonValue.Create(Math.Floor(Number(input))); break;
                 case "sqrt": yield return JsonValue.Create(Math.Sqrt(Number(input))); break;
-                case "add": yield return context.Runtime.AddAll(input); break;
-                case "flatten": yield return context.Runtime.Flatten(input); break;
                 case "min": yield return context.Runtime.MinMax(input, false); break;
                 case "max": yield return context.Runtime.MinMax(input, true); break;
                 case "reverse": yield return context.Runtime.Reverse(input); break;
+                case "sort": yield return context.Runtime.SortArray(input); break;
+                case "unique": yield return context.Runtime.UniqueArray(input); break;
                 case "keys": yield return context.Runtime.Keys(input, true); break;
                 case "keys_unsorted": yield return context.Runtime.Keys(input, false); break;
                 case "to_entries": yield return context.Runtime.ToEntries(input); break;

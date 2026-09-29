@@ -975,6 +975,68 @@ internal sealed class JqParser(
             return new WithEntriesFilter(args[0]);
         }
 
+        if (name == "flatten" && args.Count == 0)
+        {
+            return new FlattenFilter(null);
+        }
+
+        if (name == "flatten")
+        {
+            return new FlattenFilter(args[0]);
+        }
+
+        if (name == "add" && args.Count == 0)
+        {
+            return new AddValuesFilter(new IteratorFilter(new IdentityFilter(), false));
+        }
+
+        if (name == "add")
+        {
+            return new AddValuesFilter(args[0]);
+        }
+
+        if (name == "sort_by")
+        {
+            return new SortByFilter(args[0]);
+        }
+
+        if (name == "group_by")
+        {
+            return new GroupByFilter(args[0]);
+        }
+
+        if (name == "unique_by")
+        {
+            return new UniqueByFilter(args[0]);
+        }
+
+        if (name == "min_by")
+        {
+            return new MinMaxByFilter(args[0], false);
+        }
+
+        if (name == "max_by")
+        {
+            return new MinMaxByFilter(args[0], true);
+        }
+
+        if (name == "transpose")
+        {
+            return new TransposeFilter();
+        }
+
+        if (name == "bsearch")
+        {
+            return new BsearchFilter(args[0]);
+        }
+
+        if (name == "combinations")
+        {
+            return args.Count == 0
+                ? new CombinationsFilter(null)
+                : new CombinationsFilter(args[0]);
+        }
+
         if (name == "in")
         {
             return new InFilter(args[0]);
