@@ -68,8 +68,8 @@ public sealed partial class JqTests
     [InlineData("\"ab\" | split(\"a\"; 5)", "number (5) is not a string")]
     [InlineData("5 | scan(\"x\")", "number (5) cannot be matched, as it is not a string")]
     [InlineData("5 | splits(\"x\")", "number (5) cannot be matched, as it is not a string")]
-    [InlineData("5 | sub(\"x\"; \"y\")", "expected string")]
-    [InlineData("\"x\" | sub(\"x\"; \"y\"; \"z\")", "unsupported sub flag")]
+    [InlineData("5 | sub(\"x\"; \"y\")", "number (5) cannot be matched, as it is not a string")]
+    [InlineData("\"x\" | sub(\"x\"; \"y\"; \"z\")", "z is not a valid modifier string")]
     public async Task Jq_RegexStreamFailures(string filter, string diagnostic)
     {
         var host = new MockFileSystem();

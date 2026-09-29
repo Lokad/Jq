@@ -17,9 +17,16 @@ internal static class JqMatch
     {
         ArgumentNullException.ThrowIfNull(context);
         string text = RequireText(context, input);
+        string pattern = RequirePattern(context, patternNode);
+        return SearchText(context, text, pattern, RequireModifiers(context, modifiersNode));
+    }
+
+    internal static string RequirePattern(JqContext context, JsonNode? patternNode)
+    {
+        ArgumentNullException.ThrowIfNull(context);
         if (!TryGetString(patternNode, out string? pattern) || pattern is null)
             throw new JqException(TypeName(patternNode) + " (" + context.Runtime.Serialize(patternNode, false, null, false) + ") is not a string");
-        return SearchText(context, text, pattern, RequireModifiers(context, modifiersNode));
+        return pattern;
     }
 
     internal static string RequireText(JqContext context, JsonNode? input)
@@ -46,8 +53,7 @@ internal static class JqMatch
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(pattern);
         ArgumentNullException.ThrowIfNull(modifiers);
-        if (!JqRegexOptions.TryParse(modifiers, out JqRegexOptions options, out _))
-            throw new JqException(modifiers + " is not a valid modifier string");
+        JqRegexOptions options = JqRegexOptions.ParseOrThrow(modifiers);
         bool global = modifiers.Contains('g');
         JqRegexCache.Pattern compiled = context.Regexes.Get(pattern, options.Pattern);
         PcreMatchOptions matchOptions = options.Match;
@@ -206,8 +212,7 @@ internal static class JqMatch
     {
         ArgumentNullException.ThrowIfNull(context);
         string text = RequireText(context, input);
-        if (!TryGetString(patternNode, out string? pattern) || pattern is null)
-            throw new JqException(TypeName(patternNode) + " (" + context.Runtime.Serialize(patternNode, false, null, false) + ") is not a string");
+        string pattern = RequirePattern(context, patternNode);
         string flags = RequireModifiers(context, flagsNode);
         var results = new List<JsonNode?>();
         foreach (JsonObject match in SearchText(context, text, pattern, "g" + flags))
@@ -235,8 +240,7 @@ internal static class JqMatch
     {
         ArgumentNullException.ThrowIfNull(context);
         string text = RequireText(context, input);
-        if (!TryGetString(patternNode, out string? pattern) || pattern is null)
-            throw new JqException(TypeName(patternNode) + " (" + context.Runtime.Serialize(patternNode, false, null, false) + ") is not a string");
+        string pattern = RequirePattern(context, patternNode);
         string flags = RequireModifiers(context, flagsNode);
         List<JsonObject> matches = SearchText(context, text, pattern, flags + "g");
         var starts = new List<int>(text.Length + 1) { 0 };

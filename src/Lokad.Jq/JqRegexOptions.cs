@@ -31,4 +31,18 @@ internal readonly record struct JqRegexOptions(PcreOptions Pattern, PcreMatchOpt
         unsupportedFlag = default;
         return true;
     }
+
+    // Upstream accepts every flag above plus l for longest match, which has
+    // no PCRE2 equivalent and stays explicitly unimplemented. Invalid flags
+    // fail with the reference modifier diagnostic shared by all callers.
+    internal static JqRegexOptions ParseOrThrow(string flags)
+    {
+        if (!TryParse(flags, out JqRegexOptions options, out char unsupported))
+        {
+            if (unsupported == 'l')
+                throw new JqException("unsupported regex flag 'l' (longest match is not implemented)");
+            throw new JqException(flags + " is not a valid modifier string");
+        }
+        return options;
+    }
 }

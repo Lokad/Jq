@@ -14,16 +14,15 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
         string filterName = firstOnly ? "sub" : "gsub";
         if (args.Count is not (2 or 3))
             throw new JqException(filterName + " expects two or three arguments");
-        var text = String(input);
+        string text = JqMatch.RequireText(context, input);
         foreach (var flags in args.Count == 3 ? args[2].Evaluate(input, context, environment) : [(JsonNode?)null])
         foreach (var pattern in args[0].Evaluate(input, context, environment))
         {
-            string flagText = flags == null ? string.Empty : String(flags);
-            if (!JqRegexOptions.TryParse(flagText, out var options, out var unsupportedFlag))
-                throw new JqException("unsupported " + filterName + " flag ('" + unsupportedFlag + "')");
+            string flagText = JqMatch.RequireModifiers(context, flags);
+            JqRegexOptions options = JqRegexOptions.ParseOrThrow(flagText);
             // sub without an explicit g flag stops after the first match.
             bool stopFirst = firstOnly && !flagText.Contains('g');
-            var regex = context.Regexes.Get(String(pattern), options.Pattern);
+            var regex = context.Regexes.Get(JqMatch.RequirePattern(context, pattern), options.Pattern);
             var matchOptions = options.Match;
             // jq aligns replacement streams by their result index across successive matches.
             var results = new List<StringBuilder>();

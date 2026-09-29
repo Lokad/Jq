@@ -72,13 +72,13 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("null | gsub(\"x\";\"y\")", "expected string")]
-    [InlineData("\"x\" | gsub(1;\"y\")", "expected string")]
+    [InlineData("null | gsub(\"x\";\"y\")", "null (null) cannot be matched, as it is not a string")]
+    [InlineData("\"x\" | gsub(1;\"y\")", "number (1) is not a string")]
     [InlineData("\"x\" | gsub(\"x\";1)", "expected string")]
-    [InlineData("\"x\" | gsub(\"x\";\"y\";1)", "expected string")]
+    [InlineData("\"x\" | gsub(\"x\";\"y\";1)", "number (1) is not a string")]
     [InlineData("\"x\" | gsub(\"[\";\"y\")", "invalid regex")]
-    [InlineData("\"x\" | gsub(\"x\";\"y\";\"l\")", "unsupported gsub flag")]
-    [InlineData("\"x\" | gsub(\"x\";\"y\";\"z\")", "unsupported gsub flag")]
+    [InlineData("\"x\" | gsub(\"x\";\"y\";\"l\")", "unsupported regex flag")]
+    [InlineData("\"x\" | gsub(\"x\";\"y\";\"z\")", "z is not a valid modifier string")]
     [InlineData("\"x\" | gsub(\"x\" * 16385;\"y\")", "regex pattern exceeds")]
     [InlineData("\"x\" | gsub(\"(\" * 65 + \"x\" + \")\" * 65;\"y\")", "invalid regex")]
     [InlineData("\"🚀\" | gsub(\"\\\\C\";\"y\")", "invalid regex")]
