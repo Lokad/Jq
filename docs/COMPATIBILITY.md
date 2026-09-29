@@ -22,7 +22,7 @@ Known gaps to investigate and close:
   Pretty JSON currently uses platform newlines inside formatted values.
 - Duplicate object keys resolve last-wins. Numbers use doubles with integral storage for integers;
   literal precision, ordering, and non-finite rendering follow docs/NUMERIC_PROFILE.md, with deliberate decimal-build divergences recorded there.
-- `ascii_upcase`/`ascii_downcase` currently call Unicode case conversion.
+- `ascii_upcase`/`ascii_downcase` use ASCII-only case conversion per the reference definition.
 - Regex support uses PCRE.NET. jq's Oniguruma syntax, flags, captures, offsets,
   substitutions, and edge cases need explicit compatibility evidence.
 - Several CLI options, input streaming/sequence modes, exit-status behavior,

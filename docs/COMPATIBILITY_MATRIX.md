@@ -115,19 +115,19 @@ to read this file.
 | `any/0..2`, `all/0..2` | Manual: Builtin operators | implemented | JqTests.Collections | Short-circuiting generator predicates with error propagation; zero/one-argument forms iterate | none | Membership tests pass with upstream vectors |
 | `first/0..1`, `last/0`, `nth/1..2`, `isempty/1`, `limit/2`, `skip/2`, `while/2`, `until/2`, `repeat/1`, `recurse/0..2`, `walk/1`, `rindex/1` | Manual: Advanced features | implemented | JqTests.Iteration, JqTests.Collections | Lazy pulls with upstream messages; index forms desugar to reads; `skip` and `rindex` complete the family (`last/1` does not exist upstream) | none | Iteration tests pass with upstream vectors |
 | `indices/1`, `index/1`, `rindex/1` | Manual: Builtin operators | implemented | JqTests memory/collection cases | Rune-wise string offsets with contiguous array-subsequence search | none | Search tests pass with upstream vectors |
-| `tojson/0`, `fromjson/0`, `tonumber/0`, `toboolean/0`, `tostring/0` | Manual: Builtin operators | implemented | JqTests conversion paths | Narrow semantics; invalid-input diagnostics need I12 review | none | Passing |
+| `tojson/0`, `fromjson/0`, `tonumber/0`, `toboolean/0`, `tostring/0` | Manual: Builtin operators | implemented | JqTests conversion paths | Strict JSON-number grammar with integral preservation and exact boolean matching, using upstream diagnostics; NUL rejected | none | I12 vectors pass |
 
 ## Strings, encodings, and formats
 
 | Name/arity | Normative reference | Status | Tests | Caveats | Host | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `utf8bytelength/0`, `explode/0`, `implode/0` | Manual: Builtin operators | partial | `explode`/`implode` narrow cases | `explode`/`implode` exist; `utf8bytelength` missing; surrogate/NUL audit open | stdin/stdout bytes | Needs I12 |
-| `split/1` (literal) | Manual: Builtin operators | partial | Narrow split/join | Literal split exists; regex `split/2`/`splits` missing | none | Narrow cases pass |
-| `join/1` | Manual: Builtin operators (`builtin.jq` + core) | partial | Narrow join | Exists with simplified null handling; full `join($x)` parity open | none | Narrow cases pass |
-| `startswith/1`, `endswith/1`, `ltrimstr/1`, `rtrimstr/1`, `trim/0`, `ltrim/0`, `rtrim/0` | Manual: Builtin operators | implemented | JqTests trim/prefix cases | Implemented; ASCII vs Unicode trimming audit in I12 | none | Passing |
-| `ascii_downcase/0`, `ascii_upcase/0` | Manual: Builtin operators (`builtin.jq` specifies ASCII-only) | intentionally different | Narrow case-conversion paths | Currently Unicode-wide `ToLowerInvariant`/`ToUpperInvariant`; must become ASCII-only in I12 | none | Divergence recorded; needs fix |
-| `@text`, `@json`, `@html`, `@uri`, `@csv`, `@tsv`, `@sh`, `@base64`, `@base64d` | Manual: String interpolation; `builtin.c` formats | partial | JqTests.Formatting | Core formats exist; `@urid`, invalid UTF-8, unpaired surrogates, percent/base64 edge cases open | stdout bytes | Format tests pass |
-| Formatted interpolation `@fmt "\(f)"` | Manual: String interpolation | partial | JqTests format-template cases | Literal segments vs interpolated values partly covered; exact-bytes audit in I12 | stdout bytes | Narrow tests pass |
+| `utf8bytelength/0`, `explode/0`, `implode/0` | Manual: Builtin operators | implemented | JqTests conversions, split/join/explode cases | Upstream diagnostics; explode requires string input; implode needs numeric codepoints with U+FFFD replacement outside the scalar range; NUL and supplementary scalars covered | stdin/stdout bytes | I12 vectors pass |
+| `split/1` (literal) | Manual: Builtin operators | implemented | JqTests split/join/explode cases | Literal split with the upstream input message; empty input, trailing separators, and scalar splitting covered; regex `split/2`/`splits` remain I13 | none | I12 vectors pass |
+| `join/1` | Manual: Builtin operators (`builtin.jq` + core) | implemented | JqTests split/join/explode cases | Follows the reference definition: null input and empty arrays yield empty string, null elements are empty, booleans and numbers use tostring, array and object elements fail with the upstream add-shaped diagnostic | none | I12 vectors pass |
+| `startswith/1`, `endswith/1`, `ltrimstr/1`, `rtrimstr/1`, `trim/0`, `ltrim/0`, `rtrim/0` | Manual: Builtin operators | implemented | JqTests trim/prefix cases | Reference codepoint whitespace set with upstream diagnostics | none | Passing |
+| `ascii_downcase/0`, `ascii_upcase/0` | Manual: Builtin operators (`builtin.jq` specifies ASCII-only) | implemented | JqTests case/trim cases | ASCII-only mapping; non-ASCII scalars pass through per the reference definition | none | I12 vectors pass |
+| `@text`, `@json`, `@html`, `@uri`, `@urid`, `@csv`, `@tsv`, `@sh`, `@base64`, `@base64d` | Manual: String interpolation; `builtin.c` formats | implemented | JqTests.Formatting vectors, memory and chunk cases | Strict base64 decoder, strict percent decoder, exact HTML escapes with raw UTF-8, element-wise shell quoting, always-quoted CSV, upstream rejection messages; invalid UTF-8 decodes to U+FFFD per the reference replacement | stdout bytes | I12 vectors pass |
+| Formatted interpolation `@fmt "\(f)"` | Manual: String interpolation | implemented | JqTests format-template cases | Literal segments stay raw while interpolated values are encoded per format, covered for html, tsv, uri, sh, and csv | stdout bytes | I12 cases pass |
 
 ## Regex
 
