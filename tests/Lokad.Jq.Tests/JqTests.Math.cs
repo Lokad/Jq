@@ -159,4 +159,120 @@ public sealed partial class JqTests
         Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
+
+    [Theory]
+    [InlineData("5.5 | fmod(.;2)", "1.5\n")]
+    [InlineData("0 - 5.5 | fmod(.;2)", "-1.5\n")]
+    [InlineData("5 | fmod(.;0)", "null\n")]
+    [InlineData("5.5 | remainder(.;2)", "-0.5\n")]
+    [InlineData("0 - 5.5 | remainder(.;2)", "0.5\n")]
+    [InlineData("5 | remainder(.;0)", "null\n")]
+    [InlineData("5.5 | drem(.;2)", "-0.5\n")]
+    [InlineData("[fmax(3;7)]", "[7]\n")]
+    [InlineData("[fmin(3;7)]", "[3]\n")]
+    [InlineData("[fmax((-1 | sqrt); 5)]", "[5]\n")]
+    [InlineData("[fmin((-1 | sqrt); 5)]", "[5]\n")]
+    [InlineData("[fmax(0 * -1; 0)]", "[0]\n")]
+    [InlineData("[fmin(0 * -1; 0)]", "[-0]\n")]
+    [InlineData("fdim(5;3)", "2\n")]
+    [InlineData("fdim(3;5)", "0\n")]
+    [InlineData("fdim(2;2)", "0\n")]
+    [InlineData("copysign(1;-1)", "-1\n")]
+    [InlineData("copysign(0 * -1; 1)", "0\n")]
+    [InlineData("copysign(1; 0 * -1)", "-1\n")]
+    [InlineData("nextafter(1;2)", "1.0000000000000002\n")]
+    [InlineData("nextafter(1;0)", "0.9999999999999999\n")]
+    [InlineData("nextafter(0;1)", "5E-324\n")]
+    [InlineData("nexttoward(1;2)", "1.0000000000000002\n")]
+    [InlineData("ldexp(1.5;3)", "12\n")]
+    [InlineData("scalb(1.5;3)", "12\n")]
+    [InlineData("scalbln(1.5;3)", "12\n")]
+    [InlineData("8 | logb", "3\n")]
+    [InlineData("0 | logb", "-1.7976931348623157E+308\n")]
+    [InlineData("1e1000 | logb", "1.7976931348623157E+308\n")]
+    [InlineData("0 | log1p", "0\n")]
+    [InlineData("1 | log1p | . - 0.6931471805599453 | abs < 1e-12", "true\n")]
+    [InlineData("0 - 1 | log1p", "-1.7976931348623157E+308\n")]
+    [InlineData("0 | expm1", "0\n")]
+    [InlineData("1 | expm1 | . - 1.718281828459045 | abs < 1e-12", "true\n")]
+    [InlineData("0 - 1000 | expm1", "-1\n")]
+    [InlineData("6.5 | significand", "1.625\n")]
+    [InlineData("0 | significand", "0\n")]
+    [InlineData("3.75 | modf", "[0.75,3]\n")]
+    [InlineData("0 - 3.75 | modf", "[-0.75,-3]\n")]
+    [InlineData("6.5 | frexp", "[0.8125,3]\n")]
+    [InlineData("0 | frexp", "[0,0]\n")]
+    [InlineData("fma(2;3;4)", "10\n")]
+    [InlineData("fma(0 - 2;3;0 - 4)", "-10\n")]
+    public async Task Jq_MathRemainder(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    // Gamma values use a 1e-9 bound and erf values 1e-6 for the managed implementations.
+    [InlineData("5 | tgamma | . - 24 | abs < 1e-9", "true\n")]
+    [InlineData("0.5 | tgamma | . - 1.7724538509055160 | abs < 1e-9", "true\n")]
+    [InlineData("0 - 0.5 | tgamma | . + 3.544907701811032 | abs < 1e-9", "true\n")]
+    [InlineData("0 | tgamma", "1.7976931348623157E+308\n")]
+    [InlineData("0 - 1 | tgamma", "null\n")]
+    [InlineData("200 | tgamma", "1.7976931348623157E+308\n")]
+    [InlineData("10 | lgamma | . - 12.801827480081469 | abs < 1e-9", "true\n")]
+    [InlineData("0.5 | lgamma | . - 0.5723649429247001 | abs < 1e-9", "true\n")]
+    [InlineData("0 | lgamma", "1.7976931348623157E+308\n")]
+    [InlineData("0 - 1 | lgamma", "1.7976931348623157E+308\n")]
+    [InlineData("0.5 | lgamma_r | .[0] - 0.5723649429247001 | abs < 1e-9", "true\n")]
+    [InlineData("0.5 | lgamma_r | .[1]", "1\n")]
+    [InlineData("0 - 0.5 | lgamma_r | .[0] - 1.2655121234846454 | abs < 1e-9", "true\n")]
+    [InlineData("0 - 0.5 | lgamma_r | .[1]", "-1\n")]
+    [InlineData("0 | erf", "0\n")]
+    [InlineData("1 | erf | . - 0.8427007929497149 | abs < 1e-6", "true\n")]
+    [InlineData("0 - 1 | erf | . + 0.8427007929497149 | abs < 1e-6", "true\n")]
+    [InlineData("0 | erfc", "1\n")]
+    [InlineData("1 | erfc | . - 0.15729920705028513 | abs < 1e-6", "true\n")]
+    public async Task Jq_MathSpecial(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("\"x\" | tgamma", "string (\"x\") number required")]
+    [InlineData("fmax(1;\"x\")", "string (\"x\") number required")]
+    [InlineData("\"x\" | modf", "string (\"x\") number required")]
+    [InlineData("fma(1;2;\"x\")", "string (\"x\") number required")]
+    [InlineData("j0", "Error: j0/0 not found at build time")]
+    [InlineData("jn(1;2)", "Error: jn/2 not found at build time")]
+    public async Task Jq_MathSpecialFailures(string filter, string diagnostic)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Theory]
+    [InlineData("tgamma(1)", "expects no arguments")]
+    [InlineData("fmax(1)", "fmax expects 2 arguments")]
+    [InlineData("fma(1;2)", "fma expects 3 arguments")]
+    public async Task Jq_MathSpecialArityIsCompileError(string filter, string diagnostic)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
 }
