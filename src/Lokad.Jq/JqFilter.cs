@@ -1602,11 +1602,17 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                         yield return value;
                     break;
                 case "fromdate":
-                case "fromdateiso8601": yield return JsonValue.Create(DateTimeOffset.Parse(String(input), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal).ToUnixTimeSeconds()); break;
+                case "fromdateiso8601": yield return JqTime.FromDateIso(context, input); break;
                 case "todate":
-                case "todateiso8601": yield return JsonValue.Create(DateTimeOffset.FromUnixTimeSeconds((long)Number(input)).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)); break;
-                case "strptime": yield return context.Runtime.Strptime(input, Arg(0)); break;
-                case "strftime": yield return JsonValue.Create(UnixDate(input).ToString(context.Runtime.ConvertDateFormat(String(Arg(0))), CultureInfo.InvariantCulture)); break;
+                case "todateiso8601": yield return JsonValue.Create(JqTime.ToDateIso(context, input)); break;
+                case "strptime": yield return JqTime.Strptime(context, input, Arg(0)); break;
+                case "strftime": yield return JsonValue.Create(JqTime.Strftime(context, input, Arg(0), false)); break;
+                case "strflocaltime": yield return JsonValue.Create(JqTime.Strftime(context, input, Arg(0), true)); break;
+                case "gmtime": yield return JqTime.Gmtime(context, input); break;
+                case "localtime": yield return JqTime.Localtime(context, input); break;
+                case "mktime": yield return JqTime.MktimeUtc(context, input); break;
+                case "input_filename": yield return context.InputFilename is string filename ? JsonValue.Create(filename) : null; break;
+                case "input_line_number": yield return JsonValue.Create(context.InputLineNumber); break;
                 default: throw new JqException($"unsupported function {name}");
             }
         }

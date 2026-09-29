@@ -1150,29 +1150,6 @@ internal sealed class JqRuntime(JqBudget budget)
         }
     }
 
-
-    internal JsonNode Strptime(JsonNode? input, JsonNode? format)
-    {
-        var dt = DateTimeOffset.ParseExact(String(input), ConvertDateFormat(String(format)), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
-        return new JsonArray(dt.Year, dt.Month - 1, dt.Day, dt.Hour, dt.Minute, dt.Second, (int)dt.DayOfWeek, dt.DayOfYear - 1);
-    }
-
-    internal static DateTimeOffset UnixDate(JsonNode? input) => DateTimeOffset.FromUnixTimeSeconds((long)Number(input)).ToUniversalTime();
-
-    internal string ConvertDateFormat(string format)
-    {
-        if (format.Length > 4096)
-            throw new JqException("date format exceeds the 4096-character limit");
-        budget.ChargeBytes(32L * format.Length);
-        return format
-            .Replace("%Y", "yyyy", StringComparison.Ordinal)
-            .Replace("%m", "MM", StringComparison.Ordinal)
-            .Replace("%d", "dd", StringComparison.Ordinal)
-            .Replace("%H", "HH", StringComparison.Ordinal)
-            .Replace("%M", "mm", StringComparison.Ordinal)
-            .Replace("%S", "ss", StringComparison.Ordinal);
-    }
-
     internal string Format(string format, JsonNode? value)
     {
         if (format == "json") return Serialize(value, false, null, false);

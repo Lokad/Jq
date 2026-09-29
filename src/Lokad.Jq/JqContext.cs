@@ -19,6 +19,12 @@ internal sealed class JqContext(
     // Explicit host clock for time builtins; null means the capability is absent.
     public JqClock? Clock { get; init; }
 
+    // Input cursor metadata for input_filename and input_line_number. The
+    // executor refreshes both before evaluating each input value.
+    public string? InputFilename { get; set; }
+
+    public int InputLineNumber { get; set; }
+
     // Diagnostic byte queue for debug and stderr filters. Filters enqueue
     // synchronously while the executor drains to the host between outputs,
     // so retained bytes stay bounded by one output plus its diagnostics.
