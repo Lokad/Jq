@@ -19,6 +19,11 @@ explicitly disabled).
   are doubles, and `-0` stays a double so it renders with its sign.
 - Input decoding follows the same rule, so large integral inputs survive
   identity exactly while still computing as doubles.
+- Every numeric consumer (arithmetic, comparison, equality, ordering,
+  conversions, path and index resolution, slicing, ranging, implosion)
+  funnels through storage-agnostic projections, so `int`-stored values
+  (from `explode`, host variables, and internal desugars) behave exactly
+  like parsed integers.
 
 ## Literals, precision, and overflow
 
