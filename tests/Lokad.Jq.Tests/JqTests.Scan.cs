@@ -8,6 +8,7 @@ public sealed partial class JqTests
     [InlineData("\"a,b, c\" | [scan(\", \")]", "[\n  \", \"\n]\n")]
     [InlineData("\"a,b, c, d, e,f\" | [scan(\", *\")]", "[\n  \",\",\n  \", \",\n  \", \",\n  \", \",\n  \",\"\n]\n")]
     [InlineData("\"abcABBBCabbbc\" | [scan(\"b+\"; \"i\")]", "[\n  \"b\",\n  \"BBB\",\n  \"bbb\"\n]\n")]
+    [InlineData("\"aba\" | [scan(\"a*\")]", "[\n  \"a\",\n  \"\",\n  \"a\",\n  \"\"\n]\n")]
     [InlineData("\"\" | [scan(\"b+\")]", "[]\n")]
     [InlineData("\"abAB\" | [scan(\"a\"; \"gi\")]", "[\n  \"a\",\n  \"A\"\n]\n")]
     [InlineData("\"a1 b2\" | [scan(\"(?<c>[a-z])(?<n>[0-9])\")]", "[\n  [\n    \"a\",\n    \"1\"\n  ],\n  [\n    \"b\",\n    \"2\"\n  ]\n]\n")]
