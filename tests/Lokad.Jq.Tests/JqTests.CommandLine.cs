@@ -120,6 +120,23 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData("007", "       ")]
+    [InlineData("+3", "   ")]
+    [InlineData("03", "   ")]
+    [InlineData("-0", "")]
+    [InlineData("00", "")]
+    public async Task Jq_IndentSignAndLeadingZerosSelectWidth(string value, string padding)
+    {
+        // The overflow-proof range check must accept signs and leading zeros
+        // with C-like numeric values before the binder sees them.
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--indent", value, "[1]");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("[" + "\n" + padding + "1" + "\n" + "]" + "\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Theory]
     [InlineData("--indent", "-1")]
     [InlineData("--indent=-1", null)]
     public async Task Jq_IndentMinusOneSelectsTabs(string flag, string? value)
