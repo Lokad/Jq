@@ -110,6 +110,16 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_InputRawPreservesNullBytes()
+    {
+        var inner = new MockFileSystem();
+        inner.SetStandardInput("a\0b\nc\0d\ne");
+        var (exit, stdout, stderr) = await RunInputAsync(inner, "-R", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("\"a\\u0000b\"\n\"c\\u0000d\"\n\"e\"\n", stdout);
+    }
+
+    [Fact]
     public async Task Jq_InputRawPreservesCarriageReturns()
     {
         var inner = new MockFileSystem();
