@@ -41,6 +41,19 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("# just a comment")]
+    public async Task Jq_EmptyProgramIsCompileError(string filter)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("Top-level program", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Theory]
     [InlineData("[")]
     [InlineData("if true then .")]
     [InlineData("{a:}")]
