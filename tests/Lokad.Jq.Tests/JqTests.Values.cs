@@ -167,6 +167,10 @@ public sealed partial class JqTests
     [InlineData("[((-1) | sqrt), 1]", "[\n  null,\n  1\n]\n")]
     [InlineData("{\"x\":((-1) | sqrt)}", "{\n  \"x\": null\n}\n")]
     [InlineData("[1e1000]", "[\n  1.7976931348623157E+308\n]\n")]
+    [InlineData("\"nan\" | fromjson | isnan", "true\n")]
+    [InlineData("\"NaN\" | fromjson", "null\n")]
+    [InlineData("\"-Infinity\" | fromjson", "-1.7976931348623157E+308\n")]
+    [InlineData("{\"a\": nan} | tojson | fromjson", "{\n  \"a\": null\n}\n")]
     public async Task Jq_NonFiniteValuesRenderAsJson(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -187,6 +191,27 @@ public sealed partial class JqTests
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal("1.7976931348623157E+308\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_NonFiniteInputParsesLiterals()
+    {
+        var cases = new (string Stdin, string Expected)[]
+        {
+            ("nan", "null\n"),
+            ("-Infinity", "-1.7976931348623157E+308\n"),
+            ("[nan]", "[\n  null\n]\n"),
+            ("{\"a\": [1, nan]}", "{\n  \"a\": [\n    1,\n    null\n  ]\n}\n"),
+        };
+        foreach (var (stdin, expected) in cases)
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput(stdin);
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".")));
+            Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        }
     }
 
     [Fact]

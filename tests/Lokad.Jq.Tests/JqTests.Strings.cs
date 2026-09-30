@@ -81,6 +81,7 @@ public sealed partial class JqTests
     [InlineData("0", "toboolean", "number (0) cannot be parsed as a boolean")]
     [InlineData("\"TRUE\"", "toboolean", "string (\"TRUE\") cannot be parsed as a boolean")]
     [InlineData("\" true\"", "toboolean", "string (\" true\") cannot be parsed as a boolean")]
+    [InlineData("\"NaN1\"", "fromjson", "invalid start of a value")]
     [InlineData("\"123\\u0000456\"", "tonumber", "string (\"123\\u0000456\") cannot be parsed as a number")]
     [InlineData("\"true\\u0000x\"", "toboolean", "string (\"true\\u0000x\") cannot be parsed as a boolean")]
     public async Task Jq_ConversionFailures(string input, string filter, string diagnostic)

@@ -181,11 +181,20 @@ internal sealed class JqRuntime(JqBudget budget)
                 AllowMultipleValues = true,
                 MaxDepth = JqBudget.MaximumDepth
             });
+            int firstContent = SkipJsonWhitespace(text, 0);
+            if (TryMatchNonFinite(text, firstContent, out double topValue, out int topEnd))
+            {
+                budget.ChargeNode();
+                consumed = topEnd;
+                budget.ChargeBytes(consumed - firstContent);
+                return JsonValue.Create(topValue);
+            }
             if (!reader.Read())
                 throw new JqException("expected a JSON value");
             var start = (int)reader.TokenStartIndex;
-            JsonNode? value = ReadValue(ref reader, 0);
-            consumed = (int)reader.BytesConsumed;
+            int consumedBase = 0;
+            JsonNode? value = ReadValue(ref reader, text, ref consumedBase, 0);
+            consumed = consumedBase + (int)reader.BytesConsumed;
             budget.ChargeBytes(consumed - start);
             return value;
         }
@@ -193,8 +202,100 @@ internal sealed class JqRuntime(JqBudget budget)
         {
             throw new JqException(ex.Message);
         }
+    }
 
-        JsonNode? ReadValue(ref Utf8JsonReader reader, int depth)
+    private static int SkipJsonWhitespace(ReadOnlySpan<byte> text, int position)
+    {
+        while (position < text.Length && text[position] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
+            position++;
+        return position;
+    }
+
+    private static bool IsAsciiLetter(byte value) =>
+        value is >= (byte)'a' and <= (byte)'z' or >= (byte)'A' and <= (byte)'Z';
+
+    private static bool IsWord(ReadOnlySpan<byte> text, int start, int end, ReadOnlySpan<byte> word)
+    {
+        if (end - start != word.Length)
+            return false;
+        for (int i = 0; i < word.Length; i++)
+        {
+            byte candidate = text[start + i];
+            if (candidate >= (byte)'A' && candidate <= (byte)'Z')
+                candidate = (byte)(candidate + 32);
+            if (candidate != word[i])
+                return false;
+        }
+        return true;
+    }
+
+    private static bool IsValueBoundary(byte value) =>
+        value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n' or (byte)',' or (byte)']' or (byte)'}';
+
+    private static bool IsValuePreceded(ReadOnlySpan<byte> text, int position)
+    {
+        int index = position - 1;
+        while (index >= 0 && text[index] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
+            index--;
+        if (index < 0)
+            return true;
+        return text[index] is (byte)'[' or (byte)',' or (byte)':';
+    }
+
+    private static bool TryMatchNonFinite(ReadOnlySpan<byte> text, int position, out double value, out int end)
+    {
+        value = 0;
+        end = position;
+        int index = SkipJsonWhitespace(text, position);
+        bool negative = false;
+        if (index < text.Length && (text[index] == (byte)'+' || text[index] == (byte)'-'))
+        {
+            negative = text[index] == (byte)'-';
+            index++;
+        }
+        int word = index;
+        while (index < text.Length && IsAsciiLetter(text[index]))
+            index++;
+        double magnitude;
+        if (IsWord(text, word, index, "nan"u8))
+            magnitude = double.NaN;
+        else if (IsWord(text, word, index, "inf"u8) || IsWord(text, word, index, "infinity"u8))
+            magnitude = double.PositiveInfinity;
+        else
+            return false;
+        if (index < text.Length && !IsValueBoundary(text[index]))
+            return false;
+        value = negative ? -magnitude : magnitude;
+        end = index;
+        return true;
+    }
+
+    private void ReadToken(ref Utf8JsonReader reader, ReadOnlySpan<byte> source, ref int consumedBase, out bool hasToken, out JsonNode? nonFinite)
+        {
+            nonFinite = null;
+            JsonReaderState state = reader.CurrentState;
+            try
+            {
+                hasToken = reader.Read();
+            }
+            catch (JsonException)
+            {
+                int failure = consumedBase + (int)reader.BytesConsumed;
+                if (IsValuePreceded(source, failure)
+                    && TryMatchNonFinite(source, failure, out double number, out int end))
+                {
+                    budget.ChargeNode();
+                    reader = new Utf8JsonReader(source.Slice(end), reader.IsFinalBlock, state);
+                    consumedBase = end;
+                    hasToken = true;
+                    nonFinite = JsonValue.Create(number);
+                    return;
+                }
+                throw;
+            }
+        }
+
+        JsonNode? ReadValue(ref Utf8JsonReader reader, ReadOnlySpan<byte> source, ref int consumedBase, int depth)
         {
             switch (reader.TokenType)
             {
@@ -213,9 +314,10 @@ internal sealed class JqRuntime(JqBudget budget)
                         if (name is null)
                             throw new JqException("expected object key");
                         budget.ChargeString(name.Length);
-                        if (!reader.Read())
+                        ReadToken(ref reader, source, ref consumedBase, out bool hasValue, out JsonNode? valueFallback);
+                        if (!hasValue)
                             throw new JqException("truncated JSON value");
-                        obj[name] = ReadValue(ref reader, depth + 1);
+                        obj[name] = valueFallback ?? ReadValue(ref reader, source, ref consumedBase, depth + 1);
                     }
                     throw new JqException("truncated JSON value");
                 case JsonTokenType.StartArray:
@@ -223,13 +325,20 @@ internal sealed class JqRuntime(JqBudget budget)
                         throw new JqException("value nesting limit exceeded");
                     budget.ChargeNode();
                     var array = new JsonArray();
-                    while (reader.Read())
+                    while (true)
                     {
+                        ReadToken(ref reader, source, ref consumedBase, out bool hasToken, out JsonNode? nonFinite);
+                        if (!hasToken)
+                            throw new JqException("truncated JSON value");
+                        if (nonFinite is not null)
+                        {
+                            array.Add(nonFinite);
+                            continue;
+                        }
                         if (reader.TokenType == JsonTokenType.EndArray)
                             return array;
-                        array.Add(ReadValue(ref reader, depth + 1));
+                        array.Add(ReadValue(ref reader, source, ref consumedBase, depth + 1));
                     }
-                    throw new JqException("truncated JSON value");
                 case JsonTokenType.String:
                     budget.ChargeNode();
                     string? textValue = reader.GetString();
@@ -259,7 +368,6 @@ internal sealed class JqRuntime(JqBudget budget)
                     throw new JqException("expected a JSON value");
             }
         }
-    }
 
     internal JsonNode? ParseJson(string text)
     {
