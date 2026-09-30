@@ -271,6 +271,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_MissingLaterFileKeepsEarlierOutputs()
+    {
+        // Like malformed inputs, a missing later file is terminal with
+        // exit 2, but already-emitted outputs are kept.
+        var host = new MockFileSystem();
+        host.AddFile("/a.json", "1\n");
+        var (exit, stdout, stderr) = await RunCliAsync(host, ".", "/a.json", "/missing");
+        Assert.Equal(2, exit);
+        Assert.Equal("1\n", stdout);
+        Assert.Contains("cannot open", stderr);
+        Assert.Equal(0, host.OpenFileCount);
+    }
+
+    [Fact]
     public async Task Jq_OptionsStillParseAfterArgsMarkers()
     {
         // Flags and valued options keep working after --args, matching the reference:
