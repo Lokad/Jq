@@ -111,6 +111,9 @@ public sealed partial class JqTests
     [InlineData("(-0.0) == 0", "true\n")]
     [InlineData("(-0.0) | tostring", "\"-0\"\n")]
     [InlineData("(-0.0)", "-0\n")]
+    [InlineData("nan | tojson", "\"null\"\n")]
+    [InlineData("[nan] | tojson", "\"[null]\"\n")]
+    [InlineData("{\"a\": nan} | tojson", "\"{\\\"a\\\":null}\"\n")]
     public async Task Jq_NumbersFollowDoubleProfile(string filter, string expected)
     {
         var host = new MockFileSystem();
