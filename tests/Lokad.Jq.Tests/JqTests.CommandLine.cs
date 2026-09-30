@@ -188,6 +188,26 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_FileVariablesHandleEmptyFiles()
+    {
+        // An empty slurpfile binds an empty array while an empty rawfile
+        // binds an empty string.
+        var slurp = new MockFileSystem();
+        slurp.AddFile("/data.json", "");
+        var (slurpExit, slurpOut, slurpErr) = await RunCliAsync(slurp, "-n", "--slurpfile", "data", "/data.json", "$data");
+        Assert.Equal(0, slurpExit);
+        Assert.Equal("[]\n", slurpOut);
+        Assert.Empty(slurpErr);
+
+        var raw = new MockFileSystem();
+        raw.AddFile("/note.txt", "");
+        var (rawExit, rawOut, rawErr) = await RunCliAsync(raw, "-n", "--rawfile", "note", "/note.txt", "$note");
+        Assert.Equal(0, rawExit);
+        Assert.Equal("\"\"\n", rawOut);
+        Assert.Empty(rawErr);
+    }
+
+    [Fact]
     public async Task Jq_SlurpfileBindsJsonArray()
     {
         var host = new MockFileSystem();
