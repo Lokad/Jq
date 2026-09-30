@@ -203,6 +203,7 @@ public sealed partial class JqTests
     [InlineData("null", "{foo: \"bar\"} | .foo |= .?", "{\n  \"foo\": \"bar\"\n}\n")]
     [InlineData("{\"a\": 0, \"b\": 0}", ".a, .b = 1", "0\n{\n  \"a\": 0,\n  \"b\": 1\n}\n")]
     [InlineData("null", "[range(10)] | .[1.5:3.5] = [\"xyz\"]", "[\n  0,\n  \"xyz\",\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
+    [InlineData("null", "try ([range(10)] | .[1.5:3.5] = [\"xyz\"]) catch .", "[\n  0,\n  \"xyz\",\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
     [InlineData("[null,{\"b\":0},{\"a\":0},{\"a\":null},{\"a\":[0,1]},{\"a\":{\"b\":1}},{\"a\":[{}]},{\"a\":[{\"c\":3}]}]", ".[] | try (getpath([\"a\",0,\"b\"]) |= 5) catch .", "{\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n{\n  \"b\": 0,\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n\"Cannot index number with number (0)\"\n{\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n\"Cannot index number with string (\\\"b\\\")\"\n\"Cannot index object with number (0)\"\n{\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n{\n  \"a\": [\n    {\n      \"c\": 3,\n      \"b\": 5\n    }\n  ]\n}\n")]
     [InlineData("{\"a\":{\"b\":0}}", "getpath([\"a\",\"b\"]) = 5", "{\n  \"a\": {\n    \"b\": 5\n  }\n}\n")]
     [InlineData("null", "getpath([\"a\",\"b\"]) = 5", "{\n  \"a\": {\n    \"b\": 5\n  }\n}\n")]
@@ -228,6 +229,7 @@ public sealed partial class JqTests
     [InlineData("5", "try (.a = 1) catch .", "\"cannot index number with string \\\"a\\\"\"\n")]
     [InlineData("\"s\"", "try (.a = 1) catch .", "\"cannot index string with string \\\"a\\\"\"\n")]
     [InlineData("true", "try (.error = 1) catch .", "\"cannot index boolean with string \\\"error\\\"\"\n")]
+    [InlineData("null", "try (.foo[-2] = 0) catch .", "\"Out of bounds negative array index\"\n")]
     public async Task Jq_AssignReportsFailures(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

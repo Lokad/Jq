@@ -24,6 +24,9 @@ public sealed partial class JqTests
     [InlineData("10", "[first(range(.)), last(range(.))]", "[\n  0,\n  9\n]\n")]
     [InlineData("0", "[first(range(.)), last(range(.))]", "[]\n")]
     [InlineData("10", "[nth(0,5,9,10,15; range(.)), try nth(-1; range(.)) catch .]", "[\n  0,\n  5,\n  9,\n  \"nth doesn't support negative indices\"\n]\n")]
+    [InlineData("null", "try limit(-1; error) catch .", "\"limit doesn't support negative count\"\n")]
+    [InlineData("null", "first(1,error(\"foo\"))", "1\n")]
+    [InlineData("null", "isempty(1,error(\"foo\"))", "false\n")]
     public async Task Jq_LimitFirstNthIsempty(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

@@ -17,6 +17,9 @@ public sealed partial class JqTests
     [InlineData("7", "if true then .\nelse empty end", "7\n")]
     [InlineData("7", "if true then .\telse empty end", "7\n")]
     [InlineData("7", "if true then (.) else empty end", "7\n")]
+    [InlineData("1", "if true then 2 end", "2\n")]
+    [InlineData("1", "if false then 2 end", "")]
+    [InlineData("1", "if false then 2 elif true then 3 end", "3\n")]
     public async Task Jq_IdentityAtConditionalBoundaries(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

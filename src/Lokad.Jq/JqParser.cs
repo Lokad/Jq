@@ -932,10 +932,12 @@ internal sealed class JqParser(
             return ParseReduce(isForeach: true);
         if (MatchIdentifier("try"))
         {
-            // `try` binds tightly: the operand is one update-level expression,
-            // so pipes, commas, bindings, and definitions need parentheses.
-            var body = ParseUpdate();
-            JqFilter? handler = MatchIdentifier("catch") ? ParseUpdate() : null;
+            // Like the reference `try Expr catch Expr` rule with catch-wins
+            // precedence, the body takes alternative-level combinations while
+            // the handler stops before trailing binary operators, so pipes,
+            // commas, bindings, and definitions still need parentheses.
+            var body = ParseAlternative();
+            JqFilter? handler = MatchIdentifier("catch") ? ParseUnary() : null;
             return new TryFilter(body, handler);
         }
 
@@ -1099,8 +1101,9 @@ internal sealed class JqParser(
             ExpectIdentifier("then");
             branches.Add((elif, ParseQuery()));
         }
-        ExpectIdentifier("else");
-        var otherwise = ParseQuery();
+        // A missing `else` behaves like `else empty`, matching the reference
+        // ElseBody rule that accepts a bare `end`.
+        JqFilter otherwise = MatchIdentifier("else") ? ParseQuery() : new FunctionFilter("empty", []);
         ExpectIdentifier("end");
         return new IfFilter(branches, otherwise);
     }

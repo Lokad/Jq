@@ -106,6 +106,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("try ([1] | contains(2)) catch .", "\"array ([1]) and number (2) cannot have their containment checked\"\n")]
+    [InlineData("\"aa\" | try [\"OK\", bsearch(0)] catch [\"KO\",.]", "[\n  \"KO\",\n  \"string (\\\"aa\\\") cannot be searched from\"\n]\n")]
 [InlineData("try ([range(3)] | .[nan] = 9) catch .", "\"Cannot set array element at NaN index\"\n")]
     [InlineData("try flatten(-1) catch .", "\"flatten depth must not be negative\"\n")]
     [InlineData("try (5 | flatten) catch .", "\"cannot iterate over number\"\n")]

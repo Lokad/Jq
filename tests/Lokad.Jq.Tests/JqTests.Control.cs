@@ -18,9 +18,17 @@ public sealed partial class JqTests
     [InlineData("null", "try ([\"hi\", \"ho\"] | .[] | (try . catch (if . == \"ho\" then \"BROKEN\" | error else empty end)) | if . == \"ho\" then error else \"\\(.) there!\" end) catch \"caught outside \\(.)\"", "\"hi there!\"\n\"caught outside ho\"\n")]
     [InlineData("\"foo\"", "try (try error catch \"inner catch \\(.)\") catch \"outer catch \\(.)\"", "\"inner catch foo\"\n")]
     [InlineData("\"foo\"", "try ((try error catch \"inner catch \\(.)\") | error) catch \"outer catch \\(.)\"", "\"outer catch inner catch foo\"\n")]
-    [InlineData("null", "try error(0) // 1", "1\n")]
+    // Like the reference body-level `//`, the error propagates through the
+    // right branch and the suppressed run emits nothing.
+    [InlineData("null", "try error(0) // 1", "")]
     [InlineData("null", "try to_entries catch .", "\"null (null) has no keys\"\n")]
     [InlineData("null", "try error(\"\\($__loc__)\") catch .", "\"{\\\"file\\\":\\\"<top-level>\\\",\\\"line\\\":1}\"\n")]
+    [InlineData("null", "1 + try 2 catch 3 + 4", "7\n")]
+    [InlineData("null", "{x: try 1, y: try error catch 2, z: if true then 3 end}", "{\n  \"x\": 1,\n  \"y\": 2,\n  \"z\": 3\n}\n")]
+    [InlineData("[1,null,2]", ".[] | try error catch .", "1\nnull\n2\n")]
+    [InlineData("[\"hi\",\"ho\"]", ".[]|(try (if .==\"hi\" then . else error end) catch empty) | \"\\(.) there!\"", "\"hi there!\"\n")]
+    [InlineData("true", "try .a catch \". is not an object\"", "\". is not an object\"\n")]
+    [InlineData("\"foo\"", "[if error then 1 else 2 end?]", "[]\n")]
     public async Task Jq_TryCatchHandlesErrors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -121,6 +129,20 @@ public sealed partial class JqTests
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_CatchHandlerErrorsPropagateAfterPrefix()
+    {
+        // An error raised inside a catch handler is not recaught: earlier
+        // inputs keep their outputs while the run still reports status 5.
+        var host = new MockFileSystem();
+        host.SetStandardInput("[\"hi\",\"ho\"]");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".[]|(try . catch (if .==\"ho\" then \"BROKEN\"|error else empty end)) | if .==\"ho\" then error else \"\\(.) there!\" end")));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("\"hi there!\"\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: error: ho\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]
