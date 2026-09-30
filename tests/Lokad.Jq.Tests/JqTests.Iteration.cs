@@ -34,6 +34,8 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("limit((1, 2); (10, 20, 30))", "10\n10\n20\n")]
     [InlineData("nth((0, 1); (10, 20, 30))", "10\n20\n")]
+    [InlineData("[limit(5,7; range(9))]", "[\n  0,\n  1,\n  2,\n  3,\n  4,\n  0,\n  1,\n  2,\n  3,\n  4,\n  5,\n  6\n]\n")]
+    [InlineData("[nth(5,7; range(9;0;-1))]", "[\n  4,\n  2\n]\n")]
     public async Task Jq_CountArgumentsDistribute(string filter, string expected)
     {
         // Count positions are value parameters, so each count value
