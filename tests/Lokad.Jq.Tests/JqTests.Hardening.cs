@@ -162,4 +162,25 @@ public sealed partial class JqTests
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Fact]
+    public async Task Jq_CancellationMidStreamKeepsPartialOutput()
+    {
+        // Cancelling on the third append must surface cancellation with the two
+        // records already emitted kept complete.
+        using var cancellation = new CancellationTokenSource();
+        var host = new MockFileSystem();
+        host.AddFile("/input", "[0]");
+        int appends = 0;
+        host.BeforeByteAppend = () =>
+        {
+            appends++;
+            if (appends >= 3)
+                cancellation.Cancel();
+        };
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "range(0;1000000)", "/input")));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => tool.ExecuteAsync(host, cancellation.Token));
+        Assert.Equal("0\n1\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
