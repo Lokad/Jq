@@ -244,4 +244,36 @@ public sealed partial class JqTests
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+    [Theory]
+    [InlineData("_assign")]
+    [InlineData("_modify")]
+    [InlineData("get_search_list")]
+    [InlineData("get_prog_origin")]
+    [InlineData("get_jq_origin")]
+    public async Task Jq_InventoryInternalNamesAreRejected(string filter)
+    {
+        // Parser-support helpers and host-identity queries stay outside the
+        // embeddable registry; direct calls fail at compile time like unknown
+        // names, and builtins/0 never advertises them.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("unsupported function", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Theory]
+    [InlineData("_assign/2")]
+    [InlineData("_modify/2")]
+    [InlineData("get_search_list/0")]
+    [InlineData("get_prog_origin/0")]
+    [InlineData("get_jq_origin/0")]
+    public async Task Jq_InventoryBuiltinsOmitsInternalNames(string name)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "builtins | any(. == \"" + name + "\")")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("false\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
