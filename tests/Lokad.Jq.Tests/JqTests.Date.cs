@@ -18,6 +18,9 @@ public sealed partial class JqTests
     [InlineData("[2024,1,29] | mktime", "1709164800\n")]
     [InlineData("[2015,12,1,0,0,0] | mktime", "1451606400\n")]
     [InlineData("[2015,0,1,0,0,1.9] | mktime", "1420070401\n")]
+    [InlineData("[2024,8,21] | mktime", "1726876800\n")]
+    [InlineData("1425599507.25 | gmtime[5]", "47.25\n")]
+    [InlineData("0 | try [\"OK\", strftime([])] catch [\"KO\", .]", "[\n  \"KO\",\n  \"strftime/1 requires a string format\"\n]\n")]
     [InlineData("\"2015-03-05T23:51:47Z\" | fromdate", "1425599507\n")]
     [InlineData("1425599507 | todate", "\"2015-03-05T23:51:47Z\"\n")]
     [InlineData("\"2015-03-05T23:51:47Z\" | fromdate | todate", "\"2015-03-05T23:51:47Z\"\n")]
@@ -57,6 +60,8 @@ public sealed partial class JqTests
     [InlineData("1425599507 | strftime(\"a%Qb\")", "\"a%Qb\"\n")]
     [InlineData("1425599507 | strftime(\"\")", "\"\"\n")]
     [InlineData("\"2021-01-01T00:00:00Z\" | fromdate | strftime(\"%V %G\")", "\"53 2020\"\n")]
+    [InlineData("1435677542.822351 | strftime(\"%A, %B %d, %Y\")", "\"Tuesday, June 30, 2015\"\n")]
+    [InlineData("[2024,2,15] | strftime(\"%Y-%m-%dT%H:%M:%SZ\")", "\"2024-03-15T00:00:00Z\"\n")]
     public async Task Jq_DateFormatVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
