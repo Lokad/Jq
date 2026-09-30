@@ -208,6 +208,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_EmptyFileProgramIsCompileError()
+    {
+        // The empty-program diagnostic carries the file identity like any
+        // other file compile error, complementing the inline pins.
+        var host = new MockFileSystem();
+        host.AddFile("/filter.jq", "");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-f", "/filter.jq")));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("jq: Top-level program not given (try \".\") at line 1 column 1 (file \"/filter.jq\")\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(0, host.OpenFileCount);
+    }
+
+    [Fact]
     public async Task Jq_UndefinedVariableIsCompileError()
     {
         var host = new MockFileSystem();
