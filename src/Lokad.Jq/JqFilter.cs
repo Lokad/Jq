@@ -356,8 +356,8 @@ internal sealed class DefFilter(JqFunctionDefinition Definition, JqFilter Contin
 }
 
 // A call to a user-defined function. Value arguments stream at the call
-// site (cartesian combinations drive one body run each, in the engine's
-// existing last-argument-outer order); filter arguments are captured with
+// site (cartesian combinations drive one body run each, first-argument-outer
+// like the reference range vectors); filter arguments are captured with
 // the caller environment and re-evaluated afresh at every use. The body
 // runs against the call input in the closure environment, never the
 // caller's later bindings.

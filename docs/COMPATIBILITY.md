@@ -19,9 +19,12 @@ not implied by their presence here.
 Tracked gaps to investigate and close (see the matrix for row status,
 tests, and evidence):
 
-- Cartesian argument-combination order uses last-argument-outer; upstream
-  vectors indicate first-argument-outer in places. Tracked for a dedicated
-  cartesian-order increment; do not relabel without oracle evidence.
+- Cartesian argument-combination order splits by callee: C-builtin calls use
+  last-argument-outer matching the reference call prelude, while `range` and
+  user value arguments use first-argument-outer per the upstream range vectors
+  (pinned by the range-order and user-argument-order tests). Object,
+  interpolation, and index/slice-bound orders keep their established behavior
+  pending oracle vectors; do not relabel those without oracle evidence.
 - Numbers use doubles with integral storage for integers;
   literal precision, ordering, and non-finite rendering follow docs/NUMERIC_PROFILE.md, with deliberate decimal-build divergences recorded there.
 - Regex support uses PCRE.NET. The reference Oniguruma syntax, flags,
