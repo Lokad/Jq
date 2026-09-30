@@ -174,6 +174,19 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_MalformedInputAbortsRemainingInputs()
+    {
+        // Unlike sequence resync, a plain JSON parse failure is terminal:
+        // earlier outputs are kept, later inputs never run, exit status is 5.
+        var inner = new MockFileSystem();
+        inner.SetStandardInput("1\n{bad}\n2\n");
+        var (exit, stdout, stderr) = await RunInputAsync(inner, ".");
+        Assert.Equal(5, exit);
+        Assert.Equal("1\n", stdout);
+        Assert.Contains("parse error", stderr);
+    }
+
+    [Fact]
     public async Task Jq_InputMetadataFollowsExplicitReads()
     {
         var inner = new MockFileSystem();
