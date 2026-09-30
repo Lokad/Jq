@@ -141,4 +141,16 @@ public sealed partial class JqTests
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Fact]
+    public async Task Jq_UnterminatedInterpolationIsCompileError()
+    {
+        // The lexer depth-tracking rejects the unclosed marker before evaluation,
+        // so no try/catch handler can observe it.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "try \"\\(\" catch .")));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("unterminated string", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
 }

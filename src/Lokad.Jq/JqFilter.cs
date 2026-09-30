@@ -1784,17 +1784,29 @@ internal sealed class FormatFilter(string format) : JqFilter
 
 }
 
-internal sealed class InterpolatedStringFilter(string template, string? format) : JqFilter
+internal sealed class InterpolatedStringFilter : JqFilter
 {
     private abstract record Segment;
 
     private sealed record Literal(string Text) : Segment;
 
-    private sealed record Interpolation(JqFilter Filter) : Segment;
+    private sealed record Interpolation(string Source) : Segment;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    private readonly IReadOnlyList<Segment> _segments;
+    private readonly string? _format;
+
+    // Splits once at construction so malformed templates fail before evaluation;
+    // each interpolation still parses per evaluation with the ambient scope.
+    internal InterpolatedStringFilter(string template, string? format, JqSourceSpan span, JqProgramSource program)
     {
-        // Split once per evaluation; each interpolation parses a single filter.
+        _format = format;
+        _segments = SplitTemplate(template, span, program);
+    }
+
+    private static IReadOnlyList<Segment> SplitTemplate(string template, JqSourceSpan span, JqProgramSource program)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        ArgumentNullException.ThrowIfNull(program);
         var segments = new List<Segment>();
         var literal = new StringBuilder();
         for (var i = 0; i < template.Length; i++)
@@ -1824,14 +1836,13 @@ for (; i < template.Length; i++)
                     else if (template[i] == ')' && --depth == 0) break;
                 }
                 if (depth != 0)
-                    throw new JqException("unterminated string interpolation");
+                    throw new JqCompileException("unterminated string interpolation", span, program);
                 if (literal.Length > 0)
                 {
                     segments.Add(new Literal(Lexer.DecodeLiterals(literal.ToString())));
                     literal.Clear();
                 }
-                var parsed = new JqParser(template[start..i], context.ProgramSource, environment, context.Budget).Parse();
-                segments.Add(new Interpolation(parsed));
+                segments.Add(new Interpolation(template[start..i]));
             }
             else
             {
@@ -1840,13 +1851,18 @@ for (; i < template.Length; i++)
         }
         if (literal.Length > 0)
             segments.Add(new Literal(Lexer.DecodeLiterals(literal.ToString())));
+        return segments;
+    }
 
-        foreach (var text in Combine(segments.Count - 1))
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (var text in Combine(_segments.Count - 1))
             yield return JsonValue.Create(text);
-
-        string Render(JsonNode? value) => format is null
+        string Render(JsonNode? value) => _format is null
             ? context.Runtime.ToJqString(value)
-            : context.Runtime.Format(format, value);
+            : context.Runtime.Format(_format, value);
 
         // Later occurrences are outer (slow); the first is inner (fast),
         // matching nested concatenation with backtracking. An empty
@@ -1858,7 +1874,7 @@ for (; i < template.Length; i++)
                 yield return "";
                 yield break;
             }
-            if (segments[index] is Literal run)
+            if (_segments[index] is Literal run)
             {
                 foreach (var prefix in Combine(index - 1))
                 {
@@ -1869,9 +1885,10 @@ for (; i < template.Length; i++)
                 }
                 yield break;
             }
-            if (segments[index] is Interpolation interpolation)
+            if (_segments[index] is Interpolation interpolation)
             {
-                foreach (var value in interpolation.Filter.Evaluate(input, context, environment))
+                JqFilter parsed = new JqParser(interpolation.Source, context.ProgramSource, environment, context.Budget).Parse();
+                foreach (var value in parsed.Evaluate(input, context, environment))
                 {
                     string rendered = Render(value);
                     foreach (var prefix in Combine(index - 1))

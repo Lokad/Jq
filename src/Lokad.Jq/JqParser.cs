@@ -793,9 +793,10 @@ internal sealed class JqParser(
         if (Match("@"))
         {
             var format = Expect(TokenKind.Identifier).Text;
-            return Peek().Kind == TokenKind.String
-                ? new InterpolatedStringFilter(Next().Text, format)
-                : new FormatFilter(format);
+            if (Peek().Kind != TokenKind.String)
+                return new FormatFilter(format);
+            Token template = Next();
+            return new InterpolatedStringFilter(template.Text, format, template.Span, _programSource);
         }
         if (Match("."))
         {
@@ -906,7 +907,7 @@ internal sealed class JqParser(
         }
         if (token.Kind == TokenKind.String)
             return Lexer.ContainsInterpolation(token.Text)
-                ? new InterpolatedStringFilter(token.Text, null)
+                ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource)
                 : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text)));
         if (token.Kind == TokenKind.Identifier)
         {
@@ -990,8 +991,8 @@ internal sealed class JqParser(
         return new ObjectFilter(properties);
     }
 
-    private static JqFilter KeyFilterFor(Token token) => Lexer.ContainsInterpolation(token.Text)
-        ? new InterpolatedStringFilter(token.Text, null)
+    private JqFilter KeyFilterFor(Token token) => Lexer.ContainsInterpolation(token.Text)
+        ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource)
         : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text)));
 
     private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && Lexer.ContainsInterpolation(token.Text);
