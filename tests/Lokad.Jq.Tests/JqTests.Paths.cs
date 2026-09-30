@@ -97,6 +97,22 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
+    [Theory]
+    [InlineData("try getpath(0) catch .", "\"Path must be specified as an array\"\n")]
+    [InlineData("try setpath(0; 1) catch .", "\"Path must be specified as an array\"\n")]
+    [InlineData("try delpaths([0]) catch .", "\"Path must be specified as array, not number\"\n")]
+    public async Task Jq_PathBuiltinsRequireArrayPaths(string filter, string expected)
+    {
+        // Non-array paths and path elements fail catchably with array-shaped
+        // diagnostics on every path builtin, not just delpaths.
+        var host = new MockFileSystem();
+        host.SetStandardInput("{}");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
     [Fact]
     public async Task Jq_DelpathsRequiresArrays()
     {
