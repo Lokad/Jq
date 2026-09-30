@@ -1,6 +1,6 @@
 # Packaging and CI
 
-The library targets .NET 10 and packages as `Lokad.Jq`, initially with an
+The library targets .NET 10 and packages as `Lokad.Jq` with an
 unreleased prerelease version. A Release pack produces `.nupkg` and `.snupkg`
 under `artifacts/nuget/`, with README, changelog, MIT license, icon, assembly,
 and XML API documentation. SourceLink is enabled as a private build dependency.
@@ -23,8 +23,10 @@ Before any public release:
 4. Inspect package contents, transitive dependencies, licensing and native assets.
    Ensure build-only dependencies stay private and no local paths/plans/reference
    sources or test/benchmark binaries are in the package.
-5. Restore the generated package into a separate consumer and execute a basic
-   JSON filter, a regex case, a controlled file read, and a cancellation case.
+5. Restore the generated package into a separate consumer kept outside the
+   repository directory tree (so repository build props and the package
+   allowlist do not apply to it) and execute a basic JSON filter, a regex
+   case, a controlled file read, and a cancellation case.
 6. Finalize public API/version/changelog, confirm repository metadata, and select
    the desired publication mechanism. Publishing is separate from CI validation.
 
