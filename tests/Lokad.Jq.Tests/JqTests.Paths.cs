@@ -9,6 +9,8 @@ public sealed partial class JqTests
     [InlineData("[10, 20]", "path(.[])", "[\n  0\n]\n[\n  1\n]\n")]
     [InlineData("{\"a\": {\"b\": 1}}", "path(.a.b)", "[\n  \"a\",\n  \"b\"\n]\n")]
     [InlineData("[0, 1, 2]", "path(.[1, 2])", "[\n  1\n]\n[\n  2\n]\n")]
+    [InlineData("[10, 20]", "path(first)", "[\n  0\n]\n")]
+    [InlineData("[10, 20]", "path(last)", "[\n  -1\n]\n")]
     [InlineData("{\"a\": [1]}", "path(..)", "[]\n[\n  \"a\"\n]\n[\n  \"a\",\n  0\n]\n")]
     [InlineData("[0, 1, 2]", "def x: .[1, 2]; path(x)", "[\n  1\n]\n[\n  2\n]\n")]
     [InlineData("{\"a\": null, \"b\": null}", "path((.a as $x | .b))", "[\n  \"b\"\n]\n")]
@@ -80,6 +82,7 @@ public sealed partial class JqTests
     [InlineData("\"abcdef\"", "path(.[1:3]) as $p | getpath($p)", "\"bc\"\n")]
     [InlineData("[0, 1, 2, 3]", "setpath([{\"start\": 1, \"end\": 3}]; [9])", "[\n  0,\n  9,\n  3\n]\n")]
     [InlineData("[0, 1, 2, 3]", "try setpath([{\"start\": 1, \"end\": 3}]; 9) catch .", "\"A slice of an array can only be assigned another array\"\n")]
+    [InlineData("[0]", "setpath([-1]; 1)", "[\n  1\n]\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -101,6 +104,11 @@ public sealed partial class JqTests
     [InlineData("{\"a\": 1}", "pick(.b)", "{\n  \"b\": null\n}\n")]
     [InlineData("{\"a\": 1}", "pick(empty)", "null\n")]
     [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "del(.[1.5:3.5])", "[\n  0,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
+    [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "del(.[1], .[-6], .[2], .[-3:9])", "[\n  0,\n  3,\n  5,\n  6,\n  9\n]\n")]
+    [InlineData("[1, 2, 3]", "del(.[nan])", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[1, 2, 3]", "del(.[nan,nan])", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[[10, 20], 30]", "pick(first|first)", "[\n  [\n    10\n  ]\n]\n")]
+    [InlineData("[1, 2]", "try pick(last) catch .", "\"Out of bounds negative array index\"\n")]
     public async Task Jq_DelAndPickReshape(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

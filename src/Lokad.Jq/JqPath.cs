@@ -149,6 +149,11 @@ internal static class JqPaths
     {
         index = 0;
         isNaN = false;
+        if (key is JsonValue small && small.TryGetValue<int>(out int directInt))
+        {
+            index = directInt;
+            return true;
+        }
         if (key is JsonValue whole && whole.TryGetValue<long>(out long direct))
         {
             index = direct;
@@ -178,6 +183,8 @@ internal static class JqPaths
     {
         if (!slice.TryGetPropertyValue(name, out JsonNode? bound) || bound is null)
             return null;
+        if (bound is JsonValue small && small.TryGetValue<int>(out int directInt))
+            return directInt;
         if (bound is JsonValue whole && whole.TryGetValue<long>(out long direct))
             return direct;
         if (bound is JsonValue real && real.TryGetValue<double>(out double value))
