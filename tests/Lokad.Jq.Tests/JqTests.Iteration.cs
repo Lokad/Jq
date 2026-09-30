@@ -16,6 +16,7 @@ public sealed partial class JqTests
     [InlineData("0", "nth(1; (10, 20, 30))", "20\n")]
     [InlineData("0", "nth(0; empty)", "")]
     [InlineData("0", "limit(empty; 1)", "")]
+    [InlineData("0", "try last((1, error(\"x\"))) catch .", "\"x\"\n")]
     [InlineData("[1, 2, 3]", "isempty(.[])", "false\n")]
     [InlineData("0", "isempty((1, error(\"x\")))", "false\n")]
     [InlineData("0", "first((1, error(\"x\")))", "1\n")]
