@@ -27,6 +27,7 @@ internal sealed class JqInvocation
     public IReadOnlyDictionary<string, JsonNode?> Variables { get; init; } = new Dictionary<string, JsonNode?>();
     public IReadOnlyList<JsonNode?> PositionalArguments { get; init; } = [];
     public IReadOnlyList<JqResolvedPath> InputFiles { get; init; } = [];
+    public IReadOnlyList<(string Name, string Path, bool Raw)> FileVariables { get; init; } = [];
     public string? Error { get; init; }
     public JqClock? Clock { get; init; }
     public List<JqResolvedPath> LibraryDirs { get; init; } = [];

@@ -40,6 +40,7 @@ internal static class JqExecutor
                 budget.ChargeString(Encoding.UTF8.GetCharCount(bytes.Span));
                 filterText = Utf8Text.Decode(bytes);
             }
+            await LoadFileVariablesAsync(host, invocation, context, cancellationToken).ConfigureAwait(false);
             stage = 3;
             var preParser = new JqParser(filterText, programSource, context.RootEnvironment, budget);
             (_, IReadOnlyList<JqModuleImport> mainImports) = preParser.ParseImportsOnly();
@@ -221,6 +222,67 @@ internal static class JqExecutor
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(message);
         context.EmitStderr(Utf8Text.Encode("jq: ignoring parse error: " + message + "\n").ToArray());
+    }
+
+    // Hosted `--rawfile`/`--slurpfile` variables resolve after the filter
+    // file so failures surface as system errors before compilation. Names
+    // already bound by earlier arguments keep their values without reads.
+    private static async Task LoadFileVariablesAsync(
+        IJqHost host, JqInvocation invocation, JqContext context, CancellationToken cancellationToken)
+    {
+        if (invocation.FileVariables.Count == 0)
+            return;
+        if (invocation.Variables is not Dictionary<string, JsonNode?> variables)
+            throw new InvalidOperationException("File variables need a mutable variable table.");
+        foreach (var (name, path, raw) in invocation.FileVariables)
+        {
+            if (variables.ContainsKey(name))
+                continue;
+            string which = raw ? "rawfile" : "slurpfile";
+            try
+            {
+                var resolved = JqPathResolution.ResolveArgument(path, invocation.WorkingDirectory);
+                var bytes = await ReadFileAsync(resolved, host, context.Budget, cancellationToken).ConfigureAwait(false);
+                JsonNode? value;
+                if (raw)
+                {
+                    context.Budget.ChargeString(Encoding.UTF8.GetCharCount(bytes.Span));
+                    value = JsonValue.Create(Utf8Text.Decode(bytes));
+                }
+                else
+                {
+                    value = ReadSlurpfileValue(bytes, context);
+                }
+                variables[name] = value;
+                if (variables.TryGetValue("ARGS", out JsonNode? args)
+                    && args is JsonObject argsObject
+                    && argsObject.TryGetPropertyValue("named", out JsonNode? named)
+                    && named is JsonObject namedObject)
+                {
+                    namedObject[name] = context.Runtime.Clone(value);
+                }
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException
+                && exception is not JqQuotaException
+                && exception is not JqHostFailureException)
+            {
+                throw new JqException($"Bad JSON in --{which} {name} {path}: {exception.Message}");
+            }
+        }
+    }
+
+    private static JsonArray ReadSlurpfileValue(ReadOnlyMemory<byte> bytes, JqContext context)
+    {
+        var values = new JsonArray();
+        int offset = 0;
+        while (offset < bytes.Length)
+        {
+            if (bytes.Span[offset..].TrimStart(" \t\r\n"u8).IsEmpty)
+                break;
+            values.Add(context.Runtime.ReadJsonValue(bytes.Span[offset..], out int consumed));
+            offset += consumed;
+        }
+        return values;
     }
 
     private static string ParentDir(string canonicalPath)

@@ -8,6 +8,7 @@ internal partial record JqArgs
     [Argument("Print version.", Short = 'V', Long = "version")] public bool Version { get; init; }
     [Argument("Print build configuration.", Long = "build-configuration")] public bool BuildConfiguration { get; init; }
     [Argument("Accepted for compatibility.", Long = "unbuffered")] public bool Unbuffered { get; init; }
+    [Argument("Accepted for compatibility; byte streams are already binary-safe.", Short = 'b', Long = "binary")] public bool Binary { get; init; }
     [Argument("Use null as input.", Short = 'n', Long = "null-input")] public bool NullInput { get; init; }
     [Argument("Read input as raw strings.", Short = 'R', Long = "raw-input")] public bool RawInput { get; init; }
     [Argument("Slurp inputs into one value.", Short = 's', Long = "slurp")] public bool Slurp { get; init; }
