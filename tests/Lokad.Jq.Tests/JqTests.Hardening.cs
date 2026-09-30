@@ -93,6 +93,21 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_ConcurrentRegexExecutionsStayIndependent()
+    {
+        // Regex caches are per-execution with no shared mutable state, so
+        // concurrent runs compile and match independently without locks.
+        var first = new MockFileSystem();
+        var second = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-c", "[range(0;50) | tostring | test(\"^[0-9]+$\")] | length")));
+        Task<int> left = tool.ExecuteAsync(first, CancellationToken.None);
+        Task<int> right = tool.ExecuteAsync(second, CancellationToken.None);
+        Assert.Equal(new[] { 0, 0 }, await Task.WhenAll(left, right));
+        Assert.Equal("50\n", first.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("50\n", second.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
     public async Task Jq_QuotaDuringEvaluationSurvivesCloseFailure()
     {
         // The owned file stays open while evaluation trips quota; persistent
