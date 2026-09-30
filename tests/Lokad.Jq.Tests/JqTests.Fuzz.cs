@@ -84,6 +84,15 @@ public sealed partial class JqTests
         """format("text")""",
         """_strindices("a")""",
         """-.""",
+        """path(first)""",
+        """path(last)""",
+        """pick(first)""",
+        """setpath([1]; 1)""",
+        """.[1e18]""",
+        """.[1.5]""",
+        """tonumber""",
+        """toboolean""",
+        """implode""",
     ];
 
     private static readonly string[] FuzzAtoms =
