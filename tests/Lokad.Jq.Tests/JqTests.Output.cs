@@ -129,6 +129,9 @@ public sealed partial class JqTests
         Assert.Contains("Usage: jq [options] filter [files...]", stdout);
         Assert.Contains("--sort-keys", stdout);
         Assert.Contains("--exit-status", stdout);
+        Assert.Contains("--binary", stdout);
+        Assert.Contains("--color-output", stdout);
+        Assert.Contains("first non-option", stdout);
         Assert.Equal("", stderr);
         Assert.Equal(0, host.ReadBytesCallCount);
         Assert.Equal(0, host.OpenFileCount);

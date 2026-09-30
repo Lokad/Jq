@@ -4,9 +4,9 @@ using System.Runtime.InteropServices;
 
 namespace Lokad.Jq;
 
-// Truthful command help: every listed option is implemented by this
-// embedding runtime. Deliberately divergent defaults and no-op
-// acceptances are marked inline rather than omitted.
+// Truthful command help: every listed option is accepted or explicitly
+// rejected by this embedding runtime. Deliberately divergent defaults,
+// no-op acceptances, and rejections are marked inline rather than omitted.
 internal static class JqHelp
 {
     internal const string Text =
@@ -26,10 +26,12 @@ internal static class JqHelp
         "      --slurpfile name file set $name to an array of JSON values read\n" +
         "                            from the file;\n" +
         "      --rawfile name file   set $name to string contents of file;\n" +
-        "      --args                consume remaining arguments as positional\n" +
-        "                            string values;\n" +
-        "      --jsonargs            consume remaining arguments as positional\n" +
-        "                            JSON values;\n" +
+        "      --args                set string mode for later non-option operands;\n" +
+        "                            options still parse and the first non-option\n" +
+        "                            stays the filter;\n" +
+        "      --jsonargs            set JSON mode for later non-option operands;\n" +
+        "                            options still parse and the first non-option\n" +
+        "                            stays the filter;\n" +
         "      --                    terminates argument processing;\n" +
         "\n" +
         "Output:\n" +
@@ -41,6 +43,7 @@ internal static class JqHelp
         "  -a, --ascii-output        output strings by only ASCII characters\n" +
         "                            using escape sequences;\n" +
         "  -S, --sort-keys           sort keys of each object on output;\n" +
+        "  -C, --color-output        rejected; needs a terminal-capable host;\n" +
         "  -M, --monochrome-output   accepted; output is never colorized;\n" +
         "      --tab                 use tabs for indentation;\n" +
         "      --indent n            use n spaces for indentation (-1 selects\n" +
@@ -52,6 +55,7 @@ internal static class JqHelp
         "  -e, --exit-status         set exit status from the last output values\n" +
         "                            (4 when there is no output, 1 when the last\n" +
         "                            values are false or null, else 0);\n" +
+        "  -b, --binary              accepted; byte streams are already binary-safe;\n" +
         "\n" +
         "Streaming:\n" +
         "      --stream              parse the input in streaming fashion;\n" +
