@@ -24,6 +24,7 @@ public sealed partial class JqTests
     [InlineData("\"2015-03-05T23:51:47Z\" | fromdate", "1425599507\n")]
     [InlineData("1425599507 | todate", "\"2015-03-05T23:51:47Z\"\n")]
     [InlineData("\"2015-03-05T23:51:47Z\" | fromdate | todate", "\"2015-03-05T23:51:47Z\"\n")]
+    [InlineData("\"2038-01-19T03:14:08Z\" | fromdate", "2147483648\n")]
     public async Task Jq_DateEpochVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -60,6 +61,7 @@ public sealed partial class JqTests
     [InlineData("1425599507 | strftime(\"a%Qb\")", "\"a%Qb\"\n")]
     [InlineData("1425599507 | strftime(\"\")", "\"\"\n")]
     [InlineData("\"2021-01-01T00:00:00Z\" | fromdate | strftime(\"%V %G\")", "\"53 2020\"\n")]
+    [InlineData("1435677542.822351 | strftime(\"%A, %B %e, %Y\")", "\"Tuesday, June 30, 2015\"\n")]
     [InlineData("1435677542.822351 | strftime(\"%A, %B %d, %Y\")", "\"Tuesday, June 30, 2015\"\n")]
     [InlineData("[2024,2,15] | strftime(\"%Y-%m-%dT%H:%M:%SZ\")", "\"2024-03-15T00:00:00Z\"\n")]
     public async Task Jq_DateFormatVectors(string filter, string expected)
