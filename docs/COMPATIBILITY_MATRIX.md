@@ -197,3 +197,10 @@ to read this file.
   Ordinary runs skip reference cases instead of failing when no executable
   is configured.
 
+- Seeded crash-freedom campaign (`JqTests.Fuzz`, seed 20260930, 200 cases):
+  fixed grammar and value pools cover access, construction, operators, strings,
+  regex, math, sorting, paths, and recursion. Every execution must settle on a
+  staged exit (0, 3, 4, or 5) with `jq:`-prefixed diagnostics; an escaping CLR
+  exception fails with its seed and case index for minimization into a normal
+  deterministic test. No reference executable is required.
+
