@@ -65,6 +65,9 @@ public sealed partial class JqTests
     [InlineData("\"a\" * {}", "cannot be multiplied")]
     [InlineData("\"a\" / 2", "cannot be divided")]
     [InlineData("\"a\" % \"b\"", "cannot be divided (remainder)")]
+    [InlineData("1 + \"x\"", "number (1) and string (\"x\") cannot be added")]
+    [InlineData("\"a\" * {}", "string (\"a\") and object ({}) cannot be multiplied")]
+    [InlineData("123456789012345678901234567890 + \"x\"", "and string (\"x\") cannot be added")]
     public async Task Jq_MixedTypeArithmeticFails(string filter, string diagnostic)
     {
         var host = new MockFileSystem();

@@ -272,9 +272,10 @@ internal sealed class JqRuntime(JqBudget budget)
     }
 
     // Kind-shaped operand diagnostics shared by arithmetic operators,
-    // matching the reference operand rendering.
+    // matching the reference operand rendering (operands dump as JSON, so
+    // strings render quoted).
     internal string TypeError(JsonNode? l, JsonNode? r, string verb) =>
-        $"{TypeName(l)} ({ToJqString(l)}) and {TypeName(r)} ({ToJqString(r)}) {verb}";
+        $"{TypeName(l)} ({Serialize(l, false, null, false)}) and {TypeName(r)} ({Serialize(r, false, null, false)}) {verb}";
 
     internal JsonNode? Add(JsonNode? l, JsonNode? r)
     {
