@@ -216,4 +216,16 @@ public sealed partial class JqTests
         Assert.Equal("{\n  \"1\": 2\n}\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+    [Theory]
+    [InlineData("try \"\\($undefined)\" catch \"caught\"")]
+    [InlineData("try \"\\(missing_function)\" catch \"caught\"")]
+    public async Task Jq_InterpolationCompileErrorsEscapeTry(string filter)
+    {
+        // Definition-site compile failures are stage-3 errors like any other
+        // unknown name, so user-level try/catch cannot observe them.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
 }
