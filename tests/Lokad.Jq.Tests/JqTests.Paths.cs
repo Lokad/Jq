@@ -165,6 +165,8 @@ public sealed partial class JqTests
     [InlineData("[4]", ".[2][3] = 1", "[\n  4,\n  null,\n  [\n    null,\n    null,\n    null,\n    1\n  ]\n]\n")]
     [InlineData("{\"foo\": [11], \"bar\": 42}", ".foo[2].bar = 1", "{\n  \"foo\": [\n    11,\n    null,\n    {\n      \"bar\": 1\n    }\n  ],\n  \"bar\": 42\n}\n")]
     [InlineData("{\"a\": null, \"b\": null}", "(.a as $x | .b) = \"b\"", "{\n  \"a\": null,\n  \"b\": \"b\"\n}\n")]
+    [InlineData("[true, false, [5, true, [true, [false]], false]]", "(.. | select(type == \"boolean\")) |= if . then 1 else 0 end", "[\n  1,\n  0,\n  [\n    5,\n    1,\n    [\n      1,\n      [\n        0\n      ]\n    ],\n    0\n  ]\n]\n")]
+    [InlineData("[1, [2, [3]]]", "(.. | numbers) |= . + 1", "[\n  2,\n  [\n    3,\n    [\n      4\n    ]\n  ]\n]\n")]
     [InlineData("{\"a\": {\"b\": [1, {\"b\": 3}]}}", "(.. | select(type == \"object\") | select((.b | type) == \"array\") | .b) |= .[0]", "{\n  \"a\": {\n    \"b\": 1\n  }\n}\n")]
     [InlineData("[\"hello\", true, false, [false], null]", ".[] //= .[0]", "[\n  \"hello\",\n  true,\n  \"hello\",\n  [\n    false\n  ],\n  \"hello\"\n]\n")]
     [InlineData("{}", ".a //= 1", "{\n  \"a\": 1\n}\n")]
