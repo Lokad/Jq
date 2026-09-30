@@ -56,6 +56,8 @@ public sealed partial class JqTests
     [InlineData("\"aB\" | [sub(\"(?<a>.)\"; \"\\(.a|ascii_upcase)\", \"\\(.a|ascii_downcase)\")]", "[\n  \"AB\",\n  \"aB\"\n]\n")]
 [InlineData("[\"a,b, c, d, e,f\", \", a,b, c, d, e,f, \"] | [.[] | sub(\", \"; \":\")]", "[\n  \"a,b:c, d, e,f\",\n  \":a,b, c, d, e,f, \"\n]\n")]
 [InlineData("[\"a,b, c, d, e,f\", \", a,b, c, d, e,f, \"] | [.[] | scan(\", \")]", "[\n  \", \",\n  \", \",\n  \", \",\n  \", \",\n  \", \",\n  \", \",\n  \", \",\n  \", \"\n]\n")]
+    [InlineData("[\"a,b, c, d, e,f\", \", a,b, c, d, e,f, \"] | [.[]|[[sub(\", *\";\":\")], [gsub(\", *\";\":\")], [scan(\", *\")]]]", "[\n  [\n    [\n      \"a:b, c, d, e,f\"\n    ],\n    [\n      \"a:b:c:d:e:f\"\n    ],\n    [\n      \",\",\n      \", \",\n      \", \",\n      \", \",\n      \",\"\n    ]\n  ],\n  [\n    [\n      \":a,b, c, d, e,f, \"\n    ],\n    [\n      \":a:b:c:d:e:f:\"\n    ],\n    [\n      \", \",\n      \",\",\n      \", \",\n      \", \",\n      \", \",\n      \",\",\n      \", \"\n    ]\n  ]\n]\n")]
+    [InlineData("[\"a,b, c, d, e,f\", \", a,b, c, d, e,f, \"] | [.[]|[[sub(\", +\";\":\")], [gsub(\", +\";\":\")], [scan(\", +\")]]]", "[\n  [\n    [\n      \"a,b:c, d, e,f\"\n    ],\n    [\n      \"a,b:c:d:e,f\"\n    ],\n    [\n      \", \",\n      \", \",\n      \", \"\n    ]\n  ],\n  [\n    [\n      \":a,b, c, d, e,f, \"\n    ],\n    [\n      \":a,b:c:d:e,f:\"\n    ],\n    [\n      \", \",\n      \", \",\n      \", \",\n      \", \",\n      \", \"\n    ]\n  ]\n]\n")]
     [InlineData("\"\u2019\" | sub(\"(?<x>.)\"; \"\\(.x)!\")", "\"\u2019!\"\n")]
     public async Task Jq_SubVectors(string filter, string expected)
     {
