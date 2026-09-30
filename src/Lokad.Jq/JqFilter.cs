@@ -1081,18 +1081,29 @@ internal sealed class RecursiveDescentFilter : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        yield return context.Runtime.Clone(input);
-        if (input is JsonArray array)
+        // Iterative pre-order: depth follows value nesting, which setpath-built
+        // trees push far past the ingress depth cap, so nested enumerator frames
+        // are not an option.
+        var stack = new Stack<JsonNode?>();
+        stack.Push(input);
+        while (stack.Count > 0)
         {
-            foreach (JsonNode? child in array)
-                foreach (JsonNode? descendant in new RecursiveDescentFilter().Evaluate(child, context, environment))
-                    yield return descendant;
-        }
-        else if (input is JsonObject obj)
-        {
-            foreach (var property in obj)
-                foreach (JsonNode? descendant in new RecursiveDescentFilter().Evaluate(property.Value, context, environment))
-                    yield return descendant;
+            context.Budget.CheckCancellation();
+            JsonNode? current = stack.Pop();
+            yield return context.Runtime.Clone(current);
+            if (current is JsonArray array)
+            {
+                for (int index = array.Count - 1; index >= 0; index--)
+                    stack.Push(array[index]);
+            }
+            else if (current is JsonObject obj)
+            {
+                var values = new List<JsonNode?>();
+                foreach (var property in obj)
+                    values.Add(property.Value);
+                for (int index = values.Count - 1; index >= 0; index--)
+                    stack.Push(values[index]);
+            }
         }
     }
 
@@ -1100,29 +1111,40 @@ internal sealed class RecursiveDescentFilter : JqFilter
     {
         foreach (JqValuePath descendant in Expand(pair, context))
             yield return descendant;
-    }
 
+    }
     // Pre-order structural threading: the pair itself, then each child with
     // an extended path. Trackedness flows through untouched; scalars and
-    // nulls simply have no children.
+    // nulls simply have no children. Children ride a heap stack so deep value
+    // trees never cost CLR frames.
     private static IEnumerable<JqValuePath> Expand(JqValuePath pair, JqContext context)
     {
-        yield return pair;
-        if (pair.Value is null)
-            yield break;
-        if (!pair.Tracked)
-            throw new JqException(InvalidIterate(pair.Value, context));
-        if (pair.Value is JsonArray arr)
+        ArgumentNullException.ThrowIfNull(pair);
+        ArgumentNullException.ThrowIfNull(context);
+        var stack = new Stack<JqValuePath>();
+        stack.Push(pair);
+        while (stack.Count > 0)
         {
-            for (int index = 0; index < arr.Count; index++)
-                foreach (JqValuePath descendant in Expand(new JqValuePath(Extend(pair.Segments, new IndexSegment(index, false)), arr[index], true), context))
-                    yield return descendant;
-        }
-        else if (pair.Value is JsonObject obj)
-        {
-            foreach (var property in obj)
-                foreach (JqValuePath descendant in Expand(new JqValuePath(Extend(pair.Segments, new KeySegment(property.Key)), property.Value, true), context))
-                    yield return descendant;
+            context.Budget.CheckCancellation();
+            JqValuePath current = stack.Pop();
+            yield return current;
+            if (current.Value is null)
+                continue;
+            if (!current.Tracked)
+                throw new JqException(InvalidIterate(current.Value, context));
+            if (current.Value is JsonArray arr)
+            {
+                for (int index = arr.Count - 1; index >= 0; index--)
+                    stack.Push(new JqValuePath(Extend(current.Segments, new IndexSegment(index, false)), arr[index], true));
+            }
+            else if (current.Value is JsonObject obj)
+            {
+                var entries = new List<(string Key, JsonNode? Value)>();
+                foreach (var property in obj)
+                    entries.Add((property.Key, property.Value));
+                for (int index = entries.Count - 1; index >= 0; index--)
+                    stack.Push(new JqValuePath(Extend(current.Segments, new KeySegment(entries[index].Key)), entries[index].Value, true));
+            }
         }
     }
 }

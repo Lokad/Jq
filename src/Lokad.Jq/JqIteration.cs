@@ -306,33 +306,111 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
 
     private IEnumerable<JsonNode?> Walk(JsonNode? node, JqContext context, JqEnvironment environment)
     {
-        JsonNode? rebuilt = node;
-        if (node is JsonArray array)
-        {
-            var walked = new JsonArray();
-            context.Budget.ChargeNode();
-            foreach (JsonNode? child in array)
-            {
-                using IEnumerator<JsonNode?> outputs = Walk(child, context, environment).GetEnumerator();
-                if (outputs.MoveNext())
-                    walked.Add(outputs.Current);
-            }
-            rebuilt = walked;
-        }
-        else if (node is JsonObject obj)
-        {
-            var walked = new JsonObject();
-            context.Budget.ChargeNode();
-            foreach (var property in obj)
-            {
-                using IEnumerator<JsonNode?> outputs = Walk(property.Value, context, environment).GetEnumerator();
-                if (outputs.MoveNext())
-                    walked.Add(property.Key, outputs.Current);
-            }
-            rebuilt = walked;
-        }
+        // The root rebuilt node streams every body output while nested levels
+        // contribute only their first, matching the first-only child reads below.
+        JsonNode? rebuilt = BuildRebuilt(node, context, environment);
         foreach (JsonNode? value in Body.Evaluate(rebuilt, context, environment))
             yield return value;
+    }
+
+    // Heap-allocated frame for iterative bottom-up traversal. Walk depth is value
+    // depth, which setpath-built trees push far past the ingress depth cap, so
+    // nested enumerator frames are not an option.
+    private sealed class WalkFrame(JsonNode? node, string? key, int index)
+    {
+        public JsonNode? Node = node;
+        public string? Key = key;
+        public int Index = index;
+        public List<WalkChild> Children = new();
+        public int NextChild;
+        public List<Walklevel> Parts = new();
+    }
+
+    private sealed record WalkChild(string? Key, int Index, JsonNode? Node);
+
+    private sealed record Walklevel(string? Key, int Index, JsonNode? First);
+
+    private static void FillWalkChildren(WalkFrame frame)
+    {
+        if (frame.Node is JsonArray array)
+        {
+            for (int index = 0; index < array.Count; index++)
+                frame.Children.Add(new WalkChild(null, index, array[index]));
+            return;
+        }
+        if (frame.Node is JsonObject obj)
+        {
+            foreach (var property in obj)
+                frame.Children.Add(new WalkChild(property.Key, -1, property.Value));
+        }
+    }
+
+    private static JsonNode? RebuildWalkLevel(WalkFrame frame, JqContext context)
+    {
+        if (frame.Node is JsonArray)
+        {
+            context.Budget.ChargeNode();
+            var walked = new JsonArray();
+            foreach (Walklevel part in frame.Parts)
+                walked.Add(part.First);
+            return walked;
+        }
+        if (frame.Node is JsonObject)
+        {
+            context.Budget.ChargeNode();
+            var walked = new JsonObject();
+            foreach (Walklevel part in frame.Parts)
+                if (part.Key is string name)
+                    walked.Add(name, part.First);
+            return walked;
+        }
+        return frame.Node;
+    }
+
+    // First body output of a rebuilt level, or nothing when the body is empty.
+    // Empty levels drop out of their parent rebuild like the reference.
+    private JsonNode? FirstWalkOutput(JsonNode? rebuilt, JqContext context, JqEnvironment environment, out bool hasOutput)
+    {
+        using IEnumerator<JsonNode?> outputs = Body.Evaluate(rebuilt, context, environment).GetEnumerator();
+        if (!outputs.MoveNext())
+        {
+            hasOutput = false;
+            return null;
+        }
+        hasOutput = true;
+        return outputs.Current;
+    }
+
+    private JsonNode? BuildRebuilt(JsonNode? node, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        var stack = new Stack<WalkFrame>();
+        var root = new WalkFrame(node, null, -1);
+        FillWalkChildren(root);
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            context.Budget.CheckCancellation();
+            WalkFrame frame = stack.Peek();
+            if (frame.NextChild < frame.Children.Count)
+            {
+                WalkChild child = frame.Children[frame.NextChild];
+                frame.NextChild++;
+                WalkFrame childFrame = new WalkFrame(child.Node, child.Key, child.Index);
+                FillWalkChildren(childFrame);
+                stack.Push(childFrame);
+                continue;
+            }
+            JsonNode? rebuilt = RebuildWalkLevel(frame, context);
+            stack.Pop();
+            if (stack.Count == 0)
+                return rebuilt;
+            JsonNode? first = FirstWalkOutput(rebuilt, context, environment, out bool hasOutput);
+            if (hasOutput)
+                stack.Peek().Parts.Add(new Walklevel(frame.Key, frame.Index, first));
+        }
+        throw new InvalidOperationException("Walk left no rebuilt node.");
     }
 }
 

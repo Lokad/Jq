@@ -138,4 +138,28 @@ public sealed partial class JqTests
         Assert.Equal("true\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Theory]
+    [InlineData("null | setpath([range(5000)|\"a\"]; 1) | walk(true)", "true\n")]
+    [InlineData("null | setpath([range(5000)|\"a\"]; 1) | [paths | length] | add", "12502500\n")]
+    public async Task Jq_DeepTreesWalkWithoutRecursion(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("[1, [2]] | [walk(if type == \"number\" then empty else . end)] | length", "1\n")]
+    [InlineData("1 | [walk(if type == \"number\" then (., . + 10) else . end)] | length", "2\n")]
+    public async Task Jq_WalkFirstOnlyAndBodyStreaming(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
