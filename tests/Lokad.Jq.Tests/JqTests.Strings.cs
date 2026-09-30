@@ -126,4 +126,19 @@ public sealed partial class JqTests
         Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
+
+    [Theory]
+    [InlineData("\"\\\\(\"", "\"\\\\(\"\n")]
+    [InlineData("\"a\\\\(.)\"", "\"a\\\\(.)\"\n")]
+    [InlineData("\"\\\\\\\\\"", "\"\\\\\\\\\"\n")]
+    [InlineData("\"\\\\(1+2)\"", "\"\\\\(1+2)\"\n")]
+    [InlineData("\"\\\\\\(1+2)\"", "\"\\\\3\"\n")]
+    public async Task Jq_LiteralBackslashParen(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }

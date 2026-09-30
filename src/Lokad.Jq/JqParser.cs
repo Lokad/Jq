@@ -123,9 +123,9 @@ internal sealed class JqParser(
         if (Peek().Kind != TokenKind.String)
             throw Error("Import path must be constant", Peek().Span);
         var pathToken = Next();
-        if (pathToken.Text.Contains("\\(", StringComparison.Ordinal))
+        if (Lexer.ContainsInterpolation(pathToken.Text))
             throw Error("Import path must be constant", pathToken.Span);
-        string relPath = pathToken.Text;
+        string relPath = Lexer.DecodeLiterals(pathToken.Text);
         string? alias = null;
         bool isData = false;
         if (!isInclude)
@@ -731,7 +731,7 @@ internal sealed class JqParser(
                 }
                 else if (Peek().Kind == TokenKind.String)
                 {
-                    var name = Next().Text;
+                    var name = Lexer.DecodeLiterals(Next().Text);
                     var optional = Match("?");
                     filter = new FieldFilter(filter, name, optional);
                 }
@@ -803,9 +803,9 @@ internal sealed class JqParser(
                 return new RecursiveDescentFilter();
             var identity = new IdentityFilter();
             if (Peek().Kind == TokenKind.FieldName)
-                return new FieldFilter(identity, Next().Text, Match("?"));
+            return new FieldFilter(identity, Lexer.DecodeLiterals(Next().Text), Match("?"));
             if (Peek().Kind == TokenKind.String)
-                return new FieldFilter(identity, Next().Text, Match("?"));
+                return new FieldFilter(identity, Lexer.DecodeLiterals(Next().Text), Match("?"));
             if (Match("["))
                 return ParseBracket(identity);
             return identity;
@@ -905,9 +905,9 @@ internal sealed class JqParser(
             return new LiteralFilter(JsonValue.Create(value));
         }
         if (token.Kind == TokenKind.String)
-            return token.Text.Contains("\\(", StringComparison.Ordinal)
+            return Lexer.ContainsInterpolation(token.Text)
                 ? new InterpolatedStringFilter(token.Text, null)
-                : new LiteralFilter(JsonValue.Create(token.Text));
+                : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text)));
         if (token.Kind == TokenKind.Identifier)
         {
             if (token.Text == "null") return new LiteralFilter(null);
@@ -969,7 +969,7 @@ internal sealed class JqParser(
                     bool isDynamic = KeyFilterForIsDynamic(keyToken);
                     properties.Add(isDynamic
                         ? new ObjectProperty(null, KeyFilterFor(keyToken), ParseDictValue())
-                        : new ObjectProperty(keyToken.Text, null, ParseDictValue()));
+                        : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text), null, ParseDictValue()));
                 }
                 else if (keyToken.Kind == TokenKind.String)
                 {
@@ -978,7 +978,7 @@ internal sealed class JqParser(
                     bool interpolated = KeyFilterForIsDynamic(keyToken);
                     properties.Add(interpolated
                         ? new ObjectProperty(null, KeyFilterFor(keyToken), new IndexFilter(new IdentityFilter(), KeyFilterFor(keyToken), false))
-                        : new ObjectProperty(keyToken.Text, null, new FieldFilter(new IdentityFilter(), keyToken.Text, true)));
+                        : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text), null, new FieldFilter(new IdentityFilter(), Lexer.DecodeLiterals(keyToken.Text), true)));
                 }
                 else
                 {
@@ -990,11 +990,11 @@ internal sealed class JqParser(
         return new ObjectFilter(properties);
     }
 
-    private static JqFilter KeyFilterFor(Token token) => token.Text.Contains("\\(", StringComparison.Ordinal)
+    private static JqFilter KeyFilterFor(Token token) => Lexer.ContainsInterpolation(token.Text)
         ? new InterpolatedStringFilter(token.Text, null)
-        : new LiteralFilter(JsonValue.Create(token.Text));
+        : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text)));
 
-    private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && token.Text.Contains("\\(", StringComparison.Ordinal);
+    private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && Lexer.ContainsInterpolation(token.Text);
 
     // Reduction sources are update-level expressions with binding patterns;
     // initializers run outside the pattern scope while updates (and the

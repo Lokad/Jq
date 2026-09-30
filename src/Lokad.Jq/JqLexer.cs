@@ -11,6 +11,33 @@ internal readonly record struct Token(TokenKind Kind, string Text, JqSourceSpan 
 
 internal static class Lexer
 {
+    // Template alphabet: literal segments keep escaped backslash pairs raw so an
+    // interpolation marker is a backslash-paren that does not follow an escape.
+    internal static bool ContainsInterpolation(string template)
+    {
+        for (int index = 0; index + 1 < template.Length; index++)
+        {
+            if (template[index] != (char)92)
+                continue;
+            if (template[index + 1] == (char)92)
+            {
+                index++;
+                continue;
+            }
+            if (template[index + 1] == (char)40)
+                return true;
+            index++;
+        }
+        return false;
+    }
+
+    // Collapses the surviving escaped backslash pairs after splitting. Other
+    // escapes were decoded while lexing, so no other backslashes remain.
+    internal static string DecodeLiterals(string raw)
+    {
+        return raw.Replace("\\\\", "\\");
+    }
+
     public static List<Token> Tokenize(string source, JqProgramSource programSource, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -121,10 +148,17 @@ if (c == '"')
                         if (depth > 0) { sb.Append(c); sb.Append(source[i++]); continue; }
                         if (source[i] == '(') { sb.Append("\\("); i++; depth++; continue; }
                         var e = source[i++];
+                        // Keep escaped backslash pairs raw so the interpolation
+                        // splitter can tell literal backslash-paren from a marker.
+                        if (e == (char)92)
+                        {
+                            sb.Append((char)92);
+                            sb.Append(e);
+                        }
+                        else
                         sb.Append(e switch
                         {
                             '"' => '"',
-                            '\\' => '\\',
                             '/' => '/',
                             'b' => '\b',
                             'f' => '\f',

@@ -1799,7 +1799,12 @@ internal sealed class InterpolatedStringFilter(string template, string? format) 
         var literal = new StringBuilder();
         for (var i = 0; i < template.Length; i++)
         {
-            if (template[i] == '\\' && i + 1 < template.Length && template[i + 1] == '(')
+            if (template[i] == (char)92 && i + 1 < template.Length && template[i + 1] == (char)92)
+            {
+                literal.Append(template, i, 2);
+                i++;
+            }
+            else if (template[i] == (char)92 && i + 1 < template.Length && template[i + 1] == (char)40)
             {
                 var start = i + 2;
                 var depth = 1;
@@ -1822,7 +1827,7 @@ for (; i < template.Length; i++)
                     throw new JqException("unterminated string interpolation");
                 if (literal.Length > 0)
                 {
-                    segments.Add(new Literal(literal.ToString()));
+                    segments.Add(new Literal(Lexer.DecodeLiterals(literal.ToString())));
                     literal.Clear();
                 }
                 var parsed = new JqParser(template[start..i], context.ProgramSource, environment, context.Budget).Parse();
@@ -1834,7 +1839,7 @@ for (; i < template.Length; i++)
             }
         }
         if (literal.Length > 0)
-            segments.Add(new Literal(literal.ToString()));
+            segments.Add(new Literal(Lexer.DecodeLiterals(literal.ToString())));
 
         foreach (var text in Combine(segments.Count - 1))
             yield return JsonValue.Create(text);
