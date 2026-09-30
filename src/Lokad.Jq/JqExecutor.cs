@@ -39,7 +39,16 @@ internal static class JqExecutor
         JqProgramSource programSource = invocation.FilterFile is { } programPath
             ? JqProgramSource.File(Utf8Text.Decode(programPath.Display))
             : JqProgramSource.Inline;
-        using var context = new JqContext(invocation.Variables, programSource, budget)
+        // Variable tables are snapshotted per execution. File variables and
+        // ARGS.named entries are recorded while running, so a reused command
+        // must not leak them into later executions.
+        var executionVariables = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+        foreach (var entry in invocation.Variables)
+        {
+            budget.ChargeTree(entry.Value);
+            executionVariables[entry.Key] = entry.Value?.DeepClone();
+        }
+        using var context = new JqContext(executionVariables, programSource, budget)
         {
             Clock = invocation.Clock,
             SortKeys = invocation.SortKeys,
@@ -69,7 +78,6 @@ internal static class JqExecutor
             JqEnvironment moduleEnv = await loader.LoadMainImportsAsync(mainImports, mainImporterDir, cancellationToken).ConfigureAwait(false);
             var filter = new JqParser(filterText, programSource, moduleEnv, budget).Parse();
             stage = 4;
-            foreach (var value in invocation.Variables.Values) budget.ChargeTree(value);
             await using var cursor = new JqInputCursor(host, invocation, context, cancellationToken);
             context.InputCursor = cursor;
             await using var inputs = OuterInputsAsync(cursor, invocation, context, cancellationToken).GetAsyncEnumerator(cancellationToken);
@@ -281,7 +289,7 @@ internal static class JqExecutor
     {
         if (invocation.FileVariables.Count == 0)
             return;
-        if (invocation.Variables is not Dictionary<string, JsonNode?> variables)
+        if (context.Variables is not Dictionary<string, JsonNode?> variables)
             throw new InvalidOperationException("File variables need a mutable variable table.");
         foreach (var (name, path, raw) in invocation.FileVariables)
         {
@@ -303,6 +311,7 @@ internal static class JqExecutor
                     value = ReadSlurpfileValue(bytes, context);
                 }
                 variables[name] = value;
+                context.Budget.ChargeTree(value);
                 if (variables.TryGetValue("ARGS", out JsonNode? args)
                     && args is JsonObject argsObject
                     && argsObject.TryGetPropertyValue("named", out JsonNode? named)

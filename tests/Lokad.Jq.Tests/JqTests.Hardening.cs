@@ -61,4 +61,34 @@ public sealed partial class JqTests
         foreach (string line in host.GetOutput(JqFileDescriptor.StdOut).Split((char)10, StringSplitOptions.RemoveEmptyEntries))
             Assert.Equal("24", line);
     }
+
+    [Fact]
+    public async Task Jq_ReusedCommandRereadsFileVariables()
+    {
+        var host = new MockFileSystem();
+        host.AddFile("/data", "[1]");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-c", "--slurpfile", "data", "/data", "$data")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("[[1]]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        host.AddFile("/data", "[2]");
+        var rerun = new MockFileSystem();
+        rerun.AddFile("/data", "[2]");
+        Assert.Equal(0, await tool.ExecuteAsync(rerun, CancellationToken.None));
+        Assert.Equal("[[2]]\n", rerun.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
+    public async Task Jq_ReusedCommandRunsConcurrentlyWithIndependentState()
+    {
+        var first = new MockFileSystem();
+        first.AddFile("/data", "[1]");
+        var second = new MockFileSystem();
+        second.AddFile("/data", "[2]");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-c", "--slurpfile", "data", "/data", "$data")));
+        Task<int> left = tool.ExecuteAsync(first, CancellationToken.None);
+        Task<int> right = tool.ExecuteAsync(second, CancellationToken.None);
+        Assert.Equal(new[] { 0, 0 }, await Task.WhenAll(left, right));
+        Assert.Equal("[[1]]\n", first.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[[2]]\n", second.GetOutput(JqFileDescriptor.StdOut));
+    }
 }
