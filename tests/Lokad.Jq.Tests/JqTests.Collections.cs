@@ -165,6 +165,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("[0, 1, 2]", "[skip(0.5; .[])]", "[\n  0,\n  1,\n  2\n]\n")]
     [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "[skip(3; .[])]", "[\n  3,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
+    [InlineData("[]", "[skip(3; .[])]", "[]\n")]
     [InlineData("\"a,b, cd\"", "rindex(\",\")", "3\n")]
     [InlineData("\"abc\"", "rindex(\"z\")", "null\n")]
     public async Task Jq_SkipRindex(string input, string filter, string expected)
