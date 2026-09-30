@@ -33,6 +33,8 @@ public sealed partial class JqTests
     [InlineData("(([0,1,2,3]),([4,5,6,7]))[(0,1):2]", "[\n  0,\n  1\n]\n[\n  4,\n  5\n]\n[\n  1\n]\n[\n  5\n]\n")]
     [InlineData("[0,1,2] | .[empty:2]", "")]
     [InlineData("[0,1,2] | .[1:empty]", "")]
+[InlineData("[range(3)] | .[nan:1]", "[\n  0\n]\n")]
+[InlineData("[range(3)] | .[1:nan]", "[\n  1,\n  2\n]\n")]
     public async Task Jq_SliceStreamsEveryBound(string filter, string expected)
     {
         var host = new MockFileSystem();

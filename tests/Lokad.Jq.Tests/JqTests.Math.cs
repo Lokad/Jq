@@ -204,6 +204,7 @@ public sealed partial class JqTests
     [InlineData("0 | frexp", "[\n  0,\n  0\n]\n")]
     [InlineData("fma(2;3;4)", "10\n")]
     [InlineData("fma(0 - 2;3;0 - 4)", "-10\n")]
+[InlineData("[nan % 1, 1 % nan | isnan]", "[\n  true,\n  true\n]\n")]
     public async Task Jq_MathRemainder(string filter, string expected)
     {
         var host = new MockFileSystem();
