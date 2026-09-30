@@ -6,6 +6,12 @@ public sealed partial class JqTests
 {
     [Theory]
     [InlineData("{\"a\": 1}", "path(.a)", "[\n  \"a\"\n]\n")]
+    [InlineData("null", "path(.foo[0,1])", "[\n  \"foo\",\n  0\n]\n[\n  \"foo\",\n  1\n]\n")]
+    [InlineData("[1,5,3]", "path(.[] | select(.>3))", "[\n  1\n]\n")]
+    [InlineData("42", "path(.)", "[]\n")]
+    [InlineData("null", "path(.a[0].b)", "[\n  \"a\",\n  0,\n  \"b\"\n]\n")]
+    [InlineData("{\"a\":[{\"b\":1}]}", "[path(..)]", "[\n  [],\n  [\n    \"a\"\n  ],\n  [\n    \"a\",\n    0\n  ],\n  [\n    \"a\",\n    0,\n    \"b\"\n  ]\n]\n")]
+    [InlineData("{\"a\":{\"b\":0}}", "path(.a[path(.b)[0]])", "[\n  \"a\",\n  \"b\"\n]\n")]
     [InlineData("[10, 20]", "path(.[])", "[\n  0\n]\n[\n  1\n]\n")]
     [InlineData("{\"a\": {\"b\": 1}}", "path(.a.b)", "[\n  \"a\",\n  \"b\"\n]\n")]
     [InlineData("[0, 1, 2]", "path(.[1, 2])", "[\n  1\n]\n[\n  2\n]\n")]
@@ -83,6 +89,17 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3]", "setpath([{\"start\": 1, \"end\": 3}]; [9])", "[\n  0,\n  9,\n  3\n]\n")]
     [InlineData("[0, 1, 2, 3]", "try setpath([{\"start\": 1, \"end\": 3}]; 9) catch .", "\"A slice of an array can only be assigned another array\"\n")]
     [InlineData("[0]", "setpath([-1]; 1)", "[\n  1\n]\n")]
+    [InlineData("{\"bar\": 42, \"foo\": [\"a\", \"b\", \"c\", \"d\"]}", "[\"foo\",1] as $p | getpath($p), setpath($p; 20), delpaths([$p])", "\"b\"\n{\n  \"bar\": 42,\n  \"foo\": [\n    \"a\",\n    20,\n    \"c\",\n    \"d\"\n  ]\n}\n{\n  \"bar\": 42,\n  \"foo\": [\n    \"a\",\n    \"c\",\n    \"d\"\n  ]\n}\n")]
+    [InlineData("{\"bar\":false}", "[\"foo\",1] as $p | getpath($p), setpath($p; 20), delpaths([$p])", "null\n{\n  \"bar\": false,\n  \"foo\": [\n    null,\n    20\n  ]\n}\n{\n  \"bar\": false\n}\n")]
+    [InlineData("[[0], [0,1], [0,1,2]]", "map(getpath([2])), map(setpath([2]; 42)), map(delpaths([[2]]))", "[\n  null,\n  null,\n  2\n]\n[\n  [\n    0,\n    null,\n    42\n  ],\n  [\n    0,\n    1,\n    42\n  ],\n  [\n    0,\n    1,\n    42\n  ]\n]\n[\n  [\n    0\n  ],\n  [\n    0,\n    1\n  ],\n  [\n    0,\n    1\n  ]\n]\n")]
+    [InlineData("[[{\"foo\":2, \"x\":1}], [{\"bar\":2}]]", "map(delpaths([[0,\"foo\"]]))", "[\n  [\n    {\n      \"x\": 1\n    }\n  ],\n  [\n    {\n      \"bar\": 2\n    }\n  ]\n]\n")]
+    [InlineData("{\"a\":{\"b\":1},\"x\":{\"y\":2}}", "delpaths([[\"a\",\"b\"]])", "{\n  \"a\": {},\n  \"x\": {\n    \"y\": 2\n  }\n}\n")]
+    [InlineData("{\"a\":{\"b\":0, \"c\":1}}", "[getpath([\"a\",\"b\"], [\"a\",\"c\"])]", "[\n  0,\n  1\n]\n")]
+    [InlineData("null", "getpath([\"a\",\"b\"])", "null\n")]
+    [InlineData("null", "setpath([\"a\",\"b\"]; 1)", "{\n  \"a\": {\n    \"b\": 1\n  }\n}\n")]
+    [InlineData("{\"a\":{\"b\":0}}", "setpath([\"a\",\"b\"]; 1)", "{\n  \"a\": {\n    \"b\": 1\n  }\n}\n")]
+    [InlineData("null", "setpath([0,\"a\"]; 1)", "[\n  {\n    \"a\": 1\n  }\n]\n")]
+    [InlineData("[]", "try [\"OK\", setpath([[1]]; 1)] catch [\"KO\", .]", "[\n  \"KO\",\n  \"expected a number for indexing an array but got: [1]\"\n]\n")]
     [InlineData("{\"hi\": \"hello\"}", "try [\"ok\", setpath([1]; 1)] catch [\"ko\", .]", "[\n  \"ko\",\n  \"Cannot index object with number (1)\"\n]\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
@@ -111,6 +128,8 @@ public sealed partial class JqTests
     [InlineData("[1, 2, 3]", "del(.[nan,nan])", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[[10, 20], 30]", "pick(first|first)", "[\n  [\n    10\n  ]\n]\n")]
     [InlineData("[1, 2]", "try pick(last) catch .", "\"Out of bounds negative array index\"\n")]
+    [InlineData("[0,1,2,3,4,5,6,7]", "del(.[2:4],.[0],.[-2:])", "[\n  1,\n  4,\n  5\n]\n")]
+    [InlineData("[\"foo\", \"bar\", \"baz\"]", "del(.[1, 2])", "[\n  \"foo\"\n]\n")]
     public async Task Jq_DelAndPickReshape(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

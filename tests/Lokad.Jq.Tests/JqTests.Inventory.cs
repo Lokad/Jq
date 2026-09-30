@@ -116,6 +116,9 @@ public sealed partial class JqTests
     [InlineData("builtins | any(.[0:1] == \"_\")", "false\n")]
     [InlineData("builtins | length > 10", "true\n")]
     [InlineData("builtins | length", "223\n")]
+    [InlineData("\"-1\"|IN(builtins[] / \"/\"|.[1])", "false\n")]
+    [InlineData("all(builtins[] / \"/\"; .[1]|tonumber >= 0)", "true\n")]
+    [InlineData("builtins|any(.[:1] == \"_\")", "false\n")]
     public async Task Jq_InventoryBuiltins(string filter, string expected)
     {
         var host = new MockFileSystem();

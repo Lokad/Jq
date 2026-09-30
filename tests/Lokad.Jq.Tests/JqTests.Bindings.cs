@@ -41,6 +41,7 @@ public sealed partial class JqTests
     [InlineData("[[3],[4],[5],6]", ".[] | . as $a ?// {a:$a} ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("null", ". as [$a] | $a", "null\n")]
     [InlineData("null", ". as {a: $x} | $x", "null\n")]
+    [InlineData("{\"a\":4,\"b\":5}", "1 as $foreach | 2 as $and | 3 as $or | { $foreach, $and, $or, a }", "{\n  \"foreach\": 1,\n  \"and\": 2,\n  \"or\": 3,\n  \"a\": 4\n}\n")]
     public async Task Jq_DestructuringBindsMissingAsNull(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -71,6 +72,7 @@ public sealed partial class JqTests
     [InlineData("null as $x | $x", "null\n")]
     [InlineData("1, 2 as $x | $x", "1\n2\n")]
     [InlineData("1 | 2 as $x | $x", "2\n")]
+    [InlineData("{if:0,and:1,or:2,then:3,else:4,elif:5,end:6,as:7,def:8,reduce:9,foreach:10,try:11,catch:12,label:13,import:14,include:15,module:16}", "{\n  \"if\": 0,\n  \"and\": 1,\n  \"or\": 2,\n  \"then\": 3,\n  \"else\": 4,\n  \"elif\": 5,\n  \"end\": 6,\n  \"as\": 7,\n  \"def\": 8,\n  \"reduce\": 9,\n  \"foreach\": 10,\n  \"try\": 11,\n  \"catch\": 12,\n  \"label\": 13,\n  \"import\": 14,\n  \"include\": 15,\n  \"module\": 16\n}\n")]
     public async Task Jq_BinderStreamsAndGroups(string filter, string expected)
     {
         var host = new MockFileSystem();
