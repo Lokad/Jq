@@ -27,6 +27,20 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
+    [Theory]
+    [InlineData("limit((1, 2); (10, 20, 30))", "10\n10\n20\n")]
+    [InlineData("nth((0, 1); (10, 20, 30))", "10\n20\n")]
+    public async Task Jq_CountArgumentsDistribute(string filter, string expected)
+    {
+        // Count positions are value parameters, so each count value
+        // runs the body independently like upstream $n bindings.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
     [Fact]
     public async Task Jq_FirstEmptyYieldsNothing()
     {
