@@ -963,13 +963,25 @@ internal sealed class JqRuntime(JqBudget budget)
 
     internal JsonNode Flatten(JsonNode? input, double depth)
     {
-        if (input is not JsonArray arr)
-            throw new JqRuntimeException($"cannot iterate over {TypeName(input)}");
+        // Like the reference reduce over `.[]`, null iterates empty and
+        // objects contribute their values; other scalars fail.
         var result = new JsonArray();
         budget.ChargeNode();
-        foreach (JsonNode? child in arr)
-            FlattenInto(result, child, depth);
-        return result;
+        if (input is null)
+            return result;
+        if (input is JsonArray arr)
+        {
+            foreach (JsonNode? child in arr)
+                FlattenInto(result, child, depth);
+            return result;
+        }
+        if (input is JsonObject obj)
+        {
+            foreach (var property in obj)
+                FlattenInto(result, property.Value, depth);
+            return result;
+        }
+        throw new JqRuntimeException($"cannot iterate over {TypeName(input)}");
     }
 
     private void FlattenInto(JsonArray result, JsonNode? node, double depth)

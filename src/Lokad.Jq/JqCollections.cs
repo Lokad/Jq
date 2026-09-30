@@ -137,11 +137,29 @@ internal sealed class TransposeFilter : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (input is not JsonArray rows)
-            throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
+        if (input is null)
+        {
+            context.Budget.ChargeNode();
+            yield return new JsonArray();
+            yield break;
+        }
         var matrix = new List<JsonNode?>();
+        if (input is JsonObject fields)
+        {
+            foreach (var property in fields)
+                matrix.Add(property.Value);
+        }
+        else if (input is JsonArray rows)
+        {
+            foreach (JsonNode? row in rows)
+                matrix.Add(row);
+        }
+        else
+        {
+            throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
+        }
         int width = 0;
-        foreach (JsonNode? row in rows)
+        foreach (JsonNode? row in matrix)
         {
             if (row is not JsonArray && row is not null)
                 throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(row)}");
@@ -149,7 +167,6 @@ internal sealed class TransposeFilter : JqFilter
             if (length > width)
                 width = length;
             context.Budget.ChargeNode();
-            matrix.Add(row);
         }
         var result = new JsonArray();
         context.Budget.ChargeNode();
