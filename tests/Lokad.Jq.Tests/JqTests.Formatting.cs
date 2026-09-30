@@ -107,6 +107,7 @@ public sealed partial class JqTests
     [InlineData("\"=\"", "@base64d", "\"\"\n")]
     [InlineData("\"Zm/Ds2Jhcgo=\"", "@base64d", "\"foóbar\\n\"\n")]
     [InlineData("\"cWl4YmF6Cg\"", "@base64d", "\"qixbaz\\n\"\n")]
+    [InlineData("\"a\"", "@base64", "\"YQ==\"\n")]
     [InlineData("\"AB=C\"", "@base64d", "\"\\u0000\"\n")]
     public async Task Jq_Base64Vectors(string input, string filter, string expected)
     {
@@ -124,6 +125,9 @@ public sealed partial class JqTests
     [InlineData("\",-./09:;<=>?@AZ[\\\\]^_`az{|}~\u007f\"", "@uri", "\"%2C-.%2F09%3A%3B%3C%3D%3E%3F%40AZ%5B%5C%5D%5E_%60az%7B%7C%7D~%7F\"\n")]
     [InlineData("\"a \\u03bc \\u2230 \\ud83d\\ude0e\"", "@uri", "\"a%20%CE%BC%20%E2%88%B0%20%F0%9F%98%8E\"\n")]
     [InlineData("\"a\\u0000b\\u0000c\"", "@uri", "\"a%00b%00c\"\n")]
+    [InlineData("\"\"", "@uri", "\"\"\n")]
+    [InlineData("\"\"", "@urid", "\"\"\n")]
+    [InlineData("\"%c3%a4b%c3%a7d%c3%ab\"", "@urid", "\"äbçdë\"\n")]
     [InlineData("\"%08%09%0A%0C%0D%22%5C\"", "@urid", "\"\\b\\t\\n\\f\\r\\\"\\\\\"\n")]
     [InlineData("\"a%20%C3%A9\"", "@urid", "\"a é\"\n")]
     [InlineData("\"hello world\"", "@urid", "\"hello world\"\n")]
