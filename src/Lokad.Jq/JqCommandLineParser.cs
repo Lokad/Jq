@@ -42,6 +42,26 @@ internal static class JqCommandLineParser
         }
     }
 
+    // Range check for strict `--indent` values without integer overflow:
+    // only -1..7 are in range, so any multi-digit significant is out of range
+    // (this also covers values far past int range, which must report the
+    // reference diagnostic instead of tripping binder conversion errors).
+    private static bool IsIndentInRange(string text)
+    {
+        int start = text[0] is '+' or '-' ? 1 : 0;
+        int first = start;
+        while (first < text.Length && text[first] == '0')
+            first++;
+        int significant = text.Length - first;
+        if (significant == 0)
+            return true;
+        if (significant > 1)
+            return false;
+        return text[0] == '-'
+            ? text[first] <= '1'
+            : text[first] <= '7';
+    }
+
     // Strict `--indent` values: an optional sign followed by ASCII digits.
     private static bool IsStrictIndentValue(string text)
     {
@@ -232,7 +252,7 @@ internal static class JqCommandLineParser
                         if (withValue.Name == "indent")
                         {
                             format = OutputFormat.Spaces;
-                            if (!IsStrictIndentValue(withValue.Value))
+                            if (!IsStrictIndentValue(withValue.Value) || !IsIndentInRange(withValue.Value))
                                 throw new ParseException("--indent takes a number between -1 and 7");
                         }
                         break;
@@ -382,7 +402,7 @@ internal static class JqCommandLineParser
                 if (i + 1 >= args.Count)
                     return SpecialArguments.Failure("jq: --indent takes one parameter");
                 var indentText = args[++i];
-                if (!IsStrictIndentValue(indentText))
+                if (!IsStrictIndentValue(indentText) || !IsIndentInRange(indentText))
                     return SpecialArguments.Failure("--indent takes a number between -1 and 7");
                 options.Add(arg);
                 // Negative values would retokenize as numeric options, so

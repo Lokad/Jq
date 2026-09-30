@@ -136,10 +136,25 @@ public sealed partial class JqTests
     [InlineData("abc")]
     [InlineData(" 4")]
     [InlineData("4x")]
+    [InlineData("9999999999")]
+    [InlineData("-9999999999")]
+    [InlineData("+8")]
     public async Task Jq_IndentRejectsOutOfRange(string value)
     {
         var host = new MockFileSystem();
         var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--indent", value, ".");
+        Assert.Equal(2, exit);
+        Assert.Contains("--indent takes a number between -1 and 7", stderr);
+        Assert.Equal("", stdout);
+    }
+
+    [Fact]
+    public async Task Jq_IndentCombinedOverflowIsRangeError()
+    {
+        // The combined spelling must report the reference diagnostic too,
+        // not a binder conversion error.
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--indent=9999999999", ".");
         Assert.Equal(2, exit);
         Assert.Contains("--indent takes a number between -1 and 7", stderr);
         Assert.Equal("", stdout);
