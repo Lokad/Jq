@@ -241,6 +241,27 @@ public sealed partial class JqTests
         Assert.Contains("filter nesting limit exceeded", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
+    [Fact]
+    public async Task Jq_RejectsOversizedTokenCount()
+    {
+        var host = new MockFileSystem();
+        var filter = string.Join(",", Enumerable.Repeat("1", 3000));
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("4096-token limit", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
+    public async Task Jq_RejectsOversizedArgumentCount()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", Enumerable.Repeat(".", 4097).ToArray(), [])));
+        Assert.Equal(2, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("argument count exceeds the 4096 limit", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
