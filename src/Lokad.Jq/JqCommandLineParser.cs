@@ -300,11 +300,18 @@ internal static class JqCommandLineParser
         var variables = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
         var positional = new List<JsonNode?>();
         var options = new List<string>();
-        var operands = new List<string>();
         string? fromFile = null;
         var fileVariables = new List<(string Name, string Path, bool Raw)>();
         var libraryDirs = new List<string>();
         bool argsDone = false;
+        // Mirror the reference parser: --args/--jsonargs only set a mode for
+        // later non-option operands. Options keep parsing after markers, the
+        // first non-option operand stays the filter (or, with -f, every operand
+        // stays a file candidate), pre-marker operands stay input files, and --
+        // only stops option parsing without clearing the positional mode.
+        bool furtherStrings = false;
+        bool furtherJson = false;
+        var operandModes = new List<(string Text, bool Positional, bool AsJson)>();
 
         for (var i = 0; i < args.Count; i++)
         {
@@ -317,19 +324,9 @@ internal static class JqCommandLineParser
 
             if (!argsDone && (arg == "--args" || arg == "--jsonargs"))
             {
-                var jsonArgs = arg == "--jsonargs";
-                for (i++; i < args.Count; i++)
-                {
-                    if (!jsonArgs)
-                    {
-                        positional.Add(JsonValue.Create(args[i]));
-                        continue;
-                    }
-
-                    try { positional.Add(runtime.ParseJson(args[i])); }
-                    catch (JqException ex) { return SpecialArguments.Failure($"jq: invalid JSON argument: {ex.Message}"); }
-                }
-                break;
+                furtherStrings = arg == "--args";
+                furtherJson = arg == "--jsonargs";
+                continue;
             }
 
             if (!argsDone && arg == "--arg")
@@ -492,7 +489,37 @@ internal static class JqCommandLineParser
                 continue;
             }
 
-            operands.Add(arg);
+            operandModes.Add((arg, furtherStrings || furtherJson, furtherJson));
+        }
+
+        // Split operands like the reference: the first non-option operand stays the
+        // filter unless the program comes from -f, pre-marker operands stay input
+        // files, and each post-marker operand uses the marker active when it was seen.
+        var operands = new List<string>();
+        bool programSeen = fromFile is not null;
+        foreach (var entry in operandModes)
+        {
+            if (!programSeen)
+            {
+                programSeen = true;
+                operands.Add(entry.Text);
+                continue;
+            }
+
+            if (!entry.Positional)
+            {
+                operands.Add(entry.Text);
+                continue;
+            }
+
+            if (!entry.AsJson)
+            {
+                positional.Add(JsonValue.Create(entry.Text));
+                continue;
+            }
+
+            try { positional.Add(runtime.ParseJson(entry.Text)); }
+            catch (JqException ex) { return SpecialArguments.Failure($"jq: invalid JSON argument: {ex.Message}"); }
         }
 
         return new SpecialArguments(options, operands, variables, positional, fromFile, fileVariables, libraryDirs, null);

@@ -71,7 +71,6 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("--arg", "text", "-c", "{a:1}")]
-    [InlineData("{a:1}", "--args", "-c")]
     [InlineData("--", "{a:1}", "-c")]
     [InlineData("-f=c")]
     public async Task Jq_CompactOutputSpellingInOperandsDoesNotChangeFormatting(params string[] arguments)

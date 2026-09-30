@@ -217,4 +217,101 @@ public sealed partial class JqTests
         Assert.Empty(stdout);
         Assert.Equal(0, host.OpenFileCount);
     }
+
+    [Fact]
+    public async Task Jq_OptionsStillParseAfterArgsMarkers()
+    {
+        // Flags and valued options keep working after --args, matching the reference:
+        // the first non-option operand stays the filter and later ones turn positional.
+        var compact = new MockFileSystem();
+        compact.SetStandardInput("null");
+        var (compactExit, compactOut, compactErr) = await RunCliAsync(compact, "--tab", "{a:1}", "--args", "-c");
+        Assert.Equal(0, compactExit);
+        Assert.Equal("{\"a\":1}\n", compactOut);
+        Assert.Empty(compactErr);
+
+        var named = new MockFileSystem();
+        var (namedExit, namedOut, namedErr) = await RunCliAsync(named, "--args", "-n", "$ARGS.positional", "a", "b");
+        Assert.Equal(0, namedExit);
+        Assert.Equal("[\n  \"a\",\n  \"b\"\n]\n", namedOut);
+        Assert.Empty(namedErr);
+    }
+
+    [Fact]
+    public async Task Jq_FirstNonOptionStaysFilterInsideArgsMarkers()
+    {
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--args", "a", "b");
+        Assert.Equal(3, exit);
+        Assert.Empty(stdout);
+    }
+
+    [Fact]
+    public async Task Jq_FilesBeforeMarkersStayInputFiles()
+    {
+        var host = new MockFileSystem();
+        host.AddFile("/data.json", "{\"f\":1}");
+        var (exit, stdout, stderr) = await RunCliAsync(host, "[$ARGS.positional]", "/data.json", "--args", "a");
+        Assert.Equal(0, exit);
+        Assert.Equal("[\n  [\n    \"a\"\n  ]\n]\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
+    public async Task Jq_SeparatorPreservesArgsMarkers()
+    {
+        // -- only stops option parsing like the reference; an active --args mode
+        // keeps diverting later operands into positional arguments.
+        var filter = new MockFileSystem();
+        var (filterExit, filterOut, filterErr) = await RunCliAsync(filter, "-n", "--args", "--", "x");
+        Assert.Equal(3, filterExit);
+        Assert.Empty(filterOut);
+
+        var preserved = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunCliAsync(preserved, "-n", "$ARGS.positional", "--args", "a", "--", "b");
+        Assert.Equal(0, exit);
+        Assert.Equal("[\n  \"a\",\n  \"b\"\n]\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
+    public async Task Jq_RawInputFlagSurvivesArgsMarkers()
+    {
+        // -R after --args stays an option and the first non-option operand stays
+        // the filter; a distinct filter proves the fallback dot is not used.
+        var host = new MockFileSystem();
+        host.SetStandardInput("hi");
+        var (exit, stdout, stderr) = await RunCliAsync(host, "--args", "-R", "$ARGS.positional", "x");
+        Assert.Equal(0, exit);
+        Assert.Equal("[\n  \"x\"\n]\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
+    public async Task Jq_LastArgsMarkerSelectsJsonParsing()
+    {
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--args", "a", "--jsonargs", "b", "$ARGS.positional");
+        Assert.Equal(2, exit);
+        Assert.Contains("invalid JSON", stderr);
+        Assert.Empty(stdout);
+    }
+
+    [Fact]
+    public async Task Jq_ArgsMarkersKeepPerOperandParsing()
+    {
+        // Each post-marker operand uses the marker active when it was seen, like
+        // the reference: earlier string operands stay strings after --jsonargs.
+        var mixed = new MockFileSystem();
+        var (mixedExit, mixedOut, mixedErr) = await RunCliAsync(mixed, "-n", "$ARGS.positional", "--args", "a", "--jsonargs", "{\"b\":1}");
+        Assert.Equal(0, mixedExit);
+        Assert.Equal("[\n  \"a\",\n  {\n    \"b\": 1\n  }\n]\n", mixedOut);
+        Assert.Empty(mixedErr);
+
+        var back = new MockFileSystem();
+        var (backExit, backOut, backErr) = await RunCliAsync(back, "-n", "$ARGS.positional", "--jsonargs", "{\"b\":1}", "--args", "c");
+        Assert.Equal(0, backExit);
+        Assert.Equal("[\n  {\n    \"b\": 1\n  },\n  \"c\"\n]\n", backOut);
+        Assert.Empty(backErr);
+    }
 }
