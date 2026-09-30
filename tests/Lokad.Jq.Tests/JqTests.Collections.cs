@@ -55,6 +55,8 @@ public sealed partial class JqTests
     [InlineData("{\"arr\": [1, 2, 3]}", ".sum = add(.arr[])", "{\n  \"arr\": [\n    1,\n    2,\n    3\n  ],\n  \"sum\": 6\n}\n")]
     [InlineData("[[1], [2, 3]]", "transpose", "[\n  [\n    1,\n    2\n  ],\n  [\n    null,\n    3\n  ]\n]\n")]
     [InlineData("[]", "transpose", "[]\n")]
+    [InlineData("[[]]", "transpose", "[]\n")]
+    [InlineData("[[],[1]]", "transpose", "[\n  [\n    null,\n    1\n  ]\n]\n")]
     [InlineData("[[1, 2], [3]]", "combinations", "[\n  1,\n  3\n]\n[\n  2,\n  3\n]\n")]
     [InlineData("[1, 2]", "combinations(2)", "[\n  1,\n  1\n]\n[\n  1,\n  2\n]\n[\n  2,\n  1\n]\n[\n  2,\n  2\n]\n")]
     [InlineData("[1, 2]", "combinations(0)", "[]\n")]
