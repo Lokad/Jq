@@ -25,6 +25,7 @@ public sealed partial class JqTests
     [InlineData("reduce empty as $x (1, 2; .)", "1\n2\n")]
     [InlineData("reduce (1, 2) as $x (0; (., . + 100))", "0\n100\n100\n200\n")]
     [InlineData("foreach (1, 2) as $x (0; (., . + 100))", "0\n100\n0\n100\n100\n200\n")]
+    [InlineData("foreach 1 as $x ((10, 20); . + $x)", "11\n21\n")]
     public async Task Jq_ReduceFoldsStates(string filter, string expected)
     {
         var host = new MockFileSystem();
