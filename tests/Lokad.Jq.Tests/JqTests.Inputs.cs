@@ -50,6 +50,21 @@ public sealed partial class JqTests
         Assert.Equal("{\n  \"a\": [\n    1,\n    2,\n    {\n      \"b\": \"xé\"\n    }\n  ],\n  \"c\": null\n}\n[\n  true,\n  false\n]\n\"tail\"\n", stdout);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(5)]
+    [InlineData(7)]
+    public async Task Jq_InputNonFiniteAcrossChunks(int chunk)
+    {
+        var inner = new MockFileSystem();
+        inner.SetStandardInput("[nan, -Infinity, {\"a\": Infinity}]");
+        var (exit, stdout, stderr) = await RunInputAsync(new ChunkedHost(inner, chunk), ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("[\n  null,\n  -1.7976931348623157E+308,\n  {\n    \"a\": 1.7976931348623157E+308\n  }\n]\n", stdout);
+    }
+
     [Fact]
     public async Task Jq_InputLongScalarAcrossChunks()
     {

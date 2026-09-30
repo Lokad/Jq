@@ -201,6 +201,8 @@ public sealed partial class JqTests
             ("nan", "null\n"),
             ("-Infinity", "-1.7976931348623157E+308\n"),
             ("[nan]", "[\n  null\n]\n"),
+            ("{\"a\": nan, \"b\": 1}", "{\n  \"a\": null,\n  \"b\": 1\n}\n"),
+            ("{\"a\":nan}", "{\n  \"a\": null\n}\n"),
             ("{\"a\": [1, nan]}", "{\n  \"a\": [\n    1,\n    null\n  ]\n}\n"),
         };
         foreach (var (stdin, expected) in cases)

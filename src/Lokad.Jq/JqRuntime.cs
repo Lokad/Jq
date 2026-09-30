@@ -270,10 +270,9 @@ internal sealed class JqRuntime(JqBudget budget)
         return true;
     }
 
-    private void ReadToken(ref Utf8JsonReader reader, ReadOnlySpan<byte> source, ref int consumedBase, out bool hasToken, out JsonNode? nonFinite)
+    private void ReadToken(ref Utf8JsonReader reader, ReadOnlySpan<byte> source, ref int consumedBase, JsonReaderState restoreState, out bool hasToken, out JsonNode? nonFinite)
         {
             nonFinite = null;
-            JsonReaderState state = reader.CurrentState;
             try
             {
                 hasToken = reader.Read();
@@ -285,8 +284,11 @@ internal sealed class JqRuntime(JqBudget budget)
                     && TryMatchNonFinite(source, failure, out double number, out int end))
                 {
                     budget.ChargeNode();
-                    reader = new Utf8JsonReader(source.Slice(end), reader.IsFinalBlock, state);
-                    consumedBase = end;
+                    int resume = SkipJsonWhitespace(source, end);
+                    if (resume < source.Length && source[resume] == (byte)',')
+                        resume++;
+                    reader = new Utf8JsonReader(source.Slice(resume), reader.IsFinalBlock, restoreState);
+                    consumedBase = resume;
                     hasToken = true;
                     nonFinite = JsonValue.Create(number);
                     return;
@@ -304,8 +306,11 @@ internal sealed class JqRuntime(JqBudget budget)
                         throw new JqException("value nesting limit exceeded");
                     budget.ChargeNode();
                     var obj = new JsonObject();
-                    while (reader.Read())
+                    while (true)
                     {
+                        JsonReaderState headState = reader.CurrentState;
+                        if (!reader.Read())
+                            throw new JqException("truncated JSON value");
                         if (reader.TokenType == JsonTokenType.EndObject)
                             return obj;
                         if (reader.TokenType != JsonTokenType.PropertyName)
@@ -314,7 +319,7 @@ internal sealed class JqRuntime(JqBudget budget)
                         if (name is null)
                             throw new JqException("expected object key");
                         budget.ChargeString(name.Length);
-                        ReadToken(ref reader, source, ref consumedBase, out bool hasValue, out JsonNode? valueFallback);
+                        ReadToken(ref reader, source, ref consumedBase, headState, out bool hasValue, out JsonNode? valueFallback);
                         if (!hasValue)
                             throw new JqException("truncated JSON value");
                         obj[name] = valueFallback ?? ReadValue(ref reader, source, ref consumedBase, depth + 1);
@@ -327,7 +332,8 @@ internal sealed class JqRuntime(JqBudget budget)
                     var array = new JsonArray();
                     while (true)
                     {
-                        ReadToken(ref reader, source, ref consumedBase, out bool hasToken, out JsonNode? nonFinite);
+                        JsonReaderState headState = reader.CurrentState;
+                        ReadToken(ref reader, source, ref consumedBase, headState, out bool hasToken, out JsonNode? nonFinite);
                         if (!hasToken)
                             throw new JqException("truncated JSON value");
                         if (nonFinite is not null)
