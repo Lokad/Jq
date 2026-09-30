@@ -205,6 +205,13 @@ internal static class JqBuiltinRegistry
         ["normals"] = (0, 0),
         ["_strindices"] = (1, 1),
         ["_negate"] = (0, 0),
+        ["_sort_by_impl"] = (1, 1),
+        ["_group_by_impl"] = (1, 1),
+        ["_unique_by_impl"] = (1, 1),
+        ["_min_by_impl"] = (1, 1),
+        ["_max_by_impl"] = (1, 1),
+        ["_flatten"] = (1, 1),
+        ["_match_impl"] = (3, 3),
     };
 
     internal static IReadOnlyList<string> ListAll()

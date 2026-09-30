@@ -380,6 +380,161 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
     }
 }
 
+// _sort_by_impl(keys): stable ordering by precomputed key arrays.
+internal sealed class SortByImplFilter(JqFilter Keys) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
+        {
+            if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
+                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
+            var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
+            for (int index = 0; index < elements.Count; index++)
+            {
+                context.Budget.ChargeNode();
+                pairs.Add((elements[index], keys[index]));
+            }
+            var result = new JsonArray();
+            context.Budget.ChargeNode();
+            foreach (var pair in pairs.OrderBy(static item => item.Key, CollectionKeys.TotalOrder()))
+            {
+                context.Budget.ChargeNode();
+                result.Add(context.Runtime.Clone(pair.Element));
+            }
+            yield return result;
+        }
+    }
+}
+
+// _group_by_impl(keys): stable-sorted runs of equal precomputed keys.
+internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
+        {
+            if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
+                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
+            var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
+            for (int index = 0; index < elements.Count; index++)
+            {
+                context.Budget.ChargeNode();
+                pairs.Add((elements[index], keys[index]));
+            }
+            var ordered = pairs.OrderBy(static item => item.Key, CollectionKeys.TotalOrder()).ToList();
+            var result = new JsonArray();
+            context.Budget.ChargeNode();
+            JsonArray? group = null;
+            JsonNode? current = null;
+            foreach (var pair in ordered)
+            {
+                if (group is null || !context.Runtime.JsonEquals(current, pair.Key))
+                {
+                    group = new JsonArray();
+                    context.Budget.ChargeNode();
+                    result.Add(group);
+                    current = pair.Key;
+                }
+                context.Budget.ChargeNode();
+                group.Add(context.Runtime.Clone(pair.Element));
+            }
+            yield return result;
+        }
+    }
+}
+
+// _unique_by_impl(keys): first element per equal-key run in sorted order.
+internal sealed class UniqueByImplFilter(JqFilter Keys) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
+        {
+            if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
+                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
+            var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
+            for (int index = 0; index < elements.Count; index++)
+            {
+                context.Budget.ChargeNode();
+                pairs.Add((elements[index], keys[index]));
+            }
+            var ordered = pairs.OrderBy(static item => item.Key, CollectionKeys.TotalOrder()).ToList();
+            var result = new JsonArray();
+            context.Budget.ChargeNode();
+            JsonNode? current = null;
+            bool first = true;
+            foreach (var pair in ordered)
+            {
+                if (first || !context.Runtime.JsonEquals(current, pair.Key))
+                {
+                    context.Budget.ChargeNode();
+                    result.Add(context.Runtime.Clone(pair.Element));
+                    current = pair.Key;
+                    first = false;
+                }
+            }
+            yield return result;
+        }
+    }
+}
+
+// _min_by_impl and _max_by_impl with precomputed keys: first extreme wins for min, last wins for max; empty yields null.
+internal sealed class MinMaxByImplFilter(JqFilter Keys, bool TakeMax) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
+        {
+            if (input is not JsonArray elements || keysValue is not JsonArray keys)
+                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be iterated over");
+            if (elements.Count != keys.Count)
+                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") have wrong length");
+            if (elements.Count == 0)
+            {
+                yield return null;
+                continue;
+            }
+            JsonNode? best = elements[0];
+            JsonNode? bestKey = keys[0];
+            for (int index = 1; index < elements.Count; index++)
+            {
+                context.Budget.ChargeNode();
+                int order = JqRuntime.Compare(keys[index], bestKey);
+                if (TakeMax ? order >= 0 : order < 0)
+                {
+                    best = elements[index];
+                    bestKey = keys[index];
+                }
+            }
+            yield return context.Runtime.Clone(best);
+        }
+    }
+}
+
+// _flatten(depth): depth-limited flattening without the negative-depth guard.
+internal sealed class FlattenImplFilter(JqFilter Depth) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? depth in Depth.Evaluate(input, context, environment))
+        {
+            double level = Number(depth);
+            yield return context.Runtime.Flatten(input, level);
+        }
+    }
+}
+
 // `any(generator; condition)`: true on the first truthy condition output,
 // short-circuiting the rest. Exhaustion yields false; errors propagate.
 internal sealed class AnyFilter(JqFilter Generator, JqFilter Condition) : JqFilter

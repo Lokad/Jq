@@ -1124,6 +1124,11 @@ internal sealed class JqParser(
             return new SplitsFilter(args);
         }
 
+        if (name == "_match_impl")
+        {
+            return new MatchImplFilter(args);
+        }
+
         if (name == "path")
         {
             return new PathBuiltinFilter(args[0]);
@@ -1266,6 +1271,11 @@ internal sealed class JqParser(
             return new FlattenFilter(args[0]);
         }
 
+        if (name == "_flatten")
+        {
+            return new FlattenImplFilter(args[0]);
+        }
+
         if (name == "add" && args.Count == 0)
         {
             return new AddValuesFilter(new IteratorFilter(new IdentityFilter(), false));
@@ -1300,6 +1310,31 @@ internal sealed class JqParser(
         {
             return new MinMaxByFilter(args[0], true);
         }
+        if (name == "_sort_by_impl")
+        {
+            return new SortByImplFilter(args[0]);
+        }
+
+        if (name == "_group_by_impl")
+        {
+            return new GroupByImplFilter(args[0]);
+        }
+
+        if (name == "_unique_by_impl")
+        {
+            return new UniqueByImplFilter(args[0]);
+        }
+
+        if (name == "_min_by_impl")
+        {
+            return new MinMaxByImplFilter(args[0], false);
+        }
+
+        if (name == "_max_by_impl")
+        {
+            return new MinMaxByImplFilter(args[0], true);
+        }
+
 
         if (name == "transpose")
         {

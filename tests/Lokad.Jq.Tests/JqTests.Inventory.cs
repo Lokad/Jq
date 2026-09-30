@@ -135,4 +135,47 @@ public sealed partial class JqTests
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Theory]
+    [InlineData("[3, 1, 2] | _sort_by_impl([3, 1, 2])", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[1, 2, 1] | _group_by_impl([[1], [2], [1]])", "[\n  [\n    1,\n    1\n  ],\n  [\n    2\n  ]\n]\n")]
+    [InlineData("[1, 2, 1] | _unique_by_impl([[1], [2], [1]])", "[\n  1,\n  2\n]\n")]
+    [InlineData("[3, 1, 2] | _min_by_impl([3, 1, 2])", "1\n")]
+    [InlineData("[3, 1, 2] | _max_by_impl([3, 1, 2])", "3\n")]
+    [InlineData("[0, [1, [[2]]]] | _flatten(1)", "[\n  0,\n  1,\n  [\n    [\n      2\n    ]\n  ]\n]\n")]
+    public async Task Jq_InventoryUnderscoreImpls(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("\"banana\" | _match_impl(\"a\"; null; true)", "true\n")]
+    [InlineData("\"banana\" | _match_impl(\"a\"; null; false) | length", "1\n")]
+    [InlineData("\"banana\" | _match_impl(\"a\"; \"g\"; false) | length", "3\n")]
+    [InlineData("\"banana\" | _match_impl(\"a\"; null; 1) | length", "1\n")]
+    public async Task Jq_InventoryMatchImpl(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("try ([1] | _sort_by_impl([1, 2])) catch .", "\"array ([1]) and array ([1,2]) cannot be sorted, as they are not both arrays\"\n")]
+    [InlineData("try ([1, 2] | _min_by_impl([1])) catch .", "\"array ([1,2]) and array ([1]) have wrong length\"\n")]
+    [InlineData("try (1 | _match_impl(\"a\"; null; false)) catch .", "\"number (1) cannot be matched, as it is not a string\"\n")]
+    public async Task Jq_InventoryImplErrors(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
