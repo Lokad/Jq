@@ -432,11 +432,12 @@ internal sealed class PathsFilter(JqFilter? Condition) : JqFilter
                 yield return JqPaths.PathToJson(pair.Segments);
                 continue;
             }
+            // Like select, every condition output counts: each truthy probe keeps
+            // the path, matching path(recurse|select(node_filter)) multiplicity.
             foreach (JsonNode? probe in Condition.Evaluate(pair.Value, context, environment))
             {
                 if (Truthy(probe))
                     yield return JqPaths.PathToJson(pair.Segments);
-                break;
             }
         }
     }

@@ -25,6 +25,27 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_PathsFilterKeepsSelectMultiplicity()
+    {
+        // Upstream paths(node_filter) is path(recurse|select(node_filter)):
+        // every condition output counts, so later truthy probes still keep
+        // the path and repeated truthy probes duplicate it.
+        var host = new MockFileSystem();
+        host.SetStandardInput("{\"a\": 1}");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "[paths((false, true))]")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("[\n  [\n    \"a\"\n  ]\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+
+        var doubled = new MockFileSystem();
+        doubled.SetStandardInput("{\"a\": 1}");
+        var repeat = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "[paths((true, true))]")));
+        Assert.Equal(0, await repeat.ExecuteAsync(doubled, CancellationToken.None));
+        Assert.Equal("[\n  [\n    \"a\"\n  ],\n  [\n    \"a\"\n  ]\n]\n", doubled.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(doubled.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
     public async Task Jq_PathRejectsFreshValues()
     {
         var host = new MockFileSystem();
