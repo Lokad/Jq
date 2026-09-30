@@ -183,7 +183,11 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
             int times = (int)Number(count);
             var matrix = new List<JsonNode?>();
             for (int index = 0; index < times; index++)
+            {
+                context.Budget.CheckCancellation();
+                context.Budget.ChargeNode();
                 matrix.Add(input);
+            }
             foreach (JsonNode? combo in Combos(matrix, context))
                 yield return combo;
         }
@@ -201,29 +205,55 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
         throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
     }
 
+    // Iterative odometer over row positions. Recursion depth here would be input
+    // length, which the node budget does not bound below a CLR stack overflow, so
+    // nested enumerator frames are not an option. Row 0 stays outermost like the
+    // reference recursion. Rows validate lazily left-to-right stopping after the
+    // first empty row: an empty leading row yields nothing without touching later
+    // rows, matching short-circuiting in the reference definition.
     private static IEnumerable<JsonNode?> Combos(IReadOnlyList<JsonNode?> matrix, JqContext context)
     {
-        if (matrix.Count == 0)
+        ArgumentNullException.ThrowIfNull(matrix);
+        ArgumentNullException.ThrowIfNull(context);
+        var rows = new List<JsonArray>();
+        foreach (JsonNode? row in matrix)
         {
+            if (row is not JsonArray cells)
+                throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(row)}");
+            rows.Add(cells);
+            if (cells.Count == 0)
+                yield break;
+        }
+        if (rows.Count == 0)
+        {
+            context.Budget.ChargeNode();
             yield return new JsonArray();
             yield break;
         }
-        if (matrix[0] is not JsonArray first)
-            throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(matrix[0])}");
-        var rest = new List<JsonNode?>();
-        for (int index = 1; index < matrix.Count; index++)
-            rest.Add(matrix[index]);
-        foreach (JsonNode? head in first)
-            foreach (JsonNode? tail in Combos(rest, context))
+        var positions = new int[rows.Count];
+        while (true)
+        {
+            context.Budget.CheckCancellation();
+            var combo = new JsonArray();
+            context.Budget.ChargeNode();
+            for (int index = 0; index < rows.Count; index++)
             {
-                var combo = new JsonArray();
                 context.Budget.ChargeNode();
-                combo.Add(head?.DeepClone());
-                if (tail is JsonArray suffix)
-                    foreach (JsonNode? item in suffix)
-                        combo.Add(item?.DeepClone());
-                yield return combo;
+                combo.Add(context.Runtime.Clone(rows[index][positions[index]]));
             }
+            yield return combo;
+            int cursor = rows.Count - 1;
+            while (cursor >= 0)
+            {
+                context.Budget.CheckCancellation();
+                if (++positions[cursor] < rows[cursor].Count)
+                    break;
+                positions[cursor] = 0;
+                cursor--;
+            }
+            if (cursor < 0)
+                yield break;
+        }
     }
 }
 
