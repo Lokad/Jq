@@ -194,4 +194,16 @@ public sealed partial class JqTests
         Assert.Equal("[\n  [\n    1,\n    3\n  ],\n  [\n    1,\n    4\n  ],\n  [\n    2,\n    3\n  ],\n  [\n    2,\n    4\n  ]\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+    [Fact]
+    public async Task Jq_MixedValueAndFilterArgumentsInteract()
+    {
+        // Value arguments stream first-outer across body runs while the
+        // array constructor collects each run (filter arguments stay lazy
+        // per use inside the run).
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "def f($a; g): [$a, g]; [f((1, 2); (3, 4))]")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("[\n  [\n    1,\n    3,\n    4\n  ],\n  [\n    2,\n    3,\n    4\n  ]\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
