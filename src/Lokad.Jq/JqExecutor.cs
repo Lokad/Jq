@@ -14,22 +14,36 @@ internal static class JqExecutor
 {
     public static async Task<int> ExecuteAsync(IJqHost host, JqInvocation invocation, CancellationToken cancellationToken)
     {
-        if (invocation.Version || invocation.BuildConfiguration)
-        {
-            await host.AppendAsync(invocation.StdOut, Utf8Text.Encode("Lokad jq\n"), cancellationToken).ConfigureAwait(false);
-            return 0;
-        }
         if (invocation.Error != null)
         {
             await WriteErrorAsync(host, invocation, invocation.Error, cancellationToken).ConfigureAwait(false);
             return 2;
+        }
+        if (invocation.Help)
+        {
+            await host.AppendAsync(invocation.StdOut, Utf8Text.Encode(JqHelp.Text), cancellationToken).ConfigureAwait(false);
+            return 0;
+        }
+        if (invocation.Version)
+        {
+            await host.AppendAsync(invocation.StdOut, Utf8Text.Encode("Lokad jq\n"), cancellationToken).ConfigureAwait(false);
+            return 0;
+        }
+        if (invocation.BuildConfiguration)
+        {
+            await host.AppendAsync(invocation.StdOut, Utf8Text.Encode(JqBuildConfiguration.Text + "\n"), cancellationToken).ConfigureAwait(false);
+            return 0;
         }
 
         var budget = new JqBudget(cancellationToken);
         JqProgramSource programSource = invocation.FilterFile is { } programPath
             ? JqProgramSource.File(Utf8Text.Decode(programPath.Display))
             : JqProgramSource.Inline;
-        using var context = new JqContext(invocation.Variables, programSource, budget) { Clock = invocation.Clock };
+        using var context = new JqContext(invocation.Variables, programSource, budget)
+        {
+            Clock = invocation.Clock,
+            SortKeys = invocation.SortKeys,
+        };
         var stage = 2;
         try
         {
@@ -59,35 +73,42 @@ internal static class JqExecutor
             await using var cursor = new JqInputCursor(host, invocation, context, cancellationToken);
             context.InputCursor = cursor;
             await using var inputs = OuterInputsAsync(cursor, invocation, context, cancellationToken).GetAsyncEnumerator(cancellationToken);
+            bool sawOutput = false;
+            bool lastFalseNull = false;
+            int stickyError = 0;
             while (true)
             {
                 stage = 4;
                 if (!await inputs.MoveNextAsync().ConfigureAwait(false)) break;
                 stage = 5;
-                foreach (var output in filter.Evaluate(inputs.Current, context, moduleEnv))
+                try
                 {
-                    ReadOnlyMemory<byte> rendered;
-                    if (invocation.RawOutput && JqRuntime.TryGetString(output, out var text))
+                    foreach (var output in filter.Evaluate(inputs.Current, context, moduleEnv))
                     {
-                        budget.ChargeOutput(Encoding.UTF8.GetByteCount(text) + (invocation.JoinOutput ? 0 : 1));
-                        rendered = invocation.JoinOutput ? Utf8Text.Encode(text) : Utf8Text.EncodeLine(text);
+                        sawOutput = true;
+                        lastFalseNull = output is null
+                            || (output is JsonValue negative && negative.TryGetValue<bool>(out bool flag) && !flag);
+                        ReadOnlyMemory<byte> rendered = RenderOutput(invocation, context, budget, output);
+                        var appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken)).ConfigureAwait(false);
+                        if (!appended.CanAcceptMore) return appended.ExitCode;
+                        if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int stopped)
+                            return stopped;
                     }
-                    else
-                    {
-                        var body = context.Runtime.SerializeUtf8(output, invocation.AsciiOutput, invocation.Indent, invocation.UseTabs);
-                        int framing = (invocation.Seq ? 1 : 0) + (invocation.JoinOutput ? 0 : 1);
-                        budget.ChargeOutput(body.Length + framing);
-                        ReadOnlyMemory<byte> framed = invocation.Seq ? PrefixRecordSeparator(body) : body;
-                        rendered = invocation.JoinOutput ? framed : ByteLines.AppendNewline(framed);
-                    }
-                    var appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken)).ConfigureAwait(false);
-                    if (!appended.CanAcceptMore) return appended.ExitCode;
-                    if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int stopped)
-                        return stopped;
+                }
+                catch (Exception exception) when (JqErrors.IsCatchable(exception))
+                {
+                    if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int errorStopped)
+                        return errorStopped;
+                    await WriteErrorAsync(host, invocation, $"jq: {exception.Message}", cancellationToken).ConfigureAwait(false);
+                    stickyError = 5;
                 }
             }
             if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int tailStopped)
                 return tailStopped;
+            if (stickyError != 0)
+                return stickyError;
+            if (invocation.ExitStatus)
+                return !sawOutput ? 4 : lastFalseNull ? 1 : 0;
             return 0;
         }
         catch (JqHaltException ex)
@@ -205,6 +226,34 @@ internal static class JqExecutor
             context.InputLineNumber = cursor.LastLine;
             yield return slurped;
         }
+    }
+
+    private static ReadOnlyMemory<byte> RenderOutput(
+        JqInvocation invocation,
+        JqContext context,
+        JqBudget budget,
+        JsonNode? output)
+    {
+        if (invocation.RawOutput && JqRuntime.TryGetString(output, out var text))
+        {
+            if (invocation.RawOutput0 && text.Contains((char)0))
+                throw new JqException("Cannot dump a string containing NUL with --raw-output0 option");
+            if (invocation.RawOutput0)
+            {
+                budget.ChargeOutput(Encoding.UTF8.GetByteCount(text) + 1);
+                return ByteLines.AppendTerminator(Utf8Text.Encode(text), 0);
+            }
+            budget.ChargeOutput(Encoding.UTF8.GetByteCount(text) + (invocation.JoinOutput ? 0 : 1));
+            return invocation.JoinOutput ? Utf8Text.Encode(text) : Utf8Text.EncodeLine(text);
+        }
+        var body = context.Runtime.SerializeUtf8(
+            output, invocation.AsciiOutput, invocation.Indent, invocation.UseTabs, invocation.SortKeys);
+        int framing = (invocation.Seq ? 1 : 0) + (invocation.RawOutput0 ? 1 : invocation.JoinOutput ? 0 : 1);
+        budget.ChargeOutput(body.Length + framing);
+        ReadOnlyMemory<byte> framed = invocation.Seq ? PrefixRecordSeparator(body) : body;
+        if (invocation.RawOutput0)
+            return ByteLines.AppendTerminator(framed, 0);
+        return invocation.JoinOutput ? framed : ByteLines.AppendNewline(framed);
     }
 
     private static ReadOnlyMemory<byte> PrefixRecordSeparator(ReadOnlyMemory<byte> body)

@@ -1,4 +1,5 @@
 using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -17,13 +18,19 @@ internal sealed class JqRuntime(JqBudget budget)
     internal string Serialize(JsonNode? node, bool ascii, int? indent, bool tabs)
         => Encoding.UTF8.GetString(SerializeUtf8(node, ascii, indent, tabs).Span);
 
-    internal ReadOnlyMemory<byte> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs)
+    internal ReadOnlyMemory<byte> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs) =>
+        SerializeUtf8(node, ascii, indent, tabs, sorted: false);
+
+    internal ReadOnlyMemory<byte> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted)
     {
         budget.ChargeTree(node);
+        JsonNode? shaped = sorted ? SortedClone(node) : node;
+        if (sorted)
+            budget.ChargeTree(shaped);
         // The JSON writer rejects non-finite doubles while the reference
         // renders NaN as null and clamps infinities to the finite
         // extremes. Sanitize a charged clone only when needed.
-        JsonNode? clean = ContainsNonFinite(node) ? SanitizeNonFinite(node) : node;
+        JsonNode? clean = ContainsNonFinite(shaped) ? SanitizeNonFinite(shaped) : shaped;
         var buffer = new JqJsonBuffer(budget);
         using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
         {
@@ -38,8 +45,63 @@ internal sealed class JqRuntime(JqBudget budget)
             else clean.WriteTo(writer, ascii ? AsciiJson : CompactJson);
             writer.Flush();
         }
-        budget.ChargeString(Encoding.UTF8.GetCharCount(buffer.WrittenMemory.Span));
-        return buffer.WrittenMemory;
+        ReadOnlyMemory<byte> rendered = buffer.WrittenMemory;
+        if (indent != null || tabs)
+            rendered = NormalizeNewlines(rendered);
+        budget.ChargeString(Encoding.UTF8.GetCharCount(rendered.Span));
+        return rendered;
+    }
+
+    // Deep clone with object keys in ordinal order for `--sort-keys`.
+    // Scalars and arrays keep their shape; only key order changes.
+    internal static JsonNode? SortedClone(JsonNode? node)
+    {
+        switch (node)
+        {
+            case null:
+                return null;
+            case JsonObject obj:
+                var sorted = new JsonObject();
+                foreach (var property in obj.OrderBy(property => property.Key, StringComparer.Ordinal))
+                    sorted.Add(property.Key, SortedClone(property.Value));
+                return sorted;
+            case JsonArray array:
+                var copy = new JsonArray();
+                foreach (JsonNode? item in array)
+                    copy.Add(SortedClone(item));
+                return copy;
+            default:
+                return node.DeepClone();
+        }
+    }
+
+    // The JSON writer emits platform newlines for indentation; jq output is
+    // LF-only. Raw carriage returns cannot appear inside JSON string
+    // literals (controls stay escaped), so dropping `\r` before `\n` only
+    // touches structural newlines.
+    private static ReadOnlyMemory<byte> NormalizeNewlines(ReadOnlyMemory<byte> body)
+    {
+        ReadOnlySpan<byte> span = body.Span;
+        int pairs = 0;
+        for (var i = 0; i + 1 < span.Length; i++)
+        {
+            if (span[i] == (byte)13 && span[i + 1] == (byte)10)
+            {
+                pairs++;
+                i++;
+            }
+        }
+        if (pairs == 0)
+            return body;
+        var normalized = new byte[span.Length - pairs];
+        int written = 0;
+        for (var i = 0; i < span.Length; i++)
+        {
+            if (span[i] == (byte)13 && i + 1 < span.Length && span[i + 1] == (byte)10)
+                continue;
+            normalized[written++] = span[i];
+        }
+        return normalized;
     }
 
     private static bool ContainsNonFinite(JsonNode? node)

@@ -17,7 +17,11 @@ internal sealed class JqInvocation
     public bool StreamErrors { get; init; }
     public bool RawOutput { get; init; }
     public bool JoinOutput { get; init; }
+    public bool RawOutput0 { get; init; }
     public bool AsciiOutput { get; init; }
+    public bool SortKeys { get; init; }
+    public bool ExitStatus { get; init; }
+    public bool Help { get; init; }
     public bool UseTabs { get; init; }
     public int? Indent { get; init; }
     public bool Version { get; init; }

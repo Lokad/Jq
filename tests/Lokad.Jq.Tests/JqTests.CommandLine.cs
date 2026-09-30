@@ -116,8 +116,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--indent", "7", "[1]");
         Assert.True(exit == 0, stderr);
-        string newline = Environment.NewLine;
-        Assert.Equal("[" + newline + "       1" + newline + "]" + "\n", stdout);
+        Assert.Equal("[" + "\n" + "       1" + "\n" + "]" + "\n", stdout);
     }
 
     [Theory]
@@ -129,8 +128,7 @@ public sealed partial class JqTests
         string[] args = value is null ? [flag, "-n", "[1]"] : [flag, value, "-n", "[1]"];
         var (exit, stdout, stderr) = await RunCliAsync(host, args);
         Assert.True(exit == 0, stderr);
-        string newline = Environment.NewLine;
-        Assert.Equal("[" + newline + "\t1" + newline + "]" + "\n", stdout);
+        Assert.Equal("[" + "\n" + "\t1" + "\n" + "]" + "\n", stdout);
     }
 
     [Theory]
@@ -208,6 +206,9 @@ public sealed partial class JqTests
         Assert.Equal("0\n", stdout);
     }
 }
+
+
+
 
 
 

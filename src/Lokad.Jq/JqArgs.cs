@@ -17,8 +17,14 @@ internal partial record JqArgs
     [Argument("Recover from streaming input errors as events.", Long = "stream-errors")] public bool StreamErrors { get; init; }
     [Argument("Write compact JSON output.", Short = 'c', Long = "compact-output")] public bool CompactOutput { get; init; }
     [Argument("Write raw strings.", Short = 'r', Long = "raw-output")] public bool RawOutput { get; init; }
-    [Argument("Do not append newlines.", Short = 'j', Long = "join-output")] public bool JoinOutput { get; init; }
+    [Argument("Implies raw output without newlines.", Short = 'j', Long = "join-output")] public bool JoinOutput { get; init; }
+    [Argument("Implies raw output with NUL terminators.", Long = "raw-output0")] public bool RawOutput0 { get; init; }
     [Argument("Escape non-ASCII output.", Short = 'a', Long = "ascii-output")] public bool AsciiOutput { get; init; }
+    [Argument("Sort object keys on output.", Short = 'S', Long = "sort-keys")] public bool SortKeys { get; init; }
+    [Argument("Colorize output; needs a terminal-capable host.", Short = 'C', Long = "color-output")] public bool ColorOutput { get; init; }
+    [Argument("Accepted for compatibility; output is never colorized.", Short = 'M', Long = "monochrome-output")] public bool Monochrome { get; init; }
+    [Argument("Exit with status from the last output values.", Short = 'e', Long = "exit-status")] public bool ExitStatus { get; init; }
+    [Argument("Show command help.", Short = 'h', Long = "help")] public bool Help { get; init; }
     [Argument("Indent with tabs.", Long = "tab")] public bool UseTabs { get; init; }
     [Argument("Pretty-print indentation width.", Long = "indent")] public int? Indent { get; init; }
     [Argument("Read filter from file.", Short = 'f', Long = "from-file")] public string? FilterFile { get; init; }

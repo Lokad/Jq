@@ -102,6 +102,9 @@ internal static class JqCommandLineParser
             if (parsed.Indent is < -1 or > 7)
                 return Error("jq: --indent takes a number between -1 and 7");
 
+            if (parsed.ColorOutput)
+                return Error("jq: --color-output requires a terminal-capable host");
+
             // An indent of -1 selects tabs, like the reference.
             bool useTabs = format == OutputFormat.Tabs
                 || (format == OutputFormat.Spaces && parsed.Indent == -1);
@@ -162,9 +165,13 @@ internal static class JqCommandLineParser
                 Seq = parsed.Seq,
                 Stream = parsed.Stream || parsed.StreamErrors,
                 StreamErrors = parsed.StreamErrors,
-                RawOutput = parsed.RawOutput,
+                RawOutput = parsed.RawOutput || parsed.JoinOutput || parsed.RawOutput0,
                 JoinOutput = parsed.JoinOutput,
+                RawOutput0 = parsed.RawOutput0,
                 AsciiOutput = parsed.AsciiOutput,
+                SortKeys = parsed.SortKeys,
+                ExitStatus = parsed.ExitStatus,
+                Help = parsed.Help,
                 UseTabs = useTabs,
                 Indent = indent,
                 Version = parsed.Version,

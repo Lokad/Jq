@@ -23,6 +23,10 @@ internal sealed class JqContext(
     // resolving imports; null only for contexts that never evaluate filters.
     internal JqModuleLoader? ModuleLoader { get; set; }
 
+    // Whether `--sort-keys` orders object keys on JSON output (debug
+    // rendering follows; diagnostics, `tostring`, and raw strings do not).
+    public bool SortKeys { get; init; }
+
     // Shared pull cursor over every input source. Set by the executor before
     // evaluation so implicit iteration and explicit `input`/`inputs` calls
     // draw from the same stream.

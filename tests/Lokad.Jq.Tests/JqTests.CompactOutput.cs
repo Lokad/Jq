@@ -62,7 +62,7 @@ public sealed partial class JqTests
 
         var expected = indentation.Length == 0
             ? "{\"a\":1}\n"
-            : "{" + Environment.NewLine + indentation + "\"a\": 1" + Environment.NewLine + "}\n";
+            : "{" + "\n" + indentation + "\"a\": 1" + "\n" + "}\n";
         Assert.Equal(0, exitCode);
         Assert.Equal(expected, fileSystem.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
@@ -84,7 +84,7 @@ public sealed partial class JqTests
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal("{" + Environment.NewLine + "\t\"a\": 1" + Environment.NewLine + "}\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("{" + "\n" + "\t\"a\": 1" + "\n" + "}\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -142,3 +142,4 @@ public sealed partial class JqTests
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
     }
 }
+

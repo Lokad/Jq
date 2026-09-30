@@ -58,7 +58,7 @@ public sealed partial class JqTests
     public async Task Jq_InvalidOptionIsUsageError()
     {
         var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--sort-keys", ".")));
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--bogus-flag", ".")));
 
         Assert.Equal(2, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("unsupported option", host.GetOutput(JqFileDescriptor.StdErr));
@@ -279,3 +279,4 @@ public sealed partial class JqTests
         }
     }
 }
+
