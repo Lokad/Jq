@@ -72,6 +72,8 @@ public sealed partial class JqTests
     [InlineData("5", "utf8bytelength", "only strings have UTF-8 byte length")]
     [InlineData("null", "toboolean", "null (null) cannot be parsed as a boolean")]
     [InlineData("0", "toboolean", "number (0) cannot be parsed as a boolean")]
+    [InlineData("\"TRUE\"", "toboolean", "string (\"TRUE\") cannot be parsed as a boolean")]
+    [InlineData("\" true\"", "toboolean", "string (\" true\") cannot be parsed as a boolean")]
     public async Task Jq_ConversionFailures(string input, string filter, string diagnostic)
     {
         var host = new MockFileSystem();
