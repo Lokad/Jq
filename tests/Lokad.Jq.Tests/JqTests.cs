@@ -225,7 +225,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".")));
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
-        Assert.Equal(4, exitCode);
+        Assert.Equal(5, exitCode);
         Assert.Contains("jq:", fileSystem.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(string.Empty, fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }

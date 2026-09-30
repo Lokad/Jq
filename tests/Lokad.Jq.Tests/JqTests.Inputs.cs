@@ -78,9 +78,20 @@ public sealed partial class JqTests
         var inner = new MockFileSystem();
         inner.SetStandardInput("1\n2\n[");
         var (exit, stdout, stderr) = await RunInputAsync(new ChunkedHost(inner, 2), ".");
-        Assert.Equal(4, exit);
+        Assert.Equal(5, exit);
         Assert.Equal("1\n2\n", stdout);
         Assert.StartsWith("jq:", stderr);
+    }
+
+    [Fact]
+    public async Task Jq_SlurpTrailingGarbageIsInputFailure()
+    {
+        var inner = new MockFileSystem();
+        inner.SetStandardInput("1\n2\n[");
+        var (exit, stdout, stderr) = await RunInputAsync(inner, "-s", ".");
+        Assert.Equal(5, exit);
+        Assert.Empty(stdout);
+        Assert.StartsWith("jq: parse error:", stderr);
     }
 
     [Fact]

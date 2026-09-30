@@ -143,6 +143,24 @@ internal static class JqExecutor
                 await host.AppendAsync(invocation.StdErr, Utf8Text.Encode(ex.StderrText), cancellationToken).ConfigureAwait(false);
             return ex.ExitCode;
         }
+        catch (JqQuotaException ex)
+        {
+            // Resource policy failures always report status 5, no matter which
+            // stage was active when the budget tripped.
+            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int quotaStopped)
+                return quotaStopped;
+            await WriteErrorAsync(host, invocation, $"jq: {ex.Message}", cancellationToken).ConfigureAwait(false);
+            return 5;
+        }
+        catch (JqInputException ex)
+        {
+            // Malformed inputs report status 5 and missing input operands
+            // report status 2, matching the reference command.
+            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int inputStopped)
+                return inputStopped;
+            await WriteErrorAsync(host, invocation, $"jq: {ex.Message}", cancellationToken).ConfigureAwait(false);
+            return ex.ExitCode;
+        }
         catch (JqCompileException ex)
         {
             await WriteErrorAsync(host, invocation, "jq: " + ex.Message + " at line " + ex.Span.Line + " column " + ex.Span.Column + " (" + ex.ProgramSource.Label + ")", cancellationToken).ConfigureAwait(false);
@@ -194,9 +212,9 @@ internal static class JqExecutor
                         WarnIgnoringParseError(context, resync.Message);
                         continue;
                     }
-                    catch (JqException input) when (input is not JqQuotaException)
+                    catch (JqException input) when (input is not JqQuotaException and not JqInputException)
                     {
-                        throw new JqException("parse error: " + input.Message);
+                        throw new JqInputException("parse error: " + input.Message, 5);
                     }
                     if (!pulled.HasValue)
                         break;
@@ -235,9 +253,9 @@ internal static class JqExecutor
                     WarnIgnoringParseError(context, resync.Message);
                     continue;
                 }
-                catch (JqException input) when (input is not JqQuotaException)
+                catch (JqException input) when (input is not JqQuotaException and not JqInputException)
                 {
-                    throw new JqException("parse error: " + input.Message);
+                    throw new JqInputException("parse error: " + input.Message, 5);
                 }
                 if (!pulled.HasValue)
                     break;

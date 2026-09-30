@@ -205,12 +205,16 @@ public sealed partial class JqTests
         Assert.True(exit == 0, stderr);
         Assert.Equal("0\n", stdout);
     }
+
+
+    [Fact]
+    public async Task Jq_MissingInputFileIsSystemError()
+    {
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunCliAsync(host, ".", "/missing");
+        Assert.Equal(2, exit);
+        Assert.Contains("cannot open", stderr);
+        Assert.Empty(stdout);
+        Assert.Equal(0, host.OpenFileCount);
+    }
 }
-
-
-
-
-
-
-
-

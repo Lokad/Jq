@@ -463,14 +463,14 @@ internal sealed class JqStreamScanner
     private void PushIndex(long index)
     {
         if (_path.Count >= MaxPathDepth)
-            throw new JqException("value nesting limit exceeded");
+            throw new JqInputException("value nesting limit exceeded", 5);
         _path.Add(Segment.AtIndex(index));
     }
 
     private void PushPending()
     {
         if (_path.Count >= MaxPathDepth)
-            throw new JqException("value nesting limit exceeded");
+            throw new JqInputException("value nesting limit exceeded", 5);
         _path.Add(Segment.Pending());
     }
 

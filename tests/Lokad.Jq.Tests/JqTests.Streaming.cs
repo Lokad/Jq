@@ -60,7 +60,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("[1,2");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
-        Assert.Equal(4, exit);
+        Assert.Equal(5, exit);
         Assert.Equal("[\n  [\n    0\n  ],\n  1\n]\n", stdout);
         Assert.Contains("jq: parse error: Unfinished JSON term at EOF", stderr);
     }
@@ -82,7 +82,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput(new string('[', 70));
         var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
-        Assert.Equal(4, exit);
+        Assert.Equal(5, exit);
         Assert.Contains("nesting limit", stderr);
         Assert.Equal("", stdout);
     }

@@ -108,7 +108,7 @@ public sealed partial class JqTests
             : BuildInvocation("jq", "length");
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
-        Assert.Equal(argument ? 2 : 4, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(argument ? 2 : 5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -122,7 +122,7 @@ public sealed partial class JqTests
         host.BeforeByteRead = buffer => requests.Add(buffer.Length);
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".")));
 
-        Assert.Equal(4, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("input exceeds", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(8192, requests.Max());
@@ -139,7 +139,7 @@ public sealed partial class JqTests
         host.AddFile("/b", new string(' ', 8 * 1024 * 1024 + 1));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "empty", "/a", "/b")));
 
-        Assert.Equal(4, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("input exceeds", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.OpenFileCount);
         // IJqHost exposes only byte reads.
@@ -252,7 +252,7 @@ public sealed partial class JqTests
         host.SetStandardInput(string.Concat(Enumerable.Repeat("null\n", 262145)));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-s", "length")));
 
-        Assert.Equal(4, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -265,7 +265,7 @@ public sealed partial class JqTests
         host.AddFile("/b", new string('y', 4194305));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", "-s", "length", "/a", "/b")));
 
-        Assert.Equal(4, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("string result exceeds", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.OpenFileCount);
     }
@@ -382,7 +382,7 @@ public sealed partial class JqTests
             : BuildInvocation("jq", "empty");
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
-        Assert.Equal(argument ? 2 : 4, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(argument ? 2 : 5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("jq:", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -417,7 +417,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData(0, 0)]
-    [InlineData(1, 4)]
+    [InlineData(1, 5)]
     public async Task Jq_DecodedJsonStringLimitHandlesMixedEscapes(int excess, int expectedExit)
     {
         var host = new MockFileSystem();
@@ -457,7 +457,7 @@ public sealed partial class JqTests
         host.SetStandardInput(new string('x', 8 * 1024 * 1024 + 1));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", "empty")));
 
-        Assert.Equal(4, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("string result exceeds", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }

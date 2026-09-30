@@ -47,10 +47,10 @@ public sealed class JqCompatibilityProbeTests
             [],
             string.Empty,
             "jq:",
-            4);
+            5);
         JqProbeResult actual = await JqProbeRunner.RunAsync(goldenCase, CancellationToken.None);
 
-        Assert.Equal(4, actual.ExitCode);
+        Assert.Equal(5, actual.ExitCode);
         Assert.Empty(actual.Stdout);
         Assert.StartsWith(goldenCase.ExpectedStderr, actual.Stderr, StringComparison.Ordinal);
     }
