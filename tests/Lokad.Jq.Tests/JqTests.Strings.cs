@@ -15,6 +15,7 @@ public sealed partial class JqTests
     [InlineData("\"hello world\"", "rtrimstr(\" world\")", "\"hello\"\n")]
     [InlineData("\"--hello--\"", "trimstr(\"--\")", "\"hello\"\n")]
     [InlineData("\"hello\"", "startswith(\"he\")", "true\n")]
+    [InlineData("\"hi\"", "try ltrimstr(1) catch \"x\", try rtrimstr(1) catch \"x\" | \"ok\"", "\"ok\"\n\"ok\"\n")]
     [InlineData("\"hello\"", "endswith(\"lo\")", "true\n")]
     public async Task Jq_CaseTrimAffix(string input, string filter, string expected)
     {

@@ -13,6 +13,8 @@ public sealed partial class JqTests
     [InlineData("0", "try (try error(\"a\") catch error(\"b\")) catch .", "\"b\"\n")]
     [InlineData("0", "def f: try error(\"e\") catch .; f", "\"e\"\n")]
     [InlineData("1", "try (1 as $x | $x | .a) catch \"caught\"", "\"caught\"\n")]
+    [InlineData("null", "try error(0) // 1", "1\n")]
+    [InlineData("null", "try error(\"\\($__loc__)\") catch .", "\"{\\\"file\\\":\\\"<top-level>\\\",\\\"line\\\":1}\"\n")]
     public async Task Jq_TryCatchHandlesErrors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

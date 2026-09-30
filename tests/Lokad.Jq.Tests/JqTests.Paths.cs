@@ -83,6 +83,7 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3]", "setpath([{\"start\": 1, \"end\": 3}]; [9])", "[\n  0,\n  9,\n  3\n]\n")]
     [InlineData("[0, 1, 2, 3]", "try setpath([{\"start\": 1, \"end\": 3}]; 9) catch .", "\"A slice of an array can only be assigned another array\"\n")]
     [InlineData("[0]", "setpath([-1]; 1)", "[\n  1\n]\n")]
+    [InlineData("{\"hi\": \"hello\"}", "try [\"ok\", setpath([1]; 1)] catch [\"ko\", .]", "[\n  \"ko\",\n  \"Cannot index object with number (1)\"\n]\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -99,6 +100,7 @@ public sealed partial class JqTests
     [InlineData("{\"foo\": [0, 1, 2, 3, 4], \"bar\": [0, 1]}", "del(empty)", "{\n  \"foo\": [\n    0,\n    1,\n    2,\n    3,\n    4\n  ],\n  \"bar\": [\n    0,\n    1\n  ]\n}\n")]
     [InlineData("{\"foo\": [0, 1, 2, 3, 4], \"bar\": [0, 1]}", "del((.foo, .bar, .baz) | .[2, 3, 0])", "{\n  \"foo\": [\n    1,\n    4\n  ],\n  \"bar\": [\n    1\n  ]\n}\n")]
     [InlineData("{\"foo\": [0, 1, 2, 3, 4], \"bar\": [0, 1]}", "del(.foo[0], .bar[0], .foo, .baz.bar[0].x)", "{\n  \"bar\": [\n    1\n  ]\n}\n")]
+    [InlineData("[1, null, 1e400, -1e400, 0.0, -0.0]", ".[] = 1", "[\n  1,\n  1,\n  1,\n  1,\n  1,\n  1\n]\n")]
     [InlineData("null", "pick(.a.b.c)", "{\n  \"a\": {\n    \"b\": {\n      \"c\": null\n    }\n  }\n}\n")]
     [InlineData("{\"a\": 1, \"b\": 2, \"c\": 3}", "pick(.a, .b)", "{\n  \"a\": 1,\n  \"b\": 2\n}\n")]
     [InlineData("{\"a\": 1}", "pick(.b)", "{\n  \"b\": null\n}\n")]

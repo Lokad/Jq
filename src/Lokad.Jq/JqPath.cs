@@ -291,7 +291,9 @@ internal static class JqPathUpdates
                     frames.Push(new Frame(segment, PaddedArray(arr, resolved, context), (int)resolved, 0, 0));
                     return resolved < arr.Count ? arr[(int)resolved] : null;
                 }
-                throw new JqException("expected an array but got: " + context.Runtime.Serialize(current, false, null, false));
+                // Like the reference probe read inside jv_setpath, indexing a
+                // non-array reports the container and key kinds.
+                throw new JqException("Cannot index " + JqRuntime.TypeName(current) + " with number (" + index.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")");
             case SliceSegment slice:
                 if (current is null)
                 {
