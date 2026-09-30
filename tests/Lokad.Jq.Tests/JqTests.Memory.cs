@@ -114,6 +114,19 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_BoundsJsonargsBeforeMaterializingPositional()
+    {
+        // Like --argjson, quota trips while parsing positional JSON report
+        // exit 2 with the budget message instead of a JSON syntax error.
+        var json = "[" + string.Join(",", Enumerable.Repeat("null", 262145)) + "]";
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "$ARGS.positional[0] | length", "--jsonargs", json)));
+        Assert.Equal(2, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
     public async Task Jq_BoundsInputRequestsBeforeRejectingOversizeContent()
     {
         var host = new MockFileSystem();
