@@ -13,6 +13,11 @@ public sealed partial class JqTests
     [InlineData("0", "try (try error(\"a\") catch error(\"b\")) catch .", "\"b\"\n")]
     [InlineData("0", "def f: try error(\"e\") catch .; f", "\"e\"\n")]
     [InlineData("1", "try (1 as $x | $x | .a) catch \"caught\"", "\"caught\"\n")]
+    [InlineData("\"foo\"", "try ((try . catch \"caught too much\") | error) catch \"caught just right\"", "\"caught just right\"\n")]
+    [InlineData("[\"hi\", \"ho\"]", ".[] | (try (if . == \"hi\" then . else error end) catch empty) | \"\\(.) there!\"", "\"hi there!\"\n")]
+    [InlineData("null", "try ([\"hi\", \"ho\"] | .[] | (try . catch (if . == \"ho\" then \"BROKEN\" | error else empty end)) | if . == \"ho\" then error else \"\\(.) there!\" end) catch \"caught outside \\(.)\"", "\"hi there!\"\n\"caught outside ho\"\n")]
+    [InlineData("\"foo\"", "try (try error catch \"inner catch \\(.)\") catch \"outer catch \\(.)\"", "\"inner catch foo\"\n")]
+    [InlineData("\"foo\"", "try ((try error catch \"inner catch \\(.)\") | error) catch \"outer catch \\(.)\"", "\"outer catch inner catch foo\"\n")]
     [InlineData("null", "try error(0) // 1", "1\n")]
     [InlineData("null", "try error(\"\\($__loc__)\") catch .", "\"{\\\"file\\\":\\\"<top-level>\\\",\\\"line\\\":1}\"\n")]
     public async Task Jq_TryCatchHandlesErrors(string input, string filter, string expected)
