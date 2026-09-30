@@ -106,6 +106,8 @@ public sealed partial class JqTests
         """-0""",
         """1.5""",
         """1e3""",
+        """nan""",
+        """Infinity""",
         "\"\"",
         "\"a\"",
         "\"foo bar\"",
