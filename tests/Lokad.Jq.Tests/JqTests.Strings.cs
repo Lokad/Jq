@@ -50,6 +50,8 @@ public sealed partial class JqTests
     [InlineData("\" 4\"", "try tonumber catch \"caught\"", "\"caught\"\n")]
     [InlineData("\"True\"", "try toboolean catch \"caught\"", "\"caught\"\n")]
     [InlineData("[\"false\", \"true\", false, true]", "map(toboolean)", "[\n  false,\n  true,\n  false,\n  true\n]\n")]
+    [InlineData("0", "nan | tostring", "\"null\"\n")]
+    [InlineData("0", "infinite | tostring", "\"1.7976931348623157E+308\"\n")]
     [InlineData("[1, \"a\", true, null]", "map(tostring)", "[\n  \"1\",\n  \"a\",\n  \"true\",\n  \"null\"\n]\n")]
     [InlineData("\"hello\"", "utf8bytelength", "5\n")]
     [InlineData("\"é🚀\"", "utf8bytelength", "6\n")]
