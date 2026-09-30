@@ -193,4 +193,27 @@ public sealed partial class JqTests
         Assert.Equal("\"1\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+    [Fact]
+    public async Task Jq_FormattedInterpolationCapturesDefinitionVariables()
+    {
+        // The @format template path shares the definition-site parser, so it
+        // observes the same closure bindings as plain strings.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1 as $x | def f: @json \"\\($x)\"; 2 as $x | f")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("\"1\"\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_ObjectKeyInterpolationCapturesDefinitionVariables()
+    {
+        // Dynamic object keys interpolate through the same definition-site
+        // parser as string values.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1 as $x | def f: {(\"\\($x)\"): 2}; 9 as $x | f")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("{\n  \"1\": 2\n}\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
