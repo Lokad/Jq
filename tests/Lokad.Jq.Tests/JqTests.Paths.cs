@@ -98,6 +98,7 @@ public sealed partial class JqTests
     [InlineData("{\"a\": 1, \"b\": 2, \"c\": 3}", "pick(.a, .b)", "{\n  \"a\": 1,\n  \"b\": 2\n}\n")]
     [InlineData("{\"a\": 1}", "pick(.b)", "{\n  \"b\": null\n}\n")]
     [InlineData("{\"a\": 1}", "pick(empty)", "null\n")]
+    [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "del(.[1.5:3.5])", "[\n  0,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
     public async Task Jq_DelAndPickReshape(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
