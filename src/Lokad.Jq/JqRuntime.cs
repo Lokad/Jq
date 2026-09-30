@@ -1199,17 +1199,27 @@ internal sealed class JqRuntime(JqBudget budget)
         if (args.Any(arg => arg.Count == 0))
             yield break;
 
-        var start = args.Count == 1 ? 0 : (int)Number(args[0][0]);
-        var end = (int)Number(args.Count == 1 ? args[0][0] : args[1][0]);
-        var step = args.Count > 2 ? (int)Number(args[2][0]) : 1;
-        if (step == 0)
-            throw new JqException("range step cannot be zero");
+        // Upstream range/3 steps through doubles (fractional steps count) and
+        // yields nothing for a zero step; range/1..2 always steps by one.
+        // Integral outputs keep integral storage like literals and inputs.
+        double start = args.Count == 1 ? 0 : Number(args[0][0]);
+        double end = Number(args.Count == 1 ? args[0][0] : args[1][0]);
+        double step = args.Count > 2 ? Number(args[2][0]) : 1;
+        if (args.Count > 2 && !(step > 0) && !(step < 0))
+            yield break;
 
-        for (long i = start; step > 0 ? i < end : i > end; i += step)
+        for (double value = start; step > 0 ? value < end : value > end; value += step)
         {
             budget.ChargeNode();
-            yield return JsonValue.Create((int)i);
+            yield return RangeValue(value);
         }
+    }
+
+    private static JsonNode? RangeValue(double value)
+    {
+        if (!double.IsNaN(value) && !double.IsInfinity(value) && value == Math.Truncate(value) && value >= long.MinValue && value <= long.MaxValue)
+            return JsonValue.Create((long)value);
+        return JsonValue.Create(value);
     }
 
     internal string Format(string format, JsonNode? value)
