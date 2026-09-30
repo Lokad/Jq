@@ -147,6 +147,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\": null, \"b\": null}", "(.a as $x | .b) = \"b\"", "{\n  \"a\": null,\n  \"b\": \"b\"\n}\n")]
     [InlineData("{\"a\": {\"b\": [1, {\"b\": 3}]}}", "(.. | select(type == \"object\") | select((.b | type) == \"array\") | .b) |= .[0]", "{\n  \"a\": {\n    \"b\": 1\n  }\n}\n")]
     [InlineData("[\"hello\", true, false, [false], null]", ".[] //= .[0]", "[\n  \"hello\",\n  true,\n  \"hello\",\n  [\n    false\n  ],\n  \"hello\"\n]\n")]
+    [InlineData("{}", ".a //= 1", "{\n  \"a\": 1\n}\n")]
+    [InlineData("{}", ".a += 1", "{\n  \"a\": 1\n}\n")]
     [InlineData("[0, 1, 2, 3, 4, 5, 6, 7]", ".[2:4] = ([], [\"a\", \"b\"], [\"a\", \"b\", \"c\"])", "[\n  0,\n  1,\n  4,\n  5,\n  6,\n  7\n]\n[\n  0,\n  1,\n  \"a\",\n  \"b\",\n  4,\n  5,\n  6,\n  7\n]\n[\n  0,\n  1,\n  \"a\",\n  \"b\",\n  \"c\",\n  4,\n  5,\n  6,\n  7\n]\n")]
     [InlineData("[0, 1, 2]", ".[-1] = 5", "[\n  0,\n  1,\n  5\n]\n")]
     [InlineData("[0, 1, 2]", ".[-2] = 5", "[\n  0,\n  5,\n  2\n]\n")]
