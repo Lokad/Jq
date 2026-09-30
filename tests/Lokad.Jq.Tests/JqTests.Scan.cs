@@ -53,6 +53,8 @@ public sealed partial class JqTests
     [InlineData("\"abc\" | sub(\"z\"; \"X\")", "\"abc\"\n")]
     [InlineData("\"ab\" | sub(\"\"; \"X\")", "\"Xab\"\n")]
     [InlineData("\"a1\" | [scan(\"(?<c>[a-z])(?<n>[0-9])\")]", "[\n  [\n    \"a\",\n    \"1\"\n  ]\n]\n")]
+    [InlineData("\"aB\" | [sub(\"(?<a>.)\"; \"\\(.a|ascii_upcase)\", \"\\(.a|ascii_downcase)\")]", "[\n  \"AB\",\n  \"aB\"\n]\n")]
+    [InlineData("\"\u2019\" | sub(\"(?<x>.)\"; \"\\(.x)!\")", "\"\u2019!\"\n")]
     public async Task Jq_SubVectors(string filter, string expected)
     {
         var host = new MockFileSystem();

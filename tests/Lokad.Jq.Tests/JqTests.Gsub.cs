@@ -33,6 +33,19 @@ public sealed partial class JqTests
     [InlineData("\"ab\" | gsub((\"a\", \"b\"); \"X\")", "Xb\naX\n")]
     [InlineData("\"aA\" | gsub(\"a\"; \"X\"; (\"\", \"i\"))", "XA\nXX\n")]
     [InlineData("\"ab\" | gsub(\"(?<x>.)\"; .x | gsub(\"(?<x>.)\"; \"z\"))", "zz\n")]
+    [InlineData("\"A1 B2 CD\" | gsub(\"(?<x>.)(?<y>[0-9])\"; \"\\(.x|ascii_downcase)\\(.y)\")", "a1 b2 CD\n")]
+    [InlineData("\"ABC DEF\" | gsub(\"\\\\b(?<x>.)\"; \"\\(.x|ascii_downcase)\")", "aBC dEF\n")]
+    [InlineData("\"123foo456bar\" | gsub(\"[^a-z]*(?<x>[a-z]*)\"; \"Z\\(.x)\")", "ZfooZbarZ\n")]
+    [InlineData("\"aB\" | [gsub(\"(?<a>.)\"; \"\\(.a|ascii_upcase)\", \"\\(.a|ascii_downcase)\", \"c\")]", "[\n  \"AB\",\n  \"ab\",\n  \"cc\"\n]\n")]
+    [InlineData("\"a\" | gsub(\"^\"; \"\"; \"g\")", "a\n")]
+    [InlineData("\"a\" | gsub(\"\"; \"a\"; \"g\")", "aaa\n")]
+    [InlineData("\"a\" | gsub(\"$\"; \"a\"; \"g\")", "aa\n")]
+    [InlineData("\"qux\" | gsub(\"(?=u)\"; \"u\")", "quux\n")]
+    [InlineData("\"aaa\" | gsub(\"^.*a\"; \"b\")", "b\n")]
+    [InlineData("\"aaa\" | gsub(\"^.*?a\"; \"b\")", "baa\n")]
+    [InlineData("\"a1b2\" | gsub(\"(?<d>\\\\d)\"; \":\\(.d);\")", "a:1;b:2;\n")]
+    [InlineData("\"aaaaa\" | gsub(\"a\";\"b\")", "bbbbb\n")]
+    [InlineData("\"\" | gsub(\"(.*)\"; \"\"; \"x\")", "\n")]
     public async Task Jq_GsubPreservesReplacementSemantics(string filter, string expected)
     {
         var host = new MockFileSystem();
