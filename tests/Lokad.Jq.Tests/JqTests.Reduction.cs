@@ -9,6 +9,19 @@ public sealed partial class JqTests
     [InlineData("[{\"a\": [1]}, {\"a\": 1}]", "reduce .[] as {a: [$x]} ?// {a: $x} (0; . + $x)", "2\n")]
     [InlineData("0", "1 as $y | reduce (1, 2) as $x (0; . + $x + $y)", "5\n")]
     [InlineData("null", "reduce [[1, 2, 10], [3, 4, 10]][] as [$i, $j] (0; . + $i * $j)", "14\n")]
+    [InlineData("[1,2,3]", "[-foreach -.[] as $x (0; . + $x)]", "[\n  1,\n  3,\n  6\n]\n")]
+    [InlineData("[1,2,3]", "[foreach .[] as $x (0; . + $x) as $x | $x]", "[\n  1,\n  3,\n  6\n]\n")]
+    [InlineData("[0,1,2]", "[(label $here | .[] | if .>1 then break $here else . end), \"hi!\"]", "[\n  0,\n  1,\n  \"hi!\"\n]\n")]
+    [InlineData("[0,2,1]", "[(label $here | .[] | if .>1 then break $here else . end), \"hi!\"]", "[\n  0,\n  \"hi!\"\n]\n")]
+    [InlineData("[11,22,33,44,55,66,77,88,99]", "[label $out | foreach .[] as $item ([3, null]; if .[0] < 1 then break $out else [.[0] -1, $item] end; .[1])]", "[\n  11,\n  22,\n  33\n]\n")]
+    [InlineData("[[2,1], [5,3], [6,4]]", "[foreach .[] as [$i, $j] (0; . + $i - $j)]", "[\n  1,\n  3,\n  5\n]\n")]
+    [InlineData("[{\"a\":1}, {\"b\":2}, {\"a\":3, \"b\":4}]", "[foreach .[] as {a:$a} (0; . + $a; -.)]", "[\n  -1,\n  -1,\n  -4\n]\n")]
+    [InlineData("[1,2]", "[foreach .[] / .[] as $i (0; . + $i)]", "[\n  1,\n  3,\n  3.5,\n  4.5\n]\n")]
+    [InlineData("[10,9,8,7]", "[foreach .[] as $try (1 as $catch | $catch - 1; . + $try; .)]", "[\n  10,\n  19,\n  27,\n  34\n]\n")]
+    [InlineData("[1, 2]", "foreach .[] as $x (0, 1; . + $x)", "1\n3\n2\n4\n")]
+    [InlineData("[1,2,3,4,5]", "foreach .[] as $item (0; . + $item)", "1\n3\n6\n10\n15\n")]
+    [InlineData("[1,2,3,4,5]", "foreach .[] as $item (0; . + $item; [$item, . * 2])", "[\n  1,\n  2\n]\n[\n  2,\n  6\n]\n[\n  3,\n  12\n]\n[\n  4,\n  20\n]\n[\n  5,\n  30\n]\n")]
+    [InlineData("[\"foo\", \"bar\", \"baz\"]", "foreach .[] as $item (0; . + 1; {index: ., $item})", "{\n  \"index\": 1,\n  \"item\": \"foo\"\n}\n{\n  \"index\": 2,\n  \"item\": \"bar\"\n}\n{\n  \"index\": 3,\n  \"item\": \"baz\"\n}\n")]
     public async Task Jq_ReduceReadsInputs(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -32,6 +45,8 @@ public sealed partial class JqTests
     [InlineData("[1, 2, 3] | reduce .[] as $x (0; . + $x) as $x | $x", "6\n")]
     [InlineData("[1, 2, 3] | reduce .[] as $then (4 as $else | $else; . as $elif | . + $then * $elif)", "96\n")]
     [InlineData("null | reduce . as $n (.; .)", "null\n")]
+    [InlineData("[foreach range(5) as $item (0; $item)]", "[\n  0,\n  1,\n  2,\n  3,\n  4\n]\n")]
+    [InlineData("[label $if | range(10) | ., (select(. == 5) | break $if)]", "[\n  0,\n  1,\n  2,\n  3,\n  4,\n  5\n]\n")]
     public async Task Jq_ReduceFoldsStates(string filter, string expected)
     {
         var host = new MockFileSystem();
