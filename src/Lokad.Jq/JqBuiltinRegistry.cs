@@ -212,6 +212,8 @@ internal static class JqBuiltinRegistry
         ["_max_by_impl"] = (1, 1),
         ["_flatten"] = (1, 1),
         ["_match_impl"] = (3, 3),
+        ["INDEX"] = (1, 2),
+        ["JOIN"] = (2, 4),
     };
 
     internal static IReadOnlyList<string> ListAll()

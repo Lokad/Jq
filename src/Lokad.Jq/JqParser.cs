@@ -1401,6 +1401,31 @@ internal sealed class JqParser(
             return new AnyFilter(new BinaryFilter(args[0], "==", args[1]), new IdentityFilter());
         }
 
+        if (name == "INDEX" && args.Count == 1)
+        {
+            return new SqlIndexFilter(null, args[0]);
+        }
+
+        if (name == "INDEX")
+        {
+            return new SqlIndexFilter(args[0], args[1]);
+        }
+
+        if (name == "JOIN" && args.Count == 2)
+        {
+            return new SqlJoinFilter(args[0], null, args[1], null);
+        }
+
+        if (name == "JOIN" && args.Count == 3)
+        {
+            return new SqlJoinFilter(args[0], args[1], args[2], null);
+        }
+
+        if (name == "JOIN")
+        {
+            return new SqlJoinFilter(args[0], args[1], args[2], args[3]);
+        }
+
         if (name == "combinations")
         {
             return args.Count == 0

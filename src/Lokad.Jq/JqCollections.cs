@@ -535,6 +535,99 @@ internal sealed class FlattenImplFilter(JqFilter Depth) : JqFilter
     }
 }
 
+// INDEX(stream; idx_expr) and INDEX(idx_expr): build an object keyed by tostring per stream row.
+internal sealed class SqlIndexFilter(JqFilter? Stream, JqFilter IndexExpr) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        IEnumerable<JsonNode?> rows = Stream is null ? MapFilter.Iterate(input, context, environment) : Stream.Evaluate(input, context, environment);
+        var result = new JsonObject();
+        context.Budget.ChargeNode();
+        foreach (JsonNode? row in rows)
+        {
+            foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
+            {
+                string name = context.Runtime.ToJqString(key);
+                context.Budget.ChargeNode();
+                context.Budget.ChargeString(name.Length);
+                result[name] = context.Runtime.Clone(row);
+            }
+        }
+        yield return result;
+    }
+}
+
+// JOIN(idx; stream; idx_expr; join_expr) family: pair stream rows with index lookups.
+internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter IndexExpr, JqFilter? JoinExpr) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        foreach (JsonNode? idx in Index.Evaluate(input, context, environment))
+        {
+            if (Stream is null)
+            {
+                var collected = new JsonArray();
+                context.Budget.ChargeNode();
+                foreach (JsonNode? row in MapFilter.Iterate(input, context, environment))
+                {
+                    foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
+                    {
+                        JsonNode? lookup = LookupIndex(idx, key, context);
+                        var pair = new JsonArray(context.Runtime.Clone(row), context.Runtime.Clone(lookup));
+                        context.Budget.ChargeNode();
+                        context.Budget.ChargeNode();
+                        collected.Add(pair);
+                    }
+                }
+                yield return collected;
+            }
+            else
+            {
+                foreach (JsonNode? row in Stream.Evaluate(input, context, environment))
+                {
+                    foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
+                    {
+                        JsonNode? lookup = LookupIndex(idx, key, context);
+                        var pair = new JsonArray(context.Runtime.Clone(row), context.Runtime.Clone(lookup));
+                        context.Budget.ChargeNode();
+                        context.Budget.ChargeNode();
+                        if (JoinExpr is null)
+                        {
+                            yield return pair;
+                        }
+                        else
+                        {
+                            foreach (JsonNode? joined in JoinExpr.Evaluate(pair, context, environment))
+                                yield return joined;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static JsonNode? LookupIndex(JsonNode? idx, JsonNode? key, JqContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (idx is null)
+            return null;
+        if (idx is JsonObject obj && TryGetString(key, out string? name) && name is not null)
+            return context.Runtime.Clone(obj.TryGetPropertyValue(name, out JsonNode? child) ? child : null);
+        if (idx is JsonArray arr && JqPaths.TryGetIndex(key, out long index, out bool isNaN))
+        {
+            if (isNaN)
+                return null;
+            long resolved = index < 0 ? arr.Count + index : index;
+            return resolved >= 0 && resolved < arr.Count ? context.Runtime.Clone(arr[(int)resolved]) : null;
+        }
+        throw new JqRuntimeException("cannot index " + TypeName(idx));
+    }
+}
+
 // `any(generator; condition)`: true on the first truthy condition output,
 // short-circuiting the rest. Exhaustion yields false; errors propagate.
 internal sealed class AnyFilter(JqFilter Generator, JqFilter Condition) : JqFilter

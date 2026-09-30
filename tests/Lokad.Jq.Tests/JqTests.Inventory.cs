@@ -178,4 +178,50 @@ public sealed partial class JqTests
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Theory]
+    [InlineData("[1, 2, 1] | INDEX(.)", "{\n  \"1\": 1,\n  \"2\": 2\n}\n")]
+    [InlineData("INDEX([1, 2, 1][]; .)", "{\n  \"1\": 1,\n  \"2\": 2\n}\n")]
+    public async Task Jq_InventoryIndex(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("[1, 2, 3] | JOIN({\"1\": \"one\", \"2\": \"two\"}; tostring)", "[\n  [\n    1,\n    \"one\"\n  ],\n  [\n    2,\n    \"two\"\n  ],\n  [\n    3,\n    null\n  ]\n]\n")]
+    [InlineData("JOIN({\"a\": 1}; [\"a\", \"b\"][]; .)", "[\n  \"a\",\n  1\n]\n[\n  \"b\",\n  null\n]\n")]
+    [InlineData("JOIN({\"1\": \"one\"}; [1][]; tostring; .[1])", "\"one\"\n")]
+    public async Task Jq_InventoryJoin(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_InventoryUpstreamIndex()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "-n", "INDEX(range(5)|[., \"foo\\(.)\"]; .[0])")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("{\"0\":[0,\"foo0\"],\"1\":[1,\"foo1\"],\"2\":[2,\"foo2\"],\"3\":[3,\"foo3\"],\"4\":[4,\"foo4\"]}\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_InventoryUpstreamJoin()
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("[[5,\"foo\"],[3,\"bar\"],[1,\"foobar\"]]");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "JOIN({\"0\":[0,\"abc\"],\"1\":[1,\"bcd\"],\"2\":[2,\"def\"],\"3\":[3,\"efg\"],\"4\":[4,\"fgh\"]}; .[0]|tostring)")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("[[[5,\"foo\"],null],[[3,\"bar\"],[3,\"efg\"]],[[1,\"foobar\"],[1,\"bcd\"]]]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
