@@ -19,6 +19,7 @@ public sealed partial class JqTests
     [InlineData("\"foo\"", "try (try error catch \"inner catch \\(.)\") catch \"outer catch \\(.)\"", "\"inner catch foo\"\n")]
     [InlineData("\"foo\"", "try ((try error catch \"inner catch \\(.)\") | error) catch \"outer catch \\(.)\"", "\"outer catch inner catch foo\"\n")]
     [InlineData("null", "try error(0) // 1", "1\n")]
+    [InlineData("null", "try to_entries catch .", "\"null (null) has no keys\"\n")]
     [InlineData("null", "try error(\"\\($__loc__)\") catch .", "\"{\\\"file\\\":\\\"<top-level>\\\",\\\"line\\\":1}\"\n")]
     public async Task Jq_TryCatchHandlesErrors(string input, string filter, string expected)
     {

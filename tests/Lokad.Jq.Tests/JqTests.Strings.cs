@@ -54,6 +54,8 @@ public sealed partial class JqTests
     [InlineData("\" 4\"", "try tonumber catch \"caught\"", "\"caught\"\n")]
     [InlineData("\"True\"", "try toboolean catch \"caught\"", "\"caught\"\n")]
     [InlineData("[\"false\", \"true\", false, true]", "map(toboolean)", "[\n  false,\n  true,\n  false,\n  true\n]\n")]
+    [InlineData("\"1 \"", "fromjson", "1\n")]
+    [InlineData("\" 1\"", "fromjson", "1\n")]
     [InlineData("1", "try toboolean catch .", "\"number (1) cannot be parsed as a boolean\"\n")]
     [InlineData("\"1 2\"", "try fromjson catch .", "\"expected a single JSON value\"\n")]
     [InlineData("0", "nan | tostring", "\"null\"\n")]
