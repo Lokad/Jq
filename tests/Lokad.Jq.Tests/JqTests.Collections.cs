@@ -161,4 +161,23 @@ public sealed partial class JqTests
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+    [Fact]
+    public async Task Jq_TransposeRejectsNonArrays()
+    {
+        // Rows must be arrays or null like the reference map over rows;
+        // anything else fails catchably instead of padding.
+        var scalar = new MockFileSystem();
+        scalar.SetStandardInput("1");
+        var scalarTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "transpose")));
+        Assert.Equal(5, await scalarTool.ExecuteAsync(scalar, CancellationToken.None));
+        Assert.Contains("cannot iterate over number", scalar.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(scalar.GetOutput(JqFileDescriptor.StdOut));
+
+        var row = new MockFileSystem();
+        row.SetStandardInput("[[1], 5]");
+        var rowTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "transpose")));
+        Assert.Equal(5, await rowTool.ExecuteAsync(row, CancellationToken.None));
+        Assert.Contains("cannot iterate over number", row.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(row.GetOutput(JqFileDescriptor.StdOut));
+    }
 }
