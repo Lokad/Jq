@@ -27,6 +27,15 @@ Before any public release:
    repository directory tree (so repository build props and the package
    allowlist do not apply to it) and execute a basic JSON filter, a regex
    case, a controlled file read, and a cancellation case.
+
+Local out-of-tree proof (re-run after any packaging change): an ignored
+probe under `tmp/consumer` references only the packed `Lokad.Jq` package
+by exact version through the `artifacts/nuget` feed, with repository
+build props detached, an isolated packages folder, and a regenerated lock
+whose content hash matches the packed artifact. It executes JSON, regex,
+hosted file IO, cancellation, and non-finite parsing checks; all five
+report ok with exit code 0. The probe stays out of version control and
+never references the library source project.
 6. Finalize public API/version/changelog, confirm repository metadata, and select
    the desired publication mechanism. Publishing is separate from CI validation.
 
