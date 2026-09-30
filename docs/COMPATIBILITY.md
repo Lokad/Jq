@@ -42,6 +42,9 @@ tests, and evidence):
   stay explicitly rejected, never silently ignored.
 - Slice path components render as start/end objects (best effort);
   diagnostics columns count UTF-16 code units with LF line breaks.
+- Escaped non-ASCII output uses uppercase hex digits (for example `\u00E9`)
+  from the JSON encoder while the reference uses lowercase; the values are
+  identical and only the byte-level case differs.
 - Differential comparison is opt-in against an independently installed
   executable with recorded version, configuration, hash, seeds, and cases;
   ordinary builds and tests never require it.

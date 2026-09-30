@@ -343,6 +343,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_AsciiOutputEscapesNonAscii()
+    {
+        var fileSystem = new MockFileSystem();
+        fileSystem.SetStandardInput("\"é\"");
+
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-a", ".")));
+        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("\"\\u00E9\"\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
     public async Task Jq_UnbufferedIsAcceptedAsNoOp()
     {
         var fileSystem = new MockFileSystem();
