@@ -189,4 +189,26 @@ public sealed partial class JqTests
         Assert.Contains("cannot iterate over number", row.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(row.GetOutput(JqFileDescriptor.StdOut));
     }
+    [Fact]
+    public async Task Jq_RangeVectorsMatchReferenceOrder()
+    {
+        // Upstream range vectors prove first-argument-outer combinations;
+        // the generic builtin prelude is last-outer, so range parses
+        // through its own filter.
+        var cases = new (string Filter, string Expected)[]
+        {
+            ("[range(0,1;3,4)]", "[0,1,2,0,1,2,3,1,2,1,2,3]\n"),
+            ("[range(3,5)]", "[0,1,2,0,1,2,3,4]\n"),
+            ("[range(0,1;4,5;1,2)]", "[0,1,2,3,0,2,0,1,2,3,4,0,2,4,1,2,3,1,3,1,2,3,4,1,3]\n"),
+            ("[range(0,1,2;4,3,2;2,3)]", "[0,2,0,3,0,2,0,0,0,1,3,1,1,1,1,1,2,2,2,2]\n"),
+        };
+        foreach (var (filter, expected) in cases)
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "-n", filter)));
+            Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
 }

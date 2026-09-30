@@ -165,6 +165,42 @@ internal sealed class TransposeFilter : JqFilter
     }
 }
 
+// `range/1..3`: argument combinations stream first-argument-outer like the
+// reference range vectors, unlike the last-argument-outer generic builtin
+// prelude that the remaining builtins share with the reference.
+internal sealed class RangeFilter(IReadOnlyList<JqFilter> args) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        var current = new JsonNode?[args.Count];
+        foreach (JsonNode?[] combo in Combine(0))
+        {
+            var packed = new List<List<JsonNode?>>(combo.Length);
+            foreach (JsonNode? item in combo)
+                packed.Add(new List<JsonNode?> { item });
+            foreach (JsonNode? value in context.Runtime.Range(packed))
+                yield return value;
+        }
+
+        IEnumerable<JsonNode?[]> Combine(int index)
+        {
+            if (index >= args.Count)
+            {
+                yield return (JsonNode?[])current.Clone();
+                yield break;
+            }
+            foreach (JsonNode? value in args[index].Evaluate(input, context, environment))
+            {
+                current[index] = value;
+                foreach (JsonNode?[] combo in Combine(index + 1))
+                    yield return combo;
+            }
+        }
+    }
+}
+
 // `combinations` and `combinations(n)`: cartesian products of array rows.
 internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
 {

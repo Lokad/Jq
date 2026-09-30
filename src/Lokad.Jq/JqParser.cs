@@ -1171,6 +1171,11 @@ internal sealed class JqParser(
             return new MatchImplFilter(args);
         }
 
+        if (name == "range")
+        {
+            return new RangeFilter(args);
+        }
+
         if (name == "path")
         {
             return new PathBuiltinFilter(args[0]);

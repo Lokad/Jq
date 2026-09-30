@@ -183,4 +183,15 @@ public sealed partial class JqTests
         Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
+    [Fact]
+    public async Task Jq_UserValueArgumentsCombineFirstOuter()
+    {
+        // Like the reference range/3 vector, the first value argument
+        // varies slowest; filter arguments stay lazy per use.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "def f($a;$b): [$a,$b]; [f((1,2);(3,4))]")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("[\n  [\n    1,\n    3\n  ],\n  [\n    1,\n    4\n  ],\n  [\n    2,\n    3\n  ],\n  [\n    2,\n    4\n  ]\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }

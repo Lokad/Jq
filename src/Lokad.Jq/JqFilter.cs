@@ -606,14 +606,17 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         return new CallFrame(signal.Input, combos[0], signal.ValuePositions, signal.FilterArgs);
     }
 
+    // User-call value arguments combine first-argument-outer like the
+    // reference range/3 vector, unlike the last-argument-outer generic
+    // builtin prelude that the remaining builtins share with the reference.
     private static IEnumerable<JsonNode?[]> EvaluateValueCombos(IReadOnlyList<JqFilter> values, JsonNode? input, JqContext context, JqEnvironment environment)
     {
         var current = new JsonNode?[values.Count];
-        return Combine(values.Count - 1);
+        return Combine(0);
 
         IEnumerable<JsonNode?[]> Combine(int index)
         {
-            if (index < 0)
+            if (index >= values.Count)
             {
                 yield return (JsonNode?[])current.Clone();
                 yield break;
@@ -621,7 +624,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
             foreach (JsonNode? value in values[index].Evaluate(input, context, environment))
             {
                 current[index] = value;
-                foreach (JsonNode?[] combo in Combine(index - 1))
+                foreach (JsonNode?[] combo in Combine(index + 1))
                     yield return combo;
             }
         }
@@ -1710,10 +1713,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "join": yield return context.Runtime.Join(input, Arg(0)); break;
                 case "ascii_downcase": yield return JsonValue.Create(context.Runtime.AsciiCase(String(input), true)); break;
                 case "ascii_upcase": yield return JsonValue.Create(context.Runtime.AsciiCase(String(input), false)); break;
-                case "range":
-                    foreach (var value in context.Runtime.Range(combo.Select(item => new List<JsonNode?> { item }).ToList()))
-                        yield return value;
-                    break;
+
                 case "fromdate":
                 case "fromdateiso8601": yield return JqTime.FromDateIso(context, input); break;
                 case "todate":
