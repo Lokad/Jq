@@ -80,44 +80,57 @@ internal static class JqExecutor
             stage = 4;
             await using var cursor = new JqInputCursor(host, invocation, context, cancellationToken);
             context.InputCursor = cursor;
-            await using var inputs = OuterInputsAsync(cursor, invocation, context, cancellationToken).GetAsyncEnumerator(cancellationToken);
-            bool sawOutput = false;
-            bool lastFalseNull = false;
-            int stickyError = 0;
-            while (true)
+            Exception? unwindError = null;
+            try
             {
-                stage = 4;
-                if (!await inputs.MoveNextAsync().ConfigureAwait(false)) break;
-                stage = 5;
-                try
+                await using var inputs = OuterInputsAsync(cursor, invocation, context, cancellationToken).GetAsyncEnumerator(cancellationToken);
+                bool sawOutput = false;
+                bool lastFalseNull = false;
+                int stickyError = 0;
+                while (true)
                 {
-                    foreach (var output in filter.Evaluate(inputs.Current, context, moduleEnv))
+                    stage = 4;
+                    if (!await inputs.MoveNextAsync().ConfigureAwait(false)) break;
+                    stage = 5;
+                    try
                     {
-                        sawOutput = true;
-                        lastFalseNull = output is null
-                            || (output is JsonValue negative && negative.TryGetValue<bool>(out bool flag) && !flag);
-                        ReadOnlyMemory<byte> rendered = RenderOutput(invocation, context, budget, output);
-                        var appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken)).ConfigureAwait(false);
-                        if (!appended.CanAcceptMore) return appended.ExitCode;
-                        if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int stopped)
-                            return stopped;
+                        foreach (var output in filter.Evaluate(inputs.Current, context, moduleEnv))
+                        {
+                            sawOutput = true;
+                            lastFalseNull = output is null
+                                || (output is JsonValue negative && negative.TryGetValue<bool>(out bool flag) && !flag);
+                            ReadOnlyMemory<byte> rendered = RenderOutput(invocation, context, budget, output);
+                            var appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken)).ConfigureAwait(false);
+                            if (!appended.CanAcceptMore) return appended.ExitCode;
+                            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int stopped)
+                                return stopped;
+                        }
+                    }
+                    catch (Exception exception) when (JqErrors.IsCatchable(exception))
+                    {
+                        if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int errorStopped)
+                            return errorStopped;
+                        await WriteErrorAsync(host, invocation, $"jq: {exception.Message}", cancellationToken).ConfigureAwait(false);
+                        stickyError = 5;
                     }
                 }
-                catch (Exception exception) when (JqErrors.IsCatchable(exception))
-                {
-                    if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int errorStopped)
-                        return errorStopped;
-                    await WriteErrorAsync(host, invocation, $"jq: {exception.Message}", cancellationToken).ConfigureAwait(false);
-                    stickyError = 5;
-                }
+                if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int tailStopped)
+                    return tailStopped;
+                if (stickyError != 0)
+                    return stickyError;
+                if (invocation.ExitStatus)
+                    return !sawOutput ? 4 : lastFalseNull ? 1 : 0;
+                return 0;
             }
-            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int tailStopped)
-                return tailStopped;
-            if (stickyError != 0)
-                return stickyError;
-            if (invocation.ExitStatus)
-                return !sawOutput ? 4 : lastFalseNull ? 1 : 0;
-            return 0;
+            catch (Exception unwind)
+            {
+                unwindError = unwind;
+                throw;
+            }
+            finally
+            {
+                await cursor.CloseAbandonedAsync(unwindError).ConfigureAwait(false);
+            }
         }
         catch (JqHaltException ex)
         {

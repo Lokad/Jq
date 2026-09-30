@@ -816,7 +816,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
         LastLine = line;
     }
 
-    public async ValueTask DisposeAsync()
+    // Closes an abandoned owned descriptor with the in-flight failure as
+    // context, so persistent cleanup failures cannot replace quota,
+    // cancellation, host, or language errors unwinding through the executor.
+    // A null failure keeps the existing lone-cleanup-failure report.
+    internal async ValueTask CloseAbandonedAsync(Exception? earlier)
     {
         if (_disposed)
             return;
@@ -824,7 +828,12 @@ internal sealed class JqInputCursor : IAsyncDisposable
         if (_owned is { } owned)
         {
             _owned = null;
-            await _host.CloseOwnedDescriptorAsync(owned, null).ConfigureAwait(false);
+            await _host.CloseOwnedDescriptorAsync(owned, earlier).ConfigureAwait(false);
         }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await CloseAbandonedAsync(null).ConfigureAwait(false);
     }
 }

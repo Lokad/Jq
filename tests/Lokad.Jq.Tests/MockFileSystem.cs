@@ -15,6 +15,7 @@ internal sealed class MockFileSystem : IJqHost
     public int AppendCallCount { get; private set; }
     public bool AppendRemainsOpen { get; init; } = true;
     public Action<Memory<byte>>? BeforeByteRead { get; set; }
+    public Action? BeforeByteAppend { get; set; }
     public int CloseFailuresRemaining { get; set; }
     public List<JqFileDescriptor> ClosedDescriptors { get; } = [];
 
@@ -42,6 +43,7 @@ internal sealed class MockFileSystem : IJqHost
     public Task<JqAppendResult> AppendWhileOpenAsync(
         JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
     {
+        BeforeByteAppend?.Invoke();
         cancellationToken.ThrowIfCancellationRequested();
         AppendCallCount++;
         if (!_outputs.TryGetValue(descriptor, out var output))

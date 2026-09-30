@@ -91,4 +91,38 @@ public sealed partial class JqTests
         Assert.Equal("[[1]]\n", first.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("[[2]]\n", second.GetOutput(JqFileDescriptor.StdOut));
     }
+
+    [Fact]
+    public async Task Jq_QuotaDuringEvaluationSurvivesCloseFailure()
+    {
+        // The owned file stays open while evaluation trips quota; persistent
+        // cleanup failures must not replace the quota error.
+        var host = new MockFileSystem { CloseFailuresRemaining = 2 };
+        host.AddFile("/input", "[0]");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "range(0;300000) | length", "/input")));
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_CancellationDuringOutputSurvivesCloseFailure()
+    {
+        // A host-side cancellation on the first append leaves the input file
+        // open; the abandoned close must not swallow it into a close error.
+        var host = new MockFileSystem { CloseFailuresRemaining = 2 };
+        host.AddFile("/a", "[0]");
+        host.AddFile("/b", "[0]");
+        bool fired = false;
+        host.BeforeByteAppend = () =>
+        {
+            if (!fired)
+            {
+                fired = true;
+                throw new OperationCanceledException();
+            }
+        };
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".", "/a", "/b")));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
