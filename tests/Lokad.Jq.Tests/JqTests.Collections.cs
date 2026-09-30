@@ -71,6 +71,7 @@ public sealed partial class JqTests
     [InlineData("0", "range(2; 0; -0.5)", "2\n1.5\n1\n0.5\n")]
     [InlineData("0", "range(0.5; 2)", "0.5\n1.5\n")]
     [InlineData("0", "range(0; 1; 0)", "")]
+    [InlineData("0", "range(0; 1; nan)", "")]
     public async Task Jq_CollectionSearchFold(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
