@@ -19,12 +19,12 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("-n", "$ENV", "{\"A\":\"1\",\"B\":\"x y\"}\n", "A=1,B=x y")]
+    [InlineData("-n", "$ENV", "{\n  \"A\": \"1\",\n  \"B\": \"x y\"\n}\n", "A=1,B=x y")]
     [InlineData("-n", "$ENV", "{}\n", "")]
-    [InlineData("-n", "$ENV", "{\"A\":\"2\"}\n", "A=1,A=2")]
-    [InlineData("-n", "env", "{\"A\":\"1\"}\n", "A=1")]
+    [InlineData("-n", "$ENV", "{\n  \"A\": \"2\"\n}\n", "A=1,A=2")]
+    [InlineData("-n", "env", "{\n  \"A\": \"1\"\n}\n", "A=1")]
     [InlineData("-n", "\"x\" | env | .A", "\"1\"\n", "A=1")]
-    [InlineData("-n", "[(env | .A = \"9\"), env]", "[{\"A\":\"9\"},{\"A\":\"1\"}]\n", "A=1")]
+    [InlineData("-n", "[(env | .A = \"9\"), env]", "[\n  {\n    \"A\": \"9\"\n  },\n  {\n    \"A\": \"1\"\n  }\n]\n", "A=1")]
     public async Task Jq_EnvironmentSnapshot(string flag, string filter, string expected, string variables)
     {
         var environment = new List<JqEnvironmentVariable>();
@@ -111,7 +111,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("\"hi\" | stderr", "hi\n", "hi")]
-    [InlineData("{\"a\":1} | stderr", "{\"a\":1}\n", "{\"a\":1}")]
+    [InlineData("{\"a\":1} | stderr", "{\n  \"a\": 1\n}\n", "{\"a\":1}")]
     [InlineData("1 | stderr | . + 1", "2\n", "1")]
     public async Task Jq_StderrWritesRaw(string filter, string expected, string diagnostics)
     {

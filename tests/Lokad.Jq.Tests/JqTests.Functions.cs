@@ -11,7 +11,7 @@ public sealed partial class JqTests
     [InlineData("1", "def f: 1; def f: 2; f", "2\n")]
     [InlineData("1", "def f: 1; def f(x): x; f, f(2)", "1\n2\n")]
     [InlineData("9", "def f: def g: 1; g; f", "1\n")]
-    [InlineData("0", "[def f: 1; f]", "[1]\n")]
+    [InlineData("0", "[def f: 1; f]", "[\n  1\n]\n")]
     [InlineData("0", "(def f: 3; f)", "3\n")]
     [InlineData("1", "1 | def f: 2; f", "2\n")]
     [InlineData("0", "def length: 42; length", "42\n")]
@@ -81,7 +81,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "def f: . + 1; def g: f; def f: . + 100; def f(a): a + . + 11; [(g | f(20)), f]")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("[33,101]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\n  33,\n  101\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -93,7 +93,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "def id(x): x; 2000 as $x | def f(x): 1 as $x | id([$x, x, x]); def g(x): 100 as $x | f($x, $x + x); g($x)")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("[1,100,2100,100,2100]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\n  1,\n  100,\n  2100,\n  100,\n  2100\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -105,7 +105,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "[[20, 10][1, 0] as $x | def f: (100, 200) as $y | def g: [$x + $y, .]; . + $x | g; f[0] | [f][0][1] | f]")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("[[110,130],[210,130],[110,230],[210,230],[120,160],[220,160],[120,260],[220,260]]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\n  [\n    110,\n    130\n  ],\n  [\n    210,\n    130\n  ],\n  [\n    110,\n    230\n  ],\n  [\n    210,\n    230\n  ],\n  [\n    120,\n    160\n  ],\n  [\n    220,\n    160\n  ],\n  [\n    120,\n    260\n  ],\n  [\n    220,\n    260\n  ]\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -117,7 +117,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "def fac: if . == 1 then 1 else . * (. - 1 | fac) end; [.[] | fac]")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("[1,2,6,24]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\n  1,\n  2,\n  6,\n  24\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 

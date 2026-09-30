@@ -89,7 +89,7 @@ public sealed partial class JqTests
         inner.SetStandardInput(Seq("{\"a\":1}\n", "[true]\n"));
         var (exit, stdout, stderr) = await RunSeqAsync(new ChunkedHost(inner, 2), "--seq", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("\u001e{\"a\":1}\n\u001e[true]\n", stdout);
+        Assert.Equal("\u001e{\n  \"a\": 1\n}\n\u001e[\n  true\n]\n", stdout);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public sealed partial class JqTests
         host.SetStandardInput(Seq("1\n", "2\n"));
         var (exit, stdout, stderr) = await RunSeqAsync(host, "--seq", "-s", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("\u001e[1,2]\n", stdout);
+        Assert.Equal("\u001e[\n  1,\n  2\n]\n", stdout);
     }
 
     [Fact]

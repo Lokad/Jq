@@ -31,7 +31,7 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("[.if,.then,.else,.elif,.end,.and,.or]", "[1,2,3,4,5,6,7]\n")]
+    [InlineData("[.if,.then,.else,.elif,.end,.and,.or]", "[\n  1,\n  2,\n  3,\n  4,\n  5,\n  6,\n  7\n]\n")]
     [InlineData("if true then .else else .end end", "3\n")]
     [InlineData(".child.then.end", "8\n")]
     [InlineData(".child.then.end?", "8\n")]

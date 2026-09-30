@@ -40,7 +40,8 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("", new string[] { })]
+    [InlineData("", new[] { "-c" })]
+    [InlineData("  ", new string[] { })]
     [InlineData("", new[] { "--indent", "4", "-c" })]
     [InlineData("", new[] { "--tab", "--compact-output" })]
     [InlineData("", new[] { "--indent=4", "-cr" })]
@@ -142,4 +143,5 @@ public sealed partial class JqTests
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
     }
 }
+
 

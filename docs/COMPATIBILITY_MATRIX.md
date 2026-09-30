@@ -38,7 +38,7 @@ to read this file.
 | `-n`, `--null-input` | Manual: Invoking jq; command parser | implemented | JqTests, Probe identity/null cases; JqTests.Inputs explicit-input cases | Single null input; `input`/`inputs` still draw from file/stdin sources through the shared cursor | none | Null-input and interleaving tests pass |
 | `-R`, `--raw-input` | Manual: Invoking jq | implemented | JqTests raw/slurp cases; JqTests.Inputs chunked/CR cases | LF splits, CR is data; chunked line decoding preserves lone CRs and overlong lines trip the string limit per line; raw decoding wins over `--seq`/`--stream` | stdin bytes | Raw line and split tests pass |
 | `-s`, `--slurp` | Manual: Invoking jq | implemented | JqTests raw slurp; JqTests.Inputs slurp cases | Slurp aggregates the shared cursor (JSON array, raw string); filename/line report the last source state | stdin/file bytes | Slurp tests pass |
-| `-c`, `--compact-output` | Manual: Invoking jq | implemented | JqTests compact output | Default is compact; pretty-print selection order handled in parser | stdout bytes | Existing output tests pass |
+| `-c`, `--compact-output` | Manual: Invoking jq | implemented | JqTests compact output | Default is pretty with two spaces; last formatting flag wins across spellings | stdout bytes | Existing output tests pass |
 | `-r`, `--raw-output` | Manual: Invoking jq | implemented | JqTests raw output | Strings printed without JSON quotes | stdout bytes | Existing tests pass |
 | `-j`, `--join-output` | Manual: Invoking jq | implemented | JqTests.Output join case | Implies raw output without newlines, like the reference | stdout bytes | Join-implies-raw test passes |
 | `-a`, `--ascii-output` | Manual: Invoking jq | implemented | Existing format paths | ASCII escaping via encoder | stdout bytes | Covered by serializer paths |
@@ -94,7 +94,7 @@ to read this file.
 | Number literals, precision, signed zero, non-finite | Manual: Types and Values; docs/NUMERIC_PROFILE.md | partial | JqTests double-profile/non-finite/division cases | Double domain with integral storage; deliberate decNumber divergences (literal text, >2^53 comparison, exponent case) recorded in the profile | none | Profile pins pass; math builtins pending I14 |
 | Object key order, duplicate keys | Manual: Types and Values | implemented | JqTests duplicate-key ingress cases | Insertion order kept; duplicates last-wins at first position with escapes decoded; equality order-insensitive | none | All four ingress paths pass |
 | Unicode scalar indexing, `length`, slices | Manual: Types and Values | partial | Slice/length cases | `length`/slices count runes; search uses UTF-16 offsets; audit in I03/I12 | none | Needs offset tests |
-| Compact vs pretty rendering, LF bytes, sorted keys, ASCII | Manual: Invoking jq | partial | Compact/indent/format cases | Compact default; pretty uses platform newlines; sorted/color pending | stdout bytes | Needs I19 byte tests |
+| Compact vs pretty rendering, LF bytes, sorted keys, ASCII | Manual: Invoking jq | implemented | Compact/indent/format cases; JqTests.Output LF case | Pretty default with two spaces; LF-only bytes; sorted keys behind `-S` | stdout bytes | Rendering tests pass |
 
 ## Structural and collection builtins
 
@@ -168,7 +168,7 @@ to read this file.
 
 | Feature | Normative reference | Status | Tests | Caveats | Host | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Compact default, pretty indent, LF bytes | Manual: Invoking jq | partial | Compact/indent cases; JqTests.Output LF case | Pretty indentation is LF-only; the compact default flips to pretty later in I19 | stdout bytes | LF test passes; default-flip pending |
+| Pretty default, indentation, LF bytes | Manual: Invoking jq | implemented | Compact/indent/format cases; JqTests.Output LF case | Pretty default with two spaces and LF-only bytes; `-c`, `--tab`, and `--indent -1..7` select the shape | stdout bytes | Rendering tests pass |
 | Raw/join/NUL output, sorted keys, ASCII, color | Manual: Invoking jq | partial | Raw/join/ascii paths | NUL/sorted/color/seq pending | stdout bytes + terminal profile | Needs I19 |
 | Exit categories: success, compile (3), input (4), runtime (5), system (2), halt codes, `-e` modes | Command parser exit codes | partial | Stages 2/3/4/5 covered; JqTests.Diagnostics; JqTests.Output status cases | Unknown/wrong-arity now compile (3) via registry; host failures escape unstaged and cancellation propagates; uncaught per-input errors report and continue with sticky exit 5; `-e` maps no-output/false-null/values; halt codes win | status/stderr | Status and continuation tests pass |
 | Diagnostics bytes and source spans | Manual + parser errors | partial | Invalid filter/option/JSON/path cases; JqTests.Diagnostics | Compile errors carry line/column (LF lines, UTF-16 columns) and program identity (`filter` vs `file "path"`); unknown names, arities, and undefined variables fail at compile; unterminated strings are explicit; runtime type errors use a structured payload type rendered as before | stderr bytes | Span/identity/variable/payload tests pass |
@@ -192,3 +192,4 @@ to read this file.
   handling is tested with an OS-provided sleep/ping delay and a short timeout.
   Ordinary runs skip reference cases instead of failing when no executable
   is configured.
+

@@ -5,13 +5,13 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
-    [InlineData("\"a,b, c\" | [scan(\", \")]", "[\", \"]\n")]
-    [InlineData("\"a,b, c, d, e,f\" | [scan(\", *\")]", "[\",\",\", \",\", \",\", \",\",\"]\n")]
-    [InlineData("\"abcABBBCabbbc\" | [scan(\"b+\"; \"i\")]", "[\"b\",\"BBB\",\"bbb\"]\n")]
+    [InlineData("\"a,b, c\" | [scan(\", \")]", "[\n  \", \"\n]\n")]
+    [InlineData("\"a,b, c, d, e,f\" | [scan(\", *\")]", "[\n  \",\",\n  \", \",\n  \", \",\n  \", \",\n  \",\"\n]\n")]
+    [InlineData("\"abcABBBCabbbc\" | [scan(\"b+\"; \"i\")]", "[\n  \"b\",\n  \"BBB\",\n  \"bbb\"\n]\n")]
     [InlineData("\"\" | [scan(\"b+\")]", "[]\n")]
-    [InlineData("\"abAB\" | [scan(\"a\"; \"gi\")]", "[\"a\",\"A\"]\n")]
-    [InlineData("\"a1 b2\" | [scan(\"(?<c>[a-z])(?<n>[0-9])\")]", "[[\"a\",\"1\"],[\"b\",\"2\"]]\n")]
-    [InlineData("\"1\" | [scan(\"(?<x>y)?([0-9])\")]", "[[null,\"1\"]]\n")]
+    [InlineData("\"abAB\" | [scan(\"a\"; \"gi\")]", "[\n  \"a\",\n  \"A\"\n]\n")]
+    [InlineData("\"a1 b2\" | [scan(\"(?<c>[a-z])(?<n>[0-9])\")]", "[\n  [\n    \"a\",\n    \"1\"\n  ],\n  [\n    \"b\",\n    \"2\"\n  ]\n]\n")]
+    [InlineData("\"1\" | [scan(\"(?<x>y)?([0-9])\")]", "[\n  [\n    null,\n    \"1\"\n  ]\n]\n")]
     public async Task Jq_ScanVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -23,14 +23,14 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("\"ab\" | [splits(\"\")]", "[\"\",\"a\",\"b\",\"\"]\n")]
-    [InlineData("\"ab\" | [splits(\"c\")]", "[\"ab\"]\n")]
-    [InlineData("\"abAABBabA\" | [splits(\"a+\"; \"i\")]", "[\"\",\"b\",\"BB\",\"b\",\"\"]\n")]
-    [InlineData("\"abAABBabA\" | [splits(\"b+\"; \"i\")]", "[\"a\",\"AA\",\"a\",\"A\"]\n")]
-    [InlineData("\"a,é🚀,b\" | [splits(\",\")]", "[\"a\",\"é\\uD83D\\uDE80\",\"b\"]\n")]
-    [InlineData("\"a,b, c\" | split(\", *\"; \"\")", "[\"a\",\"b\",\"c\"]\n")]
-    [InlineData("\"aXbXc\" | split(\"x\"; \"i\")", "[\"a\",\"b\",\"c\"]\n")]
-    [InlineData("\"a,b,c\" | split(\",\")", "[\"a\",\"b\",\"c\"]\n")]
+    [InlineData("\"ab\" | [splits(\"\")]", "[\n  \"\",\n  \"a\",\n  \"b\",\n  \"\"\n]\n")]
+    [InlineData("\"ab\" | [splits(\"c\")]", "[\n  \"ab\"\n]\n")]
+    [InlineData("\"abAABBabA\" | [splits(\"a+\"; \"i\")]", "[\n  \"\",\n  \"b\",\n  \"BB\",\n  \"b\",\n  \"\"\n]\n")]
+    [InlineData("\"abAABBabA\" | [splits(\"b+\"; \"i\")]", "[\n  \"a\",\n  \"AA\",\n  \"a\",\n  \"A\"\n]\n")]
+    [InlineData("\"a,é🚀,b\" | [splits(\",\")]", "[\n  \"a\",\n  \"é\\uD83D\\uDE80\",\n  \"b\"\n]\n")]
+    [InlineData("\"a,b, c\" | split(\", *\"; \"\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
+    [InlineData("\"aXbXc\" | split(\"x\"; \"i\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
+    [InlineData("\"a,b,c\" | split(\",\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     public async Task Jq_SplitsVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -45,13 +45,13 @@ public sealed partial class JqTests
     [InlineData("\"a,b, c, d, e,f\" | sub(\", \"; \":\")", "\"a,b:c, d, e,f\"\n")]
     [InlineData("\", a,b, c, d, e,f, \" | sub(\", \"; \":\")", "\":a,b, c, d, e,f, \"\n")]
     [InlineData("\"abcdef\" | sub(\"^(?<head>.)\"; \"Head=\\(.head) Tail=\")", "\"Head=a Tail=bcdef\"\n")]
-    [InlineData("\"a\" | [sub(\"a\"; \"b\", \"c\")]", "[\"b\",\"c\"]\n")]
-    [InlineData("\"aB\" | [sub(\"(?<a>.)\"; \"\\(.a|ascii_upcase)\", \"\\(.a|ascii_downcase)\", \"c\")]", "[\"AB\",\"aB\",\"cB\"]\n")]
+    [InlineData("\"a\" | [sub(\"a\"; \"b\", \"c\")]", "[\n  \"b\",\n  \"c\"\n]\n")]
+    [InlineData("\"aB\" | [sub(\"(?<a>.)\"; \"\\(.a|ascii_upcase)\", \"\\(.a|ascii_downcase)\", \"c\")]", "[\n  \"AB\",\n  \"aB\",\n  \"cB\"\n]\n")]
     [InlineData("\"aaa\" | sub(\"a\"; \"X\")", "\"Xaa\"\n")]
     [InlineData("\"aaa\" | sub(\"a\"; \"X\"; \"g\")", "\"XXX\"\n")]
     [InlineData("\"abc\" | sub(\"z\"; \"X\")", "\"abc\"\n")]
     [InlineData("\"ab\" | sub(\"\"; \"X\")", "\"Xab\"\n")]
-    [InlineData("\"a1\" | [scan(\"(?<c>[a-z])(?<n>[0-9])\")]", "[[\"a\",\"1\"]]\n")]
+    [InlineData("\"a1\" | [scan(\"(?<c>[a-z])(?<n>[0-9])\")]", "[\n  [\n    \"a\",\n    \"1\"\n  ]\n]\n")]
     public async Task Jq_SubVectors(string filter, string expected)
     {
         var host = new MockFileSystem();

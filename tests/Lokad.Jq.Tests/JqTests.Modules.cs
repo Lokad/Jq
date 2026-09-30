@@ -34,7 +34,7 @@ public sealed partial class JqTests
         fs.AddFile("/lib/c.jq", "def a: 0; def c: \"hi\";");
         var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "include \"c\"; [a, c]");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[0,\"hi\"]\n", stdout);
+        Assert.Equal("[\n  0,\n  \"hi\"\n]\n", stdout);
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed partial class JqTests
         fs.AddFile("/lib/shadow2.jq", "def e: 3;");
         var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "import \"shadow1\" as f; import \"shadow2\" as f; import \"shadow1\" as e; [e::e, f::e]");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[2,3]\n", stdout);
+        Assert.Equal("[\n  2,\n  3\n]\n", stdout);
     }
 
     [Fact]
@@ -84,8 +84,8 @@ public sealed partial class JqTests
         var fs = new MockFileSystem();
         var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "$__loc__");
         Assert.True(exit == 0, stderr);
-        Assert.Contains("\"file\":\"<top-level>\"", stdout);
-        Assert.Contains("\"line\":1", stdout);
+        Assert.Contains("\"file\": \"<top-level>\"", stdout);
+        Assert.Contains("\"line\": 1", stdout);
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public sealed partial class JqTests
         fs.AddFile("/lib/c/d.jq", "def meh: \"meh\";");
         var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "import \"c\" as foo; [foo::a, foo::c]");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[0,\"acmeh\"]\n", stdout);
+        Assert.Equal("[\n  0,\n  \"acmeh\"\n]\n", stdout);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public sealed partial class JqTests
         fs.AddFile("/lib/top.jq", "import \"left\" as l; import \"right\" as r; def v: [l::v, r::v];");
         var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "import \"top\" as t; t::v");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[2,3]\n", stdout);
+        Assert.Equal("[\n  2,\n  3\n]\n", stdout);
     }
 
     [Fact]
@@ -178,8 +178,8 @@ public sealed partial class JqTests
         fs.AddFile("/lib/data.json", "{\"this\":\"is a test\",\"that\":\"is too\"}");
         var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "import \"data\" as $a; import \"data\" as $b; def f: {$a, $b}; f");
         Assert.True(exit == 0, stderr);
-        Assert.Contains("\"a\":[{", stdout);
-        Assert.Contains("\"b\":[{", stdout);
+        Assert.Contains("\"a\": [", stdout);
+        Assert.Contains("\"b\": [", stdout);
     }
 
     [Fact]
@@ -189,7 +189,7 @@ public sealed partial class JqTests
         fs.AddFile("/lib/data.json", "{\"n\":1}");
         var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "import \"data\" as $a; import \"data\" as $b; [($a[0] | .n = 99 | .n), $b[0].n]");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[99,1]\n", stdout);
+        Assert.Equal("[\n  99,\n  1\n]\n", stdout);
     }
 
     [Fact]
@@ -260,7 +260,7 @@ public sealed partial class JqTests
         fs.SetStandardInput("{\"a\":[1,2,3],\"c\":{\"hi\":\"hey\"}}");
         var (exit, stdout, stderr) = await RunModulesAsync(fs, "{a, $__loc__, c}");
         Assert.True(exit == 0, stderr);
-        Assert.Contains("\"__loc__\":{\"file\":\"<top-level>\"", stdout);
+        Assert.Contains("\"__loc__\": {\n    \"file\": \"<top-level>\"", stdout);
     }
 
     [Fact]
@@ -300,8 +300,8 @@ public sealed partial class JqTests
         fs.AddFile("/lib/m.jq", "def loc: $__loc__;");
         var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "import \"m\" as foo; foo::loc");
         Assert.True(exit == 0, stderr);
-        Assert.Contains("\"file\":\"/lib/m.jq\"", stdout);
-        Assert.Contains("\"line\":1", stdout);
+        Assert.Contains("\"file\": \"/lib/m.jq\"", stdout);
+        Assert.Contains("\"line\": 1", stdout);
     }
 
     [Fact]
@@ -365,5 +365,6 @@ public sealed partial class JqTests
         Assert.Contains("modulemeta input module name must be a string", stderr);
     }
 }
+
 
 

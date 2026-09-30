@@ -162,7 +162,7 @@ public sealed partial class JqTests
         host.AddFile("/data.json", "1\n{\"a\":2}\n");
         var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--slurpfile", "data", "/data.json", "$data");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[1,{\"a\":2}]\n", stdout);
+        Assert.Equal("[\n  1,\n  {\n    \"a\": 2\n  }\n]\n", stdout);
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public sealed partial class JqTests
         host.AddFile("/data.json", "1\n");
         var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--slurpfile", "data", "/data.json", "$ARGS.named.data");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[1]\n", stdout);
+        Assert.Equal("[\n  1\n]\n", stdout);
     }
 
     [Fact]

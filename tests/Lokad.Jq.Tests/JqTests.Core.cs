@@ -39,16 +39,16 @@ public sealed partial class JqTests
 
 
     [Theory]
-    [InlineData("[1,2,3,1] - [2]", "[1,3,1]\n")]
-    [InlineData("[1,2] - []", "[1,2]\n")]
-    [InlineData("{\"a\":{\"x\":1,\"y\":2},\"b\":1} * {\"a\":{\"y\":3,\"z\":4}}", "{\"a\":{\"x\":1,\"y\":3,\"z\":4},\"b\":1}\n")]
-    [InlineData("{\"a\":{\"x\":1}} + {\"a\":{\"y\":2}}", "{\"a\":{\"y\":2}}\n")]
+    [InlineData("[1,2,3,1] - [2]", "[\n  1,\n  3,\n  1\n]\n")]
+    [InlineData("[1,2] - []", "[\n  1,\n  2\n]\n")]
+    [InlineData("{\"a\":{\"x\":1,\"y\":2},\"b\":1} * {\"a\":{\"y\":3,\"z\":4}}", "{\n  \"a\": {\n    \"x\": 1,\n    \"y\": 3,\n    \"z\": 4\n  },\n  \"b\": 1\n}\n")]
+    [InlineData("{\"a\":{\"x\":1}} + {\"a\":{\"y\":2}}", "{\n  \"a\": {\n    \"y\": 2\n  }\n}\n")]
     [InlineData("\"ab\" * 2.5", "\"abab\"\n")]
     [InlineData("2 * \"ab\"", "\"abab\"\n")]
-    [InlineData("\"a,b\" / \",\"", "[\"a\",\"b\"]\n")]
-    [InlineData("\"abc\" / \"\"", "[\"a\",\"b\",\"c\"]\n")]
+    [InlineData("\"a,b\" / \",\"", "[\n  \"a\",\n  \"b\"\n]\n")]
+    [InlineData("\"abc\" / \"\"", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     [InlineData("\"\" | split(\",\")", "[]\n")]
-    [InlineData("\"abc\" | split(\"\")", "[\"a\",\"b\",\"c\"]\n")]
+    [InlineData("\"abc\" | split(\"\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     public async Task Jq_OperatorTypeCombinations(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -154,12 +154,12 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("{\"k\":\"K\"} | {(.k): 1}", "{\"K\":1}\n")]
-    [InlineData("{\"ks\":[\"a\",\"b\"]} | {(.ks[]): 1}", "{\"a\":1}\n{\"b\":1}\n")]
-    [InlineData("{\"ks\":[\"a\",\"b\"],\"vs\":[1,2]} | {((.ks[])): (.vs[])}", "{\"a\":1}\n{\"a\":2}\n{\"b\":1}\n{\"b\":2}\n")]
+    [InlineData("{\"k\":\"K\"} | {(.k): 1}", "{\n  \"K\": 1\n}\n")]
+    [InlineData("{\"ks\":[\"a\",\"b\"]} | {(.ks[]): 1}", "{\n  \"a\": 1\n}\n{\n  \"b\": 1\n}\n")]
+    [InlineData("{\"ks\":[\"a\",\"b\"],\"vs\":[1,2]} | {((.ks[])): (.vs[])}", "{\n  \"a\": 1\n}\n{\n  \"a\": 2\n}\n{\n  \"b\": 1\n}\n{\n  \"b\": 2\n}\n")]
     [InlineData("{\"foo\":1} | .\"foo\"", "1\n")]
     [InlineData("{\"a\":{\"b\":2}} | .a.\"b\"", "2\n")]
-    [InlineData("{\"a\":1} | {\"a$\\(1+1)\": 2}", "{\"a$2\":2}\n")]
+    [InlineData("{\"a\":1} | {\"a$\\(1+1)\": 2}", "{\n  \"a$2\": 2\n}\n")]
     public async Task Jq_DynamicAndQuotedKeys(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -185,7 +185,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("# pick the field\n.foo", "1\n")]
-    [InlineData("{\n\"a\": 1\n}", "{\"a\":1}\n")]
+    [InlineData("{\n\"a\": 1\n}", "{\n  \"a\": 1\n}\n")]
     public async Task Jq_CommentsAndLayouts(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -219,7 +219,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "{\"a\",b,\"a$\\(1+1)\"}")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("{\"a\":1,\"b\":2,\"a$2\":4}\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("{\n  \"a\": 1,\n  \"b\": 2,\n  \"a$2\": 4\n}\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 

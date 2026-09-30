@@ -21,8 +21,8 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("[0,1,2,3] | .[(1,2):3]", "[1,2]\n[2]\n")]
-    [InlineData("[0,1,2,3] | .[1:(2,3)]", "[1]\n[1,2]\n")]
+    [InlineData("[0,1,2,3] | .[(1,2):3]", "[\n  1,\n  2\n]\n[\n  2\n]\n")]
+    [InlineData("[0,1,2,3] | .[1:(2,3)]", "[\n  1\n]\n[\n  1,\n  2\n]\n")]
     [InlineData("[0,1,2] | .[empty:2]", "")]
     [InlineData("[0,1,2] | .[1:empty]", "")]
     public async Task Jq_SliceStreamsEveryBound(string filter, string expected)
@@ -42,7 +42,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "{a:(1,2), b:(3,4)}")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("{\"a\":1,\"b\":3}\n{\"a\":1,\"b\":4}\n{\"a\":2,\"b\":3}\n{\"a\":2,\"b\":4}\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("{\n  \"a\": 1,\n  \"b\": 3\n}\n{\n  \"a\": 1,\n  \"b\": 4\n}\n{\n  \"a\": 2,\n  \"b\": 3\n}\n{\n  \"a\": 2,\n  \"b\": 4\n}\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -84,8 +84,8 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("\"foobar\" | contains(\"foo\", \"baz\")", "true\nfalse\n")]
     [InlineData("\"foobar\" | startswith((\"foo\", \"bar\"))", "true\nfalse\n")]
-    [InlineData("[1,2,3] | indices((1, 3))", "[0]\n[2]\n")]
-    [InlineData("\"a,b\" | split((\",\", \";\"))", "[\"a\",\"b\"]\n[\"a,b\"]\n")]
+    [InlineData("[1,2,3] | indices((1, 3))", "[\n  0\n]\n[\n  2\n]\n")]
+    [InlineData("\"a,b\" | split((\",\", \";\"))", "[\n  \"a\",\n  \"b\"\n]\n[\n  \"a,b\"\n]\n")]
     [InlineData("\"aA\" | test((\"a\", \"b\"); (\"\", \"i\"))", "true\nfalse\ntrue\nfalse\n")]
     [InlineData("range((0, 2); 3)", "0\n1\n2\n2\n")]
     public async Task Jq_FunctionArgumentsDistribute(string filter, string expected)

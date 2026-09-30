@@ -18,7 +18,7 @@ public sealed class JqCompatibilityProbeTests
             Utf8("{\"a\":1}"),
             new Dictionary<string, string>(StringComparer.Ordinal),
             [],
-            "{\"a\":1}\n",
+            "{\n  \"a\": 1\n}\n",
             string.Empty,
             0);
     }

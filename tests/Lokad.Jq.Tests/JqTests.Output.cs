@@ -18,7 +18,7 @@ public sealed partial class JqTests
         host.SetStandardInput("{\"b\":1,\"a\":{\"d\":4,\"c\":3}}");
         var (exit, stdout, stderr) = await RunOutputAsync(host, "-S", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("{\"a\":{\"c\":3,\"d\":4},\"b\":1}\n", stdout);
+        Assert.Equal("{\n  \"a\": {\n    \"c\": 3,\n    \"d\": 4\n  },\n  \"b\": 1\n}\n", stdout);
     }
 
     [Fact]
@@ -28,7 +28,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[{\"b\":1,\"a\":2},1,\"x\"]");
         var (exit, stdout, stderr) = await RunOutputAsync(host, "-S", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[{\"a\":2,\"b\":1},1,\"x\"]\n", stdout);
+        Assert.Equal("[\n  {\n    \"a\": 2,\n    \"b\": 1\n  },\n  1,\n  \"x\"\n]\n", stdout);
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed partial class JqTests
         host.SetStandardInput("{\"a\":1}");
         var (exit, stdout, stderr) = await RunOutputAsync(host, "-M", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("{\"a\":1}\n", stdout);
+        Assert.Equal("{\n  \"a\": 1\n}\n", stdout);
     }
 
     [Theory]

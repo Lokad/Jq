@@ -17,19 +17,19 @@ public sealed partial class JqTests
     [InlineData("\"aa\" | match(\"(?>a*)a\")", "")]
     [InlineData("\"aaa\" | match(\"a*+a\")", "")]
     [InlineData("\"ab\" | match(\"\\\\Aab\\\\z\") | .offset", "0\n")]
-    [InlineData("\"foo bar\" | [match(\"\\\\b\\\\w+\"; \"g\")] | map(.string)", "[\"foo\",\"bar\"]\n")]
+    [InlineData("\"foo bar\" | [match(\"\\\\b\\\\w+\"; \"g\")] | map(.string)", "[\n  \"foo\",\n  \"bar\"\n]\n")]
     [InlineData("\"ab\" | match(\"a|b\") | .offset", "0\n")]
     [InlineData("\"ba\" | match(\"a|b\") | .offset", "0\n")]
     [InlineData("\"aa\" | match(\"(a)*\") | .captures[0].string", "\"a\"\n")]
     [InlineData("\"abc\" | match(\"(a)?b(?(1)c|d)\") | .string", "\"abc\"\n")]
     [InlineData("\"bd\" | match(\"(a)?b(?(1)c|d)\") | .string", "\"bd\"\n")]
     [InlineData("\"AB\" | match(\"a b # comment\"; \"ix\") | .string", "\"AB\"\n")]
-    [InlineData("\"a\\nb\" | [match(\"^.\"; \"mg\")] | map(.string)", "[\"a\",\"b\"]\n")]
+    [InlineData("\"a\\nb\" | [match(\"^.\"; \"mg\")] | map(.string)", "[\n  \"a\",\n  \"b\"\n]\n")]
     [InlineData("\"a1\" | match(\"[[:alpha:]][[:digit:]]\") | .offset", "0\n")]
     [InlineData("\"é1\" | match(\"\\\\p{L}+\") | .string", "\"é\"\n")]
     [InlineData("\"ab\" | [match(\".\"; \"g\") | .string] | .[] | match(\".\"; \"g\") | .offset", "0\n0\n")]
-    [InlineData("\"ab\" | split(\".\")", "[\"ab\"]\n")]
-    [InlineData("\"ab\" | split(\".\"; \"\")", "[\"\",\"\",\"\"]\n")]
+    [InlineData("\"ab\" | split(\".\")", "[\n  \"ab\"\n]\n")]
+    [InlineData("\"ab\" | split(\".\"; \"\")", "[\n  \"\",\n  \"\",\n  \"\"\n]\n")]
     public async Task Jq_RegexSyntaxVectors(string filter, string expected)
     {
         var host = new MockFileSystem();

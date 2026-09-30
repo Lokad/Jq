@@ -20,8 +20,8 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("\"2015-03-05T23:51:47Z\" | fromdate | localtime", "[2015,2,5,23,51,47,4,63]\n")]
-    [InlineData("0 | localtime", "[1970,0,1,0,0,0,4,0]\n")]
+    [InlineData("\"2015-03-05T23:51:47Z\" | fromdate | localtime", "[\n  2015,\n  2,\n  5,\n  23,\n  51,\n  47,\n  4,\n  63\n]\n")]
+    [InlineData("0 | localtime", "[\n  1970,\n  0,\n  1,\n  0,\n  0,\n  0,\n  4,\n  0\n]\n")]
     public async Task Jq_LocaltimeUtcZone(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -33,7 +33,7 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("0 | localtime", "[1970,0,1,5,30,0,4,0]\n")]
+    [InlineData("0 | localtime", "[\n  1970,\n  0,\n  1,\n  5,\n  30,\n  0,\n  4,\n  0\n]\n")]
     [InlineData("0 | strflocaltime(\"%H:%M %z %Z\")", "\"05:30 +0530 PLUS530\"\n")]
     public async Task Jq_FixedOffsetZone(string filter, string expected)
     {
@@ -47,8 +47,8 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("\"2026-07-01T12:00:00Z\" | fromdate | localtime", "[2026,6,1,14,0,0,3,181]\n")]
-    [InlineData("\"2026-01-01T12:00:00Z\" | fromdate | localtime", "[2026,0,1,13,0,0,4,0]\n")]
+    [InlineData("\"2026-07-01T12:00:00Z\" | fromdate | localtime", "[\n  2026,\n  6,\n  1,\n  14,\n  0,\n  0,\n  3,\n  181\n]\n")]
+    [InlineData("\"2026-01-01T12:00:00Z\" | fromdate | localtime", "[\n  2026,\n  0,\n  1,\n  13,\n  0,\n  0,\n  4,\n  0\n]\n")]
     [InlineData("\"2026-07-01T12:00:00Z\" | fromdate | strflocaltime(\"%Y-%m-%d %H:%M %z %Z\")", "\"2026-07-01 14:00 +0200 TEST-DST\"\n")]
     [InlineData("\"2026-01-01T12:00:00Z\" | fromdate | strflocaltime(\"%Y-%m-%d %H:%M %z %Z\")", "\"2026-01-01 13:00 +0100 TEST-STD\"\n")]
     [InlineData("[2026,6,1,14,0,0] | strflocaltime(\"%H %z\")", "\"14 +0200\"\n")]
@@ -80,8 +80,8 @@ public sealed partial class JqTests
     [InlineData("input_filename", "\"<stdin>\"\n\"<stdin>\"\n", "{\"a\":1}\n{\"b\":2}\n", null)]
     [InlineData("input_line_number", "1\n2\n", "1\n2\n", null)]
     [InlineData("input_line_number", "3\n4\n", "{\n\"a\": 1\n}\n2\n", null)]
-    [InlineData("[input_filename]", "[\"/data\"]\n", null, "{\"a\":1}\n")]
-    [InlineData("[input_line_number]", "[1]\n", null, "{\"a\":1}\n")]
+    [InlineData("[input_filename]", "[\n  \"/data\"\n]\n", null, "{\"a\":1}\n")]
+    [InlineData("[input_line_number]", "[\n  1\n]\n", null, "{\"a\":1}\n")]
     public async Task Jq_InputMetadata(string filter, string expected, string? stdin, string? file)
     {
         var host = new MockFileSystem();
@@ -117,7 +117,7 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("[input_filename, input_line_number]", "[\"<stdin>\",2]\n", "1\n2\n")]
+    [InlineData("[input_filename, input_line_number]", "[\n  \"<stdin>\",\n  2\n]\n", "1\n2\n")]
     public async Task Jq_SlurpMetadata(string filter, string expected, string stdin)
     {
         var host = new MockFileSystem();

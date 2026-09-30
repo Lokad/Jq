@@ -8,7 +8,7 @@ public sealed partial class JqTests
     [InlineData("\"error message\"", "try error catch .", "\"error message\"\n")]
     [InlineData("42", "try error(\"invalid value: \\(.)\") catch .", "\"invalid value: 42\"\n")]
     [InlineData("true", "try error(\"some exception\") catch .", "\"some exception\"\n")]
-    [InlineData("[{}, true, {\"a\": 1}]", "[.[] | try .a]", "[null,1]\n")]
+    [InlineData("[{}, true, {\"a\": 1}]", "[.[] | try .a]", "[\n  null,\n  1\n]\n")]
     [InlineData("5", "try error(\"e\") catch .", "\"e\"\n")]
     [InlineData("0", "try (try error(\"a\") catch error(\"b\")) catch .", "\"b\"\n")]
     [InlineData("0", "def f: try error(\"e\") catch .; f", "\"e\"\n")]
@@ -32,7 +32,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "[.[] | [try .a[] catch ., try .a.[] catch ., .a[]?, .a.[]?]]")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("[[1,2,1,2,1,2,1,2],[\"cannot iterate over number\",\"cannot iterate over number\"]]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\n  [\n    1,\n    2,\n    1,\n    2,\n    1,\n    2,\n    1,\n    2\n  ],\n  [\n    \"cannot iterate over number\",\n    \"cannot iterate over number\"\n  ]\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -44,7 +44,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "try [\"OK\", (.[] | error)] catch [\"KO\", .]")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("[\"KO\",[\"b\"]]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\n  \"KO\",\n  [\n    \"b\"\n  ]\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -192,12 +192,12 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("[0, 1, 2]", "[(label $here | .[] | if . > 1 then break $here else . end), \"hi!\"]", "[0,1,\"hi!\"]\n")]
-    [InlineData("[0, 2, 1]", "[(label $here | .[] | if . > 1 then break $here else . end), \"hi!\"]", "[0,\"hi!\"]\n")]
-    [InlineData("0", "[label $o | (label $i | (1, break $i)), 2]", "[1,2]\n")]
-    [InlineData("0", "[label $o | (label $i | (1, break $o)), 2]", "[1]\n")]
+    [InlineData("[0, 1, 2]", "[(label $here | .[] | if . > 1 then break $here else . end), \"hi!\"]", "[\n  0,\n  1,\n  \"hi!\"\n]\n")]
+    [InlineData("[0, 2, 1]", "[(label $here | .[] | if . > 1 then break $here else . end), \"hi!\"]", "[\n  0,\n  \"hi!\"\n]\n")]
+    [InlineData("0", "[label $o | (label $i | (1, break $i)), 2]", "[\n  1,\n  2\n]\n")]
+    [InlineData("0", "[label $o | (label $i | (1, break $o)), 2]", "[\n  1\n]\n")]
     [InlineData("0", "5 | label $x | (1 | break $x)", "")]
-    [InlineData("0", "[label $o | ((1, break $o)?), 2]", "[1]\n")]
+    [InlineData("0", "[label $o | ((1, break $o)?), 2]", "[\n  1\n]\n")]
     [InlineData("0", "[label $o | (try break $o catch 42)]", "[]\n")]
     [InlineData("0", "label $x | def f: break $x; f", "")]
     public async Task Jq_LabelBreakAbandonsCleanly(string input, string filter, string expected)

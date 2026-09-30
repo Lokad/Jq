@@ -64,7 +64,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" * -2", "null\n")]
     [InlineData("\"\" * 1000000", "\"\"\n")]
     [InlineData("\"ab\" + \"cd\"", "\"abcd\"\n")]
-    [InlineData("[2 * 3, 2 + 3, 2.5 * 4, -3 * 2]", "[6,5,10,-6]\n")]
+    [InlineData("[2 * 3, 2 + 3, 2.5 * 4, -3 * 2]", "[\n  6,\n  5,\n  10,\n  -6\n]\n")]
     public async Task Jq_StringLimitsPreserveOrdinaryArithmetic(string filter, string expected)
     {
         var fileSystem = new MockFileSystem();
@@ -111,7 +111,7 @@ public sealed partial class JqTests
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.True(exitCode == 0, fileSystem.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Equal("""{"name":"Example"}""" + "\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("{\n  \"name\": \"Example\"\n}\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public sealed partial class JqTests
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal("[3,4,5]\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\n  3,\n  4,\n  5\n]\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public sealed partial class JqTests
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.True(exitCode == 0, fileSystem.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Equal("""{"min":1,"max":3,"trim":"lokad","ok":true}""" + "\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("{\n  \"min\": 1,\n  \"max\": 3,\n  \"trim\": \"lokad\",\n  \"ok\": true\n}\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public sealed partial class JqTests
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal("""{"items":[1,2],"text":"oka"}""" + "\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("{\n  \"items\": [\n    1,\n    2\n  ],\n  \"text\": \"oka\"\n}\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Fact]
@@ -294,7 +294,7 @@ public sealed partial class JqTests
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal("""{"a":1}""" + "\n" + """{"a":2}""" + "\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("{\n  \"a\": 1\n}\n{\n  \"a\": 2\n}\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Fact]

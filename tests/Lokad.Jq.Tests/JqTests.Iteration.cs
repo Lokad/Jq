@@ -5,9 +5,9 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
-    [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "[limit(3; .[])]", "[0,1,2]\n")]
+    [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "[limit(3; .[])]", "[\n  0,\n  1,\n  2\n]\n")]
     [InlineData("0", "[limit(0; error)]", "[]\n")]
-    [InlineData("0", "[limit(1; 1, error)]", "[1]\n")]
+    [InlineData("0", "[limit(1; 1, error)]", "[\n  1\n]\n")]
     [InlineData("0", "limit(2.5; (1, 2, 3, 4))", "1\n2\n3\n")]
     [InlineData("[5, 6]", "first(.[])", "5\n")]
     [InlineData("[1, 2]", "first", "1\n")]
@@ -76,18 +76,18 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("1", "[while(.<100; .*2)]", "[1,2,4,8,16,32,64]\n")]
+    [InlineData("1", "[while(.<100; .*2)]", "[\n  1,\n  2,\n  4,\n  8,\n  16,\n  32,\n  64\n]\n")]
     [InlineData("4", "[.,1]|until(.[0] < 1; [.[0] - 1, .[1] * .[0]])|.[1]", "24\n")]
     [InlineData("0", "until(. > 3; . + 1)", "4\n")]
-    [InlineData("1", "[repeat(.*2, error)?]", "[2]\n")]
+    [InlineData("1", "[repeat(.*2, error)?]", "[\n  2\n]\n")]
     [InlineData("0", "limit(3; repeat(. + 1))", "1\n1\n1\n")]
     [InlineData("0", "limit(3; repeat(1))", "1\n1\n1\n")]
-    [InlineData("[[1]]", "[recurse]", "[[[1]],[1],1]\n")]
-    [InlineData("1", "[recurse(if . < 3 then . + 1 else empty end)]", "[1,2,3]\n")]
-    [InlineData("1", "[recurse(. + 1; . < 4)]", "[1,2,3]\n")]
-    [InlineData("[1, [2]]", "walk(if type == \"number\" then . + 1 else . end)", "[2,[3]]\n")]
-    [InlineData("{\"a\": [1]}", "[paths]", "[[\"a\"],[\"a\",0]]\n")]
-    [InlineData("{\"a\": [1]}", "[paths(type == \"number\")]", "[[\"a\",0]]\n")]
+    [InlineData("[[1]]", "[recurse]", "[\n  [\n    [\n      1\n    ]\n  ],\n  [\n    1\n  ],\n  1\n]\n")]
+    [InlineData("1", "[recurse(if . < 3 then . + 1 else empty end)]", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("1", "[recurse(. + 1; . < 4)]", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[1, [2]]", "walk(if type == \"number\" then . + 1 else . end)", "[\n  2,\n  [\n    3\n  ]\n]\n")]
+    [InlineData("{\"a\": [1]}", "[paths]", "[\n  [\n    \"a\"\n  ],\n  [\n    \"a\",\n    0\n  ]\n]\n")]
+    [InlineData("{\"a\": [1]}", "[paths(type == \"number\")]", "[\n  [\n    \"a\",\n    0\n  ]\n]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

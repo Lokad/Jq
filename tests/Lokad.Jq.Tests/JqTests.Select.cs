@@ -7,13 +7,13 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("[1,2,3] | .[] | select(. > 1)", "2\n3\n")]
     [InlineData("[null,false,0,\"\",[],{},true] | .[] | select(.)", "0\n\"\"\n[]\n{}\ntrue\n")]
-    [InlineData("{id:7,keep:true} | select(.keep)", "{\"id\":7,\"keep\":true}\n")]
+    [InlineData("{id:7,keep:true} | select(.keep)", "{\n  \"id\": 7,\n  \"keep\": true\n}\n")]
     [InlineData("false | select(true)", "false\n")]
     [InlineData("null | select(true)", "null\n")]
     [InlineData("\"kept\" | select(false,null,true,false,true)", "\"kept\"\n\"kept\"\n")]
     [InlineData("\"dropped\" | select(false,null)", "")]
     [InlineData("[1,2] | select(empty)", "")]
-    [InlineData("[1,2] | [select(true,true)]", "[[1,2],[1,2]]\n")]
+    [InlineData("[1,2] | [select(true,true)]", "[\n  [\n    1,\n    2\n  ],\n  [\n    1,\n    2\n  ]\n]\n")]
     public async Task Jq_SelectPreservesMatchingInput(string filter, string expected)
     {
         var host = new MockFileSystem();

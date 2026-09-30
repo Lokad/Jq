@@ -19,7 +19,7 @@ public sealed partial class JqTests
         host.SetStandardInput("1\n\"a\"\n[]\n{}\n");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[[],1]\n[[],\"a\"]\n[[],[]]\n[[],{}]\n", stdout);
+        Assert.Equal("[\n  [],\n  1\n]\n[\n  [],\n  \"a\"\n]\n[\n  [],\n  []\n]\n[\n  [],\n  {}\n]\n", stdout);
     }
 
     [Fact]
@@ -29,7 +29,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[\"a\",[\"b\"]]");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[[0],\"a\"]\n[[1,0],\"b\"]\n[[1,0]]\n[[1]]\n", stdout);
+        Assert.Equal("[\n  [\n    0\n  ],\n  \"a\"\n]\n[\n  [\n    1,\n    0\n  ],\n  \"b\"\n]\n[\n  [\n    1,\n    0\n  ]\n]\n[\n  [\n    1\n  ]\n]\n", stdout);
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public sealed partial class JqTests
         host.SetStandardInput("{\"x\":1,\"y\":[]}");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[[\"x\"],1]\n[[\"y\"],[]]\n[[\"y\"]]\n", stdout);
+        Assert.Equal("[\n  [\n    \"x\"\n  ],\n  1\n]\n[\n  [\n    \"y\"\n  ],\n  []\n]\n[\n  [\n    \"y\"\n  ]\n]\n", stdout);
     }
 
     [Theory]
@@ -51,7 +51,7 @@ public sealed partial class JqTests
         inner.SetStandardInput("{\"a\": [1, 2], \"b\": \"x\"}");
         var (exit, stdout, stderr) = await RunStreamAsync(new ChunkedHost(inner, chunk), "--stream", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[[\"a\",0],1]\n[[\"a\",1],2]\n[[\"a\",1]]\n[[\"b\"],\"x\"]\n[[\"b\"]]\n", stdout);
+        Assert.Equal("[\n  [\n    \"a\",\n    0\n  ],\n  1\n]\n[\n  [\n    \"a\",\n    1\n  ],\n  2\n]\n[\n  [\n    \"a\",\n    1\n  ]\n]\n[\n  [\n    \"b\"\n  ],\n  \"x\"\n]\n[\n  [\n    \"b\"\n  ]\n]\n", stdout);
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[1,2");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
         Assert.Equal(4, exit);
-        Assert.Equal("[[0],1]\n", stdout);
+        Assert.Equal("[\n  [\n    0\n  ],\n  1\n]\n", stdout);
         Assert.Contains("jq: parse error: Unfinished JSON term at EOF", stderr);
     }
 
@@ -72,7 +72,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[1, x, 2]");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream-errors", ".");
         Assert.True(exit == 0, stderr + "|" + stdout);
-        Assert.Equal("[[0],1]\n[\"Invalid literal at line 1, column 6\",[1]]\n", stdout);
+        Assert.Equal("[\n  [\n    0\n  ],\n  1\n]\n[\n  \"Invalid literal at line 1, column 6\",\n  [\n    1\n  ]\n]\n", stdout);
         Assert.Empty(stderr);
     }
 
@@ -94,7 +94,7 @@ public sealed partial class JqTests
         host.SetStandardInput("\u001e[1]\n\u001e{\"a\":2}\n\u001e");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", "--seq", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("\u001e[[0],1]\n\u001e[[0]]\n\u001e[[\"a\"],2]\n\u001e[[\"a\"]]\n", stdout);
+        Assert.Equal("\u001e[\n  [\n    0\n  ],\n  1\n]\n\u001e[\n  [\n    0\n  ]\n]\n\u001e[\n  [\n    \"a\"\n  ],\n  2\n]\n\u001e[\n  [\n    \"a\"\n  ]\n]\n", stdout);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public sealed partial class JqTests
         host.SetStandardInput("\u001e[1\n\u001e[2]\n\u001e");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", "--seq", ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("\u001e[[0],2]\n\u001e[[0]]\n", stdout);
+        Assert.Equal("\u001e[\n  [\n    0\n  ],\n  2\n]\n\u001e[\n  [\n    0\n  ]\n]\n", stdout);
         Assert.Contains("jq: ignoring parse error: Truncated value", stderr);
     }
 
@@ -135,7 +135,7 @@ public sealed partial class JqTests
         host.SetStandardInput("1");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "truncate_stream([[0],\"a\"],[[1,0],\"b\"],[[1,0]],[[1]])");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[[0],\"b\"]\n[[0]]\n", stdout);
+        Assert.Equal("[\n  [\n    0\n  ],\n  \"b\"\n]\n[\n  [\n    0\n  ]\n]\n", stdout);
         
     }
 
@@ -146,7 +146,8 @@ public sealed partial class JqTests
         host.SetStandardInput("null");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "fromstream(1 | truncate_stream([[0],\"a\"],[[1,0],\"b\"],[[1,0]],[[1]]))");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[\"b\"]\n", stdout);
+        Assert.Equal("[\n  \"b\"\n]\n", stdout);
     }
 }
+
 

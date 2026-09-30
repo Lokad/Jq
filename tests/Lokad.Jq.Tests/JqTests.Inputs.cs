@@ -47,7 +47,7 @@ public sealed partial class JqTests
         inner.SetStandardInput("{\"a\": [1, 2, {\"b\": \"x\\u00e9\"}], \"c\": null}\n[true,false]\n\"tail\"");
         var (exit, stdout, stderr) = await RunInputAsync(new ChunkedHost(inner, chunk), ".");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("{\"a\":[1,2,{\"b\":\"x\u00e9\"}],\"c\":null}\n[true,false]\n\"tail\"\n", stdout);
+        Assert.Equal("{\n  \"a\": [\n    1,\n    2,\n    {\n      \"b\": \"xé\"\n    }\n  ],\n  \"c\": null\n}\n[\n  true,\n  false\n]\n\"tail\"\n", stdout);
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public sealed partial class JqTests
         inner.SetStandardInput("1\n2\n3\n4\n");
         var (exit, stdout, stderr) = await RunInputAsync(inner, "[., input]");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[1,2]\n[3,4]\n", stdout);
+        Assert.Equal("[\n  1,\n  2\n]\n[\n  3,\n  4\n]\n", stdout);
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public sealed partial class JqTests
         inner.SetStandardInput("1\n2\n");
         var (exit, stdout, stderr) = await RunInputAsync(inner, "-n", "[input | [input_filename, input_line_number], inputs | [input_filename, input_line_number]]");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[[\"<stdin>\",1],[\"<stdin>\",2]]\n", stdout);
+        Assert.Equal("[\n  [\n    \"<stdin>\",\n    1\n  ],\n  [\n    \"<stdin>\",\n    2\n  ]\n]\n", stdout);
     }
 
     [Fact]

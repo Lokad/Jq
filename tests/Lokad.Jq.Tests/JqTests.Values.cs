@@ -20,7 +20,7 @@ public sealed partial class JqTests
     [InlineData("null", "null\n")]
     [InlineData("empty", "")]
     [InlineData("[empty]", "[]\n")]
-    [InlineData("[null]", "[null]\n")]
+    [InlineData("[null]", "[\n  null\n]\n")]
     [InlineData("null == null", "true\n")]
     public async Task Jq_NullVsEmptyStream(string filter, string expected)
     {
@@ -56,7 +56,7 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("[3 < \"a\", \"a\" < 3, null < false, false < true, true < 1, 1 < \"a\", \"a\" < [], [] < {}, {} < null]", "[true,false,true,true,true,true,true,true,false]\n")]
+    [InlineData("[3 < \"a\", \"a\" < 3, null < false, false < true, true < 1, 1 < \"a\", \"a\" < [], [] < {}, {} < null]", "[\n  true,\n  false,\n  true,\n  true,\n  true,\n  true,\n  true,\n  true,\n  false\n]\n")]
     [InlineData("[1,2] < [1,3]", "true\n")]
     [InlineData("[1] < [1,2]", "true\n")]
     [InlineData("[1,2] < [1,2]", "false\n")]
@@ -81,7 +81,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "{min:([1,\"a\",null,true] | min), max:([1,\"a\",null,true] | max)}")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("{\"min\":null,\"max\":\"a\"}\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("{\n  \"min\": null,\n  \"max\": \"a\"\n}\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
     // The numeric profile is double-based (see docs/NUMERIC_PROFILE.md):
@@ -148,9 +148,9 @@ public sealed partial class JqTests
     [InlineData("((-1) | sqrt) < false", "true\n")]
     [InlineData("1 % ((-1) | sqrt)", "null\n")]
     [InlineData("1e1000", "1.7976931348623157E+308\n")]
-    [InlineData("[((-1) | sqrt), 1]", "[null,1]\n")]
-    [InlineData("{\"x\":((-1) | sqrt)}", "{\"x\":null}\n")]
-    [InlineData("[1e1000]", "[1.7976931348623157E+308]\n")]
+    [InlineData("[((-1) | sqrt), 1]", "[\n  null,\n  1\n]\n")]
+    [InlineData("{\"x\":((-1) | sqrt)}", "{\n  \"x\": null\n}\n")]
+    [InlineData("[1e1000]", "[\n  1.7976931348623157E+308\n]\n")]
     public async Task Jq_NonFiniteValuesRenderAsJson(string filter, string expected)
     {
         var host = new MockFileSystem();

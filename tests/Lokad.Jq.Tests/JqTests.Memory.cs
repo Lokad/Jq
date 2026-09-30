@@ -30,17 +30,17 @@ public sealed partial class JqTests
     [InlineData("[\"x\" * 4194304, \"y\" * 4194304] | join(\"\") | length", "8388608\n")]
     [InlineData("\"x\" * 4194304 | \"\\(.)\\(.)\" | length", "8388608\n")]
     [InlineData("[\"é\", \"🚀\"] | join(\"/\")", "\"é/\\uD83D\\uDE80\"\n")]
-    [InlineData("[range(2147483646;2147483647;2)]", "[2147483646]\n")]
-    [InlineData("[range(-2147483647;-2147483648;-2)]", "[-2147483647]\n")]
+    [InlineData("[range(2147483646;2147483647;2)]", "[\n  2147483646\n]\n")]
+    [InlineData("[range(-2147483647;-2147483648;-2)]", "[\n  -2147483647\n]\n")]
     [InlineData("[10,20][range(0;1)]", "10\n")]
-    [InlineData("\"a,,b,\" | split(\",\")", "[\"a\",\"\",\"b\",\"\"]\n")]
-    [InlineData("\"ab\" | indices(\"\")", "[0,1,2]\n")]
+    [InlineData("\"a,,b,\" | split(\",\")", "[\n  \"a\",\n  \"\",\n  \"b\",\n  \"\"\n]\n")]
+    [InlineData("\"ab\" | indices(\"\")", "[\n  0,\n  1,\n  2\n]\n")]
     [InlineData("\"x\" * 300000 | index(\"x\")", "0\n")]
     [InlineData("\"ab\" | index(\"\")", "0\n")]
     [InlineData("\"ab\" | index(\"z\")", "null\n")]
-    [InlineData("[1,null,1] | [index(1), indices(1), index(null), index(2)]", "[0,[0,2],1,null]\n")]
+    [InlineData("[1,null,1] | [index(1), indices(1), index(null), index(2)]", "[\n  0,\n  [\n    0,\n    2\n  ],\n  1,\n  null\n]\n")]
     [InlineData("(\"\\u0000\" * 1400000) == (\"\\u0000\" * 1400000)", "true\n")]
-    [InlineData("[null == null, null == false, 1 == \"1\", [1,2] == [1,2], [1,2] != [2,1]]", "[true,false,false,true,true]\n")]
+    [InlineData("[null == null, null == false, 1 == \"1\", [1,2] == [1,2], [1,2] != [2,1]]", "[\n  true,\n  false,\n  false,\n  true,\n  true\n]\n")]
     [InlineData("[\"a,b\", \"c\\\"d\"] | @csv", "\"\\\"a,b\\\",\\\"c\\\"\\\"d\\\"\"\n")]
     [InlineData("\"é🚀\" | @base64 | @base64d", "\"é\\uD83D\\uDE80\"\n")]
     [InlineData("[\"\\t\" * 4194304] | @tsv | length", "8388608\n")]
@@ -241,7 +241,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal(raw ? "\"1\\n2\\n\"\n" : "[1,2]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(raw ? "\"1\\n2\\n\"\n" : "[\n  1,\n  2\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(0, host.OpenFileCount);
     }
 
@@ -352,7 +352,7 @@ public sealed partial class JqTests
         // The reference resolves duplicate keys last-wins at first position
         // (object assignment semantics); escapes decode before comparison.
         const string json = """{"outer":{"a":1,"\u0061":2},"b":1,"b":2}""";
-        const string expected = """{"outer":{"a":2},"b":2}""" + "\n";
+        const string expected = "{\n  \"outer\": {\n    \"a\": 2\n  },\n  \"b\": 2\n}\n";
         var host = new MockFileSystem();
         host.SetStandardInput(json);
         var invocation = source switch

@@ -105,12 +105,17 @@ internal static class JqCommandLineParser
             if (parsed.ColorOutput)
                 return Error("jq: --color-output requires a terminal-capable host");
 
-            // An indent of -1 selects tabs, like the reference.
+            // An indent of -1 selects tabs, like the reference. With no
+            // formatting flag the reference pretty-prints with two spaces.
             bool useTabs = format == OutputFormat.Tabs
                 || (format == OutputFormat.Spaces && parsed.Indent == -1);
-            int? indent = format != OutputFormat.Spaces || parsed.Indent is null or -1
-                ? null
-                : parsed.Indent;
+            int? indent = format switch
+            {
+                OutputFormat.Compact => null,
+                OutputFormat.Tabs => null,
+                OutputFormat.Spaces => parsed.Indent is null or -1 ? null : parsed.Indent,
+                _ => 2,
+            };
 
             var operands = special.Operands;
             var filterFileArgument = special.FromFile ?? parsed.FilterFile;
@@ -207,7 +212,7 @@ internal static class JqCommandLineParser
             var tokens = ArgumentTokenizer.Tokenize(arguments, ShortOptions, LongOptions, false);
             var normalized = new List<ITokenizedArguments>();
             var seenBools = new HashSet<string>(StringComparer.Ordinal);
-            format = OutputFormat.Compact;
+            format = OutputFormat.Default;
             while (tokens.Shift() is { } token)
             {
                 // Retain token kinds: removing 'c' from a short group must not create
@@ -521,7 +526,7 @@ internal static class JqCommandLineParser
         return option.StartsWith("-", StringComparison.Ordinal);
     }
 
-    private enum OutputFormat { Compact, Spaces, Tabs }
+    private enum OutputFormat { Compact, Spaces, Tabs, Default }
 
     private sealed record SpecialArguments(
         IReadOnlyList<string> Options,

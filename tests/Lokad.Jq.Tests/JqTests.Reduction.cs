@@ -64,7 +64,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "[label $o | foreach (1, 2, 3) as $x (0; . + $x | if . >= 3 then break $o else . end)]")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("[1]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\n  1\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
