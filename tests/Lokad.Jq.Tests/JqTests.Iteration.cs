@@ -79,6 +79,8 @@ public sealed partial class JqTests
     [InlineData("try nth(-1; 1) catch .", "\"nth doesn't support negative indices\"\n")]
     [InlineData("try isempty(error(\"x\")) catch .", "\"x\"\n")]
     [InlineData("isempty(empty)", "true\n")]
+    [InlineData("1 | until(true; error(\"x\"))", "1\n")]
+    [InlineData("1 | while(false; error(\"x\"))", "")]
     public async Task Jq_IterationEdgeCases(string filter, string expected)
     {
         var host = new MockFileSystem();
