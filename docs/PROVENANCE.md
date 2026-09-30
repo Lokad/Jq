@@ -4,7 +4,7 @@ Lokad.Jq is a standalone C# implementation maintained by Lokad and licensed unde
 MIT. Product sources are under `src/`; tests and benchmarks have separate
 projects. No source files or project references point outside this repository.
 
-The initial runtime depends on the public NuGet packages Lokad.Cli and PCRE.NET.
+The runtime depends on the public NuGet packages Lokad.Cli and PCRE.NET.
 The former generates command argument binding; the latter supplies the current
 regex engine and native runtime assets. SourceLink is a private build dependency.
 Package versions and resolved dependency graphs are recorded in
