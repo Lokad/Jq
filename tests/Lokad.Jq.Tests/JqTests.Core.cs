@@ -43,6 +43,8 @@ public sealed partial class JqTests
     [InlineData("[1,2] - []", "[\n  1,\n  2\n]\n")]
     [InlineData("{\"a\":{\"x\":1,\"y\":2},\"b\":1} * {\"a\":{\"y\":3,\"z\":4}}", "{\n  \"a\": {\n    \"x\": 1,\n    \"y\": 3,\n    \"z\": 4\n  },\n  \"b\": 1\n}\n")]
     [InlineData("{\"a\":{\"x\":1}} + {\"a\":{\"y\":2}}", "{\n  \"a\": {\n    \"y\": 2\n  }\n}\n")]
+    [InlineData("{\"k\": {\"a\": 0, \"c\": 3}, \"hello\": 1} as $in | {\"k\": {\"a\": 1, \"b\": 2}, \"hello\": {\"x\": 1}} * $in", "{\n  \"k\": {\n    \"a\": 0,\n    \"b\": 2,\n    \"c\": 3\n  },\n  \"hello\": 1\n}\n")]
+    [InlineData("{\"k\": {\"a\": 0, \"c\": 3}, \"hello\": {\"x\": 1}} as $in | {\"k\": {\"a\": 1, \"b\": 2}, \"hello\": 1} * $in", "{\n  \"k\": {\n    \"a\": 0,\n    \"b\": 2,\n    \"c\": 3\n  },\n  \"hello\": {\n    \"x\": 1\n  }\n}\n")]
     [InlineData("\"ab\" * 2.5", "\"abab\"\n")]
     [InlineData("2 * \"ab\"", "\"abab\"\n")]
     [InlineData("\"a,b\" / \",\"", "[\n  \"a\",\n  \"b\"\n]\n")]
