@@ -118,6 +118,7 @@ public sealed partial class JqTests
     [InlineData("{\"x\": 0}", "walk(1)", "1\n")]
     [InlineData("{\"x\": 0}", "[walk(.,1)]", "[\n  {\n    \"x\": 0\n  },\n  1\n]\n")]
     [InlineData("{\"a\": 1, \"b\": []}", "walk(select(IN({}, []) | not))", "{\n  \"a\": 1\n}\n")]
+[InlineData("[{\"_a\": {\"__b\": 2}}]", "walk( if type == \"object\" then with_entries( .key |= sub( \"^_+\"; \"\") ) else . end )", "[\n  {\n    \"a\": {\n      \"b\": 2\n    }\n  }\n]\n")]
     [InlineData("{\"a\": [1]}", "[paths]", "[\n  [\n    \"a\"\n  ],\n  [\n    \"a\",\n    0\n  ]\n]\n")]
     [InlineData("[]", "[paths]", "[]\n")]
     [InlineData("{}", "[paths]", "[]\n")]

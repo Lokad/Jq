@@ -117,6 +117,7 @@ public sealed partial class JqTests
     [InlineData("[1, 2]", "join(null)", "\"12\"\n")]
     [InlineData("\"a,b,c\"", "split(\",\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     [InlineData("\"a,\"", "split(\",\")", "[\n  \"a\",\n  \"\"\n]\n")]
+[InlineData("\"a, b,c,d, e, \"", "split(\", \")", "[\n  \"a\",\n  \"b,c,d\",\n  \"e\",\n  \"\"\n]\n")]
     [InlineData("\"\"", "split(\",\")", "[]\n")]
     [InlineData("\"a,,b\"", "split(\",\")", "[\n  \"a\",\n  \"\",\n  \"b\"\n]\n")]
     [InlineData("\"abc\"", "split(\"\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
