@@ -51,6 +51,7 @@ public sealed partial class JqTests
     [InlineData("[0, [1], [[2]], [[[3]]]]", "flatten(0)", "[\n  0,\n  [\n    1\n  ],\n  [\n    [\n      2\n    ]\n  ],\n  [\n    [\n      [\n        3\n      ]\n    ]\n  ]\n]\n")]
     [InlineData("[0, [1], [[2]], [[[3]]]]", "flatten(2)", "[\n  0,\n  1,\n  2,\n  [\n    3\n  ]\n]\n")]
     [InlineData("[0, [1, [2]], [1, [[3], 2]]]", "flatten(2)", "[\n  0,\n  1,\n  2,\n  1,\n  [\n    3\n  ],\n  2\n]\n")]
+    [InlineData("[[1]]", "flatten(0.5)", "[\n  1\n]\n")]
     [InlineData("{\"arr\": [1, 2, 3]}", ".sum = add(.arr[])", "{\n  \"arr\": [\n    1,\n    2,\n    3\n  ],\n  \"sum\": 6\n}\n")]
     [InlineData("[[1], [2, 3]]", "transpose", "[\n  [\n    1,\n    2\n  ],\n  [\n    null,\n    3\n  ]\n]\n")]
     [InlineData("[]", "transpose", "[]\n")]
@@ -150,6 +151,7 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData("[0, 1, 2]", "[skip(0.5; .[])]", "[\n  0,\n  1,\n  2\n]\n")]
     [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "[skip(3; .[])]", "[\n  3,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
     [InlineData("\"a,b, cd\"", "rindex(\",\")", "3\n")]
     [InlineData("\"abc\"", "rindex(\"z\")", "null\n")]
