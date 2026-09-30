@@ -120,6 +120,41 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_InputBomAppliesOncePerSource()
+    {
+        var cases = new (string Stdin, string ExpectedOut, int ExpectedExit)[]
+        {
+            ("\uFEFF1\n2\n", "1\n2\n", 0),
+            ("1\n\uFEFF2\n", "1\n", 5),
+            ("\uFEFF", "", 0),
+            ("\uFEFF ", "", 0),
+        };
+        foreach (int chunk in new[] { 1, 2, 3 })
+        {
+            foreach (var (stdin, expectedOut, expectedExit) in cases)
+            {
+                var inner = new MockFileSystem();
+                inner.SetStandardInput(stdin);
+                var (exit, stdout, stderr) = await RunInputAsync(new ChunkedHost(inner, chunk), ".");
+                Assert.True(exit == expectedExit, "chunk " + chunk + " stdin " + stdin.Length + ": " + stderr);
+                Assert.Equal(expectedOut, stdout);
+                if (expectedExit == 0) Assert.Empty(stderr);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Jq_InputBomResetsPerFile()
+    {
+        var inner = new MockFileSystem();
+        inner.AddFile("/a.json", "\uFEFF1");
+        inner.AddFile("/b.json", "\uFEFF2");
+        var (exit, stdout, stderr) = await RunInputAsync(inner, ".", "/a.json", "/b.json");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("1\n2\n", stdout);
+    }
+
+    [Fact]
     public async Task Jq_InputSkipsLeadingBom()
     {
         var inner = new MockFileSystem();
