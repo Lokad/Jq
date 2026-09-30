@@ -986,14 +986,23 @@ internal sealed class JqRuntime(JqBudget budget)
 
     private void FlattenInto(JsonArray result, JsonNode? node, double depth)
     {
-        if (node is JsonArray nested && depth != 0)
+        // Explicit stack: deeply nested inputs must not consume CLR frames.
+        // Children queue in order with the same per-level depth accounting as
+        // the reference reduce; leaves keep the single node charge each.
+        var pending = new List<(JsonNode? Node, double Depth)> { (node, depth) };
+        while (pending.Count > 0)
         {
-            foreach (JsonNode? child in nested)
-                FlattenInto(result, child, depth - 1);
-            return;
+            var (current, level) = pending[pending.Count - 1];
+            pending.RemoveAt(pending.Count - 1);
+            if (current is JsonArray nested && level != 0)
+            {
+                for (int index = nested.Count - 1; index >= 0; index--)
+                    pending.Add((nested[index], level - 1));
+                continue;
+            }
+            budget.ChargeNode();
+            result.Add(Clone(current));
         }
-        budget.ChargeNode();
-        result.Add(Clone(node));
     }
 
     internal JsonArray SortArray(JsonNode? input)

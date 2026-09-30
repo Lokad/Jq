@@ -533,4 +533,28 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.OpenFileCount);
     }
+
+    [Theory]
+    [InlineData("reduce range(10000) as $_ ([];[.]) | tojson | try (fromjson) catch . | (contains(\"<skipped: too deep>\") | not) and contains(\"Exceeds depth limit for parsing\")")]
+    [InlineData("reduce range(10001) as $_ ([]; [.]) | tojson | contains(\"<skipped: too deep>\")")]
+    [InlineData("reduce range(10000) as $_ ([]; [.]) | contains([[]])")]
+    [InlineData("try (reduce range(10001) as $_ ([]; [.]) as $x | $x | contains($x)) catch .")]
+    [InlineData("try (reduce range(10001) as $_ ({}; {a: .}) as $x | $x * $x) catch .")]
+    [InlineData("try ((reduce range(10001) as $_ ([]; [.])) as $x | (reduce range(10001) as $_ ([]; [.])) as $y | $x == $y) catch .")]
+    [InlineData("try ((reduce range(10001) as $_ ([]; [.])) as $x | [$x, $x] | sort) catch .")]
+    [InlineData("try ((reduce range(10001) as $_ ([]; [.])) as $x | [$x, $x] | unique) catch .")]
+    [InlineData("reduce range(9999) as $_ ([];[.]) | tojson | fromjson | flatten")]
+    [InlineData("reduce range(10000) as $_ ({}; {a: .}) as $x | $x * $x | length")]
+    public async Task Jq_RejectsExcessiveValueNesting(string filter)
+    {
+        // Deeply nested construction trips the cumulative value policy before
+        // any recursive builtin runs, so the reference deep-content checks
+        // surface here as staged failures instead of caught jq errors.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("value nesting limit exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
 }

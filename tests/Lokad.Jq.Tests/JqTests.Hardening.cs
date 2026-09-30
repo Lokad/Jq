@@ -157,6 +157,11 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("null | setpath([range(5000)|\"a\"]; 1) | walk(true)", "true\n")]
     [InlineData("null | setpath([range(5000)|\"a\"]; 1) | [paths | length] | add", "12502500\n")]
+    [InlineData("delpaths([[range(10000) | 0]])", "null\n")]
+    [InlineData("getpath([range(10000) | 0])", "null\n")]
+    [InlineData("setpath([range(10000) | 0]; 0) | flatten", "[\n  0\n]\n")]
+    [InlineData("try getpath([range(10001) | 0]) catch .", "\"Path too deep\"\n")]
+    [InlineData("try setpath([range(10001) | 0]; 0) catch .", "\"Path too deep\"\n")]
     public async Task Jq_DeepTreesWalkWithoutRecursion(string filter, string expected)
     {
         var host = new MockFileSystem();
