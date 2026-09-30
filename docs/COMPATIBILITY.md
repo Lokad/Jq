@@ -23,8 +23,10 @@ tests, and evidence):
   last-argument-outer matching the reference call prelude, while `range` and
   user value arguments use first-argument-outer per the upstream range vectors
   (pinned by the range-order and user-argument-order tests). Object,
-  interpolation, and index/slice-bound orders keep their established behavior
-  pending oracle vectors; do not relabel those without oracle evidence.
+  interpolation, index, and slice orders are pinned first-key/piece/bound-major
+  per the reference fork structure (`gen_dictpair`, `_plus` chains, `gen_index`,
+  `gen_slice_index`); execution-oracle confirmation remains open, so do not
+  relabel those without oracle evidence.
 - Numbers use doubles with integral storage for integers;
   literal precision, ordering, and non-finite rendering follow docs/NUMERIC_PROFILE.md, with deliberate decimal-build divergences recorded there.
 - Regex support uses PCRE.NET. The reference Oniguruma syntax, flags,
