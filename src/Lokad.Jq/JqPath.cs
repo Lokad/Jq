@@ -419,7 +419,7 @@ internal static class JqPathReads
                     else if (current is null)
                         current = null;
                     else
-                        throw new JqRuntimeException($"cannot index {JqRuntime.TypeName(current)} with string \"{key.Key}\"");
+                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with string (" + System.Text.Json.Nodes.JsonValue.Create(key.Key).ToJsonString() + ")");
                     break;
                 case IndexSegment index:
                     if (current is JsonArray arr)
@@ -435,7 +435,7 @@ internal static class JqPathReads
                     else if (current is null)
                         current = null;
                     else
-                        throw new JqRuntimeException($"cannot index {JqRuntime.TypeName(current)}");
+                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with number (" + (index.IsNaN ? "NaN" : index.Index.ToString(System.Globalization.CultureInfo.InvariantCulture)) + ")");
                     break;
                 case SliceSegment slice:
                     if (current is JsonArray array)
@@ -809,6 +809,30 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? paths in Paths.Evaluate(input, context, environment))
             yield return context.Runtime.Clone(JqPathReads.GetPath(input, JqPaths.ParsePathValue(paths, context)));
+    }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(pair);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        // Path transparency mirrors upstream _jq_path_append: a tracked input
+        // keeps tracking with the path argument appended, so path(getpath($p)),
+        // getpath($p) = value, and getpath($p) |= update all resolve through $p.
+        // Fresh inputs travel untracked and fail at the next path boundary.
+        foreach (JsonNode? paths in Paths.Evaluate(pair.Value, context, environment))
+        {
+            List<JqValueSegment> segments = JqPaths.ParsePathValue(paths, context);
+            JsonNode? value = JqPathReads.GetPath(pair.Value, segments);
+            if (!pair.Tracked)
+            {
+                yield return new JqValuePath(pair.Segments, value, false);
+                continue;
+            }
+            var extended = new List<JqValueSegment>(pair.Segments);
+            extended.AddRange(segments);
+            yield return new JqValuePath(extended, value, true);
+        }
     }
 }
 

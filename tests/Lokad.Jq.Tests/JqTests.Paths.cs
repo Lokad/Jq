@@ -6,6 +6,7 @@ public sealed partial class JqTests
 {
     [Theory]
     [InlineData("{\"a\": 1}", "path(.a)", "[\n  \"a\"\n]\n")]
+    [InlineData("{\"a\":{\"b\":1}}", "path(getpath([\"a\",\"b\"]))", "[\n  \"a\",\n  \"b\"\n]\n")]
     [InlineData("null", "path(.foo[0,1])", "[\n  \"foo\",\n  0\n]\n[\n  \"foo\",\n  1\n]\n")]
     [InlineData("[1,5,3]", "path(.[] | select(.>3))", "[\n  1\n]\n")]
     [InlineData("42", "path(.)", "[]\n")]
@@ -128,6 +129,7 @@ public sealed partial class JqTests
     [InlineData("[1, 2, 3]", "del(.[nan,nan])", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[[10, 20], 30]", "pick(first|first)", "[\n  [\n    10\n  ]\n]\n")]
     [InlineData("[1, 2]", "try pick(last) catch .", "\"Out of bounds negative array index\"\n")]
+    [InlineData("{\"a\":[{\"b\":1}]}", "del(getpath([\"a\",0,\"b\"]))", "{\n  \"a\": [\n    {}\n  ]\n}\n")]
     [InlineData("[0,1,2,3,4,5,6,7]", "del(.[2:4],.[0],.[-2:])", "[\n  1,\n  4,\n  5\n]\n")]
     [InlineData("[\"foo\", \"bar\", \"baz\"]", "del(.[1, 2])", "[\n  \"foo\"\n]\n")]
     public async Task Jq_DelAndPickReshape(string input, string filter, string expected)
@@ -201,6 +203,9 @@ public sealed partial class JqTests
     [InlineData("null", "{foo: \"bar\"} | .foo |= .?", "{\n  \"foo\": \"bar\"\n}\n")]
     [InlineData("{\"a\": 0, \"b\": 0}", ".a, .b = 1", "0\n{\n  \"a\": 0,\n  \"b\": 1\n}\n")]
     [InlineData("null", "[range(10)] | .[1.5:3.5] = [\"xyz\"]", "[\n  0,\n  \"xyz\",\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
+    [InlineData("[null,{\"b\":0},{\"a\":0},{\"a\":null},{\"a\":[0,1]},{\"a\":{\"b\":1}},{\"a\":[{}]},{\"a\":[{\"c\":3}]}]", ".[] | try (getpath([\"a\",0,\"b\"]) |= 5) catch .", "{\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n{\n  \"b\": 0,\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n\"Cannot index number with number (0)\"\n{\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n\"Cannot index number with string (\\\"b\\\")\"\n\"Cannot index object with number (0)\"\n{\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n{\n  \"a\": [\n    {\n      \"c\": 3,\n      \"b\": 5\n    }\n  ]\n}\n")]
+    [InlineData("{\"a\":{\"b\":0}}", "getpath([\"a\",\"b\"]) = 5", "{\n  \"a\": {\n    \"b\": 5\n  }\n}\n")]
+    [InlineData("null", "getpath([\"a\",\"b\"]) = 5", "{\n  \"a\": {\n    \"b\": 5\n  }\n}\n")]
     public async Task Jq_AssignUpdatesValues(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
