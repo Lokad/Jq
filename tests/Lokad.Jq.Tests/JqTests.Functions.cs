@@ -15,6 +15,18 @@ public sealed partial class JqTests
     [InlineData("0", "(def f: 3; f)", "3\n")]
     [InlineData("1", "1 | def f: 2; f", "2\n")]
     [InlineData("0", "def length: 42; length", "42\n")]
+[InlineData("null", "def f: 1; def g: f, def f: 2; def g: 3; f, def f: g; f, g; def f: 4; [f, def f: g; def g: 5; f, g]+[f,g]", "[\n  4,\n  1,\n  2,\n  3,\n  3,\n  5,\n  4,\n  1,\n  2,\n  3,\n  3\n]\n")]
+    [InlineData("[1,2]", "def f(a;b;c;d;e;f): [a+1,b,c,d,e,f]; f(.[0];.[1];.[0];.[0];.[0];.[0])", "[\n  2,\n  2,\n  1,\n  1,\n  1,\n  1\n]\n")]
+    [InlineData("[0,1,2,3,4,5,6,7,8,9]", "def f(a;b;c;d;e;f;g;h;i;j): [j,i,h,g,f,e,d,c,b,a]; f(.[0];.[1];.[2];.[3];.[4];.[5];.[6];.[7];.[8];.[9])", "[\n  9,\n  8,\n  7,\n  6,\n  5,\n  4,\n  3,\n  2,\n  1,\n  0\n]\n")]
+    [InlineData("[1,2,3]", "def f(x): x | x; f([.], . + [42])", "[\n  [\n    [\n      1,\n      2,\n      3\n    ]\n  ]\n]\n[\n  [\n    1,\n    2,\n    3\n  ],\n  42\n]\n[\n  [\n    1,\n    2,\n    3,\n    42\n  ]\n]\n[\n  1,\n  2,\n  3,\n  42,\n  42\n]\n")]
+    [InlineData("[1,2,3]", "def x(a;b): a as $a | b as $b | $a + $b; def y($a;$b): $a + $b; def check(a;b): [x(a;b)] == [y(a;b)]; check(.[];.[]*2)", "true\n")]
+    [InlineData("[{\"a\":1,\"b\":2},{\"a\":2,\"b\":4},{\"a\":7,\"b\":8}]", "def inc(x): x |= .+1; inc(.[].a)", "[\n  {\n    \"a\": 2,\n    \"b\": 2\n  },\n  {\n    \"a\": 3,\n    \"b\": 4\n  },\n  {\n    \"a\": 8,\n    \"b\": 8\n  }\n]\n")]
+    [InlineData("[0,1,2]", "def x: .[1,2]; x=10", "[\n  0,\n  10,\n  10\n]\n")]
+    [InlineData("[[1,2],[10,20]]", "def addvalue(f): . + [f]; map(addvalue(.[0]))", "[\n  [\n    1,\n    2,\n    1\n  ],\n  [\n    10,\n    20,\n    10\n  ]\n]\n")]
+    [InlineData("[[1,2],[10,20]]", "def addvalue(f): f as $x | map(. + $x); addvalue(.[0])", "[\n  [\n    1,\n    2,\n    1,\n    2\n  ],\n  [\n    10,\n    20,\n    1,\n    2\n  ]\n]\n")]
+    [InlineData("null", "def range(init; upto; by): def _range: if (by > 0 and . < upto) or (by < 0 and . > upto) then ., ((.+by)|_range) else empty end; if init == upto then empty elif by == 0 then init else init|_range end; [range(0; 10; 3)]", "[\n  0,\n  3,\n  6,\n  9\n]\n")]
+    [InlineData("1", "def while(cond; update): def _while: if cond then ., (update | _while) else empty end; _while; [while(.<100; .*2)]", "[\n  1,\n  2,\n  4,\n  8,\n  16,\n  32,\n  64\n]\n")]
+    [InlineData("null", "def a: 0; . | a", "0\n")]
     public async Task Jq_DefDefinesCallableFilters(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

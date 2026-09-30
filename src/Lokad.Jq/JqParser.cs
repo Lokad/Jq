@@ -507,7 +507,13 @@ internal sealed class JqParser(
     {
         var left = ParseAs();
         while (Match(","))
-            left = new CommaFilter(left, ParseAs());
+        {
+            // Like pipe right-hand sides, a comma branch starting with `def`
+            // takes the whole rest of the query as its body, matching the
+            // reference `Query , Query` rule where the right query may open
+            // with a definition.
+            left = new CommaFilter(left, PeekIsDef() ? ParseQuery() : ParseAs());
+        }
         return left;
     }
 
