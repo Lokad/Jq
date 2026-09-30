@@ -90,4 +90,20 @@ public sealed partial class JqTests
         Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+    [Theory]
+    [InlineData("if (true, false) then 1 else 2 end", "1\n2\n")]
+    [InlineData("if (false, true) then 1 else 2 end", "2\n1\n")]
+    [InlineData("if empty then 1 else 2 end", "")]
+    [InlineData("if (false, true) then 1 elif (true, false) then 2 else 3 end", "2\n3\n1\n")]
+    public async Task Jq_IfDistributesOverConditionOutputs(string filter, string expected)
+    {
+        // The manual routes every condition output independently:
+        // truthy outputs run the branch body, falsy outputs fall to
+        // the rest of the chain, and an empty condition yields nothing.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }

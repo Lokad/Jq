@@ -187,26 +187,23 @@ internal sealed class WhileFilter(JqFilter Condition, JqFilter Update) : JqFilte
         pending.Push(input);
         while (pending.TryPop(out JsonNode? state))
         {
-            if (!AnyTruthy(Condition, state, context, environment))
-                continue;
-            yield return context.Runtime.Clone(state);
+            // Reference distribution like if: every condition output counts,
+            // so repeated truthy probes duplicate the state and its updates.
             var next = new List<JsonNode?>();
-            foreach (JsonNode? updated in Update.Evaluate(state, context, environment))
+            foreach (JsonNode? probe in Condition.Evaluate(state, context, environment))
             {
-                context.Budget.ChargeNode();
-                next.Add(updated);
+                if (!Truthy(probe))
+                    continue;
+                yield return context.Runtime.Clone(state);
+                foreach (JsonNode? updated in Update.Evaluate(state, context, environment))
+                {
+                    context.Budget.ChargeNode();
+                    next.Add(updated);
+                }
             }
             for (int index = next.Count - 1; index >= 0; index--)
                 pending.Push(next[index]);
         }
-    }
-
-    internal static bool AnyTruthy(JqFilter condition, JsonNode? state, JqContext context, JqEnvironment environment)
-    {
-        foreach (JsonNode? probe in condition.Evaluate(state, context, environment))
-            if (Truthy(probe))
-                return true;
-        return false;
     }
 }
 
@@ -222,16 +219,21 @@ internal sealed class UntilFilter(JqFilter Condition, JqFilter Next) : JqFilter
         pending.Push(input);
         while (pending.TryPop(out JsonNode? state))
         {
-            if (WhileFilter.AnyTruthy(Condition, state, context, environment))
-            {
-                yield return context.Runtime.Clone(state);
-                continue;
-            }
+            // Reference distribution like if: truthy probes yield the state
+            // while falsy probes recurse, each independently.
             var next = new List<JsonNode?>();
-            foreach (JsonNode? updated in Next.Evaluate(state, context, environment))
+            foreach (JsonNode? probe in Condition.Evaluate(state, context, environment))
             {
-                context.Budget.ChargeNode();
-                next.Add(updated);
+                if (Truthy(probe))
+                {
+                    yield return context.Runtime.Clone(state);
+                    continue;
+                }
+                foreach (JsonNode? updated in Next.Evaluate(state, context, environment))
+                {
+                    context.Budget.ChargeNode();
+                    next.Add(updated);
+                }
             }
             for (int index = next.Count - 1; index >= 0; index--)
                 pending.Push(next[index]);

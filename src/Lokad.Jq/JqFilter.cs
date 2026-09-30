@@ -1434,35 +1434,67 @@ internal sealed class IfFilter(
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        foreach (var (condition, then) in branches)
+        // Reference distribution: every condition output routes independently,
+        // truthy outputs run the branch body while falsy outputs fall through
+        // to the rest of the chain; an empty condition yields nothing at all.
+        foreach (var value in RunBranch(0))
+            yield return value;
+
+        IEnumerable<JsonNode?> RunBranch(int index)
         {
-            if (condition.Evaluate(input, context, environment).Any(Truthy))
+            if (index >= branches.Count)
             {
-                foreach (var value in then.Evaluate(input, context, environment))
+                foreach (var value in otherwise.Evaluate(input, context, environment))
                     yield return value;
                 yield break;
             }
+            var (condition, then) = branches[index];
+            foreach (JsonNode? probe in condition.Evaluate(input, context, environment))
+            {
+                if (Truthy(probe))
+                {
+                    foreach (var value in then.Evaluate(input, context, environment))
+                        yield return value;
+                }
+                else
+                {
+                    foreach (var value in RunBranch(index + 1))
+                        yield return value;
+                }
+            }
         }
-
-        foreach (var value in otherwise.Evaluate(input, context, environment))
-            yield return value;
     }
 
     // Rewrites tail positions (branch bodies and the final else) while
     // leaving conditions untouched.
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        foreach (var (condition, then) in branches)
+        foreach (JqValuePath next in RunBranchPaths(0))
+            yield return next;
+
+        IEnumerable<JqValuePath> RunBranchPaths(int index)
         {
-            if (condition.Evaluate(pair.Value, context, environment).Any(Truthy))
+            if (index >= branches.Count)
             {
-                foreach (JqValuePath next in then.EvaluatePaths(pair, context, environment))
+                foreach (JqValuePath next in otherwise.EvaluatePaths(pair, context, environment))
                     yield return next;
                 yield break;
             }
+            var (condition, then) = branches[index];
+            foreach (JsonNode? probe in condition.Evaluate(pair.Value, context, environment))
+            {
+                if (Truthy(probe))
+                {
+                    foreach (JqValuePath next in then.EvaluatePaths(pair, context, environment))
+                        yield return next;
+                }
+                else
+                {
+                    foreach (JqValuePath next in RunBranchPaths(index + 1))
+                        yield return next;
+                }
+            }
         }
-        foreach (JqValuePath next in otherwise.EvaluatePaths(pair, context, environment))
-            yield return next;
     }
 
     internal IfFilter WithTails(Func<JqFilter, JqFilter> rewrite)

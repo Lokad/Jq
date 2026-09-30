@@ -120,4 +120,28 @@ public sealed partial class JqTests
         Assert.Equal("1\n3\n6\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+    [Fact]
+    public async Task Jq_LoopConditionsDistributeLikeIf()
+    {
+        // Loop bodies follow the same if-distribution as their reference
+        // definitions: repeated truthy probes duplicate the state while
+        // falsy until-probes still recurse, and empty conditions drop.
+        var duplicated = new MockFileSystem();
+        var duplicate = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "[limit(4; 0 | while((true, true); . + 1))]")));
+        Assert.Equal(0, await duplicate.ExecuteAsync(duplicated, CancellationToken.None));
+        Assert.Equal("[\n  0,\n  0,\n  1,\n  1\n]\n", duplicated.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(duplicated.GetOutput(JqFileDescriptor.StdErr));
+
+        var recursed = new MockFileSystem();
+        var recurse = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "[limit(3; 0 | until((true, false); . + 1))]")));
+        Assert.Equal(0, await recurse.ExecuteAsync(recursed, CancellationToken.None));
+        Assert.Equal("[\n  0,\n  1,\n  2\n]\n", recursed.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(recursed.GetOutput(JqFileDescriptor.StdErr));
+
+        var dropped = new MockFileSystem();
+        var drop = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "[0 | while(empty; . + 1), 0 | until(empty; . + 1)]")));
+        Assert.Equal(0, await drop.ExecuteAsync(dropped, CancellationToken.None));
+        Assert.Equal("[]\n", dropped.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(dropped.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
