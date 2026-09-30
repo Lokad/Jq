@@ -33,6 +33,12 @@ public sealed partial class JqTests
     [InlineData("[[0], [0, 1], [2, 1, 0]]", ".[] as [$a, $b] | {a: $a, b: $b}", "{\n  \"a\": 0,\n  \"b\": null\n}\n{\n  \"a\": 0,\n  \"b\": 1\n}\n{\n  \"a\": 2,\n  \"b\": 1\n}\n")]
     [InlineData("{}", ". as {a: $x} | $x", "null\n")]
     [InlineData("[]", ". as [$a] | $a", "null\n")]
+    [InlineData("[{\"a\":1, \"b\":[2,{\"d\":3}]}, [4, {\"b\":5, \"c\":6}, 7, 8, 9], \"foo\"]", ".[] | . as {$a, b: [$c, {$d}]} ?// [$a, {$b}, $e] ?// $f | [$a, $b, $c, $d, $e, $f]", "[\n  1,\n  null,\n  2,\n  3,\n  null,\n  null\n]\n[\n  4,\n  5,\n  null,\n  null,\n  7,\n  null\n]\n[\n  null,\n  null,\n  null,\n  null,\n  null,\n  \"foo\"\n]\n")]
+    [InlineData("[[3],[4],[5],6]", ".[] | . as {a:$a} ?// {a:$a} ?// $a | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("[[3],[4],[5],6]", ".[] as {a:$a} ?// {a:$a} ?// $a | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("null", "[[3],[4],[5],6][] | . as {a:$a} ?// {a:$a} ?// $a | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("[[3],[4],[5],6]", ".[] | . as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("[[3],[4],[5],6]", ".[] | . as $a ?// {a:$a} ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("null", ". as [$a] | $a", "null\n")]
     [InlineData("null", ". as {a: $x} | $x", "null\n")]
     public async Task Jq_DestructuringBindsMissingAsNull(string input, string filter, string expected)
