@@ -77,6 +77,7 @@ public sealed partial class JqTests
     [InlineData("{\"a\": 1}", "delpaths([])", "{\n  \"a\": 1\n}\n")]
     [InlineData("{\"a\": 1}", "getpath([])", "{\n  \"a\": 1\n}\n")]
     [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "delpaths([[{\"start\": 1.5, \"end\": 3.5}]])", "[\n  0,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
+    [InlineData("\"abcdef\"", "path(.[1:3]) as $p | getpath($p)", "\"bc\"\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
