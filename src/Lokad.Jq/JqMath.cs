@@ -195,7 +195,7 @@ internal static class JqMath
         return context.Runtime.Clone(input);
     }
 
-    private static bool Classify(string name, JsonNode? input)
+    internal static bool Classify(string name, JsonNode? input)
     {
         if (TypeName(input) != "number")
             return false;

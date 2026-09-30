@@ -1388,12 +1388,20 @@ internal sealed class UnaryFilter(string op, JqFilter inner) : JqFilter
     {
         foreach (var value in inner.Evaluate(input, context, environment))
         {
-            yield return op switch
+            if (op == "-")
             {
-                "-" => JsonValue.Create(-Number(value)),
-                "not" => JsonValue.Create(!Truthy(value)),
-                _ => throw new JqException($"unsupported unary operator {op}")
-            };
+                if (TypeName(value) != "number")
+                    throw new JqRuntimeException(TypeName(value) + " (" + context.Runtime.Serialize(value, false, null, false) + ") cannot be negated");
+                yield return JsonValue.Create(-Number(value));
+            }
+            else if (op == "not")
+            {
+                yield return JsonValue.Create(!Truthy(value));
+            }
+            else
+            {
+                throw new JqException("unsupported unary operator " + op);
+            }
         }
     }
 }
@@ -1599,6 +1607,23 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "nulls": if (input is null) yield return null; break;
                 case "values": if (input is not null) yield return context.Runtime.Clone(input); break;
                 case "scalars": if (TypeName(input) is not ("array" or "object")) yield return context.Runtime.Clone(input); break;
+                case "finites": if (JqMath.Classify("isfinite", input)) yield return context.Runtime.Clone(input); break;
+                case "normals": if (JqMath.Classify("isnormal", input)) yield return context.Runtime.Clone(input); break;
+                case "_negate": if (TypeName(input) != "number") throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") cannot be negated"); yield return JsonValue.Create(-Number(input)); break;
+                case "_strindices":
+                    if (!TryGetString(input, out string? strHaystack) || strHaystack is null)
+                        throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") cannot be searched, as it is not a string");
+                    if (!TryGetString(Arg(0), out string? strNeedle) || strNeedle is null)
+                        throw new JqRuntimeException(TypeName(Arg(0)) + " (" + context.Runtime.Serialize(Arg(0), false, null, false) + ") is not a string");
+                    yield return context.Runtime.Indices(input, Arg(0));
+                    break;
+                case "format":
+                    if (!TryGetString(Arg(0), out string? formatName) || formatName is null)
+                        throw new JqRuntimeException(TypeName(Arg(0)) + " (" + context.Runtime.Serialize(Arg(0), false, null, false) + ") is not a valid format");
+                    if (formatName != "json" && formatName != "text" && formatName != "csv" && formatName != "tsv" && formatName != "html" && formatName != "uri" && formatName != "urid" && formatName != "sh" && formatName != "base64" && formatName != "base64d")
+                        throw new JqRuntimeException(formatName + " is not a valid format");
+                    yield return JsonValue.Create(context.Runtime.Format(formatName, input));
+                    break;
                 case "contains": yield return JsonValue.Create(context.Runtime.Contains(input, Arg(0))); break;
                 case "inside": yield return JsonValue.Create(context.Runtime.Contains(Arg(0), input)); break;
                 case "has": yield return JsonValue.Create(context.Runtime.Has(input, Arg(0))); break;

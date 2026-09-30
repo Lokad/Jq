@@ -114,6 +114,25 @@ internal sealed class FirstFilter(JqFilter Body) : JqFilter
     }
 }
 
+// `last(EXPR)`: the last output only, empty when the argument yields nothing.
+internal sealed class LastFilter(JqFilter Body) : JqFilter
+{
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        bool empty = true;
+        JsonNode? last = null;
+        foreach (JsonNode? value in Body.Evaluate(input, context, environment))
+        {
+            empty = false;
+            last = value;
+        }
+        if (!empty)
+            yield return last;
+    }
+}
+
 // `nth($n; EXPR)`: drops n outputs, then yields the next once.
 internal sealed class NthFilter(JqFilter Index, JqFilter Body) : JqFilter
 {

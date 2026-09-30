@@ -1169,9 +1169,14 @@ internal sealed class JqParser(
             return new FirstFilter(args[0]);
         }
 
-        if (name == "last")
+        if (name == "last" && args.Count == 0)
         {
             return new IndexFilter(new IdentityFilter(), new LiteralFilter(JsonValue.Create(-1)), false);
+        }
+
+        if (name == "last")
+        {
+            return new LastFilter(args[0]);
         }
 
         if (name == "nth" && args.Count == 1)

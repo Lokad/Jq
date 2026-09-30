@@ -159,7 +159,7 @@ internal static class JqBuiltinRegistry
         ["pick"] = (1, 1),
         ["limit"] = (2, 2),
         ["first"] = (0, 1),
-        ["last"] = (0, 0),
+        ["last"] = (0, 1),
         ["nth"] = (1, 2),
         ["isempty"] = (1, 1),
         ["rindex"] = (1, 1),
@@ -200,6 +200,11 @@ internal static class JqBuiltinRegistry
         ["combinations"] = (0, 1),
         ["IN"] = (1, 2),
         ["gsub"] = (2, 3),
+        ["format"] = (1, 1),
+        ["finites"] = (0, 0),
+        ["normals"] = (0, 0),
+        ["_strindices"] = (1, 1),
+        ["_negate"] = (0, 0),
     };
 
     internal static IReadOnlyList<string> ListAll()
@@ -207,6 +212,8 @@ internal static class JqBuiltinRegistry
         var names = new List<string>();
         foreach (var entry in Definitions)
         {
+            if (entry.Key.StartsWith("_", StringComparison.Ordinal))
+                continue;
             for (var arity = entry.Value.Minimum; arity <= entry.Value.Maximum; arity++)
                 names.Add(entry.Key + "/" + arity.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
