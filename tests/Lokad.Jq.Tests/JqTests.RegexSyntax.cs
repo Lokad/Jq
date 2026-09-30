@@ -57,6 +57,9 @@ public sealed partial class JqTests
     [InlineData("\"x\" | sub(\"x\"; \"y\"; \"q\")", "q is not a valid modifier string")]
     [InlineData("\"x\" | match(\"x\"; \"q\")", "q is not a valid modifier string")]
     [InlineData("\"x\" | capture(\"x\"; \"q\")", "q is not a valid modifier string")]
+    [InlineData("\"x\" | scan(\"x\"; 1)", "number (1) is not a string")]
+    [InlineData("\"x\" | split(\"x\"; 1)", "number (1) is not a string")]
+    [InlineData("\"x\" | capture(\"x\"; 1)", "number (1) is not a string")]
     [InlineData("\"x\" | test(\"x\"; \"q\")", "q is not a valid modifier string")]
     public async Task Jq_RegexFlagLimits(string filter, string diagnostic)
     {
