@@ -224,4 +224,24 @@ public sealed partial class JqTests
         Assert.Equal("[[[5,\"foo\"],null],[[3,\"bar\"],[3,\"efg\"]],[[1,\"foobar\"],[1,\"bcd\"]]]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Theory]
+    [InlineData("[.[] | arrays]", "[\n  []\n]\n")]
+    [InlineData("[.[] | objects]", "[\n  {}\n]\n")]
+    [InlineData("[.[] | iterables]", "[\n  [],\n  {}\n]\n")]
+    [InlineData("[.[] | booleans]", "[\n  true\n]\n")]
+    [InlineData("[.[] | numbers]", "[\n  1\n]\n")]
+    [InlineData("[.[] | strings]", "[\n  \"a\"\n]\n")]
+    [InlineData("[.[] | nulls]", "[\n  null\n]\n")]
+    [InlineData("[.[] | values]", "[\n  1,\n  \"a\",\n  true,\n  [],\n  {}\n]\n")]
+    [InlineData("[.[] | scalars]", "[\n  1,\n  \"a\",\n  true,\n  null\n]\n")]
+    public async Task Jq_InventoryTypeSelectors(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("[1, \"a\", true, null, [], {}]");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
