@@ -183,4 +183,17 @@ public sealed partial class JqTests
         Assert.Equal("0\n1\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Theory]
+    [InlineData("\"\\uD83C\\uDDEC\\uD83C\\uDDE7ab\" | .[2:4]", "\"ab\"\n")]
+    [InlineData("try (\"foobar\" | .[1]) catch .", "\"cannot index string\"\n")]
+    [InlineData("try (\"foobar\" | .[1.5]) catch .", "\"cannot index string\"\n")]
+    public async Task Jq_StringIndexUnitsAreScalar(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }
