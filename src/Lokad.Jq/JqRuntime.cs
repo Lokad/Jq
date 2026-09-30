@@ -1211,11 +1211,13 @@ internal sealed class JqRuntime(JqBudget budget)
         for (double value = start; step > 0 ? value < end : value > end; value += step)
         {
             budget.ChargeNode();
-            yield return RangeValue(value);
+            yield return CreateNumber(value);
         }
     }
 
-    private static JsonNode? RangeValue(double value)
+    // Numbers that are whole and fit in a long keep integral storage like
+    // literals and inputs; anything else stays a double.
+    internal static JsonNode? CreateNumber(double value)
     {
         if (!double.IsNaN(value) && !double.IsInfinity(value) && value == Math.Truncate(value) && value >= long.MinValue && value <= long.MaxValue)
             return JsonValue.Create((long)value);

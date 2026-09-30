@@ -12,6 +12,7 @@ public sealed partial class JqTests
     [InlineData("{\"a\": [1]}", "path(..)", "[]\n[\n  \"a\"\n]\n[\n  \"a\",\n  0\n]\n")]
     [InlineData("[0, 1, 2]", "def x: .[1, 2]; path(x)", "[\n  1\n]\n[\n  2\n]\n")]
     [InlineData("{\"a\": null, \"b\": null}", "path((.a as $x | .b))", "[\n  \"b\"\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "path(.[1.5:3.5])", "[\n  {\n    \"start\": 1.5,\n    \"end\": 3.5\n  }\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[1:2])", "[\n  {\n    \"start\": 1,\n    \"end\": 2\n  }\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[1:])", "[\n  {\n    \"start\": 1,\n    \"end\": null\n  }\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[:2])", "[\n  {\n    \"start\": null,\n    \"end\": 2\n  }\n]\n")]
@@ -69,6 +70,7 @@ public sealed partial class JqTests
     [InlineData("[1, 2, 3]", "delpaths([[-200]])", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("{\"bar\": false}", "[\"foo\", 1] as $p | getpath($p), setpath($p; 20), delpaths([$p])", "null\n{\n  \"bar\": false,\n  \"foo\": [\n    null,\n    20\n  ]\n}\n{\n  \"bar\": false\n}\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[1:3]) as $p | getpath($p)", "[\n  1,\n  2\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "path(.[1.5:3.5]) as $p | getpath($p)", "[\n  1,\n  2,\n  3\n]\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -155,6 +157,7 @@ public sealed partial class JqTests
     [InlineData("1", ". |= try 2 catch 3", "2\n")]
     [InlineData("null", "{foo: \"bar\"} | .foo |= .?", "{\n  \"foo\": \"bar\"\n}\n")]
     [InlineData("{\"a\": 0, \"b\": 0}", ".a, .b = 1", "0\n{\n  \"a\": 0,\n  \"b\": 1\n}\n")]
+    [InlineData("null", "[range(10)] | .[1.5:3.5] = [\"xyz\"]", "[\n  0,\n  \"xyz\",\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
     public async Task Jq_AssignUpdatesValues(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

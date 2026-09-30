@@ -23,13 +23,13 @@ internal sealed record IndexSegment(long Index, bool IsNaN) : JqValueSegment
     internal override JsonNode? ToJson() => IsNaN ? JsonValue.Create(double.NaN) : JsonValue.Create(Index);
 }
 
-internal sealed record SliceSegment(long? Start, long? End) : JqValueSegment
+internal sealed record SliceSegment(double? Start, double? End) : JqValueSegment
 {
     internal override JsonNode? ToJson()
     {
         var slice = new JsonObject();
-        slice["start"] = Start.HasValue ? JsonValue.Create(Start.Value) : null;
-        slice["end"] = End.HasValue ? JsonValue.Create(End.Value) : null;
+        slice["start"] = Start.HasValue ? JqRuntime.CreateNumber(Start.Value) : null;
+        slice["end"] = End.HasValue ? JqRuntime.CreateNumber(End.Value) : null;
         return slice;
     }
 }
@@ -174,28 +174,50 @@ internal static class JqPaths
         return value;
     }
 
-    private static long? ParseBound(JsonObject slice, string name)
+    private static double? ParseBound(JsonObject slice, string name)
     {
         if (!slice.TryGetPropertyValue(name, out JsonNode? bound) || bound is null)
             return null;
-        if (TryGetIndex(bound, out long index, out bool isNaN))
-            return isNaN ? null : index;
+        if (bound is JsonValue whole && whole.TryGetValue<long>(out long direct))
+            return direct;
+        if (bound is JsonValue real && real.TryGetValue<double>(out double value))
+            return double.IsNaN(value) ? null : value;
         throw new JqException("invalid slice bounds in path");
     }
 
-    // Resolves raw slice bounds against a live length, mirroring read
-    // normalization: defaults, negative offsets, and clamping.
-    internal static void ResolveSlice(int count, long? start, long? end, out int from, out int to)
+    // Resolves raw slice bounds against a live length with the reference
+    // rules: missing bounds default, NaN behaves like missing, negatives
+    // offset from the length, the start truncates toward zero while a
+    // fractional end within bounds rounds up, and an empty remainder
+    // collapses to the start.
+    internal static void ResolveSlice(int count, double? start, double? end, out int from, out int to)
     {
-        long fromRaw = start ?? 0;
-        long toRaw = end ?? count;
-        if (fromRaw < 0) fromRaw = count + fromRaw;
-        if (toRaw < 0) toRaw = count + toRaw;
-        fromRaw = Math.Clamp(fromRaw, 0, count);
-        toRaw = Math.Clamp(toRaw, 0, count);
-        if (toRaw < fromRaw) toRaw = fromRaw;
-        from = (int)fromRaw;
-        to = (int)toRaw;
+        double lower = start ?? 0;
+        double upper = end ?? count;
+        if (double.IsNaN(lower))
+            lower = 0;
+        if (double.IsNaN(upper))
+            upper = count;
+        if (lower < 0)
+            lower += count;
+        if (lower < 0)
+            lower = 0;
+        if (lower > count)
+            lower = count;
+        int resolvedStart = lower > int.MaxValue ? int.MaxValue : (int)lower;
+        if (upper < 0)
+            upper += count;
+        if (upper < 0)
+            upper = resolvedStart;
+        int resolvedEnd = upper > int.MaxValue ? int.MaxValue : (int)upper;
+        if (resolvedEnd > count)
+            resolvedEnd = count;
+        if (resolvedEnd < count)
+            resolvedEnd += resolvedEnd < upper ? 1 : 0;
+        if (resolvedEnd < resolvedStart)
+            resolvedEnd = resolvedStart;
+        from = resolvedStart;
+        to = resolvedEnd;
     }
 }
 

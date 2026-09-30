@@ -181,6 +181,26 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_FractionalSliceEndRoundsUp()
+    {
+        // Reference start-down/end-up rules: the start truncates while a
+        // fractional end within bounds rounds up, for arrays and strings.
+        var arrays = new MockFileSystem();
+        arrays.SetStandardInput("[0,1,2,3,4,5,6,7,8,9]");
+        var arrayTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".[1.5:3.5]")));
+        Assert.Equal(0, await arrayTool.ExecuteAsync(arrays, CancellationToken.None));
+        Assert.Equal("[\n  1,\n  2,\n  3\n]\n", arrays.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(arrays.GetOutput(JqFileDescriptor.StdErr));
+
+        var strings = new MockFileSystem();
+        strings.SetStandardInput("\"abcdef\"");
+        var stringTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".[1.5:3.5]")));
+        Assert.Equal(0, await stringTool.ExecuteAsync(strings, CancellationToken.None));
+        Assert.Equal("\"bcd\"\n", strings.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(strings.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
     public async Task Jq_StringInterpolation()
     {
         var fileSystem = new MockFileSystem();

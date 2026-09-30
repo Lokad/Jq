@@ -888,36 +888,32 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
     {
         // Bound-major order: each start combines with every end, then every
         // source value, matching key-object construction with backtracking.
-        foreach (var startIndex in StartIndexes())
-            foreach (var endBound in EndBounds())
+        foreach (double startBound in StartBounds())
+            foreach (double? endBound in EndBounds())
                 foreach (var value in source.Evaluate(input, context, environment))
                 {
-                    int fromStart = startIndex;
-                    int endIndex;
                     if (value is JsonArray arr)
                     {
-                        endIndex = endBound ?? arr.Count;
-                        NormalizeRange(arr.Count, ref fromStart, ref endIndex);
+                        JqPaths.ResolveSlice(arr.Count, startBound, endBound, out int from, out int to);
                         var result = new JsonArray();
-                        for (var i = fromStart; i < endIndex; i++)
+                        for (var i = from; i < to; i++)
                             result.Add(context.Runtime.Clone(arr[i]));
                         yield return result;
                     }
                     else if (TryGetString(value, out var text))
                     {
                         var runeCount = text.EnumerateRunes().Count();
-                        endIndex = endBound ?? runeCount;
-                        NormalizeRange(runeCount, ref fromStart, ref endIndex);
+                        JqPaths.ResolveSlice(runeCount, startBound, endBound, out int from, out int to);
                         var offset = 0;
                         var first = 0;
                         var index = 0;
                         foreach (var rune in text.EnumerateRunes())
                         {
-                            if (index == fromStart) first = offset;
-                            if (index++ == endIndex) break;
+                            if (index == from) first = offset;
+                            if (index++ == to) break;
                             offset += rune.Utf16SequenceLength;
                         }
-                        if (fromStart == runeCount) first = offset;
+                        if (from == runeCount) first = offset;
                         context.Budget.ChargeString(offset - first);
                         yield return JsonValue.Create(text[first..offset]);
                     }
@@ -931,7 +927,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                     }
                 }
 
-        IEnumerable<int> StartIndexes()
+        IEnumerable<double> StartBounds()
         {
             if (start == null)
             {
@@ -939,12 +935,25 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 yield break;
             }
             foreach (var bound in start.Evaluate(input, context, environment))
-                yield return bound == null ? 0 : (int)Number(bound);
+            {
+                if (bound == null)
+                {
+                    yield return 0;
+                    continue;
+                }
+                if (bound is JsonValue edge && edge.TryGetValue<double>(out double nan) && double.IsNaN(nan))
+                {
+                    yield return 0;
+                    continue;
+                }
+                yield return Number(bound);
+            }
         }
 
         // A missing, null, or NaN end means the container length, matching
-        // slice defaults; other bounds truncate toward zero.
-        IEnumerable<int?> EndBounds()
+        // slice defaults; other bounds keep their fractional values for the
+        // shared start-down/end-up resolution.
+        IEnumerable<double?> EndBounds()
         {
             if (end == null)
             {
@@ -956,25 +965,16 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 if (bound == null || (bound is JsonValue edge && edge.TryGetValue<double>(out double nan) && double.IsNaN(nan)))
                     yield return null;
                 else
-                    yield return (int)Number(bound);
+                    yield return Number(bound);
             }
         }
-    }
-
-    private static void NormalizeRange(int count, ref int start, ref int end)
-    {
-        if (start < 0) start = count + start;
-        if (end < 0) end = count + end;
-        start = Math.Clamp(start, 0, count);
-        end = Math.Clamp(end, 0, count);
-        if (end < start) end = start;
     }
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
     {
         foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
-            foreach (long? lower in SliceBoundValues(start, pair.Value, context, environment))
-                foreach (long? upper in SliceBoundValues(end, pair.Value, context, environment))
+            foreach (double? lower in SliceBoundValues(start, pair.Value, context, environment))
+                foreach (double? upper in SliceBoundValues(end, pair.Value, context, environment))
                 {
                     var segment = new SliceSegment(lower, upper);
                     RequireTracked(pair, segment, context);
@@ -1004,7 +1004,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 }
     }
 
-    private static IEnumerable<long?> SliceBoundValues(JqFilter? bound, JsonNode? input, JqContext context, JqEnvironment environment)
+    private static IEnumerable<double?> SliceBoundValues(JqFilter? bound, JsonNode? input, JqContext context, JqEnvironment environment)
     {
         if (bound == null)
         {
@@ -1023,7 +1023,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 yield return null;
                 continue;
             }
-            yield return (long)Number(edge);
+            yield return Number(edge);
         }
     }
 }
