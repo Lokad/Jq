@@ -79,6 +79,7 @@ dependency-free (no native decimal library); the profile is pinned by
 
 - There is no decimal-capability introspection yet; decimal-sensitive
   builtins and their capability queries arrive with the math inventory.
-- Non-finite JSON literals (`NaN`, `Infinity`) are rejected at input;
-  they can only arise through evaluation. Incremental input work will
-  revisit input-literal parity.
+- Non-finite JSON tokens (`nan`, `inf`, `infinity`, any ASCII case with
+  an optional sign) parse like the reference strtod fallback wherever a
+  value is due, at top level and nested; anything else (for example `NaN1`)
+  still fails.
