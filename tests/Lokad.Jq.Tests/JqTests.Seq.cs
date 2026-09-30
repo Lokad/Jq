@@ -28,6 +28,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SeqRawInputWinsOverSequenceFraming()
+    {
+        // Raw line decoding wins over sequence records like the reference
+        // (raw installs no JSON parser, so SEQ/STREAMING flags stay inert);
+        // outputs still carry sequence framing.
+        var host = new MockFileSystem();
+        host.SetStandardInput("a\nb\n");
+        var (exit, stdout, stderr) = await RunSeqAsync(host, "-R", "--seq", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("\u001e\"a\"\n\u001e\"b\"\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
     public async Task Jq_SeqSkipsLeadingGarbage()
     {
         var host = new MockFileSystem();

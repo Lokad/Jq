@@ -23,6 +23,19 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_StreamRawInputWinsOverEventDecoding()
+    {
+        // Raw line decoding wins over streaming event decoding like the
+        // reference; bare text stays string input instead of parse errors.
+        var host = new MockFileSystem();
+        host.SetStandardInput("a\nb\n");
+        var (exit, stdout, stderr) = await RunStreamAsync(host, "-R", "--stream", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("\"a\"\n\"b\"\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
     public async Task Jq_StreamNestedEvents()
     {
         var host = new MockFileSystem();
