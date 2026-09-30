@@ -103,6 +103,8 @@ public sealed partial class JqTests
     [InlineData("1", "[recurse(. + 1; . < 4)]", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[1, [2]]", "walk(if type == \"number\" then . + 1 else . end)", "[\n  2,\n  [\n    3\n  ]\n]\n")]
     [InlineData("{\"a\": [1]}", "[paths]", "[\n  [\n    \"a\"\n  ],\n  [\n    \"a\",\n    0\n  ]\n]\n")]
+    [InlineData("[]", "[paths]", "[]\n")]
+    [InlineData("{}", "[paths]", "[]\n")]
     [InlineData("{\"a\": [1]}", "[paths(type == \"number\")]", "[\n  [\n    \"a\",\n    0\n  ]\n]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
