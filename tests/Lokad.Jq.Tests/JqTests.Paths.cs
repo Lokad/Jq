@@ -199,6 +199,9 @@ public sealed partial class JqTests
     [InlineData("[{\"a\": 0}, {\"a\": 1}]", "try ((reverse | .[].b) = 10) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1},{\\\"a\\\":0}]\"\n")]
     [InlineData("[0, 1, 2]", "try (def x: reverse; x = 10) catch .", "\"Invalid path expression with result [2,1,0]\"\n")]
     [InlineData("null", "try (1 = 2) catch .", "\"Invalid path expression with result 1\"\n")]
+    [InlineData("5", "try (.a = 1) catch .", "\"cannot index number with string \\\"a\\\"\"\n")]
+    [InlineData("\"s\"", "try (.a = 1) catch .", "\"cannot index string with string \\\"a\\\"\"\n")]
+    [InlineData("true", "try (.error = 1) catch .", "\"cannot index boolean with string \\\"error\\\"\"\n")]
     public async Task Jq_AssignReportsFailures(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
