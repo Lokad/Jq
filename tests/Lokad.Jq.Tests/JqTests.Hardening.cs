@@ -157,11 +157,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("null | setpath([range(5000)|\"a\"]; 1) | walk(true)", "true\n")]
     [InlineData("null | setpath([range(5000)|\"a\"]; 1) | [paths | length] | add", "12502500\n")]
-    [InlineData("delpaths([[range(10000) | 0]])", "null\n")]
-    [InlineData("getpath([range(10000) | 0])", "null\n")]
-    [InlineData("setpath([range(10000) | 0]; 0) | flatten", "[\n  0\n]\n")]
-    [InlineData("try getpath([range(10001) | 0]) catch .", "\"Path too deep\"\n")]
-    [InlineData("try setpath([range(10001) | 0]; 0) catch .", "\"Path too deep\"\n")]
+
     public async Task Jq_DeepTreesWalkWithoutRecursion(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -170,6 +166,31 @@ public sealed partial class JqTests
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+[Theory]
+    [InlineData("null | setpath([range(4000)|\"a\"]; 1) | contains(setpath([range(4000)|\"a\"]; 1))", "value nesting limit exceeded")]
+    [InlineData("null | setpath([range(4000)|\"a\"]; 1) < setpath([range(4000)|\"a\"]; 1)", "value nesting limit exceeded")]
+    [InlineData("null | setpath([range(200)|\"a\"]; 1) < setpath([range(200)|\"a\"]; 1)", "value nesting limit exceeded")]
+    [InlineData("null | setpath([range(200)|\"a\"]; 1) | contains(null | setpath([range(200)|\"a\"]; 1))", "value nesting limit exceeded")]
+    [InlineData("null | setpath([range(5000)|\"a\"]; 1) | [..] | length", "value nesting limit exceeded")]
+    [InlineData("null | setpath([range(5000)|\"a\"]; 1) | [paths] | length", "value budget exceeded")]
+    public async Task Jq_RejectsDeepTraversal(string filter, string diagnostic)
+    {
+        // Comparison, containment, and descent recurse structurally; beyond
+        // the value policy they fail cleanly instead of consuming CLR
+        // frames, even where the reference computes a result.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+    [InlineData("delpaths([[range(10000) | 0]])", "null\n")]
+    [InlineData("getpath([range(10000) | 0])", "null\n")]
+    [InlineData("setpath([range(10000) | 0]; 0) | flatten", "[\n  0\n]\n")]
+    [InlineData("try getpath([range(10001) | 0]) catch .", "\"Path too deep\"\n")]
+    [InlineData("try setpath([range(10001) | 0]; 0) catch .", "\"Path too deep\"\n")]
 
     [Theory]
     [InlineData("[1, [2]] | [walk(if type == \"number\" then empty else . end)] | length", "1\n")]

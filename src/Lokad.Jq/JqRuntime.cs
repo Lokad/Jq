@@ -698,8 +698,14 @@ internal sealed class JqRuntime(JqBudget budget)
     // Mirrors the reference value equality: kind-sensitive, objects
     // order-insensitive, arrays ordered, numbers by double value with
     // NaN unequal to everything including itself.
-    private static bool EqualsValue(JsonNode? left, JsonNode? right)
+    private static bool EqualsValue(JsonNode? left, JsonNode? right) => EqualsValue(left, right, 0);
+
+    // Depth-bounded like the budget tree walk: values deeper than the policy
+    // fail cleanly instead of consuming CLR frames.
+    private static bool EqualsValue(JsonNode? left, JsonNode? right, int depth)
     {
+        if (depth > JqBudget.MaximumDepth)
+            throw new JqQuotaException("value nesting limit exceeded");
         if (left is null || right is null)
             return left is null && right is null;
         if (left is JsonArray leftArray && right is JsonArray rightArray)
@@ -707,7 +713,7 @@ internal sealed class JqRuntime(JqBudget budget)
             if (leftArray.Count != rightArray.Count)
                 return false;
             for (var index = 0; index < leftArray.Count; index++)
-                if (!EqualsValue(leftArray[index], rightArray[index]))
+                if (!EqualsValue(leftArray[index], rightArray[index], depth + 1))
                     return false;
             return true;
         }
@@ -719,7 +725,7 @@ internal sealed class JqRuntime(JqBudget budget)
             {
                 if (!rightObject.TryGetPropertyValue(property.Key, out JsonNode? other))
                     return false;
-                if (!EqualsValue(property.Value, other))
+                if (!EqualsValue(property.Value, other, depth + 1))
                     return false;
             }
             return true;
@@ -738,8 +744,15 @@ internal sealed class JqRuntime(JqBudget budget)
     // true, numbers, strings (Unicode scalar order), arrays (lexical),
     // objects (sorted keys, then values). NaN sorts as null but never
     // equals anything, matching the reference.
-    internal static int Compare(JsonNode? l, JsonNode? r)
+    internal static int Compare(JsonNode? l, JsonNode? r) => Compare(l, r, 0);
+
+    // Depth-bounded like the budget tree walk: values deeper than the policy
+    // fail cleanly instead of consuming CLR frames. Every ordering path
+    // (operators, sort, unique, min/max, bsearch, group) funnels through here.
+    private static int Compare(JsonNode? l, JsonNode? r, int depth)
     {
+        if (depth > JqBudget.MaximumDepth)
+            throw new JqQuotaException("value nesting limit exceeded");
         int leftRank = ValueRank(l);
         int rightRank = ValueRank(r);
         if (leftRank != rightRank)
@@ -749,7 +762,7 @@ internal sealed class JqRuntime(JqBudget budget)
             int shared = Math.Min(leftArray.Count, rightArray.Count);
             for (var index = 0; index < shared; index++)
             {
-                int order = Compare(leftArray[index], rightArray[index]);
+                int order = Compare(leftArray[index], rightArray[index], depth + 1);
                 if (order != 0)
                     return order;
             }
@@ -776,7 +789,7 @@ internal sealed class JqRuntime(JqBudget budget)
                 return leftKeys.Count.CompareTo(rightKeys.Count);
             foreach (string key in leftKeys)
             {
-                int order = Compare(leftObject[key], rightObject[key]);
+                int order = Compare(leftObject[key], rightObject[key], depth + 1);
                 if (order != 0)
                     return order;
             }
@@ -1086,12 +1099,18 @@ internal sealed class JqRuntime(JqBudget budget)
         return ContainsSameKind(container, contained);
     }
 
-    private bool ContainsSameKind(JsonNode? container, JsonNode? contained)
+    private bool ContainsSameKind(JsonNode? container, JsonNode? contained) => ContainsSameKind(container, contained, 0);
+
+    // Depth-bounded like the budget tree walk: values deeper than the policy
+    // fail cleanly instead of consuming CLR frames.
+    private bool ContainsSameKind(JsonNode? container, JsonNode? contained, int depth)
     {
+        if (depth > JqBudget.MaximumDepth)
+            throw new JqQuotaException("value nesting limit exceeded");
         if (container is JsonObject obj && contained is JsonObject needle)
-            return needle.All(kv => obj.TryGetPropertyValue(kv.Key, out var value) && ContainsSameKind(value, kv.Value));
+            return needle.All(kv => obj.TryGetPropertyValue(kv.Key, out var value) && ContainsSameKind(value, kv.Value, depth + 1));
         if (container is JsonArray haystack && contained is JsonArray needles)
-            return needles.All(needle => haystack.Any(candidate => ContainsSameKind(candidate, needle)));
+            return needles.All(needle => haystack.Any(candidate => ContainsSameKind(candidate, needle, depth + 1)));
         if (TryGetString(container, out var text) && TryGetString(contained, out var fragment))
             return fragment.Length == 0 || text.Contains(fragment, StringComparison.Ordinal);
         return JsonEquals(container, contained);

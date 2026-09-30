@@ -350,7 +350,9 @@ internal static class JqPathUpdates
 
     private static JsonObject CloneObject(JsonObject source, JqContext context)
     {
-        context.Budget.ChargeNode();
+        // Charge the whole subtree like Clone does: per-level deep copies
+        // would otherwise allocate quadratically against deep inputs.
+        context.Budget.ChargeTree(source);
         var clone = new JsonObject();
         foreach (var property in source)
             clone.Add(property.Key, property.Value?.DeepClone());
@@ -359,7 +361,9 @@ internal static class JqPathUpdates
 
     private static JsonArray CloneArray(JsonArray source, JqContext context)
     {
-        context.Budget.ChargeNode();
+        // Charge the whole subtree like Clone does: per-level deep copies
+        // would otherwise allocate quadratically against deep inputs.
+        context.Budget.ChargeTree(source);
         var clone = new JsonArray();
         foreach (JsonNode? child in source)
             clone.Add(child?.DeepClone());
@@ -371,10 +375,18 @@ internal static class JqPathUpdates
     private static JsonArray PaddedArray(JsonArray? source, long resolved, JqContext context)
     {
         var padded = new JsonArray();
-        context.Budget.ChargeNode();
         if (source is not null)
+        {
+            // Charge the whole subtree like Clone does: per-level deep copies
+            // would otherwise allocate quadratically against deep inputs.
+            context.Budget.ChargeTree(source);
             foreach (JsonNode? child in source)
                 padded.Add(child?.DeepClone());
+        }
+        else
+        {
+            context.Budget.ChargeNode();
+        }
         while (padded.Count <= resolved)
         {
             context.Budget.ChargeNode();
@@ -386,7 +398,9 @@ internal static class JqPathUpdates
     private static JsonArray SliceCopy(JsonArray source, int from, int to, JqContext context)
     {
         var slice = new JsonArray();
-        context.Budget.ChargeNode();
+        // Charge the whole subtree like Clone does: per-level deep copies
+        // would otherwise allocate quadratically against deep inputs.
+        context.Budget.ChargeTree(source);
         for (int index = from; index < to; index++)
             slice.Add(source[index]?.DeepClone());
         return slice;
