@@ -229,6 +229,7 @@ public sealed partial class JqTests
     [InlineData("5", "try (.a = 1) catch .", "\"cannot index number with string \\\"a\\\"\"\n")]
     [InlineData("\"s\"", "try (.a = 1) catch .", "\"cannot index string with string \\\"a\\\"\"\n")]
     [InlineData("true", "try (.error = 1) catch .", "\"cannot index boolean with string \\\"error\\\"\"\n")]
+    [InlineData("[{\"a\":0},{\"a\":1}]", "try ((map(select(.a == 1))[].a) |= .+1) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1}]\"\n")]
     [InlineData("null", "try (.foo[-2] = 0) catch .", "\"Out of bounds negative array index\"\n")]
     public async Task Jq_AssignReportsFailures(string input, string filter, string expected)
     {
@@ -281,6 +282,11 @@ public sealed partial class JqTests
     [InlineData("{\"a\": 1}", ".a |= (2, 3)", "{\n  \"a\": 2\n}\n")]
     [InlineData("{\"a\": 1}", "(.a, .a) |= . + 1", "{\n  \"a\": 3\n}\n")]
     [InlineData("{\"a\": 1, \"b\": 2}", "(.a, .b) |= . + 10", "{\n  \"a\": 11,\n  \"b\": 12\n}\n")]
+    [InlineData("null", "(.a, .b) |= range(3)", "{\n  \"a\": 0,\n  \"b\": 0\n}\n")]
+    [InlineData("[{\"a\":1,\"b\":2}]", ".[0].a |= {\"old\":., \"new\":(.+1)}", "[\n  {\n    \"a\": {\n      \"old\": 1,\n      \"new\": 2\n    },\n    \"b\": 2\n  }\n]\n")]
+    [InlineData("{\"foo\":[0,1,2,3,4,5]}", ".foo[1,4,2,3] |= empty", "{\n  \"foo\": [\n    0,\n    5\n  ]\n}\n")]
+    [InlineData("{\"a\": {\"b\": [1, {\"b\": 3}]}}", "(.. | select(type == \"object\" and has(\"b\") and (.b | type) == \"array\")|.b) |= .[0]", "{\n  \"a\": {\n    \"b\": 1\n  }\n}\n")]
+    [InlineData("[true,false,[5,true,[true,[false]],false]]", "(..|select(type==\"boolean\")) |= if . then 1 else 0 end", "[\n  1,\n  0,\n  [\n    5,\n    1,\n    [\n      1,\n      [\n        0\n      ]\n    ],\n    0\n  ]\n]\n")]
     [InlineData("{}", ".a.b = 1", "{\n  \"a\": {\n    \"b\": 1\n  }\n}\n")]
     [InlineData("{}", ".a[2] = 1", "{\n  \"a\": [\n    null,\n    null,\n    1\n  ]\n}\n")]
     [InlineData("null", ".a.b.c.d.e = 1", "{\n  \"a\": {\n    \"b\": {\n      \"c\": {\n        \"d\": {\n          \"e\": 1\n        }\n      }\n    }\n  }\n}\n")]

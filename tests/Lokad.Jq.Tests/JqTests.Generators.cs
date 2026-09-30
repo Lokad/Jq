@@ -33,6 +33,11 @@ public sealed partial class JqTests
     [InlineData("(([0,1,2,3]),([4,5,6,7]))[(0,1):2]", "[\n  0,\n  1\n]\n[\n  4,\n  5\n]\n[\n  1\n]\n[\n  5\n]\n")]
     [InlineData("[0,1,2] | .[empty:2]", "")]
     [InlineData("[0,1,2] | .[1:empty]", "")]
+    [InlineData("[range(10)] | .[1.2:3.5]", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[range(10)] | .[1.7:3.5]", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[range(10)] | .[1.7:4294967295]", "[\n  1,\n  2,\n  3,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
+    [InlineData("[range(10)] | .[1.7:-4294967296]", "[]\n")]
+    [InlineData("[[range(10)] | .[1.1,1.5,1.7]]", "[\n  1,\n  1,\n  1\n]\n")]
 [InlineData("[range(3)] | .[nan:1]", "[\n  0\n]\n")]
 [InlineData("[range(3)] | .[1:nan]", "[\n  1,\n  2\n]\n")]
     public async Task Jq_SliceStreamsEveryBound(string filter, string expected)

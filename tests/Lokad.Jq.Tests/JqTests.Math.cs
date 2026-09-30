@@ -84,6 +84,9 @@ public sealed partial class JqTests
     [InlineData("2 | pow(.;0.5) | . - 1.4142135623730951 | abs < 1e-12", "true\n")]
     [InlineData("0.7853981633974483 | tan | . - 1 | abs < 1e-12", "true\n")]
     [InlineData("1e308 | hypot(.;1e308) | (. / 1e308 - 1.4142135623730951 | abs) < 1e-12", "true\n")]
+    [InlineData("[(3.141592 / 2) * (range(0;20) / 20)|cos * 1000000|floor / 1000000]", "[\n  1,\n  0.996917,\n  0.987688,\n  0.972369,\n  0.951056,\n  0.923879,\n  0.891006,\n  0.85264,\n  0.809017,\n  0.760406,\n  0.707106,\n  0.649448,\n  0.587785,\n  0.522498,\n  0.45399,\n  0.382683,\n  0.309017,\n  0.233445,\n  0.156434,\n  0.078459\n]\n")]
+    [InlineData("[(3.141592 / 2) * (range(0;20) / 20)|sin * 1000000|floor / 1000000]", "[\n  0,\n  0.078459,\n  0.156434,\n  0.233445,\n  0.309016,\n  0.382683,\n  0.45399,\n  0.522498,\n  0.587785,\n  0.649447,\n  0.707106,\n  0.760405,\n  0.809016,\n  0.85264,\n  0.891006,\n  0.923879,\n  0.951056,\n  0.972369,\n  0.987688,\n  0.996917\n]\n")]
+    [InlineData("[range(-52;52;1)] as $powers | [$powers[]|pow(2;.)|log2|round] == $powers", "true\n")]
     public async Task Jq_MathSpotValues(string filter, string expected)
     {
         var host = new MockFileSystem();

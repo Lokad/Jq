@@ -93,6 +93,12 @@ public sealed partial class JqTests
     [InlineData("0", "range(0.5; 2)", "0.5\n1.5\n")]
     [InlineData("0", "range(0; 1; 0)", "")]
     [InlineData("0", "range(0; 1; nan)", "")]
+    [InlineData("null", "[add(null), add(range(range(10))), add(empty), add(10,range(10))]", "[\n  null,\n  120,\n  null,\n  55\n]\n")]
+    [InlineData("null", "range(5;10)|IN(range(10))", "true\ntrue\ntrue\ntrue\ntrue\n")]
+    [InlineData("null", "range(5;13)|IN(range(0;10;3))", "false\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\n")]
+    [InlineData("null", "range(10;12)|IN(range(10))", "false\nfalse\n")]
+    [InlineData("null", "IN(range(10;20); range(10))", "false\n")]
+    [InlineData("null", "IN(range(5;20); range(10))", "true\n")]
     public async Task Jq_CollectionSearchFold(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

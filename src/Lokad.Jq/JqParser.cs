@@ -650,11 +650,12 @@ internal sealed class JqParser(
 
     private JqFilter ParseDictValue()
     {
-        // Object values mirror DictExpr: pipes of update-level expressions
-        // without top-level commas or bindings (those need parentheses).
-        var left = ParseUpdate();
+        // Object values mirror DictExpr: pipes of alternative-level
+        // expressions without top-level commas or bindings (those need
+        // parentheses), so `//` works in values like the reference.
+        var left = ParseAlternative();
         while (Match("|"))
-            left = new PipeFilter(left, ParseUpdate());
+            left = new PipeFilter(left, ParseAlternative());
         return left;
     }
 

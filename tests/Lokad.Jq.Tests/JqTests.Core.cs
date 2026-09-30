@@ -85,6 +85,9 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("empty // 42", "42\n")]
     [InlineData("(false, null, 1) // 42", "1\n")]
+    [InlineData("[{\"foo\":[1,2], \"bar\": 42}, {\"foo\":[1], \"bar\": null}, {\"foo\":[null,false,3], \"bar\": 18}, {\"foo\":[], \"bar\":42}, {\"foo\": [null,false,null], \"bar\": 41}] | [.[] | [.foo[] // .bar]]", "[\n  [\n    1,\n    2\n  ],\n  [\n    1\n  ],\n  [\n    3\n  ],\n  [\n    42\n  ],\n  [\n    41\n  ]\n]\n")]
+    [InlineData("{x: 1 + 2, y: false or true, z: null // 3}", "{\n  \"x\": 3,\n  \"y\": true,\n  \"z\": 3\n}\n")]
+    [InlineData("{\"a\": null, \"b\": true, \"c\": false} | map_values(. // empty)", "{\n  \"b\": true\n}\n")]
     [InlineData("(false, null, 1) | . // 42", "42\n42\n1\n")]
     [InlineData("1 // 2 // 3", "1\n")]
     public async Task Jq_AlternativeFiltersGoods(string filter, string expected)
