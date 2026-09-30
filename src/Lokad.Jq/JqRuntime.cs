@@ -507,6 +507,37 @@ internal sealed class JqRuntime(JqBudget budget)
         return false;
     }
 
+    // Array reads accept any numeric key like the reference jv_get: NaN
+    // reads null elsewhere, other values clamp to int range and truncate
+    // toward zero, negatives resolve from the end, and out-of-range reads
+    // yield null. Probe each integral storage in turn since conversions
+    // are storage-strict for created values.
+    internal static bool TryGetArrayIndex(JsonNode? node, out long index)
+    {
+        index = 0;
+        if (node is JsonValue small && small.TryGetValue<int>(out int direct))
+        {
+            index = direct;
+            return true;
+        }
+        if (node is JsonValue whole && whole.TryGetValue<long>(out long directLong))
+        {
+            index = directLong;
+            return true;
+        }
+        if (node is JsonValue real && real.TryGetValue<double>(out double value) && !double.IsNaN(value))
+        {
+            if (value < int.MinValue)
+                index = int.MinValue;
+            else if (value > int.MaxValue)
+                index = int.MaxValue;
+            else
+                index = (long)value;
+            return true;
+        }
+        return false;
+    }
+
     // JsonValue conversions are storage-strict for created values but
     // convertible for parsed ones, so probe each integral storage in turn.
     internal static bool TryGetInt(JsonNode? node, out int value)

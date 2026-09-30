@@ -8,6 +8,12 @@ public sealed partial class JqTests
     [InlineData("[10,20,30] | .[0,2]", "10\n30\n")]
     [InlineData("(([1,2]),([3,4]))[(0,1)]", "1\n3\n2\n4\n")]
     [InlineData("{\"a\":1,\"b\":2} | .[\"a\",\"b\"]", "1\n2\n")]
+    [InlineData("[10, 20, 30] | .[1e18]", "null\n")]
+    [InlineData("[10, 20, 30] | .[-1e18]", "null\n")]
+    [InlineData("[10, 20, 30] | .[3000000000]", "null\n")]
+    [InlineData("[10, 20, 30] | .[1.5]", "20\n")]
+    [InlineData("[10, 20, 30] | .[-2.5]", "20\n")]
+    [InlineData("1000000000000000000 | [][.]", "null\n")]
     public async Task Jq_IndexStreamsEveryKey(string filter, string expected)
     {
         // Keys are outer: each key combines with every source value,

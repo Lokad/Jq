@@ -825,10 +825,10 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
         foreach (var key in index.Evaluate(input, context, environment))
             foreach (var value in source.Evaluate(input, context, environment))
             {
-                if (value is JsonArray arr && TryGetInt(key, out var ix))
+                if (value is JsonArray arr && TryGetArrayIndex(key, out long ix))
                 {
-                    if (ix < 0) ix = arr.Count + ix;
-                    yield return ix >= 0 && ix < arr.Count ? context.Runtime.Clone(arr[ix]) : null;
+                    long resolved = ix < 0 ? arr.Count + ix : ix;
+                    yield return resolved >= 0 && resolved < arr.Count ? context.Runtime.Clone(arr[(int)resolved]) : null;
                 }
                 else if (value is JsonArray && key is JsonValue nan && nan.TryGetValue<double>(out double missing) && double.IsNaN(missing))
                 {
