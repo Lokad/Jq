@@ -87,6 +87,7 @@ public sealed partial class JqTests
     [InlineData("[[],[\"\"],[\"\",\"\"],[\"\",\"\",\"\"]]", "[.[]|join(\"a\")]", "[\n  \"\",\n  \"\",\n  \"a\",\n  \"aa\"\n]\n")]
     [InlineData("null", "join(\",\")", "\"\"\n")]
     [InlineData("[]", "join(\",\")", "\"\"\n")]
+    [InlineData("[\"a\",\"b\"]", "join((\",\", \";\"))", "\"a,b\"\n\"a;b\"\n")]
     [InlineData("\"a,b,c\"", "split(\",\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     [InlineData("\"a,\"", "split(\",\")", "[\n  \"a\",\n  \"\"\n]\n")]
     [InlineData("\"\"", "split(\",\")", "[]\n")]
