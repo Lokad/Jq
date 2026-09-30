@@ -5,7 +5,7 @@ It executes JSON filters through a caller-supplied `IJqHost`, which owns input,
 output, file access, and descriptor cleanup. The library does not install a real
 filesystem host or invoke an external jq executable.
 
-This is an initial, incomplete implementation. It is not yet a drop-in
+This implementation is incomplete. It is not yet a drop-in
 replacement for upstream jq.
 See [compatibility](docs/COMPATIBILITY.md) for the baseline and
 [architecture](docs/ARCHITECTURE.md) for the host contract.
@@ -46,8 +46,7 @@ dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --filter '*'
 
 The SDK policy is in `global.json`. Dependencies come from nuget.org, use central
 versions and committed lock files, and are checked against an explicit allowlist.
-Production dependencies initially remain `Lokad.Cli` and `PCRE.NET` from the
-implementation. PCRE.NET contains native regex components; this is not
+Production dependencies remain `Lokad.Cli` and `PCRE.NET`. PCRE.NET contains native regex components; this is not
 yet a fully managed runtime. Benchmarks are opt-in.
 
 GitHub Actions builds, tests, and packs on Windows and Linux. It does not publish

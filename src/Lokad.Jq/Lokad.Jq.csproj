@@ -2,7 +2,7 @@
   <PropertyGroup>
     <PackageId>Lokad.Jq</PackageId>
     <Title>Lokad.Jq</Title>
-    <Description>Embeddable jq runtime for .NET with host-mediated IO. Initial extraction; jq compatibility is incomplete.</Description>
+    <Description>Embeddable jq runtime for .NET with host-mediated IO. See docs/COMPATIBILITY_MATRIX.md for the jq 1.8.2 conformance inventory; compatibility is incomplete.</Description>
     <Authors>Lokad</Authors>
     <Company>Lokad</Company>
     <Version>0.1.0-preview.1</Version>
