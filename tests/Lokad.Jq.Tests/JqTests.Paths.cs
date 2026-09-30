@@ -13,6 +13,9 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2]", "def x: .[1, 2]; path(x)", "[\n  1\n]\n[\n  2\n]\n")]
     [InlineData("{\"a\": null, \"b\": null}", "path((.a as $x | .b))", "[\n  \"b\"\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[1:2])", "[\n  {\n    \"start\": 1,\n    \"end\": 2\n  }\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "path(.[1:])", "[\n  {\n    \"start\": 1,\n    \"end\": null\n  }\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "path(.[:2])", "[\n  {\n    \"start\": null,\n    \"end\": 2\n  }\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "path(.[:])", "[\n  {\n    \"start\": null,\n    \"end\": null\n  }\n]\n")]
     public async Task Jq_PathEnumeratesSegments(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
