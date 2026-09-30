@@ -1098,7 +1098,9 @@ internal sealed class JqRuntime(JqBudget budget)
         foreach (JsonNode? item in arr)
         {
             long point;
-            if (item is JsonValue number && number.TryGetValue<long>(out long whole))
+            if (item is JsonValue small && small.TryGetValue<int>(out int direct))
+                point = direct;
+            else if (item is JsonValue number && number.TryGetValue<long>(out long whole))
                 point = whole;
             else if (item is JsonValue real && real.TryGetValue<double>(out double value) && !double.IsNaN(value))
                 point = (long)value;

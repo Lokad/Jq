@@ -105,6 +105,8 @@ public sealed partial class JqTests
     [InlineData("\"a\\u0000b\"", "explode", "[\n  97,\n  0,\n  98\n]\n")]
     [InlineData("[104,101]", "implode", "\"he\"\n")]
     [InlineData("[-1,1114112,55296,1.9]", "implode|explode", "[\n  65533,\n  65533,\n  65533,\n  1\n]\n")]
+    [InlineData("\"abc\"", "explode | implode", "\"abc\"\n")]
+    [InlineData("[-1, 0, 1, 2, 3, 1114111, 1114112, 55295, 55296, 57343, 57344, 1.1, 1.9]", "implode|explode", "[\n  65533,\n  0,\n  1,\n  2,\n  3,\n  1114111,\n  65533,\n  55295,\n  65533,\n  65533,\n  57344,\n  1,\n  1\n]\n")]
     public async Task Jq_SplitJoinExplode(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
