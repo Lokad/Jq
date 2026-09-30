@@ -13,6 +13,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\": 1, \"b\": 2}", "to_entries", "[\n  {\n    \"key\": \"a\",\n    \"value\": 1\n  },\n  {\n    \"key\": \"b\",\n    \"value\": 2\n  }\n]\n")]
     [InlineData("[{\"key\": \"a\", \"value\": 1}, {\"Key\": \"b\", \"Value\": 2}, {\"name\": \"c\", \"value\": 3}, {\"Name\": \"d\", \"Value\": 4}]", "from_entries", "{\n  \"a\": 1,\n  \"b\": 2,\n  \"c\": 3,\n  \"d\": 4\n}\n")]
     [InlineData("{\"a\": 1, \"b\": 2}", "with_entries(.key |= \"KEY_\" + .)", "{\n  \"KEY_a\": 1,\n  \"KEY_b\": 2\n}\n")]
+    [InlineData("[1, 2]", "to_entries", "[\n  {\n    \"key\": 0,\n    \"value\": 1\n  },\n  {\n    \"key\": 1,\n    \"value\": 2\n  }\n]\n")]
+    [InlineData("[{\"key\": \"a\", \"value\": 1}, {\"key\": \"a\", \"value\": 2}]", "from_entries", "{\n  \"a\": 2\n}\n")]
     [InlineData("[1, \"a\", true, null, [], {}]", "map(type)", "[\n  \"number\",\n  \"string\",\n  \"boolean\",\n  \"null\",\n  \"array\",\n  \"object\"\n]\n")]
     [InlineData("[1, \"a\", true, null, [], {}]", "[(.[] | arrays), (.[] | objects), (.[] | numbers)]", "[\n  [],\n  {},\n  1\n]\n")]
     [InlineData("[0, 1, 2]", "has(-1 | sqrt)", "false\n")]
@@ -29,6 +31,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("5", "keys", "number (5) has no keys")]
+    [InlineData("\"ab\"", "to_entries", "string (\"ab\") has no keys")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
     {
         var host = new MockFileSystem();
