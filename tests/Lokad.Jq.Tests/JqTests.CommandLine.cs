@@ -208,6 +208,16 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SlurpfileSkipsLeadingBom()
+    {
+        var host = new MockFileSystem();
+        host.AddFile("/data.json", "\uFEFF[1, 2]\n");
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--slurpfile", "data", "/data.json", "$data");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("[\n  [\n    1,\n    2\n  ]\n]\n", stdout);
+    }
+
+    [Fact]
     public async Task Jq_SlurpfileBindsJsonArray()
     {
         var host = new MockFileSystem();

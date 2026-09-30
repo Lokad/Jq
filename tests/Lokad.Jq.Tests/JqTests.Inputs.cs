@@ -120,6 +120,16 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_InputSkipsLeadingBom()
+    {
+        var inner = new MockFileSystem();
+        inner.SetStandardInput("\uFEFF\"byte order mark\"");
+        var (exit, stdout, stderr) = await RunInputAsync(inner, ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("\"byte order mark\"\n", stdout);
+    }
+
+    [Fact]
     public async Task Jq_InputRawPreservesCarriageReturns()
     {
         var inner = new MockFileSystem();

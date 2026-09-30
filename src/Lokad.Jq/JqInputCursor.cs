@@ -51,6 +51,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private int _start;
     private int _count;
     private bool _eof;
+    private bool _bomPending;
     private JqFileDescriptor? _owned;
     private int _newlines;
     private bool _disposed;
@@ -162,6 +163,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
             _budget.CheckCancellation();
             if (!_active && !await ActivateNextAsync().ConfigureAwait(false))
                 return (false, null);
+            if (_bomPending)
+                await StripLeadingBomAsync().ConfigureAwait(false);
             SkipWhitespace();
             if (_count == 0)
             {
@@ -259,6 +262,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             _count = 0;
         }
         _eof = false;
+        _bomPending = true;
         _newlines = 0;
         _active = true;
         LastName = _sources[_index].Name;
@@ -338,6 +342,37 @@ internal sealed class JqInputCursor : IAsyncDisposable
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(abandon).Throw();
         }
     }
+
+    // Drops one leading UTF-8 byte-order mark per source like the reference
+    // document-start strip. Split marks resolve across fills; anything else
+    // (including leading whitespace first) leaves bytes for normal parsing.
+    private async Task StripLeadingBomAsync()
+    {
+        _bomPending = false;
+        while (true)
+        {
+            int available = Math.Min(_count, 3);
+            int matched = 0;
+            while (matched < available && _buffer[_start + matched] == BomBytes[matched])
+                matched++;
+            if (matched < available)
+                return;
+            if (available == 3)
+            {
+                _start += 3;
+                _count -= 3;
+                return;
+            }
+            if (_eof)
+                return;
+            int before = _count;
+            await FillAsync().ConfigureAwait(false);
+            if (_count == before)
+                return;
+        }
+    }
+
+    private static readonly byte[] BomBytes = [0xEF, 0xBB, 0xBF];
 
     private void SkipWhitespace()
     {

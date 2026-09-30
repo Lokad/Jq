@@ -379,11 +379,16 @@ internal sealed class JqRuntime(JqBudget budget)
     {
         budget.ChargeBytes(Encoding.UTF8.GetByteCount(text));
         var bytes = Encoding.UTF8.GetBytes(text);
-        var node = ReadJsonValue(bytes, out var consumed);
+        int prefix = HasBomPrefix(bytes) ? 3 : 0;
+        var node = ReadJsonValue(bytes.AsSpan(prefix), out var consumed);
+        consumed += prefix;
         if (!bytes.AsSpan(consumed).Trim(" \t\r\n"u8).IsEmpty)
             throw new JqException("expected a single JSON value");
         return node;
     }
+
+    internal static bool HasBomPrefix(ReadOnlySpan<byte> text) =>
+        text.Length >= 3 && text[0] == 0xEF && text[1] == 0xBB && text[2] == 0xBF;
 
     // Kind-shaped operand diagnostics shared by arithmetic operators,
     // matching the reference operand rendering (operands dump as JSON, so

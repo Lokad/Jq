@@ -363,7 +363,7 @@ internal static class JqExecutor
     private static JsonArray ReadSlurpfileValue(ReadOnlyMemory<byte> bytes, JqContext context)
     {
         var values = new JsonArray();
-        int offset = 0;
+        int offset = JqRuntime.HasBomPrefix(bytes.Span) ? 3 : 0;
         while (offset < bytes.Length)
         {
             if (bytes.Span[offset..].TrimStart(" \t\r\n"u8).IsEmpty)
