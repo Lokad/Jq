@@ -93,6 +93,20 @@ public sealed partial class JqTests
         """tonumber""",
         """toboolean""",
         """implode""",
+        """strftime("%Y-%m-%d")""",
+        """mktime""",
+        """gmtime""",
+        """sort_by(.)""",
+        """group_by(.)""",
+        """unique""",
+        """reverse""",
+        """keys""",
+        """recurse""",
+        """min""",
+        """max""",
+        """skip(1; .[])""",
+        """pick(.a)""",
+        """del(.a)""",
     ];
 
     private static readonly string[] FuzzAtoms =
