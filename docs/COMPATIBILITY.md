@@ -1,42 +1,55 @@
 # Compatibility baseline
 
-The target for further work is upstream jq 1.8.2. This extraction is a partial
-implementation and has not passed an upstream conformance suite. Its command
-tests document the initial implementation behavior, including historical
+The target is upstream jq 1.8.2. This implementation is incomplete
+and has not passed an upstream conformance suite. Its command
+tests document the current behavior, including historical
 limits and divergences that future increments must resolve explicitly.
+See `COMPATIBILITY_MATRIX.md` for the per-row inventory, status, tests,
+and evidence; that file is authoritative when this overview differs.
 
-Present building blocks include field/index/iteration access, arrays/objects,
-comma/pipe streams, arithmetic/comparison/boolean expressions, alternatives,
-conditionals, variables supplied as arguments, interpolation, basic functions,
-formatters, `test`/`gsub`, raw/slurped/null input, filter files, and output options.
-Their full upstream semantics and overloads are not implied by their presence.
+Current scope covers the jq language, documented builtins and arities,
+the module system, byte-level JSON input and rendering, and jq command
+options through the hosted API, with deterministic execution where inputs
+are fixed. Pretty-printed JSON with LF bytes is the default output;
+duplicate object keys resolve last-wins; `ascii_upcase`/`ascii_downcase`
+use ASCII-only case conversion per the reference definition.
+Their full upstream semantics and overloads are pinned per matrix row,
+not implied by their presence here.
 
-Known gaps to investigate and close:
+Tracked gaps to investigate and close (see the matrix for row status,
+tests, and evidence):
 
-- User-defined functions, lexical variable binding/destructuring, reductions,
-  recursion/control flow, assignment/update paths, modules, and many builtins.
-- Function arguments, index keys, slice bounds, object properties, and
-  interpolations distribute lazily over cartesian streams. Boolean `and`/`or`/`//`
-  keep their pairwise shape pending later increments.
-- Default output is compact; upstream-compatible formatting needs separate work.
-  Pretty JSON currently uses platform newlines inside formatted values.
-- Duplicate object keys resolve last-wins. Numbers use doubles with integral storage for integers;
+- Cartesian argument-combination order uses last-argument-outer; upstream
+  vectors indicate first-argument-outer in places. Tracked for a dedicated
+  cartesian-order increment; do not relabel without oracle evidence.
+- Numbers use doubles with integral storage for integers;
   literal precision, ordering, and non-finite rendering follow docs/NUMERIC_PROFILE.md, with deliberate decimal-build divergences recorded there.
-- `ascii_upcase`/`ascii_downcase` use ASCII-only case conversion per the reference definition.
-- Regex support uses PCRE.NET. jq's Oniguruma syntax, flags, captures, offsets,
-  substitutions, and edge cases need explicit compatibility evidence.
-- Several CLI options, input streaming/sequence modes, exit-status behavior,
-  module search paths, environment/time capabilities, and diagnostics are missing.
+- Regex support uses PCRE.NET. The reference Oniguruma syntax, flags,
+  captures, offsets, and substitutions are covered except `l`
+  (longest match) and `\C`, which stay explicitly rejected; the full
+  differential matrix remains open.
+- Bessel math (`j0`/`j1`/`y0`/`y1`/`jn`/`yn`) stays registered but unavailable,
+  like the reference missing-capability path.
+- Parser-support helpers (`_assign`/`_modify`) and host-identity queries
+  (`get_search_list`/`get_prog_origin`/`get_jq_origin`) stay intentionally
+  unexposed; direct calls fail at compile time with no `builtins/0` entry.
+- Tool switches (`--run-tests`, `--debug-dump-disasm`, `--debug-trace[...]`)
+  stay explicitly rejected, never silently ignored.
+- Slice path components render as start/end objects (best effort);
+  diagnostics columns count UTF-16 code units with LF line breaks.
+- Differential comparison is opt-in against an independently installed
+  executable with recorded version, configuration, hash, seeds, and cases;
+  ordinary builds and tests never require it.
 - Canonical virtual paths reject controls and traversal above root. Hosts own
   file access policy; native OS filename support is not yet a compatibility claim.
-- Runtime input is buffered per source, not parsed incrementally.
 
 ## Current resource policy
 
 Budgets are cumulative per execution, not a measurement of total managed memory.
-Current constants include 16 MiB input, 32 MiB output, 8 Mi UTF-16 code units per
-string, 256 MiB cumulative allocation allowance, 262,144 value nodes, JSON/parser
-depth 64, filter length 1 Mi characters, and 4,096 tokens/command arguments.
+Current constants include 16 MiB input, 32 MiB output (plus a 64 MiB JSON buffer
+allowance), 8 Mi UTF-16 code units per string, 256 MiB cumulative allocation
+allowance, 262,144 value nodes, JSON/parser depth 64, filter length 1 Mi characters,
+and 4,096 tokens/command arguments.
 Regex patterns and native work have additional limits in `JqRegexCache`.
 
 These limits remain useful for embedding. A complete implementation should expose
