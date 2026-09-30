@@ -125,4 +125,17 @@ public sealed partial class JqTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Fact]
+    public async Task Jq_DelpathsHandlesDeepPathsWithoutRecursion()
+    {
+        // setpath builds values far deeper than the ingress depth cap, so deletion
+        // depth follows path length (thousands), not value nesting policy. Five
+        // thousand levels would need five thousand call frames under recursion.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "null | setpath([range(5000)|\"a\"]; 1) | delpaths([[range(5000) | \"a\"]]) | true")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("true\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }

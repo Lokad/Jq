@@ -512,55 +512,126 @@ internal static class JqPathDeletes
         _ => 3,
     };
 
-    private static JsonNode? DeleteGrouped(JsonNode? node, List<IReadOnlyList<JqValueSegment>> paths, int depth, JqContext context)
+    // Heap-allocated frame for iterative grouped deletion. Deletion depth is path
+    // length, which the value budget does not bound below a CLR stack overflow, so
+    // nested call frames are not an option. A frame resumes exactly where a child
+    // call would return, preserving group order and error precedence.
+    private sealed class DeleteFrame(JsonNode? node, List<IReadOnlyList<JqValueSegment>> paths, int depth)
     {
-        var replacements = new List<(JqValueSegment Key, JsonNode? Value)>();
-        var removals = new List<JqValueSegment>();
-        int first = 0;
-        while (first < paths.Count)
+        public JsonNode? Node = node;
+        public List<IReadOnlyList<JqValueSegment>> Paths = paths;
+        public int Depth = depth;
+        public JqValueSegment? Slot;
+        public int First;
+        public List<(JqValueSegment Key, JsonNode? Value)> Replacements = new();
+        public List<JqValueSegment> Removals = new();
+        public JsonArray? SliceArray;
+        public List<IReadOnlyList<JqValueSegment>> SliceDeeper = new();
+        public int SliceTo;
+        public int SlicePos = -1;
+        public JsonNode? Result;
+    }
+
+    private static JsonNode? DeleteGrouped(JsonNode? root, List<IReadOnlyList<JqValueSegment>> paths, int depth, JqContext context)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(context);
+        var stack = new Stack<DeleteFrame>();
+        stack.Push(new DeleteFrame(root, paths, depth));
+        while (stack.Count > 0)
         {
-            int last = first + 1;
-            while (last < paths.Count && CompareSegment(paths[last][depth], paths[first][depth]) == 0)
-                last++;
-            JqValueSegment key = paths[first][depth];
-            if (key is SliceSegment range && node is JsonArray sliced)
+            context.Budget.CheckCancellation();
+            DeleteFrame frame = stack.Peek();
+            if (!AdvanceDeleteFrame(frame, stack, context))
+                continue;
+            stack.Pop();
+            if (stack.Count == 0)
+                return frame.Result;
+            JqValueSegment? slot = frame.Slot;
+            if (slot is null)
+                throw new InvalidOperationException("Grouped deletion lost its result slot.");
+            stack.Peek().Replacements.Add((slot, frame.Result));
+        }
+        throw new InvalidOperationException("Grouped deletion left no result.");
+    }
+
+    // Runs one frame until it needs a child result or finishes. Returns true with
+    // Result set when the frame is complete.
+    private static bool AdvanceDeleteFrame(DeleteFrame frame, Stack<DeleteFrame> stack, JqContext context)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        ArgumentNullException.ThrowIfNull(stack);
+        ArgumentNullException.ThrowIfNull(context);
+        if (frame.SlicePos >= 0)
+        {
+            JsonArray? sliced = frame.SliceArray;
+            if (sliced is null)
+                throw new InvalidOperationException("Grouped deletion lost its slice target.");
+            if (frame.SlicePos < frame.SliceTo)
             {
-                JqPaths.ResolveSlice(sliced.Count, range.Start, range.End, out int from, out int to);
+                int position = frame.SlicePos;
+                frame.SlicePos++;
+                stack.Push(new DeleteFrame(sliced[position], frame.SliceDeeper, frame.Depth + 1) { Slot = new IndexSegment(position, false) });
+                return false;
+            }
+            frame.SlicePos = -1;
+        }
+        while (frame.First < frame.Paths.Count)
+        {
+            int first = frame.First;
+            int last = first + 1;
+            while (last < frame.Paths.Count && CompareSegment(frame.Paths[last][frame.Depth], frame.Paths[first][frame.Depth]) == 0)
+                last++;
+            JqValueSegment key = frame.Paths[first][frame.Depth];
+            if (key is SliceSegment range && frame.Node is JsonArray targets)
+            {
+                JqPaths.ResolveSlice(targets.Count, range.Start, range.End, out int from, out int to);
                 var deeper = new List<IReadOnlyList<JqValueSegment>>();
                 for (int index = first; index < last; index++)
-                    if (paths[index].Count > depth + 1)
-                        deeper.Add(paths[index]);
-                for (int position = from; position < to; position++)
+                    if (frame.Paths[index].Count > frame.Depth + 1)
+                        deeper.Add(frame.Paths[index]);
+                frame.First = last;
+                if (deeper.Count == 0)
                 {
-                    if (deeper.Count == 0)
-                        removals.Add(new IndexSegment(position, false));
-                    else
-                        replacements.Add((new IndexSegment(position, false), DeleteGrouped(sliced[position], deeper, depth + 1, context)));
+                    for (int position = from; position < to; position++)
+                        frame.Removals.Add(new IndexSegment(position, false));
+                    continue;
                 }
-                first = last;
-                continue;
+                if (from >= to)
+                    continue;
+                frame.SliceArray = targets;
+                frame.SliceDeeper = deeper;
+                frame.SliceTo = to;
+                frame.SlicePos = from + 1;
+                stack.Push(new DeleteFrame(targets[from], deeper, frame.Depth + 1) { Slot = new IndexSegment(from, false) });
+                return false;
             }
             bool whole = false;
             for (int index = first; index < last; index++)
-                if (paths[index].Count == depth + 1)
+                if (frame.Paths[index].Count == frame.Depth + 1)
                     whole = true;
             if (whole)
             {
-                removals.Add(key);
+                frame.Removals.Add(key);
+                frame.First = last;
+                continue;
             }
-            else if (TryGetChild(node, key, out JsonNode? child, out bool missing))
+            if (TryGetChild(frame.Node, key, out JsonNode? child, out bool missing))
             {
                 if (!missing && child is not null)
                 {
                     var subpaths = new List<IReadOnlyList<JqValueSegment>>();
                     for (int index = first; index < last; index++)
-                        subpaths.Add(paths[index]);
-                    replacements.Add((key, DeleteGrouped(child, subpaths, depth + 1, context)));
+                        subpaths.Add(frame.Paths[index]);
+                    frame.First = last;
+                    stack.Push(new DeleteFrame(child, subpaths, frame.Depth + 1) { Slot = key });
+                    return false;
                 }
             }
-            first = last;
+            frame.First = last;
         }
-        return Rebuild(node, replacements, removals, context);
+        frame.Result = Rebuild(frame.Node, frame.Replacements, frame.Removals, context);
+        return true;
     }
     private static bool TryGetChild(JsonNode? node, JqValueSegment key, out JsonNode? child, out bool missing)
     {
