@@ -23,6 +23,8 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("[0,1,2,3] | .[(1,2):3]", "[\n  1,\n  2\n]\n[\n  2\n]\n")]
     [InlineData("[0,1,2,3] | .[1:(2,3)]", "[\n  1\n]\n[\n  1,\n  2\n]\n")]
+    [InlineData("[0,1,2,3] | .[(0,1):(2,3)]", "[\n  0,\n  1\n]\n[\n  0,\n  1,\n  2\n]\n[\n  1\n]\n[\n  1,\n  2\n]\n")]
+    [InlineData("(([0,1,2,3]),([4,5,6,7]))[(0,1):2]", "[\n  0,\n  1\n]\n[\n  4,\n  5\n]\n[\n  1\n]\n[\n  5\n]\n")]
     [InlineData("[0,1,2] | .[empty:2]", "")]
     [InlineData("[0,1,2] | .[1:empty]", "")]
     public async Task Jq_SliceStreamsEveryBound(string filter, string expected)
