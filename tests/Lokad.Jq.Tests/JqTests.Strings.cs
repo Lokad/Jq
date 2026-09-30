@@ -54,6 +54,10 @@ public sealed partial class JqTests
     [InlineData("0", "infinite | tostring", "\"1.7976931348623157E+308\"\n")]
     [InlineData("[1, \"a\", true, null]", "map(tostring)", "[\n  \"1\",\n  \"a\",\n  \"true\",\n  \"null\"\n]\n")]
     [InlineData("\"hello\"", "utf8bytelength", "5\n")]
+    [InlineData("\".89\"", "tonumber", "0.89\n")]
+    [InlineData("\"-.5\"", "tonumber", "-0.5\n")]
+    [InlineData("[\"1\", \"2a\", \"3\", \" 4\", \"5 \", \"6.7\", \".89\", \"-876\", \"+5.43\", 21]", ".[] |= try tonumber", "[\n  1,\n  3,\n  6.7,\n  0.89,\n  -876,\n  5.43,\n  21\n]\n")]
+    [InlineData("[null, 0, \"tru\", \"truee\", \"fals\", \"falsee\", [], {}]", "[.[] | try toboolean catch .]", "[\n  \"null (null) cannot be parsed as a boolean\",\n  \"number (0) cannot be parsed as a boolean\",\n  \"string (\\\"tru\\\") cannot be parsed as a boolean\",\n  \"string (\\\"truee\\\") cannot be parsed as a boolean\",\n  \"string (\\\"fals\\\") cannot be parsed as a boolean\",\n  \"string (\\\"falsee\\\") cannot be parsed as a boolean\",\n  \"array ([]) cannot be parsed as a boolean\",\n  \"object ({}) cannot be parsed as a boolean\"\n]\n")]
     [InlineData("\"é🚀\"", "utf8bytelength", "6\n")]
     public async Task Jq_Conversions(string input, string filter, string expected)
     {
@@ -76,6 +80,8 @@ public sealed partial class JqTests
     [InlineData("0", "toboolean", "number (0) cannot be parsed as a boolean")]
     [InlineData("\"TRUE\"", "toboolean", "string (\"TRUE\") cannot be parsed as a boolean")]
     [InlineData("\" true\"", "toboolean", "string (\" true\") cannot be parsed as a boolean")]
+    [InlineData("\"123\\u0000456\"", "tonumber", "string (\"123\\u0000456\") cannot be parsed as a number")]
+    [InlineData("\"true\\u0000x\"", "toboolean", "string (\"true\\u0000x\") cannot be parsed as a boolean")]
     public async Task Jq_ConversionFailures(string input, string filter, string diagnostic)
     {
         var host = new MockFileSystem();

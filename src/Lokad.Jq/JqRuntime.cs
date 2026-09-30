@@ -425,7 +425,7 @@ internal sealed class JqRuntime(JqBudget budget)
             if (!hasFraction)
                 return false;
         }
-        if (!hasWhole)
+        if (!hasWhole && !hasFraction)
             return false;
         if (position < text.Length && (text[position] == 'e' || text[position] == 'E'))
         {
