@@ -15,6 +15,7 @@ public sealed partial class JqTests
     [InlineData("[10, 20, 30]", "nth(1)", "20\n")]
     [InlineData("0", "nth(1; (10, 20, 30))", "20\n")]
     [InlineData("0", "nth(0; empty)", "")]
+    [InlineData("0", "limit(empty; 1)", "")]
     [InlineData("[1, 2, 3]", "isempty(.[])", "false\n")]
     public async Task Jq_LimitFirstNthIsempty(string input, string filter, string expected)
     {
