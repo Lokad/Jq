@@ -153,4 +153,44 @@ public sealed partial class JqTests
         Assert.Contains("unterminated string", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
+
+    [Theory]
+    [InlineData("\"\\($undefined)\"", "undefined variable")]
+    [InlineData("\"\\(missing_function)\"", "unsupported function")]
+    [InlineData("\"\\(length(1))\"", "length expects no arguments")]
+    public async Task Jq_InterpolationPiecesFailAtCompileTime(string filter, string diagnostic)
+    {
+        // Pieces parse once with definition-site scopes, so unknown names are
+        // stage-3 compile errors like the surrounding filter, not stage-5
+        // evaluation failures, and try/catch cannot observe them.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
+    public async Task Jq_InterpolationRejectsLateBoundVariables()
+    {
+        // $x is unbound where f is defined, so the piece must fail at compile
+        // time even though $x is bound at the call site.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "def f: \"\\($x)\"; 1 as $x | f")));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("undefined variable", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
+    public async Task Jq_InterpolationCapturesDefinitionVariables()
+    {
+        // Like function bodies, pieces observe bindings visible at their
+        // definition site; later shadowing never leaks into older closures.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1 as $x | def f: \"\\($x)\"; 2 as $x | f")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("\"1\"\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
 }

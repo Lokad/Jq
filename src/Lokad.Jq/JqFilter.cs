@@ -1790,23 +1790,26 @@ internal sealed class InterpolatedStringFilter : JqFilter
 
     private sealed record Literal(string Text) : Segment;
 
-    private sealed record Interpolation(string Source) : Segment;
+    private sealed record Interpolation(JqFilter Filter) : Segment;
 
     private readonly IReadOnlyList<Segment> _segments;
     private readonly string? _format;
 
     // Splits once at construction so malformed templates fail before evaluation;
-    // each interpolation still parses per evaluation with the ambient scope.
-    internal InterpolatedStringFilter(string template, string? format, JqSourceSpan span, JqProgramSource program)
+    // each interpolation is parsed once with the definition-site scopes, so unknown
+    // names fail at compile time (stage 3) instead of per evaluation as stage 5.
+    internal InterpolatedStringFilter(string template, string? format, JqSourceSpan span, JqProgramSource program, Func<string, JqSourceSpan, JqFilter> parsePiece)
     {
+        ArgumentNullException.ThrowIfNull(parsePiece);
         _format = format;
-        _segments = SplitTemplate(template, span, program);
+        _segments = SplitTemplate(template, span, program, parsePiece);
     }
 
-    private static IReadOnlyList<Segment> SplitTemplate(string template, JqSourceSpan span, JqProgramSource program)
+    private static IReadOnlyList<Segment> SplitTemplate(string template, JqSourceSpan span, JqProgramSource program, Func<string, JqSourceSpan, JqFilter> parsePiece)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(parsePiece);
         var segments = new List<Segment>();
         var literal = new StringBuilder();
         for (var i = 0; i < template.Length; i++)
@@ -1842,7 +1845,7 @@ for (; i < template.Length; i++)
                     segments.Add(new Literal(Lexer.DecodeLiterals(literal.ToString())));
                     literal.Clear();
                 }
-                segments.Add(new Interpolation(template[start..i]));
+                segments.Add(new Interpolation(parsePiece(template[start..i], span)));
             }
             else
             {
@@ -1887,8 +1890,7 @@ for (; i < template.Length; i++)
             }
             if (_segments[index] is Interpolation interpolation)
             {
-                JqFilter parsed = new JqParser(interpolation.Source, context.ProgramSource, environment, context.Budget).Parse();
-                foreach (var value in parsed.Evaluate(input, context, environment))
+                foreach (var value in interpolation.Filter.Evaluate(input, context, environment))
                 {
                     string rendered = Render(value);
                     foreach (var prefix in Combine(index - 1))

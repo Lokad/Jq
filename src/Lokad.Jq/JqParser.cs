@@ -313,9 +313,9 @@ internal sealed class JqParser(
         return false;
     }
 
-    // Reparsed fragments (string interpolation re-enters the parser with the
-    // evaluation environment) reseed visible user definitions so `"\(f)"`
-    // keeps working inside function bodies. Nearest bindings win.
+    // Seed visible user definitions from the environment so top-level filters
+    // and definition-site interpolation pieces resolve module functions.
+    // Nearest bindings win.
     private void SeedFunctionsFromEnvironment()
     {
         var collected = new Dictionary<(string Name, int Arity), JqFunctionDefinition>();
@@ -333,6 +333,47 @@ internal sealed class JqParser(
         if (_scopes.Count == 0)
             throw new InvalidOperationException("No open binding scope.");
         _scopes.Pop();
+    }
+
+    // Parses string-interpolation pieces once at construction with the
+    // definition-site scopes, so unknown names fail at compile time (stage 3)
+    // instead of surfacing per evaluation as stage 5. The sub-parser shares
+    // the program source, environment, and budget; scope snapshots are deep
+    // copies so defs inside pieces stay local to the piece.
+    private JqFilter ParseInterpolationPiece(string source, JqSourceSpan span)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        var piece = new JqParser(source, _programSource, _environment, _budget);
+        piece._depth = _depth + 1;
+        piece.SeedFunctionsFromEnvironment();
+        var snapshot = _scopes.ToArray();
+        for (int index = snapshot.Length - 1; index >= 0; index--)
+        {
+            var scope = snapshot[index];
+            var clone = new ParserScope();
+            foreach (string name in scope.Variables)
+                clone.Variables.Add(name);
+            foreach (string name in scope.FilterParams)
+                clone.FilterParams.Add(name);
+            foreach (string name in scope.Labels)
+                clone.Labels.Add(name);
+            foreach (var entry in scope.Functions)
+                clone.Functions[entry.Key] = entry.Value;
+            piece._scopes.Push(clone);
+        }
+        return piece.ParseFragment();
+    }
+
+    // Fragment parsing for interpolation pieces: a single query without module
+    // headers or imports. Leading defs stay scoped to the piece like the
+    // reference, and the caller already seeded module functions.
+    private JqFilter ParseFragment()
+    {
+        if (Peek().Kind == TokenKind.End)
+            throw Error("Top-level program not given (try \".\")", Peek().Span);
+        var filter = ParseQuery();
+        Expect(TokenKind.End);
+        return filter;
     }
 
     // Definitions bind loosest: `def f: ...; rest` scopes the definition over
@@ -796,7 +837,7 @@ internal sealed class JqParser(
             if (Peek().Kind != TokenKind.String)
                 return new FormatFilter(format);
             Token template = Next();
-            return new InterpolatedStringFilter(template.Text, format, template.Span, _programSource);
+            return new InterpolatedStringFilter(template.Text, format, template.Span, _programSource, ParseInterpolationPiece);
         }
         if (Match("."))
         {
@@ -907,7 +948,7 @@ internal sealed class JqParser(
         }
         if (token.Kind == TokenKind.String)
             return Lexer.ContainsInterpolation(token.Text)
-                ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource)
+                ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource, ParseInterpolationPiece)
                 : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text)));
         if (token.Kind == TokenKind.Identifier)
         {
@@ -992,7 +1033,7 @@ internal sealed class JqParser(
     }
 
     private JqFilter KeyFilterFor(Token token) => Lexer.ContainsInterpolation(token.Text)
-        ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource)
+        ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource, ParseInterpolationPiece)
         : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text)));
 
     private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && Lexer.ContainsInterpolation(token.Text);
