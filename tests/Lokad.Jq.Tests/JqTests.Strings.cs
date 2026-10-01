@@ -214,6 +214,8 @@ public sealed partial class JqTests
     [InlineData("1", "split(\",\")", "split input and separator must be strings")]
     [InlineData("\"a\"", "split(1)", "split input and separator must be strings")]
     [InlineData("5", "join(\",\")", "cannot iterate over number")]
+    [InlineData("\"a\"", "join(\",\")", "cannot iterate over string")]
+    [InlineData("{\"a\":1}", "join(\",\")", "cannot iterate over object")]
     [InlineData("[\"1\",\"2\",{\"a\":{\"b\":{\"c\":33}}}]", "join(\",\")", "string (\"1,2,\") and object ({\"a\":{\"b\":{\"c\":33}}}) cannot be added")]
     [InlineData("[\"1\",\"2\",[3,4,5]]", "join(\",\")", "string (\"1,2,\") and array ([3,4,5]) cannot be added")]
     [InlineData("5", "explode", "explode input must be a string")]
