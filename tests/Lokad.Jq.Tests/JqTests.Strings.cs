@@ -169,6 +169,8 @@ public sealed partial class JqTests
     [InlineData("[\"a\",\"b\"]", "join((\",\", \";\"))", "\"a,b\"\n\"a;b\"\n")]
     [InlineData("[123,[\"a\"],[nan]]", "map(try implode catch .)", "[\n  \"implode input must be an array\",\n  \"string (\\\"a\\\") can't be imploded, unicode codepoint needs to be numeric\",\n  \"number (null) can't be imploded, unicode codepoint needs to be numeric\"\n]\n")]
     [InlineData("[1, 2]", "join(null)", "\"12\"\n")]
+    // A null separator absorbs through the null-identity of the reference fold.
+    [InlineData("[\"a\",\"b\"]", "join(null)", "\"ab\"\n")]
     [InlineData("[\"1\",\"2\",{\"a\":{\"b\":{\"c\":33}}}]", "try join(\",\") catch .", "\"string (\\\"1,2,\\\") and object ({\\\"a\\\":{\\\"b\\\":{\\\"c\\\":33}}}) cannot be added\"\n")]
     [InlineData("[\"1\",\"2\",[3,4,5]]", "try join(\",\") catch .", "\"string (\\\"1,2,\\\") and array ([3,4,5]) cannot be added\"\n")]
     [InlineData("\"a,b,c\"", "split(\",\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
