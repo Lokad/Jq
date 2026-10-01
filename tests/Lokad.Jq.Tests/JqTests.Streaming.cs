@@ -228,6 +228,39 @@ public sealed partial class JqTests
         Assert.Equal("true\n", stdout);
     }
 
+    // Truncation depths over one event literal: depth 0 keeps every path,
+    // depth 1 rebases longer paths, depth 2 drops paths of length 2 or less,
+    // exactly per the builtin.jq conditional.
+    [Theory]
+    [InlineData("0", "[\n  [\n    [\n      0\n    ],\n    \"a\"\n  ],\n  [\n    [\n      1,\n      0\n    ],\n    \"b\"\n  ],\n  [\n    [\n      1,\n      0\n    ]\n  ],\n  [\n    [\n      1\n    ]\n  ]\n]\n")]
+    [InlineData("1", "[\n  [\n    [\n      0\n    ],\n    \"b\"\n  ],\n  [\n    [\n      0\n    ]\n  ]\n]\n")]
+    [InlineData("2", "[]\n")]
+    public async Task Jq_TruncateStreamDepths(string input, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var (exit, stdout, stderr) = await RunStreamAsync(host, "[truncate_stream([[0],\"a\"],[[1,0],\"b\"],[[1,0]],[[1]])]");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal(expected, stdout);
+        Assert.Empty(stderr);
+    }
+
+    // Degenerate folds through the same definition: an empty stream emits
+    // nothing, a root leaf rebuilds, and a lone close emits the null seed.
+    [Theory]
+    [InlineData("fromstream(empty)", "")]
+    [InlineData("fromstream([[],[]])", "[]\n")]
+    [InlineData("fromstream([[0]])", "null\n")]
+    public async Task Jq_FromstreamDegenerateFolds(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("null");
+        var (exit, stdout, stderr) = await RunStreamAsync(host, filter);
+        Assert.True(exit == 0, stderr);
+        Assert.Equal(expected, stdout);
+        Assert.Empty(stderr);
+    }
+
     [Fact]
     public async Task Jq_TruncateStreamVectors()
     {
