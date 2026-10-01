@@ -179,6 +179,12 @@ public sealed partial class JqTests
     [InlineData("[1,[2]]", "[recurse(empty)]", "[\n  [\n    1,\n    [\n      2\n    ]\n  ]\n]\n")]
     [InlineData("{\"a\":1}", "[walk(empty)]", "[]\n")]
     [InlineData("1", "[walk(empty)]", "[]\n")]
+    // Multi-output recurse stays depth-first pre-order like the reference
+    // def r (self, then each function output in turn); break abandons
+    // pending siblings while keeping already-yielded outputs.
+    [InlineData("[[1,2]]", "[recurse(if type == \"array\" then .[] else empty end)]", "[\n  [\n    [\n      1,\n      2\n    ]\n  ],\n  [\n    1,\n    2\n  ],\n  1,\n  2\n]\n")]
+    [InlineData("{\"a\":[1],\"b\":[2]}", "[recurse(.[]?)]", "[\n  {\n    \"a\": [\n      1\n    ],\n    \"b\": [\n      2\n    ]\n  },\n  [\n    1\n  ],\n  1,\n  [\n    2\n  ],\n  2\n]\n")]
+    [InlineData("[[1],[2],[3]]", "[label $o | recurse(if . == [2] then break $o elif type == \"array\" then .[] else empty end)]", "[\n  [\n    [\n      1\n    ],\n    [\n      2\n    ],\n    [\n      3\n    ]\n  ],\n  [\n    1\n  ],\n  1,\n  [\n    2\n  ]\n]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -212,6 +218,17 @@ public sealed partial class JqTests
             Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
         }
+    }
+
+    [Fact]
+    public async Task Jq_RecursePropagatesErrors()
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("[[1,2]]");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "[recurse(if . == 2 then error(\"x\") elif type == \"array\" then .[] else empty end)]")));
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: error: x\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]
