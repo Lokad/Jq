@@ -150,6 +150,9 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3]", "setpath([{\"start\": 1, \"end\": 3}]; [9])", "[\n  0,\n  9,\n  3\n]\n")]
     [InlineData("[0, 1, 2, 3]", "try setpath([{\"start\": 1, \"end\": 3}]; 9) catch .", "\"A slice of an array can only be assigned another array\"\n")]
     [InlineData("[0]", "setpath([-1]; 1)", "[\n  1\n]\n")]
+    // Negative setpath indices resolve from the end up to the exact first element, then fail like the reference.
+    [InlineData("[1,2,3]", "setpath([-3]; 9)", "[\n  9,\n  2,\n  3\n]\n")]
+    [InlineData("[1,2,3]", "try setpath([-4]; 9) catch .", "\"Out of bounds negative array index\"\n")]
     [InlineData("{\"bar\": 42, \"foo\": [\"a\", \"b\", \"c\", \"d\"]}", "[\"foo\",1] as $p | getpath($p), setpath($p; 20), delpaths([$p])", "\"b\"\n{\n  \"bar\": 42,\n  \"foo\": [\n    \"a\",\n    20,\n    \"c\",\n    \"d\"\n  ]\n}\n{\n  \"bar\": 42,\n  \"foo\": [\n    \"a\",\n    \"c\",\n    \"d\"\n  ]\n}\n")]
     [InlineData("{\"bar\":false}", "[\"foo\",1] as $p | getpath($p), setpath($p; 20), delpaths([$p])", "null\n{\n  \"bar\": false,\n  \"foo\": [\n    null,\n    20\n  ]\n}\n{\n  \"bar\": false\n}\n")]
     [InlineData("[[0], [0,1], [0,1,2]]", "map(getpath([2])), map(setpath([2]; 42)), map(delpaths([[2]]))", "[\n  null,\n  null,\n  2\n]\n[\n  [\n    0,\n    null,\n    42\n  ],\n  [\n    0,\n    1,\n    42\n  ],\n  [\n    0,\n    1,\n    42\n  ]\n]\n[\n  [\n    0\n  ],\n  [\n    0,\n    1\n  ],\n  [\n    0,\n    1\n  ]\n]\n")]
