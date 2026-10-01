@@ -206,6 +206,27 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData("[{\"a\":1, \"b\":[2,{\"d\":3}]}, [4, {\"b\":5, \"c\":6}, 7, 8, 9], \"foo\"]", ".[] | . as {$a, b: [$c, {$d}]} ?// [$a, {$b}, $e] ?// $f | [$a, $b, $c, $d, $e, $f]", "[\n  1,\n  null,\n  2,\n  3,\n  null,\n  null\n]\n[\n  4,\n  5,\n  null,\n  null,\n  7,\n  null\n]\n[\n  null,\n  null,\n  null,\n  null,\n  null,\n  \"foo\"\n]\n")]
+    [InlineData("[[3],[4],[5],6]", ".[] | . as {a:$a} ?// {a:$a} ?// $a | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("[[3],[4],[5],6]", ".[] as {a:$a} ?// {a:$a} ?// $a | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("null", "[[3],[4],[5],6][] | . as {a:$a} ?// {a:$a} ?// $a | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("null", "[[3],[4],[5],6] | .[] as {a:$a} ?// {a:$a} ?// $a | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("[[3],[4],[5],6]", ".[] | . as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("[[3],[4],[5],6]", ".[] as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("null", "[[3],[4],[5],6][] | . as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("null", "[[3],[4],[5],6] | .[] as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    public async Task Jq_AlternationChainsFromReference(string input, string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+
+    [Theory]
     [InlineData("\"v\" as $x | {$x}", "{\n  \"x\": \"v\"\n}\n")]
     [InlineData("\"k\" as $x | {$x: 1}", "{\n  \"k\": 1\n}\n")]
     public async Task Jq_ObjectShorthandsUseBindings(string filter, string expected)

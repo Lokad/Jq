@@ -199,6 +199,8 @@ public sealed partial class JqTests
     [InlineData("\"\\\\\\\\\"", "\"\\\\\\\\\"\n")]
     [InlineData("\"\\\\(1+2)\"", "\"\\\\(1+2)\"\n")]
     [InlineData("\"\\\\\\(1+2)\"", "\"\\\\3\"\n")]
+    [InlineData("\"Aa\\r\\n\\t\\b\\f\\u03bc\"", "\"Aa\\r\\n\\t\\b\\fμ\"\n")]
+    [InlineData("\"inter\\(\"pol\" + \"ation\")\"", "\"interpolation\"\n")]
     public async Task Jq_LiteralBackslashParen(string filter, string expected)
     {
         var host = new MockFileSystem();
