@@ -19,6 +19,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("null", "null\n")]
     [InlineData("empty", "")]
+    [InlineData("\"hello\" | (null,1,null)", "null\n1\nnull\n")]
     [InlineData("[empty]", "[]\n")]
     [InlineData("[null]", "[\n  null\n]\n")]
     [InlineData("null == null", "true\n")]
