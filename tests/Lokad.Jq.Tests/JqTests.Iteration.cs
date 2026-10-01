@@ -132,6 +132,11 @@ public sealed partial class JqTests
     [InlineData("[range(0;10)]", "[\n  0,\n  1,\n  2,\n  3,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
     [InlineData("[range(0;10;-1)]", "[]\n")]
     [InlineData("[range(0;-5;-1)]", "[\n  0,\n  -1,\n  -2,\n  -3,\n  -4\n]\n")]
+    // range/3 sign desugar: a zero step falls to the else-empty branch either way, fractional steps run through while.
+    [InlineData("[range(0;5;0)]", "[]\n")]
+    [InlineData("[range(5;0;0)]", "[]\n")]
+    [InlineData("[range(0;2;0.5)]", "[\n  0,\n  0.5,\n  1,\n  1.5\n]\n")]
+    [InlineData("[range(0;1;0.25)]", "[\n  0,\n  0.25,\n  0.5,\n  0.75\n]\n")]
     [InlineData("[range(4)]", "[\n  0,\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[range(2; 4)]", "[\n  2,\n  3\n]\n")]
     [InlineData("range(nan)", "")]
