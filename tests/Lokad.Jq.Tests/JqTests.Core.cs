@@ -16,6 +16,9 @@ public sealed partial class JqTests
     [InlineData("null | not", "true\n")]
     [InlineData("1,2 | .+1", "2\n3\n")]
     [InlineData("3 | ., .+1", "3\n4\n")]
+    [InlineData("1 + 2 as $x | -$x", "-3\n")]
+    [InlineData("2-1", "1\n")]
+    [InlineData("2-(-1)", "3\n")]
     public async Task Jq_CorePrecedenceAndLiterals(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -171,6 +174,7 @@ public sealed partial class JqTests
     [InlineData("{\"foo\":1} | .\"foo\"", "1\n")]
     [InlineData("{\"a\":{\"b\":2}} | .a.\"b\"", "2\n")]
     [InlineData("{\"a\":1} | {\"a$\\(1+1)\": 2}", "{\n  \"a$2\": 2\n}\n")]
+    [InlineData("{\"a\":1, \"b\":2, \"c\":3, \"d\":\"c\"} | {a,b,(.d):.a,e:.b}", "{\n  \"a\": 1,\n  \"b\": 2,\n  \"c\": 1,\n  \"e\": 2\n}\n")]
     public async Task Jq_DynamicAndQuotedKeys(string filter, string expected)
     {
         var host = new MockFileSystem();

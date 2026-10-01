@@ -208,6 +208,7 @@ public sealed partial class JqTests
     [InlineData("[null,{\"b\":0},{\"a\":0},{\"a\":null},{\"a\":[0,1]},{\"a\":{\"b\":1}},{\"a\":[{}]},{\"a\":[{\"c\":3}]}]", ".[] | try (getpath([\"a\",0,\"b\"]) |= 5) catch .", "{\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n{\n  \"b\": 0,\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n\"Cannot index number with number (0)\"\n{\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n\"Cannot index number with string (\\\"b\\\")\"\n\"Cannot index object with number (0)\"\n{\n  \"a\": [\n    {\n      \"b\": 5\n    }\n  ]\n}\n{\n  \"a\": [\n    {\n      \"c\": 3,\n      \"b\": 5\n    }\n  ]\n}\n")]
     [InlineData("{\"a\":{\"b\":0}}", "getpath([\"a\",\"b\"]) = 5", "{\n  \"a\": {\n    \"b\": 5\n  }\n}\n")]
     [InlineData("null", "getpath([\"a\",\"b\"]) = 5", "{\n  \"a\": {\n    \"b\": 5\n  }\n}\n")]
+    [InlineData("[0,1,2,3,4,5,6,7]", ".[2:4] = ([], [\"a\",\"b\"], [\"a\",\"b\",\"c\"])", "[\n  0,\n  1,\n  4,\n  5,\n  6,\n  7\n]\n[\n  0,\n  1,\n  \"a\",\n  \"b\",\n  4,\n  5,\n  6,\n  7\n]\n[\n  0,\n  1,\n  \"a\",\n  \"b\",\n  \"c\",\n  4,\n  5,\n  6,\n  7\n]\n")]
     public async Task Jq_AssignUpdatesValues(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

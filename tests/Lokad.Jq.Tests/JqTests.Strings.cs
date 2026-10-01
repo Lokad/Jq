@@ -70,6 +70,7 @@ public sealed partial class JqTests
     [InlineData("1", "try toboolean catch .", "\"number (1) cannot be parsed as a boolean\"\n")]
     [InlineData("\"1 2\"", "try fromjson catch .", "\"expected a single JSON value\"\n")]
     [InlineData("[\"NaN\",\"-NaN\",\"NaN1\",\"NaN10\",\"NaN100\",\"NaN1000\",\"NaN10000\",\"NaN100000\"]", ".[] | try (fromjson | isnan) catch .", "true\ntrue\n\"Invalid numeric literal at EOF at line 1, column 4 (while parsing 'NaN1')\"\n\"Invalid numeric literal at EOF at line 1, column 5 (while parsing 'NaN10')\"\n\"Invalid numeric literal at EOF at line 1, column 6 (while parsing 'NaN100')\"\n\"Invalid numeric literal at EOF at line 1, column 7 (while parsing 'NaN1000')\"\n\"Invalid numeric literal at EOF at line 1, column 8 (while parsing 'NaN10000')\"\n\"Invalid numeric literal at EOF at line 1, column 9 (while parsing 'NaN100000')\"\n")]
+    [InlineData("[[], {}, [1,2], {\"a\":42}, \"asdf\", \"μ\"]", "[.[] | length]", "[\n  0,\n  0,\n  2,\n  1,\n  4,\n  1\n]\n")]
     [InlineData("null", "nan | length", "null\n")]
     [InlineData("null", "infinite | length", "1.7976931348623157E+308\n")]
     [InlineData("null", "-0.0 | length", "0\n")]
@@ -158,6 +159,7 @@ public sealed partial class JqTests
     [InlineData("[-1,1114112,55296,1.9]", "implode|explode", "[\n  65533,\n  65533,\n  65533,\n  1\n]\n")]
     [InlineData("\"abc\"", "explode | implode", "\"abc\"\n")]
     [InlineData("[-1, 0, 1, 2, 3, 1114111, 1114112, 55295, 55296, 57343, 57344, 1.1, 1.9]", "implode|explode", "[\n  65533,\n  0,\n  1,\n  2,\n  3,\n  1114111,\n  65533,\n  55295,\n  65533,\n  65533,\n  57344,\n  1,\n  1\n]\n")]
+    [InlineData("[\"a\",\"b\",\"c\",\"d\"]", "join(\",\",\"/\")", "\"a,b,c,d\"\n\"a/b/c/d\"\n")]
     public async Task Jq_SplitJoinExplode(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
