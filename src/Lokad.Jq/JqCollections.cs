@@ -117,9 +117,41 @@ internal sealed class AddValuesFilter(JqFilter Values) : JqFilter
 }
 
 // `flatten` and `flatten(depth)`: depth-limited flattening over arrays.
+// Like the reference desugar, only numbers reach the negative guard: null
+// and booleans sort below zero and fail it, while strings, arrays, and
+// objects sort above it and flatten fully because they never equal zero.
 internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
+
+    internal static bool TryDepthLevel(JsonNode? depth, out double level)
+    {
+        if (depth is JsonValue value)
+        {
+            if (value.TryGetValue<double>(out level))
+                return true;
+            if (value.TryGetValue<long>(out long whole))
+            {
+                level = whole;
+                return true;
+            }
+            if (value.TryGetValue<int>(out int integer))
+            {
+                level = integer;
+                return true;
+            }
+            if (value.TryGetValue<decimal>(out decimal dec))
+            {
+                level = (double)dec;
+                return true;
+            }
+        }
+        level = double.NaN;
+        return false;
+    }
+
+    internal static bool IsBooleanValue(JsonNode? depth) =>
+        depth is JsonValue value && value.TryGetValue<bool>(out _);
 
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -132,10 +164,20 @@ internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
         }
         foreach (JsonNode? depth in Depth.Evaluate(input, context, environment))
         {
-            double level = Number(depth);
-            if (level < 0)
+            if (TryDepthLevel(depth, out double level))
+            {
+                if (level < 0)
+                    throw new JqException("flatten depth must not be negative");
+                yield return context.Runtime.Flatten(input, level);
+            }
+            else if (depth is null || IsBooleanValue(depth))
+            {
                 throw new JqException("flatten depth must not be negative");
-            yield return context.Runtime.Flatten(input, level);
+            }
+            else
+            {
+                yield return context.Runtime.Flatten(input, double.NaN);
+            }
         }
     }
 }
@@ -643,7 +685,10 @@ internal sealed class FlattenImplFilter(JqFilter Depth) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? depth in Depth.Evaluate(input, context, environment))
         {
-            double level = Number(depth);
+            // _flatten carries no negative guard upstream; every non-number
+            // flattens fully because it never equals zero.
+            if (!FlattenFilter.TryDepthLevel(depth, out double level))
+                level = double.NaN;
             yield return context.Runtime.Flatten(input, level);
         }
     }

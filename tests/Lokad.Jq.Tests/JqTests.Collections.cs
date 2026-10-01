@@ -90,6 +90,11 @@ public sealed partial class JqTests
     [InlineData("[0, [1], [[2]], [[[3]]]]", "flatten(2)", "[\n  0,\n  1,\n  2,\n  [\n    3\n  ]\n]\n")]
     [InlineData("[0, [1, [2]], [1, [[3], 2]]]", "flatten(2)", "[\n  0,\n  1,\n  2,\n  1,\n  [\n    3\n  ],\n  2\n]\n")]
     [InlineData("[[1]]", "flatten(0.5)", "[\n  1\n]\n")]
+    // Non-numeric depths follow the desugar: strings and containers never equal zero, so they flatten fully.
+    [InlineData("[1,[2,[3]]]", "flatten(\"a\")", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[1,[2,[3]]]", "flatten(\"1\")", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[1,[2,[3]]]", "flatten([])", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[1,[2]]", "_flatten(null)", "[\n  1,\n  2\n]\n")]
     [InlineData("{\"arr\": [1, 2, 3]}", ".sum = add(.arr[])", "{\n  \"arr\": [\n    1,\n    2,\n    3\n  ],\n  \"sum\": 6\n}\n")]
     [InlineData("[[1], [2, 3]]", "transpose", "[\n  [\n    1,\n    2\n  ],\n  [\n    null,\n    3\n  ]\n]\n")]
     [InlineData("[]", "transpose", "[]\n")]
@@ -215,6 +220,9 @@ public sealed partial class JqTests
     [InlineData("\"aa\" | try [\"OK\", bsearch(0)] catch [\"KO\",.]", "[\n  \"KO\",\n  \"string (\\\"aa\\\") cannot be searched from\"\n]\n")]
 [InlineData("try ([range(3)] | .[nan] = 9) catch .", "\"Cannot set array element at NaN index\"\n")]
     [InlineData("try flatten(-1) catch .", "\"flatten depth must not be negative\"\n")]
+    // Null and booleans sort below zero, so they fail the same guard.
+    [InlineData("try flatten(null) catch .", "\"flatten depth must not be negative\"\n")]
+    [InlineData("try flatten(false) catch .", "\"flatten depth must not be negative\"\n")]
     [InlineData("try (5 | flatten) catch .", "\"cannot iterate over number\"\n")]
     [InlineData("try (5 | add) catch .", "\"cannot iterate over number\"\n")]
     [InlineData("try (5 | bsearch(0)) catch .", "\"number (5) cannot be searched from\"\n")]
