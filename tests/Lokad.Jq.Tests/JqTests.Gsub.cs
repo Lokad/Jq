@@ -46,6 +46,7 @@ public sealed partial class JqTests
     [InlineData("\"a1b2\" | gsub(\"(?<d>\\\\d)\"; \":\\(.d);\")", "a:1;b:2;\n")]
     [InlineData("\"aaaaa\" | gsub(\"a\";\"b\")", "bbbbb\n")]
     [InlineData("\"\" | gsub(\"(.*)\"; \"\"; \"x\")", "\n")]
+    [InlineData("\"p\" | [gsub(\"p\"; \"a\", \"b\")]", "[\n  \"a\",\n  \"b\"\n]\n")]
 [InlineData("[\"a,b, c, d, e,f\", \", a,b, c, d, e,f, \"] | [.[] | gsub(\", \"; \":\")]", "[\n  \"a,b:c:d:e,f\",\n  \":a,b:c:d:e,f:\"\n]\n")]
     public async Task Jq_GsubPreservesReplacementSemantics(string filter, string expected)
     {

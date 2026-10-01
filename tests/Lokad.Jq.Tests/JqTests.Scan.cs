@@ -50,6 +50,7 @@ public sealed partial class JqTests
     [InlineData("\"aB\" | [sub(\"(?<a>.)\"; \"\\(.a|ascii_upcase)\", \"\\(.a|ascii_downcase)\", \"c\")]", "[\n  \"AB\",\n  \"aB\",\n  \"cB\"\n]\n")]
     [InlineData("\"aaa\" | sub(\"a\"; \"X\")", "\"Xaa\"\n")]
     [InlineData("\"aaa\" | sub(\"a\"; \"X\"; \"g\")", "\"XXX\"\n")]
+    [InlineData("\"123abc456def\" | sub(\"[^a-z]*(?<x>[a-z]+)\"; \"Z\\(.x)\"; \"g\")", "\"ZabcZdef\"\n")]
     [InlineData("\"abc\" | sub(\"z\"; \"X\")", "\"abc\"\n")]
     [InlineData("\"ab\" | sub(\"\"; \"X\")", "\"Xab\"\n")]
     [InlineData("\"a1\" | [scan(\"(?<c>[a-z])(?<n>[0-9])\")]", "[\n  [\n    \"a\",\n    \"1\"\n  ]\n]\n")]
