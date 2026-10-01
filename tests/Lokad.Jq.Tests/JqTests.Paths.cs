@@ -27,6 +27,9 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3]", "path(.[:2])", "[\n  {\n    \"start\": null,\n    \"end\": 2\n  }\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[:])", "[\n  {\n    \"start\": null,\n    \"end\": null\n  }\n]\n")]
     [InlineData("[1,[[],{\"a\":2}]]", "[paths]", "[\n  [\n    0\n  ],\n  [\n    1\n  ],\n  [\n    1,\n    0\n  ],\n  [\n    1,\n    1\n  ],\n  [\n    1,\n    1,\n    \"a\"\n  ]\n]\n")]
+    // Empty-string keys and empty containers enumerate like any other leaf path.
+    [InlineData("{\"\":1}", "[paths]", "[\n  [\n    \"\"\n  ]\n]\n")]
+    [InlineData("{\"a\":{},\"b\":[]}", "[paths]", "[\n  [\n    \"a\"\n  ],\n  [\n    \"b\"\n  ]\n]\n")]
     [InlineData("1", "path(.)", "[]\n")]
     // Scalar inputs enumerate no descent paths, while path(.) still reports the root.
     [InlineData("1", "[paths]", "[]\n")]
