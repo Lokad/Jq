@@ -131,6 +131,44 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_ArgsFormsPopulateVariables()
+    {
+        foreach (var (flags, expected) in new (string[], string)[]
+        {
+            (["-n", "--arg", "foo", "1", "--argjson", "bar", "2", "{$foo, $bar} | ., . == $ARGS.named"], "{\n  \"foo\": \"1\",\n  \"bar\": 2\n}\ntrue\n"),
+            (["-n", "--args", "$ARGS.positional", "foo", "bar", "baz"], "[\n  \"foo\",\n  \"bar\",\n  \"baz\"\n]\n"),
+            (["-n", "--jsonargs", "$ARGS.positional", "null", "true", "[]", "{}"], "[\n  null,\n  true,\n  [],\n  {}\n]\n"),
+            (["-n", "$ARGS.positional", "--args", "foo", "1", "--jsonargs", "2", "{}", "--args", "3", "4"], "[\n  \"foo\",\n  \"1\",\n  2,\n  {},\n  \"3\",\n  \"4\"\n]\n"),
+            (["-n", "$ARGS.positional", "--args", "--jsonargs"], "[]\n"),
+            (["--args", "-rn", "--", "$ARGS.positional[0]", "bar"], "bar\n"),
+            (["--args", "-rn", "1", "--", "$ARGS.positional[0]", "bar"], "1\n"),
+        })
+        {
+            var fileSystem = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", flags)));
+            var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+            Assert.Equal(0, exitCode);
+            Assert.Equal(expected, fileSystem.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        }
+
+        foreach (string[] flags in new string[][]
+        {
+            new string[] { "-n", "--jsonargs", "null", "invalid" },
+            new string[] { "-n", "--jsonargs", "null", "--", "invalid" },
+        })
+        {
+            var fileSystem = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", flags)));
+            var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+            Assert.Equal(2, exitCode);
+            Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Contains("jq:", fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
+
+
+    [Fact]
     public async Task Jq_RawSlurpReadsWholeInputAsString()
     {
         var fileSystem = new MockFileSystem();
