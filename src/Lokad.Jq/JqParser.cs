@@ -30,7 +30,7 @@ internal sealed class JqParser(
         ParsedImports = ParseImportList();
         if (Peek().Kind == TokenKind.End)
             throw Error("Top-level program not given (try \".\")", Peek().Span);
-        var filter = ParseQuery();
+        var filter = ParseQuery(topLevel: true);
         Expect(TokenKind.End);
         return filter;
     }
@@ -383,6 +383,14 @@ internal sealed class JqParser(
     // conditions, branches, and call arguments).
     private JqFilter ParseQuery()
     {
+        return ParseQuery(topLevel: false);
+    }
+
+    // A trailing top-level `def` with no following query means the program
+    // has definitions but no main expression, like an empty program;
+    // nested positions keep their generic unexpected-token errors.
+    private JqFilter ParseQuery(bool topLevel)
+    {
         if (!PeekIsDef())
             return ParsePipe();
         JqFunctionDefinition definition = ParseFuncDefHead();
@@ -398,7 +406,7 @@ internal sealed class JqParser(
                 else
                     DeclareFilterParam(parameter.Name);
             }
-            body = ParseQuery();
+            body = ParseQuery(topLevel: false);
         }
         finally
         {
@@ -407,7 +415,9 @@ internal sealed class JqParser(
         Expect(";");
         var complete = AttachBody(definition, RewriteTailCalls(body, definition));
         DeclareFunction(complete);
-        return new DefFilter(complete, ParseQuery());
+        if (topLevel && Peek().Kind == TokenKind.End)
+            throw Error("Top-level program not given (try \".\")", Peek().Span);
+        return new DefFilter(complete, ParseQuery(topLevel));
     }
 
     private static JqFunctionDefinition AttachBody(JqFunctionDefinition definition, JqFilter body)

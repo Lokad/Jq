@@ -45,6 +45,8 @@ public sealed partial class JqTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("# just a comment")]
+    [InlineData("def a: .;")]
+    [InlineData("def a: .; def b: .;")]
 
     public async Task Jq_EmptyProgramIsCompileError(string filter)
     {
@@ -298,6 +300,46 @@ public sealed partial class JqTests
 
         Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("invalid character", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
+    public async Task Jq_DefOnlyFileNeedsMainProgram()
+    {
+        // A program file with definitions but no main expression reports the
+        // missing main program like an empty program does (upstream #2785
+        // pins the exit code; wording stays in our diagnostic shape).
+        var host = new MockFileSystem();
+        host.AddFile("/main.jq", "def a: .;\n");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-f", "/main.jq")));
+
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("Top-level program not given", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
+    public async Task Jq_FileProgramWithMainRuns()
+    {
+        var host = new MockFileSystem();
+        host.AddFile("/main.jq", "def a: .;\n0\n");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-f", "/main.jq")));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("0\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_NestedDefWithoutBodyKeepsTokenError()
+    {
+        // The missing-main diagnostic fires only at top level: a bodiless
+        // definition inside parentheses keeps its unexpected-token error.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "(def a: .;)")));
+
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("unexpected token", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
