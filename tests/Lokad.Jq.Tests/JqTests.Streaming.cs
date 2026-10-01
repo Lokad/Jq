@@ -68,6 +68,17 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_StreamSlurpComposesEvents()
+    {
+        // Slurped streaming input decodes to the reference event arrays.
+        var host = new MockFileSystem();
+        host.SetStandardInput("[1][2]");
+        var (exit, stdout, stderr) = await RunStreamAsync(host, "-c", "-s", "--stream", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("[[[0],1],[[0]],[[0],2],[[0]]]\n", stdout);
+    }
+
+[Fact]
     public async Task Jq_StreamTruncatedIsFatal()
     {
         var host = new MockFileSystem();

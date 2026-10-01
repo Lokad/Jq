@@ -99,6 +99,17 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SlurpAddsAcrossValues()
+    {
+        // Slurp collects sibling values before folding, like the reference.
+        var host = new MockFileSystem();
+        host.SetStandardInput("[1,2][3,4]");
+        var (exit, stdout, stderr) = await RunInputAsync(host, "-c", "-s", "add");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("[1,2,3,4]\n", stdout);
+    }
+
+[Fact]
     public async Task Jq_SlurpTrailingGarbageIsInputFailure()
     {
         var inner = new MockFileSystem();

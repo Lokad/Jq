@@ -76,6 +76,8 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("{}\0{}", ".", "{}\n", "parse error")]
     [InlineData("\"\u0001\"", ".", "", "parse error")]
+    [InlineData("\"a\n", ".", "", "parse error")]
+    [InlineData("foobar", ".", "", "parse error")]
     public async Task Jq_MalformedInputReportsStageFive(string input, string filter, string expectedOut, string diagnostic)
     {
         // Malformed input bytes fail staged even mid-stream, after any
