@@ -803,6 +803,9 @@ internal sealed class PathBuiltinFilter(JqFilter Paths) : JqFilter
 // `del(EXPRS...)`: collects paths from every argument, then deletes once.
 internal sealed class DelBuiltinFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 {
+    // Deletion rebuilds the root, so results travel untracked.
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -853,6 +856,9 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
 // `setpath(PATHS; VALUES)`: cartesian value-outer combinations.
 internal sealed class SetpathBuiltinFilter(JqFilter Paths, JqFilter Values) : JqFilter
 {
+    // Updates rebuild the root, so results travel untracked.
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -866,6 +872,9 @@ internal sealed class SetpathBuiltinFilter(JqFilter Paths, JqFilter Values) : Jq
 // `delpaths(PATHS)`: deletes a value holding an array of paths.
 internal sealed class DelpathsBuiltinFilter(JqFilter Paths) : JqFilter
 {
+    // Deletion rebuilds the root, so results travel untracked.
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);

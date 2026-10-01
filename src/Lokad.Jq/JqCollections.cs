@@ -199,6 +199,9 @@ internal sealed class TransposeFilter : JqFilter
 // prelude that the remaining builtins share with the reference.
 internal sealed class RangeFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
+    // Generated scalars are always fresh, so results travel untracked.
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);

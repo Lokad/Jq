@@ -1829,6 +1829,9 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
 }
 internal sealed class FormatFilter(string format) : JqFilter
 {
+    // Formatted encodings build fresh strings, so results travel untracked.
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         yield return JsonValue.Create(context.Runtime.Format(format, input));

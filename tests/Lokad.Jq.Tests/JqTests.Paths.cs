@@ -42,6 +42,8 @@ public sealed partial class JqTests
     [InlineData("null", "\"ab\" | try path(. * 1) catch .", "\"Invalid path expression with result \\\"ab\\\"\"\n")]
     [InlineData("null", "true | path(. and true)", "[]\n")]
     [InlineData("null", "1 | path(1 // 2)", "[]\n")]
+    [InlineData("null", "0 | try path(range(1)) catch .", "\"Invalid path expression with result 0\"\n")]
+    [InlineData("{\"a\":1}", "try path(del(.zzz)) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
     public async Task Jq_PathEnumeratesSegments(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
