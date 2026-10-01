@@ -36,6 +36,25 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_AlternativePropagatesLeftErrors()
+    {
+        // Defined-or substitutes only for false, null, and empty: left errors
+        // propagate, keeping outputs produced before the error.
+        foreach (var (filter, stdout) in new (string, string)[]
+        {
+            ("error(\"x\") // 1", ""),
+            ("(1, error(\"x\")) // 2", "1\n"),
+        })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+            Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal("jq: error: x\n", host.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
+
+    [Fact]
     public async Task Jq_ChainedComparisonsDoNotParse()
     {
         var host = new MockFileSystem();
