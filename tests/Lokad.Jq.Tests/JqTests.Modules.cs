@@ -48,6 +48,18 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_Modules_DoubleAliasBindsSeparately()
+    {
+        // Importing one data module under two aliases keeps both bindings
+        // usable, including qualified access through the second alias.
+        var fs = new MockFileSystem();
+        fs.AddFile("/lib/data.json", "{\"this\":\"is a test\",\"that\":\"is too\"}");
+        var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "import \"data\" as $e; import \"data\" as $d; [$d[].this,$e[].that,$d::d[].this,$e::e[].that]|join(\";\")");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("\"is a test;is too;is a test;is too\"\n", stdout);
+    }
+
+    [Fact]
     public async Task Jq_Modules_ShadowLaterIncludesWin()
     {
         var fs = new MockFileSystem();
