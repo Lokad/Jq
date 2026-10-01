@@ -47,6 +47,8 @@ public sealed partial class JqTests
     [InlineData("0", "try (1%0) catch .", "\"number (1) and number (0) cannot be divided (remainder) because the divisor is zero\"\n")]
     [InlineData("1", ". |= try . catch .", "1\n")]
     [InlineData("null", "\"foo\" | try ((try . catch \"caught too much\") | error) catch \"caught just right\"", "\"caught just right\"\n")]
+    // Upstream try/catch/general-`?` vector: explicit errors, index mistypes, and empty all behave per the reference; the index wording follows the structured-error policy.
+    [InlineData("[0,1,2,3]", "[.[]|try if . == 0 then error(\"foo\") elif . == 1 then .a elif . == 2 then empty else . end catch .]", "[\n  \"foo\",\n  \"cannot index number with string \\\"a\\\"\",\n  3\n]\n")]
     public async Task Jq_TryCatchHandlesErrors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

@@ -70,6 +70,8 @@ public sealed partial class JqTests
     [InlineData("\"x\" * 300000 | gsub(\"x\"; \"\") | empty")]
     // Upstream day-of-week/yearday loop: cumulative node charges (no refunds) trip the value budget; staged exit 5.
     [InlineData("last(range(365 * 67)|(\"1970-03-01T01:02:03Z\"|strptime(\"%Y-%m-%dT%H:%M:%SZ\")|mktime) + (86400 * .)|strftime(\"%Y-%m-%dT%H:%M:%SZ\")|strptime(\"%Y-%m-%dT%H:%M:%SZ\"))")]
+    // Upstream large-offset slice vector: ranging down over a 65k sparse array rebuilds per update, tripping the value budget; staged exit 5.
+    [InlineData("reduce range(65540;65536;-1) as $i ([]; .[$i] = $i)|.[65536:]")]
     public async Task Jq_BoundsValuesAndDiscardedWork(string filter)
     {
         var host = new MockFileSystem();
