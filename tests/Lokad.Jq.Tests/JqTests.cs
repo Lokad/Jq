@@ -65,6 +65,9 @@ public sealed partial class JqTests
     [InlineData("\"\" * 1000000", "\"\"\n")]
     [InlineData("\"ab\" + \"cd\"", "\"abcd\"\n")]
     [InlineData("[2 * 3, 2 + 3, 2.5 * 4, -3 * 2]", "[\n  6,\n  5,\n  10,\n  -6\n]\n")]
+    [InlineData("[\"a\", \"ab\", \"abc\"] | [.[] * 3]", "[\n  \"aaa\",\n  \"ababab\",\n  \"abcabcabc\"\n]\n")]
+    [InlineData("[-1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 3.7, 10.0] | [.[] * \"abc\"]", "[\n  null,\n  null,\n  \"\",\n  \"\",\n  \"abc\",\n  \"abc\",\n  \"abcabcabc\",\n  \"abcabcabcabcabcabcabcabcabcabc\"\n]\n")]
+    [InlineData("\"abc\" | [. * (nan,-nan)]", "[\n  null,\n  null\n]\n")]
     public async Task Jq_StringLimitsPreserveOrdinaryArithmetic(string filter, string expected)
     {
         var fileSystem = new MockFileSystem();

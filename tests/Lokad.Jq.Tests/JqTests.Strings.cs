@@ -33,6 +33,9 @@ public sealed partial class JqTests
     [InlineData("[\"fo\", \"foo\", \"barfoo\", \"foobar\", \"barfoob\"]", "[.[]|startswith(\"foo\")]", "[\n  false,\n  true,\n  false,\n  true,\n  false\n]\n")]
     [InlineData("[\"foobar\", \"barfoo\"]", "[.[]|endswith(\"foo\")]", "[\n  false,\n  true\n]\n")]
     [InlineData("\" abc \"", "trim, ltrim, rtrim", "\"abc\"\n\"abc \"\n\" abc\"\n")]
+    [InlineData("[\"a\", \"xx\", \"\"]", "[.[]|ltrimstr(\"\")]", "[\n  \"a\",\n  \"xx\",\n  \"\"\n]\n")]
+    [InlineData("[\"a\", \"xx\", \"\"]", "[.[]|rtrimstr(\"\")]", "[\n  \"a\",\n  \"xx\",\n  \"\"\n]\n")]
+    [InlineData("[\"a\", \"xx\", \"\"]", "[.[]|trimstr(\"\")]", "[\n  \"a\",\n  \"xx\",\n  \"\"\n]\n")]
     public async Task Jq_CaseTrimAffix(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -167,6 +170,8 @@ public sealed partial class JqTests
     [InlineData("[-1,1114112,55296,1.9]", "implode|explode", "[\n  65533,\n  65533,\n  65533,\n  1\n]\n")]
     [InlineData("\"abc\"", "explode | implode", "\"abc\"\n")]
     [InlineData("[-1, 0, 1, 2, 3, 1114111, 1114112, 55295, 55296, 57343, 57344, 1.1, 1.9]", "implode|explode", "[\n  65533,\n  0,\n  1,\n  2,\n  3,\n  1114111,\n  65533,\n  55295,\n  65533,\n  65533,\n  57344,\n  1,\n  1\n]\n")]
+    [InlineData("[\"a, bc, def, ghij, jklmn, a,b, c,d, e,f\", \"a,b,c,d, e,f,g,h\"]", "[.[] / \",\"]", "[\n  [\n    \"a\",\n    \" bc\",\n    \" def\",\n    \" ghij\",\n    \" jklmn\",\n    \" a\",\n    \"b\",\n    \" c\",\n    \"d\",\n    \" e\",\n    \"f\"\n  ],\n  [\n    \"a\",\n    \"b\",\n    \"c\",\n    \"d\",\n    \" e\",\n    \"f\",\n    \"g\",\n    \"h\"\n  ]\n]\n")]
+    [InlineData("[\"a, bc, def, ghij, jklmn, a,b, c,d, e,f\", \"a,b,c,d, e,f,g,h\"]", "[.[] / \", \"]", "[\n  [\n    \"a\",\n    \"bc\",\n    \"def\",\n    \"ghij\",\n    \"jklmn\",\n    \"a,b\",\n    \"c,d\",\n    \"e,f\"\n  ],\n  [\n    \"a,b,c,d\",\n    \"e,f,g,h\"\n  ]\n]\n")]
     [InlineData("[\"a\",\"b\",\"c\",\"d\"]", "join(\",\",\"/\")", "\"a,b,c,d\"\n\"a/b/c/d\"\n")]
     public async Task Jq_SplitJoinExplode(string input, string filter, string expected)
     {
