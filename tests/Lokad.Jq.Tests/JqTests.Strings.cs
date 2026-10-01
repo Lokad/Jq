@@ -95,6 +95,11 @@ public sealed partial class JqTests
     [InlineData("42", "\"The input was \\(.), which is one less than \\(.+1)\"", "\"The input was 42, which is one less than 43\"\n")]
     [InlineData("[\"foo\", 1, [\"a\", 1, \"b\", 2, {\"foo\":\"bar\"}]]", "[.[]|tojson|fromjson]", "[\n  \"foo\",\n  1,\n  [\n    \"a\",\n    1,\n    \"b\",\n    2,\n    {\n      \"foo\": \"bar\"\n    }\n  ]\n]\n")]
     [InlineData("[1, \"foo\", [\"foo\"]]", "[.[]|tojson|fromjson]", "[\n  1,\n  \"foo\",\n  [\n    \"foo\"\n  ]\n]\n")]
+    // Self-consistency sweep over valid-JSON shapes: tojson|fromjson and getpath(path(.)) fix every value, including duplicate keys (last-wins), NUL, and signed zero.
+    [InlineData("{\"a\":1,\"a\":2}", "tojson|fromjson", "{\n  \"a\": 2\n}\n")]
+    [InlineData("\"\\u0000\"", "tojson|fromjson", "\"\\u0000\"\n")]
+    [InlineData("-0", "tojson|fromjson", "-0\n")]
+    [InlineData("{\"a\":1,\"a\":2}", "getpath(path(.))", "{\n  \"a\": 2\n}\n")]
     [InlineData("null", "\"123\\u0000456\" | try tonumber catch .", "\"string (\\\"123\\\\u0000456\\\") cannot be parsed as a number\"\n")]
     [InlineData("null", "\"true\\u0000x\", \"false\\u0000\" | try toboolean catch .", "\"string (\\\"true\\\\u0000x\\\") cannot be parsed as a boolean\"\n\"string (\\\"false\\\\u0000\\\") cannot be parsed as a boolean\"\n")]
     [InlineData("[[], {}, [1,2], 55, true, false]", "[.[] | try utf8bytelength catch .]", "[\n  \"array ([]) only strings have UTF-8 byte length\",\n  \"object ({}) only strings have UTF-8 byte length\",\n  \"array ([1,2]) only strings have UTF-8 byte length\",\n  \"number (55) only strings have UTF-8 byte length\",\n  \"boolean (true) only strings have UTF-8 byte length\",\n  \"boolean (false) only strings have UTF-8 byte length\"\n]\n")]
