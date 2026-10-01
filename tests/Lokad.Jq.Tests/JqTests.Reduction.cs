@@ -69,6 +69,16 @@ public sealed partial class JqTests
     [InlineData("reduce (1, 2) as $x (0; select($x > 10) | . + $x)", "null\n")]
     [InlineData("reduce (1, 2, 3) as $x (0; select($x > 1) | . + $x)", "5\n")]
     [InlineData("foreach (1, 2, 3) as $x (0; select($x > 1) | . + $x)", "2\n5\n")]
+    // Multi-init empties yield null per initializer; empty alternatives
+    // inside the update resolve to the surviving outputs, and extraction
+    // observes only post-skip states.
+    [InlineData("reduce (1, 2) as $x ((10, 20); empty)", "null\nnull\n")]
+    [InlineData("foreach (1, 2) as $x ((10, 20); empty)", "")]
+    [InlineData("reduce (1, 2) as $x (0; (empty, . + $x))", "3\n")]
+    [InlineData("foreach (1, 2) as $x (0; (empty, . + $x))", "1\n3\n")]
+    [InlineData("reduce (1, 2) as $x (0; (. + $x, empty))", "3\n")]
+    [InlineData("foreach (1, 2) as $x (0; (. + $x, empty))", "1\n3\n")]
+    [InlineData("foreach (1, 2, 3) as $x (0; select($x > 1) | . + $x; . * 10)", "20\n50\n")]
     public async Task Jq_ReduceFoldsStates(string filter, string expected)
     {
         var host = new MockFileSystem();
