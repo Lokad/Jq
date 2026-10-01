@@ -119,6 +119,21 @@ public sealed partial class JqTests
         """min_by(.)""",
         """tostream""",
         """del(.a)""",
+        """. as {a:$a} ?// {a:$a} ?// {a:$a} | $a""",
+        """. as $a ?// {a:$a} ?// {a:$a} | $a""",
+        """try .a catch .""",
+        """try fromjson catch .""",
+        """path(.a)""",
+        """-.""",
+        """try -. catch .""",
+        """strptime("%Y")""",
+        """strftime("%Y")""",
+        """@urid""",
+        """@base64d""",
+        """foreach .[] as $x (0, 1; . + $x)""",
+        """sort_by(.a)""",
+        """debug""",
+        """stderr""",
     ];
 
     private static readonly string[] FuzzAtoms =
@@ -148,6 +163,10 @@ public sealed partial class JqTests
         """"a\u0304b"""",
         """"ab\u0000cd"""",
         """{"a":1,"a":2}""",
+        """""2015-03-05T23:51:47Z""""",
+        """""abc%""""",
+        """""QUJDa""""",
+        """""1E9999999999""""",
     ];
 
     private static readonly string[] FuzzKeys = ["a", "b", "c", "x y"];
@@ -201,6 +220,7 @@ public sealed partial class JqTests
         """select(.)""",
         """isempty(..)""",
         """path(..)""",
+        """unique""",
     ];
 
     [Fact]
