@@ -7,6 +7,9 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("{\"b\": 1, \"a\": 2}", "keys", "[\n  \"a\",\n  \"b\"\n]\n")]
     [InlineData("{\"b\": 1, \"a\": 2}", "keys_unsorted", "[\n  \"b\",\n  \"a\"\n]\n")]
+    // Duplicate keys coalesce last-wins at parse like jv_object_set, so counts and orders see one entry.
+    [InlineData("{\"b\":1,\"a\":2,\"b\":3}", "keys_unsorted", "[\n  \"b\",\n  \"a\"\n]\n")]
+    [InlineData("{\"b\":1,\"a\":2,\"b\":3}", "length", "2\n")]
     [InlineData("[42, 3, 35]", "keys", "[\n  0,\n  1,\n  2\n]\n")]
     [InlineData("[{\"foo\": 42}, {}]", "map(has(\"foo\"))", "[\n  true,\n  false\n]\n")]
     [InlineData("[[0, 1], [\"a\", \"b\", \"c\"]]", "map(has(2))", "[\n  false,\n  true\n]\n")]
