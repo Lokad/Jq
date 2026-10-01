@@ -158,6 +158,19 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_EmptyRepeatExhaustsQuota()
+    {
+        // repeat(empty) recurses forever without emitting, like an
+        // unsatisfiable range: the budget stages the hang instead.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "isempty(repeat(empty))")));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
     public async Task Jq_ReduceHonorsCancellation()
     {
         var host = new MockFileSystem();
