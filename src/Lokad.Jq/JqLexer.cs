@@ -54,9 +54,27 @@ internal static class Lexer
                 throw new JqCompileException("filter exceeds the 4096-token limit", JqSourceSpan.FromOffset(source, i), programSource);
             var c = source[i];
             if (char.IsWhiteSpace(c)) { i++; continue; }
-            // Comments run to the end of the line (or input), matching the
-            // reference lexer; the newline itself stays whitespace.
-            if (c == '#') { while (i < source.Length && source[i] != '\n') i++; continue; }
+            // Comments mirror the reference IN_COMMENT state: a backslash
+            // escapes the next character (a line break included, across CRLF),
+            // so only a bare line break ends the comment while odd trailing
+            // backslash runs continue it; the newline itself stays whitespace.
+            if (c == '#')
+            {
+                while (i < source.Length)
+                {
+                    if (source[i] == '\\' && i + 1 < source.Length
+                        && (source[i + 1] == '\\' || source[i + 1] == '\n'
+                            || (source[i + 1] == '\r' && i + 2 < source.Length && source[i + 2] == '\n')))
+                    {
+                        i += source[i + 1] == '\r' ? 3 : 2;
+                        continue;
+                    }
+                    if (source[i] == '\n')
+                        break;
+                    i++;
+                }
+                continue;
+            }
             if (char.IsLetter(c) || c == '_')
             {
                 var start = i++;

@@ -227,6 +227,12 @@ public sealed partial class JqTests
         var (exit3, _, err3) = await RunModulesAsync(fs, "-n", "-L", "/lib", "import \"a\\b\" as x; 0");
         Assert.True(exit3 != 0, "expected backslash failure");
         Assert.Contains("not", err3);
+        var (exit4, _, err4) = await RunModulesAsync(fs, "-n", "import \"a\u0000b\" as x; 0");
+        Assert.True(exit4 != 0, "expected NUL import failure");
+        Assert.Contains("NUL byte", err4);
+        var (exit5, _, err5) = await RunModulesAsync(fs, "-n", "\"a\u0000b\" | modulemeta");
+        Assert.True(exit5 != 0, "expected NUL modulemeta failure");
+        Assert.Contains("NUL byte", err5);
     }
 
     [Fact]

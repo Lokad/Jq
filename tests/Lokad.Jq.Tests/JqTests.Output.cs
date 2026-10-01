@@ -54,12 +54,25 @@ public sealed partial class JqTests
     }
 
     [Fact]
+
     public async Task Jq_JoinImpliesRawOutput()
     {
         var host = new MockFileSystem();
         var (exit, stdout, stderr) = await RunOutputAsync(host, "-n", "-j", "\"a\"");
         Assert.True(exit == 0, stderr);
         Assert.Equal("a", stdout);
+    }
+
+    [Fact]
+    public async Task Jq_JoinOutputDuplicatesOnStderr()
+    {
+        // With join-output, human-readable rendering goes to stdout while
+        // diagnostics still mirror the same bytes on stderr.
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunOutputAsync(host, "-n", "-c", "-j", "\"hello\\nworld\", null, [false, 0], {\"foo\":[\"bar\"]}, \"\\n\" | stderr");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("hello\nworldnull[false,0]{\"foo\":[\"bar\"]}\n", stdout);
+        Assert.Equal("hello\nworldnull[false,0]{\"foo\":[\"bar\"]}\n", stderr);
     }
 
     [Fact]
@@ -119,6 +132,7 @@ public sealed partial class JqTests
         Assert.Contains("jq:", stderr);
     }
 
+
     [Fact]
     public async Task Jq_HelpPrintsWithoutReads()
     {
@@ -135,6 +149,21 @@ public sealed partial class JqTests
         Assert.Equal("", stderr);
         Assert.Equal(0, host.ReadBytesCallCount);
         Assert.Equal(0, host.OpenFileCount);
+    }
+
+    [Fact]
+    public async Task Jq_HelpWinsOverVersionFlags()
+    {
+        // Like the reference, combined help/version spellings in either
+        // order print the help text.
+        foreach (var flags in new[] { new[] { "-hV" }, new[] { "-Vh" } })
+        {
+            var host = new MockFileSystem();
+            var (exit, stdout, stderr) = await RunOutputAsync(host, flags);
+            Assert.Equal(0, exit);
+            Assert.Contains("Usage: jq [options] filter [files...]", stdout);
+            Assert.Equal("", stderr);
+        }
     }
 
     [Fact]

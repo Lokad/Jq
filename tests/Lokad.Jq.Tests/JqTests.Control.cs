@@ -180,6 +180,7 @@ public sealed partial class JqTests
     [InlineData("null", "1, halt_error(3)", 3, "1\n", "")]
     [InlineData("\"xy\"", "halt_error(1)", 1, "", "xy")]
     [InlineData("{\"a\": \"xyz\"}", "halt_error(1)", 1, "", "{\"a\":\"xyz\"}\n")]
+    [InlineData("null", "\"x\\u0000y\\u0000z\" | halt_error(1)", 1, "", "x\0y\0z")]
     public async Task Jq_HaltTerminatesImmediately(string input, string filter, int exitCode, string expectedOut, string expectedErr)
     {
         var host = new MockFileSystem();

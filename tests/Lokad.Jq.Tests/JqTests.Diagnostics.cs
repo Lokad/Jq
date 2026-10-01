@@ -44,6 +44,7 @@ public sealed partial class JqTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("# just a comment")]
+
     public async Task Jq_EmptyProgramIsCompileError(string filter)
     {
         var host = new MockFileSystem();
@@ -52,6 +53,41 @@ public sealed partial class JqTests
         Assert.Contains("Top-level program", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
+
+    [Theory]
+    [InlineData("1\r\n+\r\n2", "3\n")]
+    [InlineData("1 # foo\r + 2", "1\n")]
+    [InlineData("[\n  1,\n  # foo \\\n  2,\n  # bar \\\\\n  3,\n  4, # baz \\\\\\\n  5, \\\n  6,\n  7\n  # comment \\\n    comment \\\n    comment\n]", "[1,3,4,7]\n")]
+    [InlineData("[\r\n1,# comment\r\n2,# comment\\\r\ncomment\r\n3\r\n]", "[1,2,3]\n")]
+
+    public async Task Jq_CommentsAndBreaksLexCleanly(string filter, string expected)
+    {
+        // CRLF line breaks, carriage-return comments, and backslash
+        // continuations (odd trailing runs, across LF and CRLF) lex like
+        // the reference IN_COMMENT state.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+    [Theory]
+    [InlineData("{}\0{}", ".", "{}\n", "parse error")]
+    [InlineData("\"\u0001\"", ".", "", "parse error")]
+    public async Task Jq_MalformedInputReportsStageFive(string input, string filter, string expectedOut, string diagnostic)
+    {
+        // Malformed input bytes fail staged even mid-stream, after any
+        // values already produced.
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expectedOut, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
 
     [Theory]
     [InlineData("[")]
@@ -243,6 +279,18 @@ public sealed partial class JqTests
         Assert.Equal("jq: undefined variable $undefined at line 1 column 1 (file \"/filter.jq\")\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(0, host.OpenFileCount);
+    }
+
+    [Fact]
+    public async Task Jq_NulByteInProgramIsCompileError()
+    {
+        var host = new MockFileSystem();
+        host.AddFile("/filter.jq", ".\x00invalid");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-f", "/filter.jq")));
+
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("invalid character", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Theory]

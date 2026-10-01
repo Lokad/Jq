@@ -357,6 +357,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
+
     public async Task Jq_UnbufferedIsAcceptedAsNoOp()
     {
         var fileSystem = new MockFileSystem();
@@ -367,6 +368,22 @@ public sealed partial class JqTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal("1\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
+    public async Task Jq_ControlCharactersRenderEscaped()
+    {
+        // Like the reference, DEL renders as an escape (with the encoder's
+        // uppercase hex case) rather than raw.
+        var fileSystem = new MockFileSystem();
+        fileSystem.SetStandardInput("\" \u007f\"");
+
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".")));
+        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("\" \\u007F\"\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]

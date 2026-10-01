@@ -17,6 +17,7 @@ public sealed partial class JqTests
         foreach (var (flags, stdin, expected) in new (string[], string, string)[]
         {
             (["-n", "-n", "."], "", "null\n"),
+            (["-nn", "42"], "", "42\n"),
             (["-R", "-R", "."], "0", "\"0\"\n"),
             (["-s", "-s", "-n", "."], "", "null\n"),
             (["-c", "-c", "."], "0", "0\n"),
@@ -125,6 +126,7 @@ public sealed partial class JqTests
     [InlineData("03", "   ")]
     [InlineData("-0", "")]
     [InlineData("00", "")]
+
     public async Task Jq_IndentSignAndLeadingZerosSelectWidth(string value, string padding)
     {
         // The overflow-proof range check must accept signs and leading zeros
@@ -133,6 +135,22 @@ public sealed partial class JqTests
         var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--indent", value, "[1]");
         Assert.True(exit == 0, stderr);
         Assert.Equal("[" + "\n" + padding + "1" + "\n" + "]" + "\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Theory]
+    [InlineData("0", "[1,2]", "[\n1,\n2\n]\n")]
+    [InlineData("1", "[1,2]", "[\n 1,\n 2\n]\n")]
+    [InlineData("5", "[1,2]", "[\n     1,\n     2\n]\n")]
+    [InlineData("6", "[{a:1}]", "[\n      {\n            \"a\": 1\n      }\n]\n")]
+    public async Task Jq_IndentWidthsRenderExactly(string width, string filter, string expected)
+    {
+        // Byte-exact reference indent widths, including single-space and
+        // nested forms.
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--indent", width, filter);
+        Assert.True(exit == 0, stderr);
+        Assert.Equal(expected, stdout);
         Assert.Empty(stderr);
     }
 
