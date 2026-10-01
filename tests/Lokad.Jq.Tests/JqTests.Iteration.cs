@@ -178,6 +178,7 @@ public sealed partial class JqTests
     [InlineData("1", "[recurse(empty)]", "[\n  1\n]\n")]
     [InlineData("[1,[2]]", "[recurse(empty)]", "[\n  [\n    1,\n    [\n      2\n    ]\n  ]\n]\n")]
     [InlineData("{\"a\":1}", "[walk(empty)]", "[]\n")]
+    [InlineData("1", "[walk(empty)]", "[]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -187,6 +188,30 @@ public sealed partial class JqTests
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_WalkPropagatesSignals()
+    {
+        // Errors in any branch abort the whole rebuild like the reference
+        // map collection (no partial collect escapes); break abandons the
+        // rebuild and the outer collect yields nothing.
+        foreach (var (stdin, filter, exit, stdout, stderr) in new (string, string, int, string, string)[]
+        {
+            ("[1,2]", "[walk(if . == 2 then error(\"x\") else . end)]", 5, "", "jq: error: x\n"),
+            ("[1,2]", "try ([1,2] | walk(if . == 2 then error(\"x\") else . end)) catch .", 0, "\"x\"\n", ""),
+            ("[1,2]", "[label $o | [1,2] | walk(if . == 2 then break $o else . end)]", 0, "[]\n", ""),
+            ("{\"a\":1,\"b\":2}", "[walk(if . == 2 then error(\"x\") else . end)]", 5, "", "jq: error: x\n"),
+            ("[[1],[2]]", "walk(if . == 2 then error(\"x\") else . end)", 5, "", "jq: error: x\n"),
+        })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput(stdin);
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+            Assert.Equal(exit, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
+        }
     }
 
     [Fact]
