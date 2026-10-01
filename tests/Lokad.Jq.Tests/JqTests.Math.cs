@@ -70,6 +70,9 @@ public sealed partial class JqTests
     [InlineData("[-1.1,1.1,1.9] | [.[]|floor]", "[\n  -2,\n  1,\n  1\n]\n")]
     [InlineData("[4,9] | [.[]|sqrt]", "[\n  2,\n  3\n]\n")]
     [InlineData("[1,0,-1] | [.[] | (1 / .)?]", "[\n  1,\n  -1\n]\n")]
+    [InlineData("13911860366432393 | . - 10", "13911860366432382\n")]
+    [InlineData("[13911860366432393] | .[0] - 10", "13911860366432382\n")]
+    [InlineData("{\"x\":13911860366432393} | .x - 10", "13911860366432382\n")]
     public async Task Jq_MathExact(string filter, string expected)
     {
         var host = new MockFileSystem();

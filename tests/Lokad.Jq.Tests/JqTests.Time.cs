@@ -25,6 +25,8 @@ public sealed partial class JqTests
     [InlineData("-n", "env", "{\n  \"A\": \"1\"\n}\n", "A=1")]
     [InlineData("-n", "\"x\" | env | .A", "\"1\"\n", "A=1")]
     [InlineData("-n", "[(env | .A = \"9\"), env]", "[\n  {\n    \"A\": \"9\"\n  },\n  {\n    \"A\": \"1\"\n  }\n]\n", "A=1")]
+    [InlineData("-n", "$ENV.PAGER", "\"less\"\n", "PAGER=less")]
+    [InlineData("-n", "env.PAGER", "\"less\"\n", "PAGER=less")]
     public async Task Jq_EnvironmentSnapshot(string flag, string filter, string expected, string variables)
     {
         var environment = new List<JqEnvironmentVariable>();

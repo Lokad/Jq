@@ -49,6 +49,7 @@ public sealed partial class JqTests
     [InlineData("\"2015-03-05T23:51:47 EST\" | strptime(\"%Y-%m-%dT%H:%M:%S %Z\")", "[\n  2015,\n  2,\n  5,\n  23,\n  51,\n  47,\n  4,\n  63\n]\n")]
     [InlineData("\"2015-03-05T23:51:47+02:00\" | strptime(\"%Y-%m-%dT%H:%M:%S%z\")", "[\n  2015,\n  2,\n  5,\n  23,\n  51,\n  47,\n  4,\n  63\n]\n")]
     [InlineData("\"Thu Mar  5 23:51:47 2015\" | strptime(\"%c\")", "[\n  2015,\n  2,\n  5,\n  23,\n  51,\n  47,\n  4,\n  63\n]\n")]
+    [InlineData("\"2015-03-05T23:51:47Z\" | [strptime(\"%Y-%m-%dT%H:%M:%SZ\")|(.,mktime)]", "[\n  [\n    2015,\n    2,\n    5,\n    23,\n    51,\n    47,\n    4,\n    63\n  ],\n  1425599507\n]\n")]
     [InlineData("[2015,2,5,23,51,47,4,63] | strftime(\"%Y-%m-%dT%H:%M:%SZ\")", "\"2015-03-05T23:51:47Z\"\n")]
     [InlineData("1425599507 | strftime(\"%Y-%m-%dT%H:%M:%SZ\")", "\"2015-03-05T23:51:47Z\"\n")]
     [InlineData("1425599507 | strftime(\"%A, %B %e, %Y\")", "\"Thursday, March  5, 2015\"\n")]
