@@ -49,6 +49,19 @@ public sealed partial class JqTests
     [InlineData("{\"a\":[{\"b\":0}]}", "def f: map(.); try path(.a | f) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "def s: select(.b == 0); path(.a[] | s)", "[\n  \"a\",\n  0\n]\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "def m: map(select(.b == 0)); try path(.a | m) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
+    [InlineData("{\"a\":1}", "try path(map_values(.)) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
+    [InlineData("{\"a\":1}", "try path(with_entries(.)) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
+    [InlineData("[1]", "try path(flatten) catch .", "\"Invalid path expression with result [1]\"\n")]
+    [InlineData("[[1]]", "try path(transpose) catch .", "\"Invalid path expression with result [[1]]\"\n")]
+    [InlineData("[1]", "try path(sort) catch .", "\"Invalid path expression with result [1]\"\n")]
+    [InlineData("[{\"a\":1}]", "try path(sort_by(.a)) catch .", "\"Invalid path expression with result [{\\\"a\\\":1}]\"\n")]
+    [InlineData("[1]", "try path(unique) catch .", "\"Invalid path expression with result [1]\"\n")]
+    [InlineData("[{\"a\":1}]", "try path(unique_by(.a)) catch .", "\"Invalid path expression with result [{\\\"a\\\":1}]\"\n")]
+    [InlineData("[[1]]", "try path(reverse) catch .", "\"Invalid path expression with result [[1]]\"\n")]
+    [InlineData("[0]", "try path(keys) catch .", "\"Invalid path expression with result [0]\"\n")]
+    [InlineData("{\"a\":1}", "try path(delpaths([])) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
+    [InlineData("[1]", "try path(setpath([0]; 1)) catch .", "\"Invalid path expression with result [1]\"\n")]
+    [InlineData("\"\"", "try path(@base64) catch .", "\"Invalid path expression with result \\\"\\\"\"\n")]
     public async Task Jq_PathEnumeratesSegments(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
