@@ -582,9 +582,42 @@ internal sealed class JqRuntime(JqBudget budget)
     {
         if (TypeName(node) == "number")
             return Clone(node) ?? JsonValue.Create(0);
-        if (TryGetString(node, out string? text) && text is not null && !text.Contains('\0') && TryParseStrictNumber(text, out JsonNode? number) && number is not null)
-            return number;
+        if (TryGetString(node, out string? text) && text is not null && !text.Contains('\0'))
+        {
+            if (TryParseStrictNumber(text, out JsonNode? number) && number is not null)
+                return number;
+            if (TryParseNonFiniteNumber(text, out JsonNode? nonFinite) && nonFinite is not null)
+                return nonFinite;
+        }
         throw new JqException($"{TypeName(node)} ({Serialize(node, false, null, false)}) cannot be parsed as a number");
+    }
+
+    // Non-finite spellings mirror the reference strtod fallback (builtin.c
+    // f_tonumber through jvp_strtod INFNAN_CHECK): an optional sign with a
+    // case-insensitive nan, inf, or infinity and no surrounding whitespace.
+    // Hex floats and NaN payloads stay rejected.
+    private static bool TryParseNonFiniteNumber(string text, out JsonNode? number)
+    {
+        number = null;
+        ReadOnlySpan<char> rest = text;
+        bool negative = false;
+        if (rest.Length > 0 && (rest[0] == '+' || rest[0] == '-'))
+        {
+            negative = rest[0] == '-';
+            rest = rest.Slice(1);
+        }
+        if (rest.Equals("nan", StringComparison.OrdinalIgnoreCase))
+        {
+            number = JsonValue.Create(double.NaN);
+            return true;
+        }
+        if (rest.Equals("inf", StringComparison.OrdinalIgnoreCase) ||
+            rest.Equals("infinity", StringComparison.OrdinalIgnoreCase))
+        {
+            number = JsonValue.Create(negative ? double.NegativeInfinity : double.PositiveInfinity);
+            return true;
+        }
+        return false;
     }
 
     // Strict JSON-number grammar with an optional leading sign and no

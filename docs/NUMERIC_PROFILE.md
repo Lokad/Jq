@@ -89,3 +89,6 @@ dependency-free (no native decimal library); the profile is pinned by
   an optional sign) parse like the reference strtod fallback wherever a
   value is due, at top level and nested; anything else (for example `NaN1`)
   still fails.
+- `tonumber` accepts the same non-finite spellings (an optional sign with
+  case-insensitive `nan`, `inf`, or `infinity`, no surrounding whitespace);
+  values render through the double-domain rules above.

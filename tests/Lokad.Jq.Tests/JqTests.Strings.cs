@@ -106,6 +106,14 @@ public sealed partial class JqTests
     [InlineData("\"hello\"", "utf8bytelength", "5\n")]
     [InlineData("\".89\"", "tonumber", "0.89\n")]
     [InlineData("\"-.5\"", "tonumber", "-0.5\n")]
+    // Non-finite spellings follow the reference strtod fallback: an optional
+    // sign with case-insensitive nan, inf, or infinity; values render through
+    // the double-domain profile (NaN as null, infinities clamped).
+    [InlineData("\"nan\"", "tonumber | isnan", "true\n")]
+    [InlineData("\"nan\"", "tonumber", "null\n")]
+    [InlineData("\"Infinity\"", "tonumber", "1.7976931348623157E+308\n")]
+    [InlineData("\"-inf\"", "tonumber", "-1.7976931348623157E+308\n")]
+    [InlineData("\"+INF\"", "tonumber | isinfinite", "true\n")]
     [InlineData("[\"1\", \"2a\", \"3\", \" 4\", \"5 \", \"6.7\", \".89\", \"-876\", \"+5.43\", 21]", ".[] |= try tonumber", "[\n  1,\n  3,\n  6.7,\n  0.89,\n  -876,\n  5.43,\n  21\n]\n")]
     [InlineData("[null, 0, \"tru\", \"truee\", \"fals\", \"falsee\", [], {}]", "[.[] | try toboolean catch .]", "[\n  \"null (null) cannot be parsed as a boolean\",\n  \"number (0) cannot be parsed as a boolean\",\n  \"string (\\\"tru\\\") cannot be parsed as a boolean\",\n  \"string (\\\"truee\\\") cannot be parsed as a boolean\",\n  \"string (\\\"fals\\\") cannot be parsed as a boolean\",\n  \"string (\\\"falsee\\\") cannot be parsed as a boolean\",\n  \"array ([]) cannot be parsed as a boolean\",\n  \"object ({}) cannot be parsed as a boolean\"\n]\n")]
     [InlineData("\"é🚀\"", "utf8bytelength", "6\n")]
@@ -125,7 +133,7 @@ public sealed partial class JqTests
     [InlineData("null", "tonumber", "null (null) cannot be parsed as a number")]
     [InlineData("\"\"", "tonumber", "string (\"\") cannot be parsed as a number")]
     [InlineData("\"0x10\"", "tonumber", "string (\"0x10\") cannot be parsed as a number")]
-    [InlineData("\"Infinity\"", "tonumber", "string (\"Infinity\") cannot be parsed as a number")]
+    [InlineData("\"nanx\"", "tonumber", "string (\"nanx\") cannot be parsed as a number")]
     [InlineData("5", "utf8bytelength", "only strings have UTF-8 byte length")]
     [InlineData("null", "toboolean", "null (null) cannot be parsed as a boolean")]
     [InlineData("0", "toboolean", "number (0) cannot be parsed as a boolean")]
