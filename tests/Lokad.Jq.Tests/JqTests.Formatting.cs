@@ -187,6 +187,7 @@ public sealed partial class JqTests
     [InlineData("\"abc%g\"", "@urid", "string (\"abc%g\") is not a valid uri encoding")]
     [InlineData("\"%F0%93%81\"", "@urid", "string (\"%F0%93%81\") is not a valid uri encoding")]
     [InlineData("\"%F0%C0%81%8E\"", "@urid", "string (\"%F0%C0%81%8E\") is not a valid uri encoding")]
+    [InlineData("\"%FX%9F%98%8E\"", "@urid", "string (\"%FX%9F%98%8E\") is not a valid uri encoding")]
     [InlineData("[\"ok\",[1]]", "@sh", "array ([1]) can not be escaped for shell")]
     [InlineData("5", "@csv", "number (5) cannot be csv-formatted, only array")]
     [InlineData("[\"ok\",{}]", "@csv", "object ({}) is not valid in a csv row")]

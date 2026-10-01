@@ -101,6 +101,8 @@ public sealed partial class JqTests
     [InlineData("0", "nan | tostring", "\"null\"\n")]
     [InlineData("0", "infinite | tostring", "\"1.7976931348623157E+308\"\n")]
     [InlineData("[1, \"a\", true, null]", "map(tostring)", "[\n  \"1\",\n  \"a\",\n  \"true\",\n  \"null\"\n]\n")]
+    [InlineData("[1, \"foo\", [\"foo\"]]", "[.[]|tostring]", "[\n  \"1\",\n  \"foo\",\n  \"[\\\"foo\\\"]\"\n]\n")]
+    [InlineData("[1, \"foo\", [\"foo\"]]", "[.[]|tojson]", "[\n  \"1\",\n  \"\\\"foo\\\"\",\n  \"[\\\"foo\\\"]\"\n]\n")]
     [InlineData("\"hello\"", "utf8bytelength", "5\n")]
     [InlineData("\".89\"", "tonumber", "0.89\n")]
     [InlineData("\"-.5\"", "tonumber", "-0.5\n")]

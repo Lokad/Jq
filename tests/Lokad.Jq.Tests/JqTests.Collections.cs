@@ -29,6 +29,9 @@ public sealed partial class JqTests
     [InlineData("[{}, {\"abcd\":1,\"abc\":2,\"abcde\":3}, {\"x\":1, \"z\": 3, \"y\":2}]", "map(keys)", "[\n  [],\n  [\n    \"abc\",\n    \"abcd\",\n    \"abcde\"\n  ],\n  [\n    \"x\",\n    \"y\",\n    \"z\"\n  ]\n]\n")]
     [InlineData("[[], [1,2,3], [\"a\",\"b\",\"c\"], [[3],[4,5],[6]], [{\"a\":1}, {\"b\":2}, {\"a\":3}]]", "map(add)", "[\n  null,\n  6,\n  \"abc\",\n  [\n    3,\n    4,\n    5,\n    6\n  ],\n  {\n    \"a\": 3,\n    \"b\": 2\n  }\n]\n")]
     [InlineData("[0,1,2]", "map_values(.+1)", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[1, 2, 3]", "[ .[] | . * 2]", "[\n  2,\n  4,\n  6\n]\n")]
+    [InlineData("[1,2,3]", "map(.+1)", "[\n  2,\n  3,\n  4\n]\n")]
+    [InlineData("[1,2]", "map(., .)", "[\n  1,\n  1,\n  2,\n  2\n]\n")]
     [InlineData("[\"a\",\"a\",\"b\",\"a\",\"d\",\"b\",\"d\",\"a\",\"d\"]", "add({(.[]):1}) | keys", "[\n  \"a\",\n  \"b\",\n  \"d\"\n]\n")]
     public async Task Jq_StructuralBuiltins(string input, string filter, string expected)
     {

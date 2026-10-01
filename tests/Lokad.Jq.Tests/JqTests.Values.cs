@@ -22,6 +22,8 @@ public sealed partial class JqTests
     [InlineData("\"hello\" | (null,1,null)", "null\n1\nnull\n")]
     [InlineData("[empty]", "[]\n")]
     [InlineData("[null]", "[\n  null\n]\n")]
+    [InlineData("1, empty, 2", "1\n2\n")]
+    [InlineData("[1,2,empty,3]", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("null == null", "true\n")]
     public async Task Jq_NullVsEmptyStream(string filter, string expected)
     {
@@ -70,6 +72,7 @@ public sealed partial class JqTests
     [InlineData("[10 >= 0, 10 >= 10, 10 >= 20, 10 <= 0, 10 <= 10, 10 <= 20]", "[\n  true,\n  true,\n  false,\n  false,\n  true,\n  true\n]\n")]
     [InlineData("[1] < [1,2]", "true\n")]
     [InlineData("[1,2] < [1,2]", "false\n")]
+    [InlineData("2 | . < 5", "true\n")]
     [InlineData("{\"a\":1} < {\"b\":1}", "true\n")]
     [InlineData("{\"a\":2} > {\"a\":1}", "true\n")]
     [InlineData("{\"a\":1} < {\"a\":1,\"b\":2}", "true\n")]

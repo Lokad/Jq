@@ -28,6 +28,7 @@ public sealed partial class JqTests
     [InlineData("{\"foo\": {\"bar\": 20}} | .\"foo\".\"bar\"", "20\n")]
     [InlineData(".e5", "null\n")]
     [InlineData("{\"foo\":{\"bar\":4},\"baz\":\"bar\"} | .foo[.baz]", "4\n")]
+    [InlineData("{\"foo\": 42} | .[\"foo\"]?", "42\n")]
     [InlineData("[\"a\"] | [.[]]", "[\n  \"a\"\n]\n")]
     [InlineData("[1,2,3] | [([5,5][]),.,.[]]", "[\n  5,\n  5,\n  [\n    1,\n    2,\n    3\n  ],\n  1,\n  2,\n  3\n]\n")]
     public async Task Jq_IndexStreamsEveryKey(string filter, string expected)
