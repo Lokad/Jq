@@ -1201,7 +1201,9 @@ internal sealed class JqRuntime(JqBudget budget)
     {
         if (TryGetString(input, out var text) && text is not null && TryGetString(needle, out var fragment))
         {
-            // Scalar offsets, matching rune-wise substring search.
+            // Scalar offsets, matching rune-wise substring search. Like the
+            // reference byte search, an empty needle matches nowhere and the
+            // scan resumes one scalar past each hit so overlaps are reported.
             var runes = new List<System.Text.Rune>();
             foreach (var rune in text.EnumerateRunes())
                 runes.Add(rune);
@@ -1209,6 +1211,8 @@ internal sealed class JqRuntime(JqBudget budget)
             if (fragment is not null)
                 foreach (var rune in fragment.EnumerateRunes())
                     wanted.Add(rune);
+            if (wanted.Count == 0)
+                yield break;
             for (int start = 0; start + wanted.Count <= runes.Count; start++)
             {
                 bool match = true;
@@ -1222,7 +1226,6 @@ internal sealed class JqRuntime(JqBudget budget)
                     continue;
                 budget.ChargeNode();
                 yield return start;
-                start += Math.Max(0, wanted.Count - 1);
             }
             yield break;
         }

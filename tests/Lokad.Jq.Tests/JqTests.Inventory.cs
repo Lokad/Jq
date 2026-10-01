@@ -73,7 +73,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("\"abcabc\" | _strindices(\"bc\")", "[\n  1,\n  4\n]\n")]
-    [InlineData("\"abc\" | _strindices(\"\")", "[\n  0,\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("\"abc\" | _strindices(\"\")", "[]\n")]
     public async Task Jq_InventoryStrindices(string filter, string expected)
     {
         var host = new MockFileSystem();

@@ -88,6 +88,7 @@ public sealed partial class JqTests
     [InlineData("[0, [1], [[2]], [[[3]]]]", "flatten(3,2,1)", "[\n  0,\n  1,\n  2,\n  3\n]\n[\n  0,\n  1,\n  2,\n  [\n    3\n  ]\n]\n[\n  0,\n  1,\n  [\n    2\n  ],\n  [\n    [\n      3\n    ]\n  ]\n]\n")]
     [InlineData("\"a,b|c,d,e||f,g,h,|,|,i,j\"", "[(index(\",\",\"|\"), rindex(\",\",\"|\")), indices(\",\",\"|\")]", "[\n  1,\n  3,\n  22,\n  19,\n  [\n    1,\n    5,\n    7,\n    12,\n    14,\n    16,\n    18,\n    20,\n    22\n  ],\n  [\n    3,\n    9,\n    10,\n    17,\n    19\n  ]\n]\n")]
     [InlineData("[\"a\",\"b\",\"c\",\"d\"]", "join(\",\",\"/\")", "\"a,b,c,d\"\n\"a/b/c/d\"\n")]
+    [InlineData("\"xababababax\"", "[ index(\"aba\"), rindex(\"aba\"), indices(\"aba\") ]", "[\n  1,\n  7,\n  [\n    1,\n    3,\n    5,\n    7\n  ]\n]\n")]
     [InlineData("[[],[\"\"],[\"\",\"\"],[\"\",\"\",\"\"]]", "[.[]|join(\"a\")]", "[\n  \"\",\n  \"\",\n  \"a\",\n  \"aa\"\n]\n")]
     [InlineData("[{\"x\": 0}, {\"x\": 1}, {\"x\": 2}]", "bsearch({\"x\": 1})", "1\n")]
     [InlineData("0", "range(3; 0; -1)", "3\n2\n1\n")]
@@ -224,6 +225,8 @@ public sealed partial class JqTests
     [InlineData("[]", "[skip(3; .[])]", "[]\n")]
     [InlineData("\"a,b, cd\"", "rindex(\",\")", "3\n")]
     [InlineData("\"abc\"", "rindex(\"z\")", "null\n")]
+    [InlineData("\"\\u6B63xyz\"", ".[:rindex(\"x\")]", "\"正\"\n")]
+    [InlineData("\"abc\"", "rindex(\"\")", "null\n")]
     public async Task Jq_SkipRindex(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
