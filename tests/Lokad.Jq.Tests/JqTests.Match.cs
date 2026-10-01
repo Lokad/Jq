@@ -40,6 +40,10 @@ public sealed partial class JqTests
     [InlineData("\"a\\nb\" | match(\"a.b\"; \"m\")", "")]
     [InlineData("\"a\\nb\" | match(\"^a.b$\"; \"p\") | .offset", "0\n")]
     [InlineData("\"AB\" | match(\"ab\"; \"i\") | .string", "\"AB\"\n")]
+    [InlineData("\"\\u0101\\u00e1\\u00e0\\u00e4\" | [match(\"a\"; \"gi\")]", "[]\n")]
+    [InlineData("\"a\\u0304 two-codepoint grapheme\" | [match(\".+?\\\\b\")]", "[\n  {\n    \"offset\": 0,\n    \"length\": 2,\n    \"string\": \"ā\",\n    \"captures\": []\n  }\n]\n")]
+    [InlineData("\"a\",\"b\",\"c\" | match(\"(?<x>a?)?b?\")", "{\n  \"offset\": 0,\n  \"length\": 1,\n  \"string\": \"a\",\n  \"captures\": [\n    {\n      \"offset\": 0,\n      \"length\": 1,\n      \"string\": \"a\",\n      \"name\": \"x\"\n    }\n  ]\n}\n{\n  \"offset\": 0,\n  \"length\": 1,\n  \"string\": \"b\",\n  \"captures\": [\n    {\n      \"offset\": 0,\n      \"length\": 0,\n      \"string\": \"\",\n      \"name\": \"x\"\n    }\n  ]\n}\n{\n  \"offset\": 0,\n  \"length\": 0,\n  \"string\": \"\",\n  \"captures\": [\n    {\n      \"offset\": 0,\n      \"length\": 0,\n      \"string\": \"\",\n      \"name\": \"x\"\n    }\n  ]\n}\n")]
+    [InlineData("\"foo bar foo\" | match(\"foo\")", "{\n  \"offset\": 0,\n  \"length\": 3,\n  \"string\": \"foo\",\n  \"captures\": []\n}\n")]
     public async Task Jq_MatchCaptureVectors(string filter, string expected)
     {
         var host = new MockFileSystem();

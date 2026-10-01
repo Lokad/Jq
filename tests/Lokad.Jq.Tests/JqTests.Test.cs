@@ -23,6 +23,10 @@ public sealed partial class JqTests
     [InlineData("\"A\" | test(\"A\";empty)", "")]
     [InlineData("null | test(empty)", "")]
     [InlineData("null | test(\"x\";empty)", "")]
+    [InlineData("\"abc\" | [test(\"( )*\"; \"gn\")]", "[\n  false\n]\n")]
+    [InlineData("\"\\u0101\" | [test(\"\\u0101\")]", "[\n  true\n]\n")]
+    [InlineData("\"foo\" | test(\"foo\")", "true\n")]
+    [InlineData("[\"xabcd\", \"ABC\"] | .[] | test(\"a b c # spaces are ignored\"; \"ix\")", "true\ntrue\n")]
     public async Task Jq_TestReturnsBooleansWithRegexFlagsAndArgumentStreams(string filter, string expected)
     {
         var host = new MockFileSystem();

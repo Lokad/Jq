@@ -48,6 +48,8 @@ public sealed partial class JqTests
     [InlineData("\"\" | gsub(\"(.*)\"; \"\"; \"x\")", "\n")]
     [InlineData("\"p\" | [gsub(\"p\"; \"a\", \"b\")]", "[\n  \"a\",\n  \"b\"\n]\n")]
 [InlineData("[\"a,b, c, d, e,f\", \", a,b, c, d, e,f, \"] | [.[] | gsub(\", \"; \":\")]", "[\n  \"a,b:c:d:e,f\",\n  \":a,b:c:d:e,f:\"\n]\n")]
+    [InlineData("\"\" | gsub(\"^\"; \"a\")", "a\n")]
+    [InlineData("\"a\" | [gsub(\"a\"; \"b\", \"c\")]", "[\n  \"b\",\n  \"c\"\n]\n")]
     public async Task Jq_GsubPreservesReplacementSemantics(string filter, string expected)
     {
         var host = new MockFileSystem();

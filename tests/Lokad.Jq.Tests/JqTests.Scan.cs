@@ -13,6 +13,9 @@ public sealed partial class JqTests
     [InlineData("\"abAB\" | [scan(\"a\"; \"gi\")]", "[\n  \"a\",\n  \"A\"\n]\n")]
     [InlineData("\"a1 b2\" | [scan(\"(?<c>[a-z])(?<n>[0-9])\")]", "[\n  [\n    \"a\",\n    \"1\"\n  ],\n  [\n    \"b\",\n    \"2\"\n  ]\n]\n")]
     [InlineData("\"1\" | [scan(\"(?<x>y)?([0-9])\")]", "[\n  [\n    null,\n    \"1\"\n  ]\n]\n")]
+    [InlineData("[\"\",\"bBb\",\"abcABBBCabbbc\"] | [.[] | scan(\"b+\"; \"i\")]", "[\n  \"bBb\",\n  \"b\",\n  \"BBB\",\n  \"bbb\"\n]\n")]
+    [InlineData("\"abcdefabc\" | [scan(\"c\")]", "[\n  \"c\",\n  \"c\"\n]\n")]
+    [InlineData("\"abaabbaaabbb\" | [scan(\"(a+)(b+)\")]", "[\n  [\n    \"a\",\n    \"b\"\n  ],\n  [\n    \"aa\",\n    \"bb\"\n  ],\n  [\n    \"aaa\",\n    \"bbb\"\n  ]\n]\n")]
     public async Task Jq_ScanVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -32,6 +35,9 @@ public sealed partial class JqTests
     [InlineData("\"a,b, c\" | split(\", *\"; \"\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     [InlineData("\"aXbXc\" | split(\"x\"; \"i\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     [InlineData("\"a,b,c\" | split(\",\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
+    [InlineData("\"ab,cd, ef\" | split(\", *\"; null)", "[\n  \"ab\",\n  \"cd\",\n  \"ef\"\n]\n")]
+    [InlineData("\"ab,cd,   ef, gh\" | [splits(\", *\")]", "[\n  \"ab\",\n  \"cd\",\n  \"ef\",\n  \"gh\"\n]\n")]
+    [InlineData("\"ab,cd ef,  gh\" | [splits(\",? *\"; \"n\")]", "[\n  \"ab\",\n  \"cd\",\n  \"ef\",\n  \"gh\"\n]\n")]
     public async Task Jq_SplitsVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
