@@ -38,6 +38,9 @@ public sealed partial class JqTests
     [InlineData("\"ab,cd, ef\" | split(\", *\"; null)", "[\n  \"ab\",\n  \"cd\",\n  \"ef\"\n]\n")]
     [InlineData("\"ab,cd,   ef, gh\" | [splits(\", *\")]", "[\n  \"ab\",\n  \"cd\",\n  \"ef\",\n  \"gh\"\n]\n")]
     [InlineData("\"ab,cd ef,  gh\" | [splits(\",? *\"; \"n\")]", "[\n  \"ab\",\n  \"cd\",\n  \"ef\",\n  \"gh\"\n]\n")]
+    // Empty patterns split at every gap, including both ends of the input.
+    [InlineData("\"\" | [splits(\"\")]", "[\n  \"\",\n  \"\"\n]\n")]
+    [InlineData("\"abc\" | [splits(\"\")]", "[\n  \"\",\n  \"a\",\n  \"b\",\n  \"c\",\n  \"\"\n]\n")]
     public async Task Jq_SplitsVectors(string filter, string expected)
     {
         var host = new MockFileSystem();

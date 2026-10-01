@@ -79,6 +79,7 @@ public sealed partial class JqTests
     [InlineData("5 | 10 / . * 3", "6\n")]
     [InlineData("\"a, b,c,d, e\" | . / \", \"", "[\n  \"a\",\n  \"b,c,d\",\n  \"e\"\n]\n")]
     [InlineData("[true, false | not]", "[\n  false,\n  true\n]\n")]
+    [InlineData("\"\" | split(\"\")", "[]\n")]
     public async Task Jq_OperatorTypeCombinations(string filter, string expected)
     {
         var host = new MockFileSystem();
