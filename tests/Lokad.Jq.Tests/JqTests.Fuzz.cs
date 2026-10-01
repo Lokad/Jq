@@ -396,4 +396,59 @@ public sealed partial class JqTests
                 Assert.StartsWith("jq:", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
         }
     }
+
+    // Path-mode crash-freedom: path enumeration, deletion, assignment,
+    // and update targets over hostile values must settle on staged exits.
+    // Filters stay fixed and valid; paths that resolve nowhere fail with
+    // catchable diagnostics instead of escaping.
+    private const int PathFuzzSeed = 20261003;
+    private const int PathFuzzCases = 120;
+
+    private static readonly string[] PathFuzzFilters =
+    [
+        """path(.)""",
+        """path(.a)""",
+        """path(.[])""",
+        """path(..)""",
+        """path(.a | map(.))""",
+        """path(.a | .b)""",
+        """del(.a)""",
+        """delpaths([["a"]])""",
+        """pick(.a)""",
+        """getpath(["a"])""",
+        """setpath(["a"]; 1)""",
+        """.a = 1""",
+        """.a |= . + 1""",
+        """(.a | map(.)) = 1""",
+        """[paths]""",
+        """limit(1; path(.a))""",
+        """isempty(path(.a))""",
+    ];
+
+    [Fact]
+    public async Task Jq_SeededPathFuzzSettlesOnStagedExits()
+    {
+        var rng = new Random(PathFuzzSeed);
+        for (int index = 0; index < PathFuzzCases; index++)
+        {
+            string filter = PathFuzzFilters[rng.Next(PathFuzzFilters.Length)];
+            string input = rng.Next(10) == 0 ? "{bad" : FuzzValue(rng, 2);
+            var host = new MockFileSystem();
+            host.SetStandardInput(input);
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+            int exit;
+            try
+            {
+                exit = await tool.ExecuteAsync(host, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail("Path seed " + PathFuzzSeed + " case " + index + " escaped with " + ex.GetType().Name + ": " + filter + " on " + input);
+                throw new InvalidOperationException("Unreachable path fuzz failure.");
+            }
+            Assert.True(exit is 0 or 5, "Path seed " + PathFuzzSeed + " case " + index + " gave exit " + exit);
+            if (exit != 0)
+                Assert.StartsWith("jq:", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
+        }
+    }
 }
