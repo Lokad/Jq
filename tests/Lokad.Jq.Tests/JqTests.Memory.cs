@@ -565,6 +565,8 @@ public sealed partial class JqTests
     [InlineData("try ((reduce range(10001) as $_ ([]; [.])) as $x | (reduce range(10001) as $_ ([]; [.])) as $y | $x == $y) catch .")]
     [InlineData("try ((reduce range(10001) as $_ ([]; [.])) as $x | [$x, $x] | sort) catch .")]
     [InlineData("try ((reduce range(10001) as $_ ([]; [.])) as $x | [$x, $x] | unique) catch .")]
+    [InlineData("try ((reduce range(10001) as $_ ({}; {a: .})) as $x | [$x, $x] | sort) catch .")]
+    [InlineData("try ((reduce range(10001) as $_ ({}; {a: .})) as $x | [$x, $x] | unique) catch .")]
     [InlineData("reduce range(9999) as $_ ([];[.]) | tojson | fromjson | flatten")]
     [InlineData("reduce range(10000) as $_ ({}; {a: .}) as $x | $x * $x | length")]
     public async Task Jq_RejectsExcessiveValueNesting(string filter)
