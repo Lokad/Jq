@@ -67,7 +67,7 @@ dependency-free (no native decimal library); the profile is pinned by
   and objects by key lookup regardless of member order.
 - The total order is null, false, true, numbers, strings (Unicode scalar
   order, matching byte order for valid UTF-8), arrays (lexical), and
-  objects (sorted keys, then values key by key). NaN sorts as null.
+  objects (sorted keys, then values key by key). NaN orders immediately after null and before every number.
 
 ## Rendering and culture
 

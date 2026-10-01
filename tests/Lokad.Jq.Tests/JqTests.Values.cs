@@ -79,6 +79,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1} < {\"a\":1,\"b\":2}", "true\n")]
     [InlineData("\"\\ue000\" < \"\U00010000\"", "true\n")]
     [InlineData("[nan < 1, 1 < nan, nan == nan]", "[\n  true,\n  false,\n  false\n]\n")]
+    // Null orders strictly before NaN (reference kind difference) while NaN still compares as null against numbers.
+    [InlineData("[nan > null, null < nan, nan < null, null > nan]", "[\n  true,\n  true,\n  false,\n  false\n]\n")]
     public async Task Jq_ComparisonFollowsTotalOrdering(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -102,7 +104,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_NanSortsAsNull()
     {
-        // The shared total order ranks NaN with null while never
+        // The shared total order ranks NaN immediately after null while never
         // equating it, so sorting and extrema agree with comparisons.
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "{sorted: ([1, nan] | sort), minimum: ([1, nan] | min), maximum: ([1, nan] | max)}")));

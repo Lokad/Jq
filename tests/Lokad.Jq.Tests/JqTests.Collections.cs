@@ -215,6 +215,10 @@ public sealed partial class JqTests
     [InlineData("[]", "group_by(.)", "[]\n")]
     [InlineData("[]", "min", "null\n")]
     [InlineData("[]", "max", "null\n")]
+    [InlineData("[nan, null]", "sort | map(type)", "[\n  \"null\",\n  \"number\"\n]\n")]
+    [InlineData("[null, nan]", "sort | map(type)", "[\n  \"null\",\n  \"number\"\n]\n")]
+    [InlineData("[nan, null]", "min | type", "\"null\"\n")]
+    [InlineData("[null, nan]", "max | type", "\"number\"\n")]
     public async Task Jq_SortGroupUnique(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

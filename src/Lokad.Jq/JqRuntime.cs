@@ -807,8 +807,10 @@ internal sealed class JqRuntime(JqBudget budget)
 
     // Total order shared by comparison operators and min/max: null, false,
     // true, numbers, strings (Unicode scalar order), arrays (lexical),
-    // objects (sorted keys, then values). NaN sorts as null but never
-    // equals anything, matching the reference.
+    // objects (sorted keys, then values). NaN orders immediately after null
+    // and before every number (like the reference kind difference for null
+    // versus NaN, with null substituted elsewhere per jv_aux.c jvp_cmp) but
+    // never equals anything, matching the reference.
     internal static int Compare(JsonNode? l, JsonNode? r) => Compare(l, r, 0);
 
     // Depth-bounded like the budget tree walk: values deeper than the policy
@@ -818,6 +820,10 @@ internal sealed class JqRuntime(JqBudget budget)
     {
         if (depth > JqBudget.MaximumDepth)
             throw new JqQuotaException("value nesting limit exceeded");
+        if (l is null && IsNaNNumber(r))
+            return -1;
+        if (r is null && IsNaNNumber(l))
+            return 1;
         int leftRank = ValueRank(l);
         int rightRank = ValueRank(r);
         if (leftRank != rightRank)
