@@ -184,11 +184,20 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
-    [Fact]
-    public async Task Jq_AlternationExhaustionPropagatesErrors()
+    [Theory]
+    [InlineData("null", "[3] as {a:$a} ?// {a:$a} ?// {a:$a} | $a")]
+    [InlineData("[[3],[4],[5],6]", ".[] | . as {a:$a} ?// {a:$a} ?// {a:$a} | $a")]
+    [InlineData("[[3],[4],[5],6]", ".[] as {a:$a} ?// {a:$a} ?// {a:$a} | $a")]
+    [InlineData("null", "[[3],[4],[5],6][] | . as {a:$a} ?// {a:$a} ?// {a:$a} | $a")]
+    [InlineData("null", "[[3],[4],[5],6] | .[] as {a:$a} ?// {a:$a} ?// {a:$a} | $a")]
+    public async Task Jq_AlternationExhaustionPropagatesErrors(string input, string filter)
     {
+        // The reference marks these destructuring DUP/POP shapes as runtime
+        // errors rather than empty output, so exhaustion stays catchable
+        // only through explicit handlers, never silent.
         var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "[3] as {a:$a} ?// {a:$a} ?// {a:$a} | $a")));
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("cannot index array", host.GetOutput(JqFileDescriptor.StdErr));
@@ -217,6 +226,8 @@ public sealed partial class JqTests
     [InlineData("[[3],[4],[5],6]", ".[] as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("null", "[[3],[4],[5],6][] | . as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("null", "[[3],[4],[5],6] | .[] as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("null", "[[3],[4],[5],6][] | . as $a ?// {a:$a} ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("null", "[[3],[4],[5],6] | .[] as $a ?// {a:$a} ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("[[3]]", ".[] as [$a] ?// [$b] | if $a != null then error(\"err: \\($a)\") else {$a,$b} end", "{\n  \"a\": null,\n  \"b\": 3\n}\n")]
     public async Task Jq_AlternationChainsFromReference(string input, string filter, string expected)
     {

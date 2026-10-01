@@ -63,6 +63,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" * 0", "\"\"\n")]
     [InlineData("\"x\" * -2", "null\n")]
     [InlineData("\"\" * 1000000", "\"\"\n")]
+    [InlineData("\"\" * 1000000000", "\"\"\n")]
     [InlineData("\"ab\" + \"cd\"", "\"abcd\"\n")]
     [InlineData("[2 * 3, 2 + 3, 2.5 * 4, -3 * 2]", "[\n  6,\n  5,\n  10,\n  -6\n]\n")]
     [InlineData("[\"a\", \"ab\", \"abc\"] | [.[] * 3]", "[\n  \"aaa\",\n  \"ababab\",\n  \"abcabcabc\"\n]\n")]
