@@ -65,6 +65,24 @@ public sealed partial class JqTests
         Assert.Equal("[\n  null,\n  -1.7976931348623157E+308,\n  {\n    \"a\": 1.7976931348623157E+308\n  }\n]\n", stdout);
     }
 
+    // Mid-container non-finite literals resume past their comma only when the
+    // restored state expects a value; later positions leave the comma for the
+    // post-value state, in arrays, objects, and nested mixes alike.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(5)]
+    [InlineData(7)]
+    public async Task Jq_InputNonFiniteMidContainerAcrossChunks(int chunk)
+    {
+        var inner = new MockFileSystem();
+        inner.SetStandardInput("[1,nan,{\"a\":1,\"b\":-inf,\"c\":[2,infinity]}]");
+        var (exit, stdout, stderr) = await RunInputAsync(new ChunkedHost(inner, chunk), ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("[\n  1,\n  null,\n  {\n    \"a\": 1,\n    \"b\": -1.7976931348623157E+308,\n    \"c\": [\n      2,\n      1.7976931348623157E+308\n    ]\n  }\n]\n", stdout);
+    }
+
     [Fact]
     public async Task Jq_InputLongScalarAcrossChunks()
     {

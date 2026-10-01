@@ -323,7 +323,8 @@ internal sealed class JqRuntime(JqBudget budget)
         return true;
     }
 
-    private void ReadToken(ref Utf8JsonReader reader, ReadOnlySpan<byte> source, ref int consumedBase, JsonReaderState restoreState, out bool hasToken, out JsonNode? nonFinite)
+    // consumeComma mirrors the restored state kind: array starts and object values expect a value, so a trailing comma belongs to the resumed reader, while later array elements sit in a post-value state that consumes the comma itself. A resume preserves the state kind, so callers must not flip the flag on resumed values.
+    private void ReadToken(ref Utf8JsonReader reader, ReadOnlySpan<byte> source, ref int consumedBase, JsonReaderState restoreState, bool consumeComma, out bool hasToken, out JsonNode? nonFinite)
         {
             nonFinite = null;
             try
@@ -341,7 +342,7 @@ internal sealed class JqRuntime(JqBudget budget)
                 {
                     budget.ChargeNode();
                     int resume = SkipJsonWhitespace(source, end);
-                    if (resume < source.Length && source[resume] == (byte)',')
+                    if (consumeComma && resume < source.Length && source[resume] == (byte)',')
                         resume++;
                     reader = new Utf8JsonReader(source.Slice(resume), reader.IsFinalBlock, restoreState);
                     consumedBase = resume;
@@ -362,6 +363,7 @@ internal sealed class JqRuntime(JqBudget budget)
                         throw new JqException("value nesting limit exceeded");
                     budget.ChargeNode();
                     var obj = new JsonObject();
+                    bool expectsObjectValue = true;
                     while (true)
                     {
                         JsonReaderState headState = reader.CurrentState;
@@ -375,10 +377,19 @@ internal sealed class JqRuntime(JqBudget budget)
                         if (name is null)
                             throw new JqException("expected object key");
                         budget.ChargeString(name.Length);
-                        ReadToken(ref reader, source, ref consumedBase, headState, out bool hasValue, out JsonNode? valueFallback);
+                        ReadToken(ref reader, source, ref consumedBase, headState, expectsObjectValue, out bool hasValue, out JsonNode? valueFallback);
                         if (!hasValue)
                             throw new JqException("truncated JSON value");
-                        obj[name] = valueFallback ?? ReadValue(ref reader, source, ref consumedBase, depth + 1);
+                        if (valueFallback is not null)
+                        {
+                            // A resume preserves the restored state kind, so the flag stays put.
+                            obj[name] = valueFallback;
+                        }
+                        else
+                        {
+                            obj[name] = ReadValue(ref reader, source, ref consumedBase, depth + 1);
+                            expectsObjectValue = false;
+                        }
                     }
                     throw new JqException("truncated JSON value");
                 case JsonTokenType.StartArray:
@@ -386,10 +397,11 @@ internal sealed class JqRuntime(JqBudget budget)
                         throw new JqException("value nesting limit exceeded");
                     budget.ChargeNode();
                     var array = new JsonArray();
+                    bool expectsValue = true;
                     while (true)
                     {
                         JsonReaderState headState = reader.CurrentState;
-                        ReadToken(ref reader, source, ref consumedBase, headState, out bool hasToken, out JsonNode? nonFinite);
+                        ReadToken(ref reader, source, ref consumedBase, headState, expectsValue, out bool hasToken, out JsonNode? nonFinite);
                         if (!hasToken)
                             throw new JqException("truncated JSON value");
                         if (nonFinite is not null)
@@ -400,6 +412,7 @@ internal sealed class JqRuntime(JqBudget budget)
                         if (reader.TokenType == JsonTokenType.EndArray)
                             return array;
                         array.Add(ReadValue(ref reader, source, ref consumedBase, depth + 1));
+                        expectsValue = false;
                     }
                 case JsonTokenType.String:
                     budget.ChargeNode();

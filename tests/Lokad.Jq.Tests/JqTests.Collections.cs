@@ -192,6 +192,13 @@ public sealed partial class JqTests
     [InlineData("[1,2]", "bsearch(nan)", "-1\n")]
     [InlineData("[null,1]", "bsearch(nan)", "-2\n")]
     [InlineData("[nan,1]", "bsearch(null)", "-1\n")]
+    // NaN never equals, so equality search misses, but it keeps its null-first order slot for bsearch.
+    [InlineData("[1,nan,2]", "index(nan)", "null\n")]
+    [InlineData("[1,nan,2]", "indices(nan)", "[]\n")]
+    [InlineData("[1,nan,2]", "rindex(nan)", "null\n")]
+    [InlineData("nan", "contains(nan)", "false\n")]
+    [InlineData("[1,2]", "inside([1,nan,2])", "true\n")]
+    [InlineData("[nan]", "bsearch(nan)", "0\n")]
     public async Task Jq_CollectionSearchFold(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
