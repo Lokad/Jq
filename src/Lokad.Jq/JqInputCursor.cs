@@ -734,6 +734,16 @@ internal sealed class JqInputCursor : IAsyncDisposable
             _seqDone = true;
             return;
         }
+        if (_seqWaiting)
+        {
+            // No record separator seen: unframed content is abandoned text
+            // even when it parses as complete values, like the reference
+            // waiting state (truncated strings and terms included).
+            Advance(length);
+            _seqDone = true;
+            throw new JqSeqResyncException(
+                $"Unfinished abandoned text at EOF at line {_scanLine}, column {_scanCol}");
+        }
         ScanSeqRecord(tail, out int depth, out bool inString, out int trailingRun);
         if (inString)
         {

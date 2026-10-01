@@ -118,6 +118,32 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SeqUnframedTailIsAbandoned()
+    {
+        // Like the reference waiting state, content that never sees a
+        // record separator is abandoned text even when it parses as
+        // complete values: warnings in auto-drain, errors via inputs.
+        var bare = new MockFileSystem();
+        bare.SetStandardInput("1\n");
+        var (bareExit, bareOut, bareErr) = await RunSeqAsync(bare, "-c", "--seq", ".");
+        Assert.Equal(0, bareExit);
+        Assert.Equal("", bareOut);
+        Assert.Contains("Unfinished abandoned text at EOF", bareErr);
+        var sting = new MockFileSystem();
+        sting.SetStandardInput("\"foo");
+        var (stingExit, stingOut, stingErr) = await RunSeqAsync(sting, "-c", "--seq", ".");
+        Assert.Equal(0, stingExit);
+        Assert.Equal("", stingOut);
+        Assert.Contains("Unfinished abandoned text at EOF at line 1, column 4", stingErr);
+        var pulled = new MockFileSystem();
+        pulled.SetStandardInput("1\n");
+        var (pulledExit, pulledOut, pulledErr) = await RunSeqAsync(pulled, "-c", "-e", "-n", "--seq", "[inputs] == []");
+        Assert.Equal(5, pulledExit);
+        Assert.Equal("", pulledOut);
+        Assert.Contains("Unfinished abandoned text at EOF at line 2, column 0", pulledErr);
+    }
+
+    [Fact]
     public async Task Jq_SeqTruncatedRecordExitsFour()
     {
         // Like the reference, a truncated final record warns and exits 4
@@ -156,7 +182,7 @@ public sealed partial class JqTests
         // Sequence framing prefixes every output value, including values
         // fanned out from a single input, like the reference.
         var host = new MockFileSystem();
-        host.SetStandardInput("[1,2]");
+        host.SetStandardInput(Seq("[1,2]\n"));
         var (exit, stdout, stderr) = await RunSeqAsync(host, "--seq", ".[]");
         Assert.True(exit == 0, stderr);
         Assert.Equal("\u001e1\n\u001e2\n", stdout);
