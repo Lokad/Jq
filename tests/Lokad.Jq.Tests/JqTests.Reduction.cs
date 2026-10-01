@@ -58,10 +58,17 @@ public sealed partial class JqTests
     [InlineData("null | reduce . as $n (.; .)", "null\n")]
     [InlineData("[foreach range(5) as $item (0; $item)]", "[\n  0,\n  1,\n  2,\n  3,\n  4\n]\n")]
     [InlineData("[label $if | range(10) | ., (select(. == 5) | break $if)]", "[\n  0,\n  1,\n  2,\n  3,\n  4,\n  5\n]\n")]
-    // Empty updates end the run with no outputs. No upstream vector pins this corner and cell-lifetime readings differ, so this locks the established behavior.
-    [InlineData("reduce (1, 2) as $x (0; empty)", "")]
+    // Empty updates empty the cell like the reference LOADVN slot and the run
+    // continues (compile.c gen_reduce/gen_foreach with execute.c LOADVN): reduce
+    // falls through to the final cell read, so all-empty updates yield null,
+    // while foreach only emits extraction outputs and stays silent on all-empty.
+    // Partially empty updates skip just that item: the following pins lock the
+    // null-cell reads (null absorbs into +) and the per-item extraction stream.
+    [InlineData("reduce (1, 2) as $x (0; empty)", "null\n")]
     [InlineData("foreach (1, 2) as $x (0; empty)", "")]
-    [InlineData("reduce (1, 2) as $x (0; select($x > 10) | . + $x)", "")]
+    [InlineData("reduce (1, 2) as $x (0; select($x > 10) | . + $x)", "null\n")]
+    [InlineData("reduce (1, 2, 3) as $x (0; select($x > 1) | . + $x)", "5\n")]
+    [InlineData("foreach (1, 2, 3) as $x (0; select($x > 1) | . + $x)", "2\n5\n")]
     public async Task Jq_ReduceFoldsStates(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -84,13 +91,13 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_ReduceEmptyUpdateKillsBranches()
+    public async Task Jq_ReduceEmptyUpdateOutputsNull()
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "reduce (1, 2) as $x (0; empty)")));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("null\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 

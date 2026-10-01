@@ -11,8 +11,9 @@ namespace Lokad.Jq;
 // (first-match-wins with catchable retries, mirroring bindings). Like the
 // reference cell overwrite (compile.c gen_reduce, gojq compileReduce), the
 // last update output wins and earlier outputs are dropped; an update with no
-// outputs ends the run for that initializer. Each surviving initializer
-// yields its final state once.
+// outputs empties the cell (reference LOADVN slot) and the run continues.
+// Each initializer yields its final state once, even when no update
+// ever produced a value.
 internal sealed class ReduceFilter(JqFilter Source, IReadOnlyList<BindingPattern> Alternatives, JqFilter Init, JqFilter Update) : JqFilter
 {
     private readonly HashSet<string> _allNames = AsFilter.CollectAll(Alternatives);
@@ -24,7 +25,6 @@ internal sealed class ReduceFilter(JqFilter Source, IReadOnlyList<BindingPattern
         foreach (JsonNode? initial in Init.Evaluate(input, context, environment))
         {
             JsonNode? state = initial;
-            bool alive = true;
             foreach (JsonNode? item in Source.Evaluate(input, context, environment))
             {
                 bool produced = false;
@@ -36,17 +36,12 @@ internal sealed class ReduceFilter(JqFilter Source, IReadOnlyList<BindingPattern
                     last = updated;
                 }
 
-                if (!produced)
-                {
-                    alive = false;
-                    break;
-                }
-
-                state = last;
+                // Like the reference LOADVN slot, an update with no outputs
+                // empties the cell and the run continues with the next item.
+                state = produced ? last : null;
             }
 
-            if (alive)
-                yield return state;
+            yield return state;
         }
     }
 }
@@ -55,7 +50,8 @@ internal sealed class ReduceFilter(JqFilter Source, IReadOnlyList<BindingPattern
 // yields every intermediate state (or the extraction run against each
 // updated state in the matched environment). Initial values never yield
 // without items; each update output is emitted while only the last threads
-// forward as state, and an update with no outputs ends the run silently.
+// forward as state. An update with no outputs empties the cell like the
+// reference LOADVN slot, skips extraction, and continues with the next item.
 internal sealed class ForeachFilter(JqFilter Source, IReadOnlyList<BindingPattern> Alternatives, JqFilter Init, JqFilter Update, JqFilter? Extract) : JqFilter
 {
     private readonly HashSet<string> _allNames = AsFilter.CollectAll(Alternatives);
@@ -83,10 +79,9 @@ internal sealed class ForeachFilter(JqFilter Source, IReadOnlyList<BindingPatter
                             yield return extracted;
                 }
 
-                if (!produced)
-                    break;
-
-                state = last;
+                // Like the reference LOADVN slot, an update with no outputs
+                // empties the cell, skips extraction, and continues.
+                state = produced ? last : null;
             }
         }
     }
