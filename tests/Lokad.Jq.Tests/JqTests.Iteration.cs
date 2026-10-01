@@ -157,6 +157,11 @@ public sealed partial class JqTests
     [InlineData("[1]", "[walk(if type == \"number\" then (., . + 10) else . end)]", "[\n  [\n    1\n  ]\n]\n")]
     [InlineData("[[1]]", "[walk(if type == \"array\" then (., .) else . end)]", "[\n  [\n    [\n      1\n    ]\n  ],\n  [\n    [\n      1\n    ]\n  ]\n]\n")]
     [InlineData("{\"a\":1}", "[walk(if type == \"number\" then (., . + 10) else . end)]", "[\n  {\n    \"a\": 1\n  }\n]\n")]
+    // Every condition output counts: repeated truthy probes duplicate the state in both loops.
+    [InlineData("0", "[while((true, true); empty)]", "[\n  0,\n  0\n]\n")]
+    [InlineData("0", "[until((true, true); empty)]", "[\n  0,\n  0\n]\n")]
+    [InlineData("0", "[while((true, false); empty)]", "[\n  0\n]\n")]
+    [InlineData("0", "[until((false, true); empty)]", "[\n  0\n]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
