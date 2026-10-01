@@ -185,6 +185,13 @@ public sealed partial class JqTests
     [InlineData("[[1,2]]", "[recurse(if type == \"array\" then .[] else empty end)]", "[\n  [\n    [\n      1,\n      2\n    ]\n  ],\n  [\n    1,\n    2\n  ],\n  1,\n  2\n]\n")]
     [InlineData("{\"a\":[1],\"b\":[2]}", "[recurse(.[]?)]", "[\n  {\n    \"a\": [\n      1\n    ],\n    \"b\": [\n      2\n    ]\n  },\n  [\n    1\n  ],\n  1,\n  [\n    2\n  ],\n  2\n]\n")]
     [InlineData("[[1],[2],[3]]", "[label $o | recurse(if . == [2] then break $o elif type == \"array\" then .[] else empty end)]", "[\n  [\n    [\n      1\n    ],\n    [\n      2\n    ],\n    [\n      3\n    ]\n  ],\n  [\n    1\n  ],\n  1,\n  [\n    2\n  ]\n]\n")]
+    // Conditions filter multi-output expansions while lazy consumers stop the
+    // explicit-stack traversal early; multi-output while updates fan out
+    // leftmost-first like the recursive desugar.
+    [InlineData("[[1,2],[3]]", "[recurse(if type == \"array\" then .[] else empty end; . != 2)]", "[\n  [\n    [\n      1,\n      2\n    ],\n    [\n      3\n    ]\n  ],\n  [\n    1,\n    2\n  ],\n  1,\n  [\n    3\n  ],\n  3\n]\n")]
+    [InlineData("[[1,2]]", "[limit(3; recurse(if type == \"array\" then .[] else empty end))]", "[\n  [\n    [\n      1,\n      2\n    ]\n  ],\n  [\n    1,\n    2\n  ],\n  1\n]\n")]
+    [InlineData("0", "[limit(4; while(true; (1,2)))]", "[\n  0,\n  1,\n  1,\n  1\n]\n")]
+    [InlineData("0", "[limit(5; while(.<10; (.+1, .+2)))]", "[\n  0,\n  1,\n  2,\n  3,\n  4\n]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
