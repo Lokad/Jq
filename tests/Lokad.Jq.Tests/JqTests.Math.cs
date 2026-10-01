@@ -65,6 +65,10 @@ public sealed partial class JqTests
     [InlineData("1000 | exp", "1.7976931348623157E+308\n")]
     [InlineData("(-1000) | exp", "0\n")]
     [InlineData("1e1000 | sin", "null\n")]
+    [InlineData("1 + 2 * 2 + 10 / 2", "10\n")]
+    [InlineData("1 | atan * 4 * 1000000|floor / 1000000", "3.141592\n")]
+    [InlineData("[-1.1,1.1,1.9] | [.[]|floor]", "[\n  -2,\n  1,\n  1\n]\n")]
+    [InlineData("[4,9] | [.[]|sqrt]", "[\n  2,\n  3\n]\n")]
     public async Task Jq_MathExact(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -208,6 +212,10 @@ public sealed partial class JqTests
     [InlineData("fma(2;3;4)", "10\n")]
     [InlineData("fma(0 - 2;3;0 - 4)", "-10\n")]
 [InlineData("[nan % 1, 1 % nan | isnan]", "[\n  true,\n  true\n]\n")]
+    [InlineData("25 % 7", "4\n")]
+    [InlineData("49732 % 472", "172\n")]
+    [InlineData("[(infinite, -infinite) % (1, -1, infinite)]", "[\n  0,\n  0,\n  0,\n  0,\n  0,\n  -1\n]\n")]
+    [InlineData("[-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7] | [.[] % 7]", "[\n  0,\n  -6,\n  -5,\n  -4,\n  -3,\n  -2,\n  -1,\n  0,\n  1,\n  2,\n  3,\n  4,\n  5,\n  6,\n  0\n]\n")]
     public async Task Jq_MathRemainder(string filter, string expected)
     {
         var host = new MockFileSystem();
