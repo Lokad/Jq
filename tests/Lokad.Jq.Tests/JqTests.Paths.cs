@@ -169,6 +169,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "setpath(path(empty); 1)", "")]
     [InlineData("null", "getpath(path(.a))", "null\n")]
     [InlineData("[1,2]", "setpath(path(.[]); 0)", "[\n  0,\n  2\n]\n[\n  1,\n  0\n]\n")]
+    [InlineData("{\"a\":1}", "[getpath(paths)]", "[\n  1\n]\n")]
+    [InlineData("{\"a\":1}", "delpaths([paths])", "{}\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -212,6 +214,9 @@ public sealed partial class JqTests
     [InlineData("[{\"b\":0},{\"b\":1}]", "del(.[] | select(.b == 0))", "[\n  {\n    \"b\": 1\n  }\n]\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "pick(.a)", "{\n  \"a\": [\n    {\n      \"b\": 0\n    }\n  ]\n}\n")]
     [InlineData("{\"a\":1}", "try del(.a as $x | $x) catch .", "\"Invalid path expression with result 1\"\n")]
+    // Fresh path arrays are untracked, so path() over them fails like the reference delpaths([path(f)]) and pick desugars.
+    [InlineData("{\"a\":1}", "try del(paths) catch .", "\"Invalid path expression with result [\\\"a\\\"]\"\n")]
+    [InlineData("{\"a\":1}", "try pick(paths) catch .", "\"Invalid path expression with result [\\\"a\\\"]\"\n")]
     public async Task Jq_DelAndPickReshape(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
