@@ -193,6 +193,9 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("[1, 2, 1] | INDEX(.)", "{\n  \"1\": 1,\n  \"2\": 2\n}\n")]
     [InlineData("INDEX([1, 2, 1][]; .)", "{\n  \"1\": 1,\n  \"2\": 2\n}\n")]
+    // NaN keys fold under their tostring spelling while missing keys collide last-wins with nulls.
+    [InlineData("[{\"a\":nan},{\"a\":1}] | INDEX(.a)", "{\n  \"null\": {\n    \"a\": null\n  },\n  \"1\": {\n    \"a\": 1\n  }\n}\n")]
+    [InlineData("[{\"a\":null},{}] | INDEX(.a)", "{\n  \"null\": {}\n}\n")]
     public async Task Jq_InventoryIndex(string filter, string expected)
     {
         var host = new MockFileSystem();
