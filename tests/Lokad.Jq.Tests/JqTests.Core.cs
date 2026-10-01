@@ -103,6 +103,10 @@ public sealed partial class JqTests
     [InlineData("{\"a\":[1]} * {\"a\":[2]}", "{\n  \"a\": [\n    2\n  ]\n}\n")]
     [InlineData("{\"a\":{\"x\":1}} * {\"a\":5}", "{\n  \"a\": 5\n}\n")]
     [InlineData("{\"a\":5} * {\"a\":{\"x\":1}}", "{\n  \"a\": {\n    \"x\": 1\n  }\n}\n")]
+    // Null merge values replace right-wins instead of recursing, since null is not an object.
+    [InlineData("{\"a\":1} * {\"a\":null}", "{\n  \"a\": null\n}\n")]
+    [InlineData("{\"a\":null} * {\"a\":1}", "{\n  \"a\": 1\n}\n")]
+    [InlineData("{\"a\":{\"b\":1}} * {\"a\":null}", "{\n  \"a\": null\n}\n")]
     // Overwritten merge keys keep their first position while new keys append, like jv_object_set.
     [InlineData("{\"b\":1,\"a\":2} + {\"a\":3,\"c\":4}", "{\n  \"b\": 1,\n  \"a\": 3,\n  \"c\": 4\n}\n")]
     [InlineData("{\"b\":1,\"a\":2} * {\"a\":3,\"c\":4}", "{\n  \"b\": 1,\n  \"a\": 3,\n  \"c\": 4\n}\n")]
