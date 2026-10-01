@@ -217,6 +217,8 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "del(.[1], .[-6], .[2], .[-3:9])", "[\n  0,\n  3,\n  5,\n  6,\n  9\n]\n")]
     [InlineData("[1, 2, 3]", "del(.[nan])", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[1, 2, 3]", "del(.[nan,nan])", "[\n  1,\n  2,\n  3\n]\n")]
+    // A NaN index reads null while sets fail and dels pass through.
+    [InlineData("[1, 2, 3]", ".[nan]", "null\n")]
     [InlineData("[[10, 20], 30]", "pick(first|first)", "[\n  [\n    10\n  ]\n]\n")]
     [InlineData("[1, 2]", "try pick(last) catch .", "\"Out of bounds negative array index\"\n")]
     [InlineData("[1,2,3,4]", "pick(.[2], .[0], .[0])", "[\n  1,\n  null,\n  3\n]\n")]
