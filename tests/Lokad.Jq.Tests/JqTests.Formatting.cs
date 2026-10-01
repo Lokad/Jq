@@ -109,6 +109,8 @@ public sealed partial class JqTests
     [InlineData("\"cWl4YmF6Cg\"", "@base64d", "\"qixbaz\\n\"\n")]
     [InlineData("\"a\"", "@base64", "\"YQ==\"\n")]
     [InlineData("\"AB=C\"", "@base64d", "\"\\u0000\"\n")]
+    [InlineData("\"Not base64 data\"", ". | try @base64d catch .", "\"string (\\\"Not base64 data\\\") is not valid base64 data\"\n")]
+    [InlineData("\"QUJDa\"", ". | try @base64d catch .", "\"string (\\\"QUJDa\\\") trailing base64 byte found\"\n")]
     public async Task Jq_Base64Vectors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -133,6 +135,12 @@ public sealed partial class JqTests
     [InlineData("\"hello world\"", "@urid", "\"hello world\"\n")]
     [InlineData("\"Knäckebröd\"", "@urid", "\"Knäckebröd\"\n")]
     [InlineData("\"a%00b\"", "@urid", "\"a\\u0000b\"\n")]
+    [InlineData("\"abc%\"", ". | try @urid catch .", "\"string (\\\"abc%\\\") is not a valid uri encoding\"\n")]
+    [InlineData("\"abc%f\"", ". | try @urid catch .", "\"string (\\\"abc%f\\\") is not a valid uri encoding\"\n")]
+    [InlineData("\"abc%g\"", ". | try @urid catch .", "\"string (\\\"abc%g\\\") is not a valid uri encoding\"\n")]
+    [InlineData("\"%FX%9F%98%8E\"", ". | try @urid catch .", "\"string (\\\"%FX%9F%98%8E\\\") is not a valid uri encoding\"\n")]
+    [InlineData("\"%F0%93%81\"", ". | try @urid catch .", "\"string (\\\"%F0%93%81\\\") is not a valid uri encoding\"\n")]
+    [InlineData("\"%F0%C0%81%8E\"", ". | try @urid catch .", "\"string (\\\"%F0%C0%81%8E\\\") is not a valid uri encoding\"\n")]
     public async Task Jq_UriVectors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
