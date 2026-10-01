@@ -1628,7 +1628,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
 
             switch (name)
             {
-                case "length": yield return JsonValue.Create(Length(input)); break;
+                case "length": yield return context.Runtime.Length(input); break;
                 case "type": yield return JsonValue.Create(TypeName(input)); break;
                 case "not": yield return JsonValue.Create(!Truthy(input)); break;
                 case "now": yield return JsonValue.Create(JqTime.Now(context)); break;

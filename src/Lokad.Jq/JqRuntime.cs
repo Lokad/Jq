@@ -839,13 +839,16 @@ internal sealed class JqRuntime(JqBudget budget)
         return first.IsEmpty && second.IsEmpty ? 0 : (first.IsEmpty ? -1 : 1);
     }
 
-    internal static int Length(JsonNode? node) => node switch
+    internal JsonNode? Length(JsonNode? node) => node switch
     {
-        null => 0,
-        JsonArray arr => arr.Count,
-        JsonObject obj => obj.Count,
-        JsonValue v when v.TryGetValue<string>(out var s) => s.EnumerateRunes().Count(),
-        _ => 0
+        null => JsonValue.Create(0),
+        JsonArray arr => JsonValue.Create(arr.Count),
+        JsonObject obj => JsonValue.Create(obj.Count),
+        JsonValue v when v.TryGetValue<string>(out var s) => JsonValue.Create(s.EnumerateRunes().Count()),
+        // Like the reference number branch, the length of a number is its
+        // absolute value; anything else has no length.
+        JsonValue v when TypeName(v) == "number" => JsonValue.Create(Math.Abs(Number(v))),
+        _ => throw new JqException($"{TypeName(node)} ({Serialize(node, false, null, false)}) has no length"),
     };
 
     internal static string TypeName(JsonNode? node)

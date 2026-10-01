@@ -40,6 +40,12 @@ public sealed partial class JqTests
     [InlineData("[[3],[4],[5],6]", ".[] | . as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("[[3],[4],[5],6]", ".[] | . as $a ?// {a:$a} ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("null", ". as [$a] | $a", "null\n")]
+    [InlineData("34324", "42 as $x | . | . | . + 432 | $x + 1", "43\n")]
+    [InlineData("[0]", ". as $i | . as [$i] | $i", "0\n")]
+    [InlineData("[0]", ". as [$i] | . as $i | $i", "[\n  0\n]\n")]
+    [InlineData("{\"object\": {\"a\":42}, \"num\":10.0}", "[{\"a\":42},.object,10,.num,false,true,null,\"b\",[1,4]] | .[] as $x | [$x == .[]]", "[\n  true,\n  true,\n  false,\n  false,\n  false,\n  false,\n  false,\n  false,\n  false\n]\n[\n  true,\n  true,\n  false,\n  false,\n  false,\n  false,\n  false,\n  false,\n  false\n]\n[\n  false,\n  false,\n  true,\n  true,\n  false,\n  false,\n  false,\n  false,\n  false\n]\n[\n  false,\n  false,\n  true,\n  true,\n  false,\n  false,\n  false,\n  false,\n  false\n]\n[\n  false,\n  false,\n  false,\n  false,\n  true,\n  false,\n  false,\n  false,\n  false\n]\n[\n  false,\n  false,\n  false,\n  false,\n  false,\n  true,\n  false,\n  false,\n  false\n]\n[\n  false,\n  false,\n  false,\n  false,\n  false,\n  false,\n  true,\n  false,\n  false\n]\n[\n  false,\n  false,\n  false,\n  false,\n  false,\n  false,\n  false,\n  true,\n  false\n]\n[\n  false,\n  false,\n  false,\n  false,\n  false,\n  false,\n  false,\n  false,\n  true\n]\n")]
+    [InlineData("5", ". as $i|[(.*2|. as $i| $i), $i]", "[\n  10,\n  5\n]\n")]
+    [InlineData("{\"as\":8}", "1 as $x | \"2\" as $y | \"3\" as $z | { $x, as, $y: 4, ($z): 5, if: 6, foo: 7 }", "{\n  \"x\": 1,\n  \"as\": 8,\n  \"2\": 4,\n  \"3\": 5,\n  \"if\": 6,\n  \"foo\": 7\n}\n")]
     [InlineData("null", "[1, {c:3, d:4}] as [$a, {c:$b, b:$c}] | $a, $b, $c", "1\n3\nnull\n")]
     [InlineData("{\"as\": 1, \"str\": 2, \"exp\": 3}", ". as {as: $kw, \"str\": $str, (\"e\"+\"x\"+\"p\"): $exp} | [$kw, $str, $exp]", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[[1], [1, 2, 3]]", ".[] as [$a, $b] | [$b, $a]", "[\n  null,\n  1\n]\n[\n  2,\n  1\n]\n")]
@@ -76,6 +82,10 @@ public sealed partial class JqTests
     [InlineData("null as $x | $x", "null\n")]
     [InlineData("1, 2 as $x | $x", "1\n2\n")]
     [InlineData("1 | 2 as $x | $x", "2\n")]
+    [InlineData("1 as $x | 2 as $y | [$x,$y,$x]", "[\n  1,\n  2,\n  1\n]\n")]
+    [InlineData("[1,2,3][] as $x | [[4,5,6,7][$x]]", "[\n  5\n]\n[\n  6\n]\n[\n  7\n]\n")]
+    [InlineData("\"x\" as $x | \"a\"+\"y\" as $y | $x+\",\"+$y", "\"x,ay\"\n")]
+    [InlineData("1 as $x | [$x,$x,$x as $x | $x]", "[\n  1,\n  1,\n  1\n]\n")]
     [InlineData("{if:0,and:1,or:2,then:3,else:4,elif:5,end:6,as:7,def:8,reduce:9,foreach:10,try:11,catch:12,label:13,import:14,include:15,module:16}", "{\n  \"if\": 0,\n  \"and\": 1,\n  \"or\": 2,\n  \"then\": 3,\n  \"else\": 4,\n  \"elif\": 5,\n  \"end\": 6,\n  \"as\": 7,\n  \"def\": 8,\n  \"reduce\": 9,\n  \"foreach\": 10,\n  \"try\": 11,\n  \"catch\": 12,\n  \"label\": 13,\n  \"import\": 14,\n  \"include\": 15,\n  \"module\": 16\n}\n")]
     public async Task Jq_BinderStreamsAndGroups(string filter, string expected)
     {
