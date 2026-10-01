@@ -171,6 +171,17 @@ public sealed partial class JqTests
     [InlineData("[1,2]", "setpath(path(.[]); 0)", "[\n  0,\n  2\n]\n[\n  1,\n  0\n]\n")]
     [InlineData("{\"a\":1}", "[getpath(paths)]", "[\n  1\n]\n")]
     [InlineData("{\"a\":1}", "delpaths([paths])", "{}\n")]
+    // Mistyped descents report container and key kinds like the reference
+    // probe read; fractional indices truncate toward zero; overlapping
+    // deletions resolve order-independently through sorted groups.
+    [InlineData("[1,2]", "try getpath([\"a\"]) catch .", "\"Cannot index array with string (\\\"a\\\")\"\n")]
+    [InlineData("[10,20,30]", "getpath([1.5])", "20\n")]
+    [InlineData("[10,20,30]", "getpath([-1.5])", "30\n")]
+    [InlineData("{\"a\":1}", "try getpath([0]) catch .", "\"Cannot index object with number (0)\"\n")]
+    [InlineData("[10,20,30]", "setpath([1.5]; 99)", "[\n  10,\n  99,\n  30\n]\n")]
+    [InlineData("[10,20]", "try setpath([\"a\"]; 99) catch .", "\"Cannot index array with string (\\\"a\\\")\"\n")]
+    [InlineData("{\"a\":{\"b\":1,\"c\":2}}", "delpaths([[\"a\"],[\"a\",\"b\"]])", "{}\n")]
+    [InlineData("{\"a\":{\"b\":1,\"c\":2}}", "delpaths([[\"a\",\"b\"],[\"a\"]])", "{}\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

@@ -268,7 +268,9 @@ internal static class JqPathUpdates
                     frames.Push(new Frame(segment, CloneObject(obj, context), 0, 0, 0));
                     return obj.TryGetPropertyValue(key.Key, out JsonNode? child) ? child : null;
                 }
-                throw new JqException("expected an object but got: " + context.Runtime.Serialize(current, false, null, false));
+                // Like the reference probe read inside jv_setpath, indexing a
+                // non-object with a key reports the container and key kinds.
+                throw new JqException("Cannot index " + JqRuntime.TypeName(current) + " with string (" + System.Text.Json.Nodes.JsonValue.Create(key.Key).ToJsonString() + ")");
             case IndexSegment index:
                 if (index.IsNaN)
                     throw new JqException("Cannot set array element at NaN index");
