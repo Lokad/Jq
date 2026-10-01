@@ -31,6 +31,10 @@ public sealed partial class JqTests
     [InlineData("empty(1)", "empty expects no arguments")]
     [InlineData("contains", "contains expects one argument")]
     [InlineData("pick", "pick expects one argument")]
+    [InlineData("stderr(1)", "stderr expects no arguments")]
+    [InlineData("input(1)", "input expects no arguments")]
+    [InlineData("inputs(1)", "inputs expects no arguments")]
+    [InlineData("halt(1)", "halt expects no arguments")]
     public async Task Jq_WrongArityIsCompileError(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
