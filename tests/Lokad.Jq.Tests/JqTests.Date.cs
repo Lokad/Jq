@@ -11,7 +11,6 @@ public sealed partial class JqTests
     [InlineData("0.5 | gmtime", "[\n  1970,\n  0,\n  1,\n  0,\n  0,\n  0.5,\n  4,\n  0\n]\n")]
     [InlineData("0 - 1 | gmtime", "[\n  1969,\n  11,\n  31,\n  23,\n  59,\n  59,\n  3,\n  364\n]\n")]
     [InlineData("0 - 1.5 | gmtime", "[\n  1969,\n  11,\n  31,\n  23,\n  59,\n  59.5,\n  3,\n  364\n]\n")]
-    [InlineData("[2015,2,5,23,51,47,4,63] | mktime", "1425599507\n")]
     [InlineData("1425599507 | gmtime | mktime", "1425599507\n")]
     [InlineData("[1969,11,31,23,59,59] | mktime", "-1\n")]
     [InlineData("0 - 1 | gmtime | mktime", "-1\n")]
@@ -34,6 +33,9 @@ public sealed partial class JqTests
     [InlineData("[2015,0,1,0,0,0,0] | mktime", "1420070400\n")]
     [InlineData("[2015,0,1,0,0,0,0,0,99] | mktime", "1420070400\n")]
     [InlineData("[2015,11,31,23,59,60] | mktime", "1451606400\n")]
+    // Weekday and yearday elements are ignored like the reference timegm call, even when inconsistent.
+    [InlineData("[2015,2,5,23,51,47,0,0] | mktime", "1425599507\n")]
+    [InlineData("[2015,2,5,23,51,47,4,63] | mktime", "1425599507\n")]
     public async Task Jq_DateEpochVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
