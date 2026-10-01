@@ -218,6 +218,8 @@ public sealed partial class JqTests
     [InlineData("[1,nan,2]", "rindex(nan)", "null\n")]
     [InlineData("nan", "contains(nan)", "false\n")]
     [InlineData("[1,2]", "inside([1,nan,2])", "true\n")]
+    [InlineData("{\"a\":nan}", "contains({a:nan})", "false\n")]
+    [InlineData("[nan]", "inside([nan])", "false\n")]
     [InlineData("[nan]", "bsearch(nan)", "0\n")]
     public async Task Jq_CollectionSearchFold(string input, string filter, string expected)
     {
