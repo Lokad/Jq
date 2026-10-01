@@ -220,11 +220,11 @@ public sealed partial class JqTests
         // rebuild and the outer collect yields nothing.
         foreach (var (stdin, filter, exit, stdout, stderr) in new (string, string, int, string, string)[]
         {
-            ("[1,2]", "[walk(if . == 2 then error(\"x\") else . end)]", 5, "", "jq: error: x\n"),
+            ("[1,2]\n", "[walk(if . == 2 then error(\"x\") else . end)]", 5, "", "jq: error (at <stdin>:1): x\n"),
             ("[1,2]", "try ([1,2] | walk(if . == 2 then error(\"x\") else . end)) catch .", 0, "\"x\"\n", ""),
             ("[1,2]", "[label $o | [1,2] | walk(if . == 2 then break $o else . end)]", 0, "[]\n", ""),
-            ("{\"a\":1,\"b\":2}", "[walk(if . == 2 then error(\"x\") else . end)]", 5, "", "jq: error: x\n"),
-            ("[[1],[2]]", "walk(if . == 2 then error(\"x\") else . end)", 5, "", "jq: error: x\n"),
+            ("{\"a\":1,\"b\":2}\n", "[walk(if . == 2 then error(\"x\") else . end)]", 5, "", "jq: error (at <stdin>:1): x\n"),
+            ("[[1],[2]]\n", "walk(if . == 2 then error(\"x\") else . end)", 5, "", "jq: error (at <stdin>:1): x\n"),
         })
         {
             var host = new MockFileSystem();
@@ -240,11 +240,11 @@ public sealed partial class JqTests
     public async Task Jq_RecursePropagatesErrors()
     {
         var host = new MockFileSystem();
-        host.SetStandardInput("[[1,2]]");
+        host.SetStandardInput("[[1,2]]\n");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "[recurse(if . == 2 then error(\"x\") elif type == \"array\" then .[] else empty end)]")));
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: error: x\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: error (at <stdin>:1): x\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]

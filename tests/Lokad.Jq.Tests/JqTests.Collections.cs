@@ -261,15 +261,15 @@ public sealed partial class JqTests
         // An error before any decisive output propagates instead of short-circuiting.
         foreach (var (input, filter) in new (string, string)[]
         {
-            ("[true]", "all(.[]; (error(\"x\"), false))"),
-            ("[false]", "any(.[]; (error(\"x\"), true))"),
+            ("[true]\n", "all(.[]; (error(\"x\"), false))"),
+            ("[false]\n", "any(.[]; (error(\"x\"), true))"),
         })
         {
             var host = new MockFileSystem();
             host.SetStandardInput(input);
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
             Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-            Assert.Equal("jq: error: x\n", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal("jq: error (at <stdin>:1): x\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         }
     }

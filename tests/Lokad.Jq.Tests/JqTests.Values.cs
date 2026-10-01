@@ -147,10 +147,10 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("1/0", "jq: number (1) and number (0) cannot be divided because the divisor is zero\n")]
-    [InlineData("1/-0.0", "jq: number (1) and number (-0) cannot be divided because the divisor is zero\n")]
-    [InlineData("0/0", "jq: number (0) and number (0) cannot be divided because the divisor is zero\n")]
-    [InlineData("1%0", "jq: number (1) and number (0) cannot be divided (remainder) because the divisor is zero\n")]
+    [InlineData("1/0", "jq: error (at <unknown>): number (1) and number (0) cannot be divided because the divisor is zero\n")]
+    [InlineData("1/-0.0", "jq: error (at <unknown>): number (1) and number (-0) cannot be divided because the divisor is zero\n")]
+    [InlineData("0/0", "jq: error (at <unknown>): number (0) and number (0) cannot be divided because the divisor is zero\n")]
+    [InlineData("1%0", "jq: error (at <unknown>): number (1) and number (0) cannot be divided (remainder) because the divisor is zero\n")]
     public async Task Jq_ZeroDivisorsAreRuntimeErrors(string filter, string expectedError)
     {
         var host = new MockFileSystem();

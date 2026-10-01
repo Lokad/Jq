@@ -54,11 +54,11 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("null", "null (null) cannot be tsv-formatted, only array")]
-    [InlineData("\"text\"", "string (\"text\") cannot be tsv-formatted, only array")]
-    [InlineData("{}", "object ({}) cannot be tsv-formatted, only array")]
-    [InlineData("[\"valid\", []]", "array ([]) is not valid in a csv row")]
-    [InlineData("[{}]", "object ({}) is not valid in a csv row")]
+    [InlineData("null\n", "null (null) cannot be tsv-formatted, only array")]
+    [InlineData("\"text\"\n", "string (\"text\") cannot be tsv-formatted, only array")]
+    [InlineData("{}\n", "object ({}) cannot be tsv-formatted, only array")]
+    [InlineData("[\"valid\", []]\n", "array ([]) is not valid in a csv row")]
+    [InlineData("[{}]\n", "object ({}) is not valid in a csv row")]
     public async Task Jq_TsvRejectsInvalidRows(string input, string error)
     {
         var host = new MockFileSystem();
@@ -66,7 +66,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "@tsv")));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal($"jq: {error}\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal($"jq: error (at <stdin>:1): {error}\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 

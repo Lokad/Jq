@@ -50,7 +50,7 @@ public sealed partial class JqTests
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
             Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
             Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
-            Assert.Equal("jq: error: x\n", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal("jq: error (at <unknown>): x\n", host.GetOutput(JqFileDescriptor.StdErr));
         }
     }
 
@@ -243,7 +243,7 @@ public sealed partial class JqTests
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
             Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
             Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
-            Assert.Equal("jq: error: x\n", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal("jq: error (at <unknown>): x\n", host.GetOutput(JqFileDescriptor.StdErr));
         }
     }
 
@@ -343,8 +343,8 @@ public sealed partial class JqTests
         // while dynamic ones fail at evaluation (execute.c INSERT), with one wording.
         foreach (var (filter, exit, stderr) in new (string, int, string)[]
         {
-            ("{(1, 2): \"x\"}", 5, "jq: Cannot use number (1) as object key\n"),
-            ("{(error(\"x\")): 1}", 5, "jq: error: x\n"),
+            ("{(1, 2): \"x\"}", 5, "jq: error (at <unknown>): Cannot use number (1) as object key\n"),
+            ("{(error(\"x\")): 1}", 5, "jq: error (at <unknown>): x\n"),
             ("{(1): \"x\"}", 3, "jq: Cannot use number (1) as object key at line 1 column 2 (filter)\n"),
             ("{(null): 1}", 3, "jq: Cannot use null (null) as object key at line 1 column 2 (filter)\n"),
         })

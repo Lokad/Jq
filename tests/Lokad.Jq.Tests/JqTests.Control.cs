@@ -71,7 +71,7 @@ public sealed partial class JqTests
             var host = new MockFileSystem();
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
             Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-            Assert.Equal("jq: error: x\n", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal("jq: error (at <unknown>): x\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         }
     }
@@ -101,18 +101,39 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("error(\"boom\")", "jq: error: boom\n")]
-    [InlineData("\"x\" | error", "jq: error: x\n")]
-    [InlineData("[1] | error", "jq: error: [1]\n")]
+    [InlineData("error(\"boom\")", "jq: error (at <stdin>:1): boom\n")]
+    [InlineData("\"x\" | error", "jq: error (at <stdin>:1): x\n")]
+    [InlineData("[1] | error", "jq: error (at <stdin>:1) (not a string): [1]\n")]
     public async Task Jq_UncaughtErrorsFailWithPayload(string filter, string expectedError)
     {
         var host = new MockFileSystem();
-        host.SetStandardInput("[1]");
+        host.SetStandardInput("[1]\n");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal(expectedError, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
+    public async Task Jq_UncaughtErrorsReportFailingInputPosition()
+    {
+        // The position tracks the failing input like the reference: earlier
+        // outputs are kept with sticky exit 5, and explicit reads under -n
+        // resolve <stdin> instead of <unknown>.
+        foreach (var (stdin, args, exit, stdout, stderr) in new (string, string[], int, string, string)[]
+        {
+            ("1\n2\n", new string[] { "if . == 2 then error(\"x\") else . end" }, 5, "1\n", "jq: error (at <stdin>:2): x\n"),
+            ("5\n", new string[] { "-n", "[input] | error(\"x\")" }, 5, "", "jq: error (at <stdin>:1): x\n"),
+        })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput(stdin);
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", args)));
+            Assert.Equal(exit, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
+        }
     }
 
     [Fact]
@@ -178,12 +199,12 @@ public sealed partial class JqTests
         // An error raised inside a catch handler is not recaught: earlier
         // inputs keep their outputs while the run still reports status 5.
         var host = new MockFileSystem();
-        host.SetStandardInput("[\"hi\",\"ho\"]");
+        host.SetStandardInput("[\"hi\",\"ho\"]\n");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".[]|(try . catch (if .==\"ho\" then \"BROKEN\"|error else empty end)) | if .==\"ho\" then error else \"\\(.) there!\" end")));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal("\"hi there!\"\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: error: ho\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: error (at <stdin>:1): ho\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]

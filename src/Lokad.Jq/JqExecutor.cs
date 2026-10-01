@@ -54,6 +54,30 @@ internal static class JqExecutor
             SortKeys = invocation.SortKeys,
             AsciiOutput = invocation.AsciiOutput,
         };
+        // Uncaught evaluation failures render with the failing input's position
+        // like the reference process loop: string payloads print raw while other
+        // payloads and error shapes print rendered with a not-a-string marker.
+        // Inputs never read report <unknown>; line numbers count the newlines
+        // consumed through the failing value, so values on unterminated tails
+        // report one past the reference fgets-based count.
+        static string RenderUncaughtError(JqContext context, Exception exception)
+        {
+            string position = context.InputFilename is string name
+                ? $"{name}:{context.InputLineNumber}"
+                : "<unknown>";
+            if (exception is JqErrorException user
+                && JqRuntime.TryGetString(user.Payload, out string text))
+                return $"jq: error (at {position}): {text}";
+            if (exception is JqErrorException userPayload)
+            {
+                string rendered = userPayload.Payload is null
+                    ? "null"
+                    : context.Runtime.ToJqString(userPayload.Payload);
+                return $"jq: error (at {position}) (not a string): {rendered}";
+            }
+            return $"jq: error (at {position}): {exception.Message}";
+        }
+
         var stage = 2;
         try
         {
@@ -111,7 +135,7 @@ internal static class JqExecutor
                     {
                         if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int errorStopped)
                             return errorStopped;
-                        await WriteErrorAsync(host, invocation, $"jq: {exception.Message}", cancellationToken).ConfigureAwait(false);
+                        await WriteErrorAsync(host, invocation, RenderUncaughtError(context, exception), cancellationToken).ConfigureAwait(false);
                         stickyError = 5;
                     }
                 }
