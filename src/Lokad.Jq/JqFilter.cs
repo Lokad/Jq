@@ -111,6 +111,26 @@ internal sealed class VariableFilter(string name) : JqFilter
             throw new JqException($"undefined variable ${name}");
         yield return context.Runtime.Clone(value);
     }
+
+    // Upstream LOADV pushes the stored pointer without touching path state,
+    // so PATH_END compares the loaded value against value_at_path by pointer
+    // identity (execute.c LOADV/STOREV with path_intact/jv_identical; jv.c).
+    // Cloned heap values are fresh allocations even when value-equal, so
+    // variable reads travel untracked for strings/arrays/objects while
+    // immediates (null/booleans/numbers) keep the value-identity rule.
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        if (!environment.TryGetValue(name, out JsonNode? value))
+            throw new JqException($"undefined variable ${name}");
+        JsonNode? clone = context.Runtime.Clone(value);
+        if (clone is null || (clone is JsonValue scalar && !TryGetString(scalar, out _)))
+        {
+            yield return new JqValuePath(pair.Segments, clone, pair.Tracked && PathIntact(context.Runtime, pair.Value, clone));
+            yield break;
+        }
+
+        yield return new JqValuePath(pair.Segments, clone, false);
+    }
 }
 
 // Source location: a parse-time constant capturing the file and line where

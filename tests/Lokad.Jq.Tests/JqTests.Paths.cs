@@ -76,6 +76,12 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "try path(delpaths([])) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
     [InlineData("[1]", "try path(setpath([0]; 1)) catch .", "\"Invalid path expression with result [1]\"\n")]
     [InlineData("\"\"", "try path(@base64) catch .", "\"Invalid path expression with result \\\"\\\"\"\n")]
+    // Heap variable reads travel untracked even when value-equal: upstream LOADV shares the stored pointer (execute.c LOADV/STOREV with path_intact/jv_identical), so an identity alias succeeds there and fails here.
+    [InlineData("{\"a\":1}", "try path(. as $x | $x) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
+    [InlineData("{\"a\":1}", "try path({\"a\":1} as $x | $x) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "try path(.a as $x | $x) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
+    [InlineData("1", "path(1 as $x | $x)", "[]\n")]
+    [InlineData("null", "try path(1 as $x | $x) catch .", "\"Invalid path expression with result 1\"\n")]
     public async Task Jq_PathEnumeratesSegments(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
