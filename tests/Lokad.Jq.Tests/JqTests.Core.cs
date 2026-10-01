@@ -126,6 +126,12 @@ public sealed partial class JqTests
     [InlineData("1 % null", "number (1) and null (null) cannot be divided (remainder)")]
     [InlineData("null % 1", "null (null) and number (1) cannot be divided (remainder)")]
     [InlineData("1 / \"a\"", "number (1) and string (\"a\") cannot be divided")]
+    // Remaining mismatched-kind additions fail like binop_plus.
+    [InlineData("\"a\" + {}", "string (\"a\") and object ({}) cannot be added")]
+    [InlineData("{} + \"a\"", "object ({}) and string (\"a\") cannot be added")]
+    [InlineData("[1] + {}", "array ([1]) and object ({}) cannot be added")]
+    [InlineData("{} + [1]", "object ({}) and array ([1]) cannot be added")]
+    [InlineData("1 + []", "number (1) and array ([]) cannot be added")]
     public async Task Jq_MixedTypeArithmeticFails(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
