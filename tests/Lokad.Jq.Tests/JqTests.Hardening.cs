@@ -195,7 +195,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("[1, [2]] | [walk(if type == \"number\" then empty else . end)] | length", "1\n")]
     [InlineData("1 | [walk(if type == \"number\" then (., . + 10) else . end)] | length", "2\n")]
-    public async Task Jq_WalkFirstOnlyAndBodyStreaming(string filter, string expected)
+    public async Task Jq_WalkArrayCollectsAndBodyStreams(string filter, string expected)
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));

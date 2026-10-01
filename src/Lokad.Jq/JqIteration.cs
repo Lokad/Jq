@@ -307,9 +307,11 @@ internal sealed class RecurseFilter(JqFilter Body, JqFilter? Condition) : JqFilt
     }
 }
 
-// `walk(filter)`: bottom-up traversal. Children rebuild first (taking the
-// first walk output per child, dropping empties, like update assignment),
-// then the filter runs against each rebuilt node.
+// `walk(filter)`: bottom-up traversal. Array levels rebuild by collecting
+// every child walk output (reference map), object levels keep the first
+// output per value and drop empties (reference map_values modify
+// first-only, like update assignment), and the filter then runs against
+// each rebuilt node, streaming every output upward.
 internal sealed class WalkFilter(JqFilter Body) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
@@ -322,8 +324,9 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
 
     private IEnumerable<JsonNode?> Walk(JsonNode? node, JqContext context, JqEnvironment environment)
     {
-        // The root rebuilt node streams every body output while nested levels
-        // contribute only their first, matching the first-only child reads below.
+        // The root rebuilt node streams every body output; nested array levels
+        // collect every child output while nested object levels contribute only
+        // their first, matching the reference child reads below.
         JsonNode? rebuilt = BuildRebuilt(node, context, environment);
         foreach (JsonNode? value in Body.Evaluate(rebuilt, context, environment))
             yield return value;
@@ -344,7 +347,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
 
     private sealed record WalkChild(string? Key, int Index, JsonNode? Node);
 
-    private sealed record Walklevel(string? Key, int Index, JsonNode? First);
+    private sealed record Walklevel(string? Key, int Index, List<JsonNode?> Outputs);
 
     private static void FillWalkChildren(WalkFrame frame)
     {
@@ -368,7 +371,8 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
             context.Budget.ChargeNode();
             var walked = new JsonArray();
             foreach (Walklevel part in frame.Parts)
-                walked.Add(part.First);
+                foreach (JsonNode? output in part.Outputs)
+                    walked.Add(output);
             return walked;
         }
         if (frame.Node is JsonObject)
@@ -376,8 +380,8 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
             context.Budget.ChargeNode();
             var walked = new JsonObject();
             foreach (Walklevel part in frame.Parts)
-                if (part.Key is string name)
-                    walked.Add(name, part.First);
+                if (part.Key is string name && part.Outputs.Count > 0)
+                    walked.Add(name, part.Outputs[0]);
             return walked;
         }
         return frame.Node;
@@ -395,6 +399,22 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
         }
         hasOutput = true;
         return outputs.Current;
+    }
+
+    // Every body output of a rebuilt level, cloned for array collection like
+    // map. Object levels use the first-only read above; array levels collect
+    // the whole stream, so empty levels contribute zero elements like the
+    // reference.
+    private List<JsonNode?> CollectWalkOutputs(JsonNode? rebuilt, JqContext context, JqEnvironment environment)
+    {
+        var outputs = new List<JsonNode?>();
+        foreach (JsonNode? value in Body.Evaluate(rebuilt, context, environment))
+        {
+            context.Budget.CheckCancellation();
+            context.Budget.ChargeNode();
+            outputs.Add(context.Runtime.Clone(value));
+        }
+        return outputs;
     }
 
     private JsonNode? BuildRebuilt(JsonNode? node, JqContext context, JqEnvironment environment)
@@ -422,9 +442,17 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
             stack.Pop();
             if (stack.Count == 0)
                 return rebuilt;
-            JsonNode? first = FirstWalkOutput(rebuilt, context, environment, out bool hasOutput);
-            if (hasOutput)
-                stack.Peek().Parts.Add(new Walklevel(frame.Key, frame.Index, first));
+            if (stack.Peek().Node is JsonArray)
+            {
+                List<JsonNode?> outputs = CollectWalkOutputs(rebuilt, context, environment);
+                stack.Peek().Parts.Add(new Walklevel(frame.Key, frame.Index, outputs));
+            }
+            else
+            {
+                JsonNode? first = FirstWalkOutput(rebuilt, context, environment, out bool hasOutput);
+                if (hasOutput)
+                    stack.Peek().Parts.Add(new Walklevel(frame.Key, frame.Index, new List<JsonNode?> { first }));
+            }
         }
         throw new InvalidOperationException("Walk left no rebuilt node.");
     }

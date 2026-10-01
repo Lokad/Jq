@@ -160,10 +160,15 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "[paths(type == \"number\")]", "[\n  [\n    \"a\"\n  ]\n]\n")]
     [InlineData("{\"a\":1}", "[paths(numbers)]", "[\n  [\n    \"a\"\n  ]\n]\n")]
     [InlineData("1", "def while(cond; update): def _while: if cond then ., (update | _while) else empty end; _while; [while(.<100; .*2)]", "[\n  1,\n  2,\n  4,\n  8,\n  16,\n  32,\n  64\n]\n")]
-    // Multi-output walk functions stay first-only at every level, while the reference array branch collects every child output (builtin.jq walk/map); objects agree via map_values first-only.
-    [InlineData("[1]", "[walk(if type == \"number\" then (., . + 10) else . end)]", "[\n  [\n    1\n  ]\n]\n")]
-    [InlineData("[[1]]", "[walk(if type == \"array\" then (., .) else . end)]", "[\n  [\n    [\n      1\n    ]\n  ],\n  [\n    [\n      1\n    ]\n  ]\n]\n")]
+    // Array levels collect every child walk output (builtin.jq walk/map), so the
+    // rebuilt array grows, shrinks, or empties with the child streams; object
+    // levels keep the first output per value and drop empties (map_values).
+    [InlineData("[1]", "[walk(if type == \"number\" then (., . + 10) else . end)]", "[\n  [\n    1,\n    11\n  ]\n]\n")]
+    [InlineData("[[1]]", "[walk(if type == \"array\" then (., .) else . end)]", "[\n  [\n    [\n      1\n    ],\n    [\n      1\n    ]\n  ],\n  [\n    [\n      1\n    ],\n    [\n      1\n    ]\n  ]\n]\n")]
     [InlineData("{\"a\":1}", "[walk(if type == \"number\" then (., . + 10) else . end)]", "[\n  {\n    \"a\": 1\n  }\n]\n")]
+    [InlineData("[1,2]", "walk(if type == \"number\" then (., . + 1) else . end)", "[\n  1,\n  2,\n  2,\n  3\n]\n")]
+    [InlineData("[1]", "[walk(if type == \"array\" then empty else . end)]", "[]\n")]
+    [InlineData("{\"a\":1,\"b\":2}", "walk(if type == \"number\" then (., . + 10) else . end)", "{\n  \"a\": 1,\n  \"b\": 2\n}\n")]
     // Every condition output counts: repeated truthy probes duplicate the state in both loops.
     [InlineData("0", "[while((true, true); empty)]", "[\n  0,\n  0\n]\n")]
     [InlineData("0", "[until((true, true); empty)]", "[\n  0,\n  0\n]\n")]
