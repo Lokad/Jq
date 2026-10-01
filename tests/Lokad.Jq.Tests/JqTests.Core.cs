@@ -111,6 +111,14 @@ public sealed partial class JqTests
     [InlineData("\"a\" * null", "string (\"a\") and null (null) cannot be multiplied")]
     [InlineData("[1] * null", "array ([1]) and null (null) cannot be multiplied")]
     [InlineData("{\"a\":1} - {\"b\":2}", "object ({\"a\":1}) and object ({\"b\":2}) cannot be subtracted")]
+    // Division and remainder absorb no nulls either (binop_divide/modulo).
+    [InlineData("1 / null", "number (1) and null (null) cannot be divided")]
+    [InlineData("null / 1", "null (null) and number (1) cannot be divided")]
+    [InlineData("\"a\" / null", "string (\"a\") and null (null) cannot be divided")]
+    [InlineData("null / \"a\"", "null (null) and string (\"a\") cannot be divided")]
+    [InlineData("1 % null", "number (1) and null (null) cannot be divided (remainder)")]
+    [InlineData("null % 1", "null (null) and number (1) cannot be divided (remainder)")]
+    [InlineData("1 / \"a\"", "number (1) and string (\"a\") cannot be divided")]
     public async Task Jq_MixedTypeArithmeticFails(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
