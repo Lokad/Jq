@@ -891,6 +891,9 @@ internal sealed class DelpathsBuiltinFilter(JqFilter Paths) : JqFilter
 // `pick(EXPRS...)`: rebuilds from null with the original values at each path.
 internal sealed class PickFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 {
+    // Pick rebuilds from null, so its output is never identical to the input.
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);

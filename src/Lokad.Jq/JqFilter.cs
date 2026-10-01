@@ -55,12 +55,16 @@ internal abstract class JqFilter
     }
 
     // Default path transparency: ordinary evaluation, keeping tracking
-    // only for outputs identical to the incoming value. Fresh values travel
-    // untracked and fail at the next path boundary.
+    // only for outputs identical to the incoming value. Filters that build
+    // fresh containers override PreservesPathIdentity so their results travel
+    // untracked and fail at the next path boundary, like the reference,
+    // even when a rebuilt container coincides with the input value.
+    internal virtual bool PreservesPathIdentity => true;
+
     protected virtual IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
         foreach (JsonNode? value in Evaluate(pair.Value, context, environment))
-            yield return new JqValuePath(pair.Segments, value, pair.Tracked && context.Runtime.JsonEquals(value, pair.Value));
+            yield return new JqValuePath(pair.Segments, value, pair.Tracked && PreservesPathIdentity && context.Runtime.JsonEquals(value, pair.Value));
     }
 }
 
@@ -1156,6 +1160,8 @@ internal sealed class ArrayFilter(JqFilter item) : JqFilter
 {
     internal JqFilter Item => item;
 
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         var array = new JsonArray();
@@ -1170,6 +1176,8 @@ internal sealed record ObjectProperty(string? StaticKey, JqFilter? KeyFilter, Jq
 internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : JqFilter
 {
     internal IReadOnlyList<ObjectProperty> Properties => properties;
+
+    internal override bool PreservesPathIdentity => false;
 
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -1512,6 +1520,11 @@ internal sealed class IfFilter(
 
 internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) : JqFilter
 {
+    // Rebuilt containers break path identity even when they coincide with
+    // the input (sorted, deduped, or reversed into place); pass-through
+    // selectors and scalar builtins keep the default rule.
+    internal override bool PreservesPathIdentity => name is not ("sort" or "unique" or "reverse" or "keys" or "keys_unsorted");
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         if (name == "empty")

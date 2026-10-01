@@ -8,6 +8,8 @@ namespace Lokad.Jq;
 // `map(f)`: collects every f-output per element into a new array.
 internal sealed class MapFilter(JqFilter Body) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -31,6 +33,8 @@ internal sealed class MapFilter(JqFilter Body) : JqFilter
 // keep their keys; anything else follows iteration errors.
 internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -73,6 +77,8 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
 // `with_entries(f)`: entries through f and back, multi-outputs included.
 internal sealed class WithEntriesFilter(JqFilter Body) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -100,6 +106,8 @@ internal sealed class InFilter(JqFilter Containers) : JqFilter
 // `add` and `add(f)`: folds a value stream with `+` from null.
 internal sealed class AddValuesFilter(JqFilter Values) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -111,6 +119,8 @@ internal sealed class AddValuesFilter(JqFilter Values) : JqFilter
 // `flatten` and `flatten(depth)`: depth-limited flattening over arrays.
 internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -133,6 +143,8 @@ internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
 // `transpose`: rows become columns, jagged rows padded with null.
 internal sealed class TransposeFilter : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -221,6 +233,8 @@ internal sealed class RangeFilter(IReadOnlyList<JqFilter> args) : JqFilter
 // `combinations` and `combinations(n)`: cartesian products of array rows.
 internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -370,6 +384,8 @@ internal static class CollectionKeys
 // `sort_by(f)`: stable ordering by collected keys.
 internal sealed class SortByFilter(JqFilter Keys) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -388,6 +404,8 @@ internal sealed class SortByFilter(JqFilter Keys) : JqFilter
 // `group_by(f)`: stable-sorted runs of equal keys.
 internal sealed class GroupByFilter(JqFilter Keys) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -416,6 +434,8 @@ internal sealed class GroupByFilter(JqFilter Keys) : JqFilter
 // `unique_by(f)`: first element per equal-key run in sorted order.
 internal sealed class UniqueByFilter(JqFilter Keys) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -466,6 +486,8 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
 // _sort_by_impl(keys): stable ordering by precomputed key arrays.
 internal sealed class SortByImplFilter(JqFilter Keys) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -495,6 +517,8 @@ internal sealed class SortByImplFilter(JqFilter Keys) : JqFilter
 // _group_by_impl(keys): stable-sorted runs of equal precomputed keys.
 internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -534,6 +558,8 @@ internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
 // _unique_by_impl(keys): first element per equal-key run in sorted order.
 internal sealed class UniqueByImplFilter(JqFilter Keys) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -606,6 +632,8 @@ internal sealed class MinMaxByImplFilter(JqFilter Keys, bool TakeMax) : JqFilter
 // _flatten(depth): depth-limited flattening without the negative-depth guard.
 internal sealed class FlattenImplFilter(JqFilter Depth) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);

@@ -29,6 +29,10 @@ public sealed partial class JqTests
     [InlineData("[1,[[],{\"a\":2}]]", "[paths]", "[\n  [\n    0\n  ],\n  [\n    1\n  ],\n  [\n    1,\n    0\n  ],\n  [\n    1,\n    1\n  ],\n  [\n    1,\n    1,\n    \"a\"\n  ]\n]\n")]
     [InlineData("1", "path(.)", "[]\n")]
     [InlineData("null", "[path(..)]", "[\n  []\n]\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "try path(.a | map(select(.b == 0))) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "try path(.a | map(select(.b == 0)) | .[0]) catch .", "\"Invalid path expression near attempt to access element 0 of [{\\\"b\\\":0}]\"\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "try path(.a | map(select(.b == 0)) | .c) catch .", "\"Invalid path expression near attempt to access element \\\"c\\\" of [{\\\"b\\\":0}]\"\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "try path(.a | map(select(.b == 0)) | .[]) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"b\\\":0}]\"\n")]
     public async Task Jq_PathEnumeratesSegments(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
