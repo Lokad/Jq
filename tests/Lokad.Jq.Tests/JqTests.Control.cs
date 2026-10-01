@@ -49,6 +49,10 @@ public sealed partial class JqTests
     [InlineData("null", "\"foo\" | try ((try . catch \"caught too much\") | error) catch \"caught just right\"", "\"caught just right\"\n")]
     // Upstream try/catch/general-`?` vector: explicit errors, index mistypes, and empty all behave per the reference; the index wording follows the structured-error policy.
     [InlineData("[0,1,2,3]", "[.[]|try if . == 0 then error(\"foo\") elif . == 1 then .a elif . == 2 then empty else . end catch .]", "[\n  \"foo\",\n  \"cannot index number with string \\\"a\\\"\",\n  3\n]\n")]
+    // Upstream chaining/suffix-list vector: `?` suppression matches try/catch branch for branch; iterate wording follows the structured-error policy.
+    [InlineData("[{\"a\": [1,2]}, {\"a\": 123}]", "map(try .a[] catch ., try .a.[] catch ., .a[]?, .a.[]?)", "[\n  1,\n  2,\n  1,\n  2,\n  1,\n  2,\n  1,\n  2,\n  \"cannot iterate over number\",\n  \"cannot iterate over number\"\n]\n")]
+    // Index-error shape without a key detail, per the same policy.
+    [InlineData("[]", "try 0[implode] catch .", "\"cannot index number\"\n")]
     public async Task Jq_TryCatchHandlesErrors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
