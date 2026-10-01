@@ -110,6 +110,19 @@ public sealed partial class JqTests
     }
 
 [Fact]
+    public async Task Jq_InputHugeExponentClampsCleanly()
+    {
+        // Absurd exponents in input values clamp to the double profile like
+        // literals do instead of failing: the reference pipes such values
+        // through successfully (upstream #2367).
+        var host = new MockFileSystem();
+        host.SetStandardInput("{\"a\": 1E9999999999}");
+        var (exit, stdout, stderr) = await RunInputAsync(host, ".a");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("1.7976931348623157E+308\n", stdout);
+    }
+
+[Fact]
     public async Task Jq_SlurpTrailingGarbageIsInputFailure()
     {
         var inner = new MockFileSystem();

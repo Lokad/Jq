@@ -232,6 +232,21 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_Modules_DotLibraryDirectoryIsAccepted()
+    {
+        // A dot search directory parses in attached (-L.) and separate
+        // (-L .) forms alike and never blocks a program that needs no
+        // imports (upstream #3194).
+        foreach (string[] args in new string[][] { ["-n", "-L.", "42"], ["-n", "-L", ".", "42"] })
+        {
+            var fs = new MockFileSystem();
+            var (exit, stdout, stderr) = await RunModulesAsync(fs, args);
+            Assert.True(exit == 0, string.Join(" ", args) + "|" + stderr);
+            Assert.Equal("42\n", stdout);
+        }
+    }
+
+    [Fact]
     public async Task Jq_Modules_RelativeViaFilterFile()
     {
         var fs = new MockFileSystem();

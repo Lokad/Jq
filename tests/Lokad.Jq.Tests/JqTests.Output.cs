@@ -104,6 +104,19 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_RawOutput0KeepsPrefixBeforeNulFailure()
+    {
+        // Values rendered before a NUL-containing string stay on stdout when
+        // --raw-output0 fails with exit 5 (upstream pins a\0 as the prefix).
+        var host = new MockFileSystem();
+        host.SetStandardInput("[\"a\", \"c\\u0000d\", \"b\"]");
+        var (exit, _, stderr) = await RunOutputAsync(host, "--raw-output0", ".[]");
+        Assert.Equal(5, exit);
+        Assert.Equal("a\0"u8.ToArray(), host.GetOutputBytes(JqFileDescriptor.StdOut));
+        Assert.Contains("Cannot dump a string containing NUL", stderr);
+    }
+
+    [Fact]
 
     public async Task Jq_JoinImpliesRawOutput()
     {

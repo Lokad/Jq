@@ -70,7 +70,11 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_StreamSlurpComposesEvents()
     {
-        // Slurped streaming input decodes to the reference event arrays.
+        // Slurped streaming input decodes element-wise: each top-level value
+        // contributes its leaf and close events. The reference additionally
+        // emits a repeated [[0]] close between values (upstream #3273 pins
+        // [[[0],1],[[0]],[[0]],[[0],2],[[0]]]), which stays an open gap, so
+        // this pins our four-event composition, not byte parity there.
         var host = new MockFileSystem();
         host.SetStandardInput("[1][2]");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "-c", "-s", "--stream", ".");
