@@ -65,6 +65,7 @@ public sealed partial class JqTests
     [InlineData("1000 | exp", "1.7976931348623157E+308\n")]
     [InlineData("(-1000) | exp", "0\n")]
     [InlineData("1e1000 | sin", "null\n")]
+    [InlineData("-10E-1000000001", "-0\n")]
     [InlineData("1 + 2 * 2 + 10 / 2", "10\n")]
     [InlineData("1 | atan * 4 * 1000000|floor / 1000000", "3.141592\n")]
     [InlineData("[-1.1,1.1,1.9] | [.[]|floor]", "[\n  -2,\n  1,\n  1\n]\n")]

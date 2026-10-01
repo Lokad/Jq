@@ -262,6 +262,28 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
+    [Fact]
+    public async Task Jq_RejectsOversizedDefinitions()
+    {
+        // Mirrors the reference overflow guards: 4097 parameters and
+        // 4097 sibling definitions both stop at the token policy.
+        string parameters = string.Join(";", System.Linq.Enumerable.Range(0, 4097).Select(i => "a" + i));
+        string arguments = string.Join(";", System.Linq.Enumerable.Range(0, 4097));
+        foreach (string filter in new[]
+        {
+            "def f(" + parameters + "): .; f(" + arguments + ")",
+            string.Join("; ", System.Linq.Enumerable.Range(0, 4097).Select(i => "def f" + i + ": " + i)) + "; " + string.Join(" + ", System.Linq.Enumerable.Range(0, 4097).Select(i => "f" + i)),
+        })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+            Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Contains("4096-token limit", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        }
+    }
+
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
