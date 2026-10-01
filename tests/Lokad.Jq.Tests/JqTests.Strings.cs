@@ -179,6 +179,10 @@ public sealed partial class JqTests
     [InlineData("[\"a, bc, def, ghij, jklmn, a,b, c,d, e,f\", \"a,b,c,d, e,f,g,h\"]", "[.[] / \",\"]", "[\n  [\n    \"a\",\n    \" bc\",\n    \" def\",\n    \" ghij\",\n    \" jklmn\",\n    \" a\",\n    \"b\",\n    \" c\",\n    \"d\",\n    \" e\",\n    \"f\"\n  ],\n  [\n    \"a\",\n    \"b\",\n    \"c\",\n    \"d\",\n    \" e\",\n    \"f\",\n    \"g\",\n    \"h\"\n  ]\n]\n")]
     [InlineData("[\"a, bc, def, ghij, jklmn, a,b, c,d, e,f\", \"a,b,c,d, e,f,g,h\"]", "[.[] / \", \"]", "[\n  [\n    \"a\",\n    \"bc\",\n    \"def\",\n    \"ghij\",\n    \"jklmn\",\n    \"a,b\",\n    \"c,d\",\n    \"e,f\"\n  ],\n  [\n    \"a,b,c,d\",\n    \"e,f,g,h\"\n  ]\n]\n")]
     [InlineData("[\"a\",\"b\",\"c\",\"d\"]", "join(\",\",\"/\")", "\"a,b,c,d\"\n\"a/b/c/d\"\n")]
+    // Caught split/explode failures surface the message alone, like the reference freed-operand errors.
+    [InlineData("1", "try split(\",\") catch .", "\"split input and separator must be strings\"\n")]
+    [InlineData("\"a\"", "try split(1) catch .", "\"split input and separator must be strings\"\n")]
+    [InlineData("5", "try explode catch .", "\"explode input must be a string\"\n")]
     public async Task Jq_SplitJoinExplode(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
