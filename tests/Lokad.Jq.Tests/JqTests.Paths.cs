@@ -28,6 +28,10 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3]", "path(.[:])", "[\n  {\n    \"start\": null,\n    \"end\": null\n  }\n]\n")]
     [InlineData("[1,[[],{\"a\":2}]]", "[paths]", "[\n  [\n    0\n  ],\n  [\n    1\n  ],\n  [\n    1,\n    0\n  ],\n  [\n    1,\n    1\n  ],\n  [\n    1,\n    1,\n    \"a\"\n  ]\n]\n")]
     [InlineData("1", "path(.)", "[]\n")]
+    // Scalar inputs enumerate no descent paths, while path(.) still reports the root.
+    [InlineData("1", "[paths]", "[]\n")]
+    [InlineData("\"a\"", "[paths]", "[]\n")]
+    [InlineData("null", "[paths]", "[]\n")]
     [InlineData("null", "[path(..)]", "[\n  []\n]\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "try path(.a | map(select(.b == 0))) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "try path(.a | map(select(.b == 0)) | .[0]) catch .", "\"Invalid path expression near attempt to access element 0 of [{\\\"b\\\":0}]\"\n")]
