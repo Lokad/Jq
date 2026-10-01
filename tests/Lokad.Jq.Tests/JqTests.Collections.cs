@@ -93,11 +93,17 @@ public sealed partial class JqTests
     [InlineData("null", "transpose", "[]\n")]
     [InlineData("{\"a\": [1, 2]}", "transpose", "[\n  [\n    1\n  ],\n  [\n    2\n  ]\n]\n")]
     [InlineData("[[],[1]]", "transpose", "[\n  [\n    null,\n    1\n  ]\n]\n")]
+    // Null rows contribute zero width like empty rows; present nulls pad.
+    [InlineData("[null]", "transpose", "[]\n")]
+    [InlineData("[[1],null]", "transpose", "[\n  [\n    1,\n    null\n  ]\n]\n")]
     [InlineData("[[1, 2], [3]]", "combinations", "[\n  1,\n  3\n]\n[\n  2,\n  3\n]\n")]
     [InlineData("[1, 2]", "combinations(2)", "[\n  1,\n  1\n]\n[\n  1,\n  2\n]\n[\n  2,\n  1\n]\n[\n  2,\n  2\n]\n")]
     [InlineData("[1, 2]", "combinations(0)", "[]\n")]
     [InlineData("[1, 2]", "combinations(-1)", "[]\n")]
     [InlineData("[]", "combinations", "[]\n")]
+    // An empty row kills the cartesian product per the recursive desugar.
+    [InlineData("[[]]", "combinations", "")]
+    [InlineData("[[],[1]]", "combinations", "")]
     [InlineData("[1, 2, 3]", "bsearch(0, 1, 2, 3, 4)", "-1\n0\n1\n2\n-4\n")]
     [InlineData("[]", "bsearch(1)", "-1\n")]
     [InlineData("[[0, [1]]]", "flatten((1, 0))", "[\n  0,\n  [\n    1\n  ]\n]\n[\n  [\n    0,\n    [\n      1\n    ]\n  ]\n]\n")]
