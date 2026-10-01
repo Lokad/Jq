@@ -272,6 +272,27 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_BreakEdgesAreCompileErrors()
+    {
+        // Bare and unbound breaks fail at compile time. The reference reports
+        // `break requires a label to break to` and `break used outside labeled
+        // control structure` where we report the generic parse and undefined-label shapes.
+        foreach (var (filter, diagnostic) in new (string, string)[]
+        {
+            ("break", "jq: expected $, got <end> at line 1 column 6 (filter)\n"),
+            ("break $nosuchlabel", "jq: undefined label $nosuchlabel at line 1 column 7 (filter)\n"),
+            ("label $x | break $y", "jq: undefined label $y at line 1 column 18 (filter)\n"),
+        })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+            Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        }
+    }
+
+    [Fact]
     public async Task Jq_UndefinedVariableIsCompileError()
     {
         var host = new MockFileSystem();
