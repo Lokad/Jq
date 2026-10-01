@@ -149,5 +149,18 @@ public sealed partial class JqTests
         Assert.True(exit == 0, stderr);
         Assert.Equal("\u001e6\n", stdout);
     }
+
+    [Fact]
+    public async Task Jq_SeqFramesEachOutput()
+    {
+        // Sequence framing prefixes every output value, including values
+        // fanned out from a single input, like the reference.
+        var host = new MockFileSystem();
+        host.SetStandardInput("[1,2]");
+        var (exit, stdout, stderr) = await RunSeqAsync(host, "--seq", ".[]");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("\u001e1\n\u001e2\n", stdout);
+        Assert.Empty(stderr);
+    }
 }
 

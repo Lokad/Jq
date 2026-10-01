@@ -53,6 +53,46 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_RawOutput0FramesAllValues()
+    {
+        // Like raw output, strings render without quotes; every value,
+        // scalar or structured, ends with a NUL terminator instead of LF.
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput("[1,\"a\",null,true]");
+            var tool = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", ["--raw-output0", ".[]"], [])));
+            var exit = await tool.ExecuteAsync(host, CancellationToken.None);
+            Assert.Equal(0, exit);
+            Assert.Equal("1\0a\0null\0true\0"u8.ToArray(), host.GetOutputBytes(JqFileDescriptor.StdOut));
+        }
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput("{\"a\":1}");
+            var (exit, stdout, stderr) = await RunOutputAsync(host, "--raw-output0", ".");
+            Assert.Equal(0, exit);
+            Assert.Equal("{\n  \"a\": 1\n}\0"u8.ToArray(), host.GetOutputBytes(JqFileDescriptor.StdOut));
+            Assert.Equal("", stderr);
+        }
+    }
+
+    [Fact]
+    public async Task Jq_JoinConcatenatesRawOutputs()
+    {
+        foreach (var (stdin, filter, expected) in new (string, string, string)[]
+        {
+            ("[1,2]", ".[]", "12"),
+            ("[\"a\",\"b\"]", ".[]", "ab"),
+        })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput(stdin);
+            var (exit, stdout, stderr) = await RunOutputAsync(host, "-j", filter);
+            Assert.True(exit == 0, stderr);
+            Assert.Equal(expected, stdout);
+        }
+    }
+
+    [Fact]
     public async Task Jq_RawOutput0RejectsNulStrings()
     {
         var host = new MockFileSystem();
