@@ -27,6 +27,9 @@ public sealed partial class JqTests
     [InlineData("[1,2,3,4,5]", "foreach .[] as $item (0; . + $item; [$item, . * 2])", "[\n  1,\n  2\n]\n[\n  2,\n  6\n]\n[\n  3,\n  12\n]\n[\n  4,\n  20\n]\n[\n  5,\n  30\n]\n")]
     [InlineData("[\"foo\", \"bar\", \"baz\"]", "foreach .[] as $item (0; . + 1; {index: ., $item})", "{\n  \"index\": 1,\n  \"item\": \"foo\"\n}\n{\n  \"index\": 2,\n  \"item\": \"bar\"\n}\n{\n  \"index\": 3,\n  \"item\": \"baz\"\n}\n")]
     [InlineData("[1,2,3,4,5]", "[.[]|[.,1]|until(.[0] < 1; [.[0] - 1, .[1] * .[0]])|.[1]]", "[\n  1,\n  2,\n  6,\n  24,\n  120\n]\n")]
+    // Breaking out of a reduction abandons it: no intermediate states escape.
+    [InlineData("[1,2,3,4]", "[label $out | reduce .[] as $x (0; if $x > 2 then break $out else . + $x end)]", "[]\n")]
+    [InlineData("[false, true]", "[label $out | reduce .[] as $x (null; if $x == false then break $out else . end)]", "[]\n")]
     public async Task Jq_ReduceReadsInputs(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
