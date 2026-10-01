@@ -111,6 +111,44 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_FromFileTreatsOperandsAsInputFiles()
+    {
+        // Like the reference, operands after -f are input files, not filters.
+        var host = new MockFileSystem();
+        host.AddFile("/prog.jq", ".a");
+        host.AddFile("/in.json", "{\"a\":7}");
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-f", "/prog.jq", "/in.json");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("7\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
+    public async Task Jq_NullInputSkipsInputFiles()
+    {
+        // Like the reference PROVIDE_NULL branch, -n runs once on null without reading files.
+        var host = new MockFileSystem();
+        host.AddFile("/prog.jq", ".a");
+        host.AddFile("/in.json", "{\"a\":7}");
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "-f", "/prog.jq", "/in.json");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("null\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
+    public async Task Jq_FromFileReadsStandardInput()
+    {
+        var host = new MockFileSystem();
+        host.AddFile("/prog.jq", ".a");
+        host.SetStandardInput("{\"a\":7}");
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-f", "/prog.jq");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("7\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
     public async Task Jq_FirstArgWins()
     {
         var host = new MockFileSystem();
