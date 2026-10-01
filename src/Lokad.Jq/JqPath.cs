@@ -312,7 +312,9 @@ internal static class JqPathUpdates
                 }
                 if (current is JsonValue scalar && scalar.TryGetValue<string>(out _))
                     throw new JqException("Cannot update string slices");
-                throw new JqException("expected an array but got: " + context.Runtime.Serialize(current, false, null, false));
+                // Like the reference jv_set fallthrough, a slice update outside
+                // arrays reports the component and container kinds.
+                throw new JqException("Cannot update field at object index of " + JqRuntime.TypeName(current));
             default:
                 throw SegmentTypeError(current, segment, context);
         }

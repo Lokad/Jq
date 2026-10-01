@@ -182,6 +182,12 @@ public sealed partial class JqTests
     [InlineData("[10,20]", "try setpath([\"a\"]; 99) catch .", "\"Cannot index array with string (\\\"a\\\")\"\n")]
     [InlineData("{\"a\":{\"b\":1,\"c\":2}}", "delpaths([[\"a\"],[\"a\",\"b\"]])", "{}\n")]
     [InlineData("{\"a\":{\"b\":1,\"c\":2}}", "delpaths([[\"a\",\"b\"],[\"a\"]])", "{}\n")]
+    // Slice updates outside arrays report component and container kinds like
+    // the reference jv_set fallthrough; getpath reads slice components too.
+    [InlineData("5", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot update field at object index of number\"\n")]
+    [InlineData("true", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot update field at object index of boolean\"\n")]
+    [InlineData("{\"a\":1}", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot update field at object index of object\"\n")]
+    [InlineData("[10,20,30]", "getpath([{start:1,end:2}])", "[\n  20\n]\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
