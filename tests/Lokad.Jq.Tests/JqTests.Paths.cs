@@ -27,6 +27,8 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3]", "path(.[:2])", "[\n  {\n    \"start\": null,\n    \"end\": 2\n  }\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[:])", "[\n  {\n    \"start\": null,\n    \"end\": null\n  }\n]\n")]
     [InlineData("[1,[[],{\"a\":2}]]", "[paths]", "[\n  [\n    0\n  ],\n  [\n    1\n  ],\n  [\n    1,\n    0\n  ],\n  [\n    1,\n    1\n  ],\n  [\n    1,\n    1,\n    \"a\"\n  ]\n]\n")]
+    [InlineData("1", "path(.)", "[]\n")]
+    [InlineData("null", "[path(..)]", "[\n  []\n]\n")]
     public async Task Jq_PathEnumeratesSegments(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -103,6 +105,8 @@ public sealed partial class JqTests
     [InlineData("null", "setpath([0,\"a\"]; 1)", "[\n  {\n    \"a\": 1\n  }\n]\n")]
     [InlineData("[]", "try [\"OK\", setpath([[1]]; 1)] catch [\"KO\", .]", "[\n  \"KO\",\n  \"expected a number for indexing an array but got: [1]\"\n]\n")]
     [InlineData("{\"hi\": \"hello\"}", "try [\"ok\", setpath([1]; 1)] catch [\"ko\", .]", "[\n  \"ko\",\n  \"Cannot index object with number (1)\"\n]\n")]
+    [InlineData("null", "setpath([\"a\",\"b\",\"c\"]; 1)", "{\n  \"a\": {\n    \"b\": {\n      \"c\": 1\n    }\n  }\n}\n")]
+    [InlineData("{}", "getpath([\"a\"])", "null\n")]
     [InlineData("{\"a\":1}", "setpath([]; 5)", "5\n")]
     [InlineData("{\"a\":1}", "getpath([])", "{\n  \"a\": 1\n}\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
@@ -138,6 +142,7 @@ public sealed partial class JqTests
     [InlineData("[\"foo\", \"bar\", \"baz\"]", "del(.[1, 2])", "[\n  \"foo\"\n]\n")]
     [InlineData("{\"foo\": [0,1,2,3,4], \"bar\": [0,1]}", "del(.), del(empty), del((.foo,.bar,.baz) | .[2,3,0]), del(.foo[0], .bar[0], .foo, .baz.bar[0].x)", "null\n{\n  \"foo\": [\n    0,\n    1,\n    2,\n    3,\n    4\n  ],\n  \"bar\": [\n    0,\n    1\n  ]\n}\n{\n  \"foo\": [\n    1,\n    4\n  ],\n  \"bar\": [\n    1\n  ]\n}\n{\n  \"bar\": [\n    1\n  ]\n}\n")]
     [InlineData("null", "try delpaths([[range(10001) | 0]]) catch .", "\"Path too deep\"\n")]
+    [InlineData("{\"a\":1}", "delpaths([[]])", "null\n")]
     [InlineData("{\"a\":1}", "delpaths([])", "{\n  \"a\": 1\n}\n")]
     [InlineData("{\"a\": 1, \"b\": {\"c\": 2, \"d\": 3}, \"e\": 4}", "pick(.a, .b.c, .x)", "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2\n  },\n  \"x\": null\n}\n")]
     [InlineData("{\"foo\": 42, \"bar\": 9001, \"baz\": 42}", "del(.foo)", "{\n  \"bar\": 9001,\n  \"baz\": 42\n}\n")]
