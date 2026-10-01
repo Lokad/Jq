@@ -26,6 +26,7 @@ public sealed partial class JqTests
     [InlineData("{\"foo_bar\": 2} | .foo_bar", "2\n")]
     [InlineData("{\"foo\": {\"bar\": 42}, \"bar\": \"badvalue\"} | .[\"foo\"].bar", "42\n")]
     [InlineData("{\"foo\": {\"bar\": 20}} | .\"foo\".\"bar\"", "20\n")]
+    [InlineData(".e5", "null\n")]
     [InlineData("{\"foo\":{\"bar\":4},\"baz\":\"bar\"} | .foo[.baz]", "4\n")]
     public async Task Jq_IndexStreamsEveryKey(string filter, string expected)
     {

@@ -19,6 +19,12 @@ public sealed partial class JqTests
     [InlineData("1 + 2 as $x | -$x", "-3\n")]
     [InlineData("2-1", "1\n")]
     [InlineData("2-(-1)", "3\n")]
+    [InlineData("4/-2", "-2\n")]
+    [InlineData("4/ -2", "-2\n")]
+    [InlineData("1 - -1", "2\n")]
+    [InlineData("2--1", "3\n")]
+    [InlineData("5.", "5\n")]
+    [InlineData("1E5", "100000\n")]
     public async Task Jq_CorePrecedenceAndLiterals(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -245,6 +251,9 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("\"a\\qb\"", "invalid escape")]
     [InlineData("`", "invalid character")]
+    [InlineData("1e", "invalid number")]
+    [InlineData("1e+", "invalid number")]
+    [InlineData("0x10", "expected End, got x10")]
     public async Task Jq_LexerErrorsIdentifyTheirSpan(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
