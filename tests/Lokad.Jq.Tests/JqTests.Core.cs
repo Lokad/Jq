@@ -80,6 +80,10 @@ public sealed partial class JqTests
     [InlineData("\"a, b,c,d, e\" | . / \", \"", "[\n  \"a\",\n  \"b,c,d\",\n  \"e\"\n]\n")]
     [InlineData("[true, false | not]", "[\n  false,\n  true\n]\n")]
     [InlineData("\"\" | split(\"\")", "[]\n")]
+    // Only object-object collisions recurse; arrays and mixed collisions replace like jvp_object_merge_recursive.
+    [InlineData("{\"a\":[1]} * {\"a\":[2]}", "{\n  \"a\": [\n    2\n  ]\n}\n")]
+    [InlineData("{\"a\":{\"x\":1}} * {\"a\":5}", "{\n  \"a\": 5\n}\n")]
+    [InlineData("{\"a\":5} * {\"a\":{\"x\":1}}", "{\n  \"a\": {\n    \"x\": 1\n  }\n}\n")]
     public async Task Jq_OperatorTypeCombinations(string filter, string expected)
     {
         var host = new MockFileSystem();
