@@ -234,6 +234,7 @@ public sealed partial class JqTests
     [InlineData("0.5 | lgamma_r | .[1]", "1\n")]
     [InlineData("0 - 0.5 | lgamma_r | .[0] - 1.2655121234846454 | abs < 1e-9", "true\n")]
     [InlineData("0 - 0.5 | lgamma_r | .[1]", "-1\n")]
+    [InlineData("[range(-99/2;99/2;1)] as $orig | [$orig[]|pow(2;.)|log2] as $back | ($orig|keys)[]|. as $k | (($orig|.[$k])-($back|.[$k]))|if . < 0 then . * -1 else . end|select(.>.00005)", "")]
     [InlineData("0 | erf", "0\n")]
     [InlineData("1 | erf | . - 0.8427007929497149 | abs < 1e-6", "true\n")]
     [InlineData("0 - 1 | erf | . + 0.8427007929497149 | abs < 1e-6", "true\n")]
