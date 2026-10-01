@@ -208,11 +208,21 @@ public sealed partial class JqTests
         Assert.Equal("5001\n", stdout);
     }
 
-    [Fact]
-    public async Task Jq_TostreamRoundtrip()
+    // Identity battery: empty containers, nesting, duplicate keys, and
+    // empty-string keys all rebuild exactly through the event fold.
+    [Theory]
+    [InlineData("[0,[1,{\"a\":1},{\"b\":2}]]")]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("[[],{}]")]
+    [InlineData("{\"a\":{},\"b\":[]}")]
+    [InlineData("[[[[1]]]]")]
+    [InlineData("{\"a\":1,\"a\":2}")]
+    [InlineData("{\"\":0}")]
+    public async Task Jq_TostreamRoundtrip(string input)
     {
         var host = new MockFileSystem();
-        host.SetStandardInput("[0,[1,{\"a\":1},{\"b\":2}]]");
+        host.SetStandardInput(input);
         var (exit, stdout, stderr) = await RunStreamAsync(host, ". as $dot | fromstream($dot | tostream) | . == $dot");
         Assert.True(exit == 0, stderr);
         Assert.Equal("true\n", stdout);
