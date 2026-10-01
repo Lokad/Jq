@@ -82,8 +82,9 @@ dependency-free (no native decimal library); the profile is pinned by
 
 ## Capability and input notes
 
-- There is no decimal-capability introspection yet; decimal-sensitive
-  builtins and their capability queries arrive with the math inventory.
+- Decimal-capability introspection exists and reports the double domain:
+  `have_decnum` and `have_literal_numbers` both evaluate to `false`, so
+  decimal-sensitive conditionals take their non-decimal branches.
 - Non-finite JSON tokens (`nan`, `inf`, `infinity`, any ASCII case with
   an optional sign) parse like the reference strtod fallback wherever a
   value is due, at top level and nested; anything else (for example `NaN1`)
