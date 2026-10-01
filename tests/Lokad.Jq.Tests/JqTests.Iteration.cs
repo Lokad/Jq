@@ -153,6 +153,10 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "[paths(type == \"number\")]", "[\n  [\n    \"a\"\n  ]\n]\n")]
     [InlineData("{\"a\":1}", "[paths(numbers)]", "[\n  [\n    \"a\"\n  ]\n]\n")]
     [InlineData("1", "def while(cond; update): def _while: if cond then ., (update | _while) else empty end; _while; [while(.<100; .*2)]", "[\n  1,\n  2,\n  4,\n  8,\n  16,\n  32,\n  64\n]\n")]
+    // Multi-output walk functions stay first-only at every level, while the reference array branch collects every child output (builtin.jq walk/map); objects agree via map_values first-only.
+    [InlineData("[1]", "[walk(if type == \"number\" then (., . + 10) else . end)]", "[\n  [\n    1\n  ]\n]\n")]
+    [InlineData("[[1]]", "[walk(if type == \"array\" then (., .) else . end)]", "[\n  [\n    [\n      1\n    ]\n  ],\n  [\n    [\n      1\n    ]\n  ]\n]\n")]
+    [InlineData("{\"a\":1}", "[walk(if type == \"number\" then (., . + 10) else . end)]", "[\n  {\n    \"a\": 1\n  }\n]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
