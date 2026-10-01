@@ -64,7 +64,18 @@ internal abstract class JqFilter
     protected virtual IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
         foreach (JsonNode? value in Evaluate(pair.Value, context, environment))
-            yield return new JqValuePath(pair.Segments, value, pair.Tracked && PreservesPathIdentity && context.Runtime.JsonEquals(value, pair.Value));
+            yield return new JqValuePath(pair.Segments, value, pair.Tracked && PreservesPathIdentity && PathIntact(context.Runtime, pair.Value, value));
+    }
+
+    // Path intactness mirrors upstream bitwise identity for doubles (so
+    // signed zeros stay distinct) while keeping value equality elsewhere.
+    internal static bool PathIntact(JqRuntime runtime, JsonNode? expected, JsonNode? actual)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        if (expected is JsonValue a && actual is JsonValue b
+            && a.TryGetValue<double>(out double x) && b.TryGetValue<double>(out double y))
+            return BitConverter.DoubleToInt64Bits(x) == BitConverter.DoubleToInt64Bits(y);
+        return runtime.JsonEquals(actual, expected);
     }
 }
 
@@ -79,6 +90,13 @@ internal sealed class IdentityFilter : JqFilter
 internal sealed class LiteralFilter(JsonNode? value) : JqFilter
 {
     internal JsonNode? Value => value;
+
+    // Upstream identity keeps immediates (numbers, booleans, null) intact
+    // by value while heap values (strings, arrays, objects) break on fresh
+    // copies, so literals follow the same split.
+    internal override bool PreservesPathIdentity =>
+        value is null || (value is JsonValue scalar && !TryGetString(scalar, out _));
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         yield return context.Runtime.Clone(value);
@@ -1841,6 +1859,9 @@ internal sealed class FormatFilter(string format) : JqFilter
 
 internal sealed class InterpolatedStringFilter : JqFilter
 {
+    // Templates always build fresh strings, so results travel untracked.
+    internal override bool PreservesPathIdentity => false;
+
     private abstract record Segment;
 
     private sealed record Literal(string Text) : Segment;
