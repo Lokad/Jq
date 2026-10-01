@@ -991,7 +991,9 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                     yield return 0;
                     continue;
                 }
-                yield return Number(bound);
+                if (!FlattenFilter.TryDepthLevel(bound, out double start))
+                    throw new JqException("Array/string slice indices must be integers");
+                yield return start;
             }
         }
 
@@ -1009,8 +1011,10 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
             {
                 if (bound == null || (bound is JsonValue edge && edge.TryGetValue<double>(out double nan) && double.IsNaN(nan)))
                     yield return null;
+                else if (!FlattenFilter.TryDepthLevel(bound, out double finish))
+                    throw new JqException("Array/string slice indices must be integers");
                 else
-                    yield return Number(bound);
+                    yield return finish;
             }
         }
     }
@@ -1068,7 +1072,9 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 yield return null;
                 continue;
             }
-            yield return Number(edge);
+            if (!FlattenFilter.TryDepthLevel(edge, out double position))
+                throw new JqException("Array/string slice indices must be integers");
+            yield return position;
         }
     }
 }

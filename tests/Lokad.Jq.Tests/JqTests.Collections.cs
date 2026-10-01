@@ -59,6 +59,8 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("5", "keys", "number (5) has no keys")]
     [InlineData("\"ab\"", "to_entries", "string (\"ab\") has no keys")]
+    [InlineData("\"abcdef\"", ".[\"a\":]", "Array/string slice indices must be integers")]
+    [InlineData("[[1]]", "combinations(\"a\")", "Range bounds must be numeric")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
     {
         var host = new MockFileSystem();
@@ -109,6 +111,8 @@ public sealed partial class JqTests
     [InlineData("[1, 2]", "combinations(2)", "[\n  1,\n  1\n]\n[\n  1,\n  2\n]\n[\n  2,\n  1\n]\n[\n  2,\n  2\n]\n")]
     [InlineData("[1, 2]", "combinations(0)", "[]\n")]
     [InlineData("[1, 2]", "combinations(-1)", "[]\n")]
+    // Numeric-string counts coerce like other count positions; other kinds fail with the reference range diagnostic.
+    [InlineData("[[1,2],[3,4]]", "combinations(\"2\")", "[\n  [\n    1,\n    2\n  ],\n  [\n    1,\n    2\n  ]\n]\n[\n  [\n    1,\n    2\n  ],\n  [\n    3,\n    4\n  ]\n]\n[\n  [\n    3,\n    4\n  ],\n  [\n    1,\n    2\n  ]\n]\n[\n  [\n    3,\n    4\n  ],\n  [\n    3,\n    4\n  ]\n]\n")]
     [InlineData("[]", "combinations", "[]\n")]
     // An empty row kills the cartesian product per the recursive desugar.
     [InlineData("[[]]", "combinations", "")]

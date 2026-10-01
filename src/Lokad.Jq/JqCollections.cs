@@ -153,6 +153,22 @@ internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
     internal static bool IsBooleanValue(JsonNode? depth) =>
         depth is JsonValue value && value.TryGetValue<bool>(out _);
 
+    // Count positions keep the runtime Number() leniency for numeric strings
+    // while reporting kind failures with the caller-chosen diagnostic.
+    internal static bool TryCountLevel(JsonNode? depth, out double level)
+    {
+        if (TryDepthLevel(depth, out level))
+            return true;
+        if (depth is JsonValue text && text.TryGetValue<string>(out string? raw) &&
+            double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsed))
+        {
+            level = parsed;
+            return true;
+        }
+        level = double.NaN;
+        return false;
+    }
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -292,7 +308,11 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
         }
         foreach (JsonNode? count in Count.Evaluate(input, context, environment))
         {
-            int times = (int)Number(count);
+            // Like range bounds upstream, non-numbers fail with the range
+            // diagnostic while numeric strings still coerce.
+            if (!FlattenFilter.TryCountLevel(count, out double level))
+                throw new JqException("Range bounds must be numeric");
+            int times = (int)level;
             var matrix = new List<JsonNode?>();
             for (int index = 0; index < times; index++)
             {
