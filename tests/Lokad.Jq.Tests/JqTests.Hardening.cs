@@ -156,6 +156,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("null | setpath([range(5000)|\"a\"]; 1) | walk(true)", "true\n")]
+    [InlineData("null | setpath([range(5000)|0]; 0) | walk(true)", "true\n")]
     [InlineData("null | setpath([range(5000)|\"a\"]; 1) | [paths | length] | add", "12502500\n")]
 
     public async Task Jq_DeepTreesWalkWithoutRecursion(string filter, string expected)
@@ -165,6 +166,18 @@ public sealed partial class JqTests
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_WalkFanOutFailsStaged()
+    {
+        // Collect-all fan-out grows rebuilt trees exponentially; per-output
+        // budget charges fail staged instead of hanging or exhausting memory.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "null | setpath([range(100)|0]; 0) | walk((.,.)) | length")));
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
 [Theory]
