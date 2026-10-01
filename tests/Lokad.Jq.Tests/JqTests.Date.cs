@@ -79,6 +79,9 @@ public sealed partial class JqTests
     [InlineData("[\"a\",1,2,3,4,5,6,7] | try strftime(\"%Y-%m-%dT%H:%M:%SZ\") catch .", "\"strftime/1 requires parsed datetime inputs\"\n")]
     [InlineData("[\"a\",1,2,3,4,5,6,7] | try strflocaltime(\"%Y-%m-%dT%H:%M:%SZ\") catch .", "\"strflocaltime/1 requires parsed datetime inputs\"\n")]
     [InlineData("0 | try [\"OK\", strflocaltime({})] catch [\"KO\", .]", "[\n  \"KO\",\n  \"strflocaltime/1 requires a string format\"\n]\n")]
+    // Epoch conversions truncate fractions and accept negative epochs like struct tm handoffs.
+    [InlineData("1425599507.5 | strftime(\"%s\")", "\"1425599507\"\n")]
+    [InlineData("\"-1\" | strptime(\"%s\")", "[\n  1969,\n  11,\n  31,\n  23,\n  59,\n  59,\n  3,\n  364\n]\n")]
     public async Task Jq_DateFormatVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -104,6 +107,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" | localtime", "string (\"x\") localtime() requires numeric inputs")]
     // Fractional ISO instants fail like system strptime without fraction support, not just garbage inputs.
     [InlineData("\"2015-03-05T23:51:47.123Z\" | fromdate", "date \"2015-03-05T23:51:47.123Z\" does not match format \"%Y-%m-%dT%H:%M:%SZ\"")]
+    [InlineData("\"1425599507.5\" | strptime(\"%s\")", "does not match format")]
     public async Task Jq_DateFailures(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
