@@ -141,6 +141,15 @@ public sealed partial class JqTests
     [InlineData("\"x\" | split(empty)")]
     [InlineData("range(empty; 3)")]
     [InlineData("range(0; empty)")]
+    [InlineData("limit(empty; (1,2))")]
+    [InlineData("nth(empty; (1,2))")]
+    [InlineData("skip(empty; (1,2))")]
+    [InlineData("while(empty; .)")]
+    [InlineData("until(empty; .)")]
+    [InlineData("getpath(empty)")]
+    [InlineData("setpath(empty; 1)")]
+    [InlineData("delpaths(empty)")]
+    [InlineData("[1,2] | index(empty)")]
     public async Task Jq_EmptyArgumentsYieldNoOutputs(string filter)
     {
         var host = new MockFileSystem();
