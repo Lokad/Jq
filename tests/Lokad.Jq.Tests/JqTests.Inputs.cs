@@ -125,6 +125,25 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_DuplicateInputKeysKeepFirstPosition()
+    {
+        // Like the reference object builder, later duplicates overwrite values
+        // in place while the first-insertion position is kept.
+        var first = new MockFileSystem();
+        first.SetStandardInput("{\"a\":1,\"a\":2}");
+        var (exit, stdout, stderr) = await RunInputAsync(first, ".");
+        Assert.Equal(0, exit);
+        Assert.Equal("{\n  \"a\": 2\n}\n", stdout);
+        Assert.Empty(stderr);
+        var ordered = new MockFileSystem();
+        ordered.SetStandardInput("{\"b\":1,\"a\":2,\"b\":3}");
+        var (exit2, stdout2, stderr2) = await RunInputAsync(ordered, ".");
+        Assert.Equal(0, exit2);
+        Assert.Equal("{\n  \"b\": 3,\n  \"a\": 2\n}\n", stdout2);
+        Assert.Empty(stderr2);
+    }
+
+    [Fact]
     public async Task Jq_SlurpAddsAcrossValues()
     {
         // Slurp collects sibling values before folding, like the reference.
