@@ -162,6 +162,10 @@ public sealed partial class JqTests
     [InlineData("0", "[until((true, true); empty)]", "[\n  0,\n  0\n]\n")]
     [InlineData("0", "[while((true, false); empty)]", "[\n  0\n]\n")]
     [InlineData("0", "[until((false, true); empty)]", "[\n  0\n]\n")]
+    // Empty traversal bodies yield just the input (recurse) or nothing (walk).
+    [InlineData("1", "[recurse(empty)]", "[\n  1\n]\n")]
+    [InlineData("[1,[2]]", "[recurse(empty)]", "[\n  [\n    1,\n    [\n      2\n    ]\n  ]\n]\n")]
+    [InlineData("{\"a\":1}", "[walk(empty)]", "[]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
