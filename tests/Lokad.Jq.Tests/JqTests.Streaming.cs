@@ -13,6 +13,16 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_StreamEmitsResumedLeaves()
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("[1,nan,2]");
+        var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("[\n  [\n    0\n  ],\n  1\n]\n[\n  [\n    1\n  ],\n  null\n]\n[\n  [\n    2\n  ],\n  2\n]\n[\n  [\n    2\n  ]\n]\n", stdout);
+    }
+
+    [Fact]
     public async Task Jq_StreamScalarAndContainers()
     {
         var host = new MockFileSystem();

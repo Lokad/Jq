@@ -170,6 +170,16 @@ public sealed partial class JqTests
 
 
     [Fact]
+    public async Task Jq_SlurpKeepsResumedValues()
+    {
+        var fileSystem = new MockFileSystem();
+        fileSystem.SetStandardInput("1\n[1,nan,2]");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-s", ".")));
+        Assert.Equal(0, await tool.ExecuteAsync(fileSystem, CancellationToken.None));
+        Assert.Equal("[\n  1,\n  [\n    1,\n    null,\n    2\n  ]\n]\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
     public async Task Jq_RawSlurpReadsWholeInputAsString()
     {
         var fileSystem = new MockFileSystem();
