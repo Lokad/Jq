@@ -62,6 +62,10 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("5", "keys", "number (5) has no keys")]
     [InlineData("\"ab\"", "to_entries", "string (\"ab\") has no keys")]
+    // Scalar combinations fail at native iteration rather than the desugar length/index steps; wording follows the structured-error policy.
+    [InlineData("1", "combinations", "cannot iterate over number")]
+    [InlineData("\"a\"", "combinations", "cannot iterate over string")]
+    [InlineData("{\"a\":1}", "combinations", "cannot iterate over object")]
     [InlineData("\"abcdef\"", ".[\"a\":]", "Array/string slice indices must be integers")]
     [InlineData("[[1]]", "combinations(\"a\")", "Range bounds must be numeric")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
