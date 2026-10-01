@@ -105,6 +105,22 @@ public sealed partial class JqTests
         Assert.Equal("", stdout);
     }
 
+    // Resumed non-finite literals keep cursor accounting: later documents
+    // decode and line numbers stay exact across single- and multi-line resumes.
+    [Theory]
+    [InlineData("1\n[1,nan,2]\n3", ".", "1\n[\n  1,\n  null,\n  2\n]\n3\n")]
+    [InlineData("1\n[1,nan,2]\n3", "input_line_number", "1\n2\n3\n")]
+    [InlineData("{\n\"a\": 1,\n\"b\": nan\n}\n[5]", "input_line_number", "4\n5\n")]
+    public async Task Jq_InputResumeKeepsPosition(string stdin, string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(stdin);
+        var (exit, stdout, stderr) = await RunInputAsync(host, filter);
+        Assert.True(exit == 0, stderr);
+        Assert.Equal(expected, stdout);
+        Assert.Empty(stderr);
+    }
+
     [Fact]
     public async Task Jq_InputTruncatedAfterValidValues()
     {
