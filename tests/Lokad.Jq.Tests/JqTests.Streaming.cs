@@ -208,6 +208,21 @@ public sealed partial class JqTests
         Assert.Contains("jq: ignoring parse error: Truncated value", stderr);
     }
 
+    // Unterminated text without record separators is abandoned identically
+    // with and without resumed literals; the sequence framer never sees a value.
+    [Theory]
+    [InlineData("[1,2]", "jq: ignoring parse error: Unfinished abandoned text at EOF at line 1, column 5\n")]
+    [InlineData("[1,nan,2]", "jq: ignoring parse error: Unfinished abandoned text at EOF at line 1, column 9\n")]
+    public async Task Jq_StreamSeqAbandonsUnterminatedTail(string stdin, string expectedErr)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(stdin);
+        var (exit, stdout, stderr) = await RunStreamAsync(host, "--seq", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Empty(stdout);
+        Assert.Equal(expectedErr, stderr);
+    }
+
     [Fact]
     public async Task Jq_StreamCountsLargeShallowDocuments()
     {
