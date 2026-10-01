@@ -113,6 +113,11 @@ public sealed partial class JqTests
     [InlineData("[0,1,1,2,3,4,1,5]", "indices(1)", "[\n  1,\n  2,\n  6\n]\n")]
     [InlineData("[0,1,2,3,1,4,2,5,1,2,6,7]", "indices([1,2])", "[\n  1,\n  8\n]\n")]
     [InlineData("[1]", "indices([1,2])", "[]\n")]
+    // Like the reference jv_array_indexes, an empty array needle matches
+    // nowhere (the string branch already yields nothing for empty needles).
+    [InlineData("[1,2]", "indices([])", "[]\n")]
+    [InlineData("[1,2]", "index([])", "null\n")]
+    [InlineData("[1,2]", "rindex([])", "null\n")]
     [InlineData("\"a,b, cd,e, fgh, ijkl\"", "indices(\", \")", "[\n  3,\n  9,\n  14\n]\n")]
     [InlineData("\"здравствуй мир!\"", "index(\"!\")", "14\n")]
     [InlineData("\"ƒoo\"", "indices(\"o\")", "[\n  1,\n  2\n]\n")]

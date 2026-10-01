@@ -1272,7 +1272,11 @@ internal sealed class JqRuntime(JqBudget budget)
         {
             if (needle is JsonArray pattern)
             {
-                // Contiguous subsequence search; empty needles match everywhere.
+                // Contiguous subsequence search; like the reference
+                // jv_array_indexes, an empty needle matches nowhere (the
+                // string branch already yields nothing too).
+                if (pattern.Count == 0)
+                    yield break;
                 for (int start = 0; start + pattern.Count <= values.Count; start++)
                 {
                     bool match = true;
