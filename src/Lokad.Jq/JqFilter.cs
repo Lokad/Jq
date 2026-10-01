@@ -1227,6 +1227,11 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
 
 internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : JqFilter
 {
+    // Arithmetic builds fresh values and breaks path identity; boolean
+    // connectives and comparisons agree with the reference through boolean
+    // singletons on both sides, so they keep the default rule.
+    internal override bool PreservesPathIdentity => op is "and" or "or" or "==" or "!=" or "<" or "<=" or ">" or ">=";
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         // Value operators distribute with the left operand inner (fast),
