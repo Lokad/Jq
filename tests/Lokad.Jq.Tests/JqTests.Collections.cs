@@ -15,6 +15,10 @@ public sealed partial class JqTests
     [InlineData("{\"a\": 1, \"b\": 2}", "with_entries(.key |= \"KEY_\" + .)", "{\n  \"KEY_a\": 1,\n  \"KEY_b\": 2\n}\n")]
     [InlineData("[{\"key\":\"a\", \"value\":1}, {\"key\":\"a\", \"value\":2}]", "from_entries", "{\n  \"a\": 2\n}\n")]
     [InlineData("[]", "to_entries", "[]\n")]
+    // Entries roundtrip fixes every object; duplicate keys coalesce last-wins and stay visible as one entry.
+    [InlineData("{\"a\":1,\"a\":2}", "to_entries", "[\n  {\n    \"key\": \"a\",\n    \"value\": 2\n  }\n]\n")]
+    [InlineData("{\"b\":1,\"a\":2}", "(to_entries|from_entries) == .", "true\n")]
+    [InlineData("{\"a\":1,\"a\":2}", "(to_entries|from_entries) == .", "true\n")]
     [InlineData("{\"a\":1,\"b\":2}", "with_entries(select(.key != \"a\"))", "{\n  \"b\": 2\n}\n")]
     [InlineData("[1, 2]", "to_entries", "[\n  {\n    \"key\": 0,\n    \"value\": 1\n  },\n  {\n    \"key\": 1,\n    \"value\": 2\n  }\n]\n")]
     [InlineData("[{\"key\": \"a\", \"value\": 1}, {\"key\": \"a\", \"value\": 2}]", "from_entries", "{\n  \"a\": 2\n}\n")]
