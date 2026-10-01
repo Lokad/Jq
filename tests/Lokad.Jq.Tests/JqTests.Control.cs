@@ -29,6 +29,7 @@ public sealed partial class JqTests
     [InlineData("[\"hi\",\"ho\"]", ".[]|(try (if .==\"hi\" then . else error end) catch empty) | \"\\(.) there!\"", "\"hi there!\"\n")]
     [InlineData("true", "try .a catch \". is not an object\"", "\". is not an object\"\n")]
     [InlineData("\"foo\"", "[if error then 1 else 2 end?]", "[]\n")]
+    [InlineData("null", "1, try error(2), 3", "1\n3\n")]
     public async Task Jq_TryCatchHandlesErrors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

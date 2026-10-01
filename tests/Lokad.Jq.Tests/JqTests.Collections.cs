@@ -216,6 +216,7 @@ public sealed partial class JqTests
     [InlineData("null", "range(5; 13) | IN(range(0; 10; 3))", "false\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\n")]
     [InlineData("null", "IN(range(10; 20); range(10))", "false\n")]
     [InlineData("null", "IN(range(5; 20); range(10))", "true\n")]
+    [InlineData("{\"a\":\"1\",\"b\":\"2\",\"c\":\"3\"}", "any(keys[]|tostring?;true)", "true\n")]
     public async Task Jq_AnyAllShortCircuit(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

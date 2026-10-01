@@ -29,6 +29,8 @@ public sealed partial class JqTests
     [InlineData("null", "try limit(-1; error) catch .", "\"limit doesn't support negative count\"\n")]
     [InlineData("null", "first(1,error(\"foo\"))", "1\n")]
     [InlineData("null", "isempty(1,error(\"foo\"))", "false\n")]
+    [InlineData("null", "first(.?,.?)", "null\n")]
+    [InlineData("null", "isempty(range(3))", "false\n")]
     public async Task Jq_LimitFirstNthIsempty(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
