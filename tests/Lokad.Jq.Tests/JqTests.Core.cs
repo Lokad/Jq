@@ -123,6 +123,9 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1} | .b?", "null\n")]
     [InlineData("null | .a?", "null\n")]
     [InlineData("(\"x\" | test(\"x\";\"z\"))?", "")]
+    [InlineData("[1,[2],{\"foo\":3,\"bar\":4},{},{\"foo\":5}] | [.[]|.foo?]", "[\n  3,\n  null,\n  5\n]\n")]
+    [InlineData("[1,[2],[],{\"foo\":3},{\"foo\":{\"bar\":4}},{}] | [.[]|.foo?.bar?]", "[\n  4,\n  null\n]\n")]
+    [InlineData("[1,null,[],[1,[2,[[3]]]],[{}],[{\"a\":[1,[2]]}]] | [.[]|.[]?]", "[\n  1,\n  [\n    2,\n    [\n      [\n        3\n      ]\n    ]\n  ],\n  {},\n  {\n    \"a\": [\n      1,\n      [\n        2\n      ]\n    ]\n  }\n]\n")]
     public async Task Jq_OptionalSuppressesCatchableErrors(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -155,15 +158,17 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
-    [Fact]
-    public async Task Jq_RecursiveDescentVisitsPreOrder()
+    [Theory]
+    [InlineData("[[1]]", "[..] | length", "3\n")]
+    [InlineData("[1,[[2]],{\"a\":[1]}]", "[..]", "[\n  [\n    1,\n    [\n      [\n        2\n      ]\n    ],\n    {\n      \"a\": [\n        1\n      ]\n    }\n  ],\n  1,\n  [\n    [\n      2\n    ]\n  ],\n  [\n    2\n  ],\n  2,\n  {\n    \"a\": [\n      1\n    ]\n  },\n  [\n    1\n  ],\n  1\n]\n")]
+    public async Task Jq_RecursiveDescentVisitsPreOrder(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
-        host.SetStandardInput("[[1]]");
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "[..] | length")));
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("3\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 

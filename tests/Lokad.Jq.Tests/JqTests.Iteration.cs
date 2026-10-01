@@ -98,6 +98,9 @@ public sealed partial class JqTests
     [InlineData("isempty(empty)", "true\n")]
     [InlineData("1 | until(true; error(\"x\"))", "1\n")]
     [InlineData("1 | while(false; error(\"x\"))", "")]
+    [InlineData("[range(0;10)]", "[\n  0,\n  1,\n  2,\n  3,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
+    [InlineData("[range(0;10;-1)]", "[]\n")]
+    [InlineData("[range(0;-5;-1)]", "[\n  0,\n  -1,\n  -2,\n  -3,\n  -4\n]\n")]
     public async Task Jq_IterationEdgeCases(string filter, string expected)
     {
         var host = new MockFileSystem();

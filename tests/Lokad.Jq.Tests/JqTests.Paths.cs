@@ -26,6 +26,7 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3]", "path(.[1:])", "[\n  {\n    \"start\": 1,\n    \"end\": null\n  }\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[:2])", "[\n  {\n    \"start\": null,\n    \"end\": 2\n  }\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[:])", "[\n  {\n    \"start\": null,\n    \"end\": null\n  }\n]\n")]
+    [InlineData("[1,[[],{\"a\":2}]]", "[paths]", "[\n  [\n    0\n  ],\n  [\n    1\n  ],\n  [\n    1,\n    0\n  ],\n  [\n    1,\n    1\n  ],\n  [\n    1,\n    1,\n    \"a\"\n  ]\n]\n")]
     public async Task Jq_PathEnumeratesSegments(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -133,6 +134,7 @@ public sealed partial class JqTests
     [InlineData("{\"a\":[{\"b\":1}]}", "del(getpath([\"a\",0,\"b\"]))", "{\n  \"a\": [\n    {}\n  ]\n}\n")]
     [InlineData("[0,1,2,3,4,5,6,7]", "del(.[2:4],.[0],.[-2:])", "[\n  1,\n  4,\n  5\n]\n")]
     [InlineData("[\"foo\", \"bar\", \"baz\"]", "del(.[1, 2])", "[\n  \"foo\"\n]\n")]
+    [InlineData("{\"foo\": [0,1,2,3,4], \"bar\": [0,1]}", "del(.), del(empty), del((.foo,.bar,.baz) | .[2,3,0]), del(.foo[0], .bar[0], .foo, .baz.bar[0].x)", "null\n{\n  \"foo\": [\n    0,\n    1,\n    2,\n    3,\n    4\n  ],\n  \"bar\": [\n    0,\n    1\n  ]\n}\n{\n  \"foo\": [\n    1,\n    4\n  ],\n  \"bar\": [\n    1\n  ]\n}\n{\n  \"bar\": [\n    1\n  ]\n}\n")]
     public async Task Jq_DelAndPickReshape(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
