@@ -82,6 +82,43 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_Modules_UpstreamMultiImport()
+    {
+        // Upstream jq.test multi-import composition with byte-faithful fixtures.
+        var fs = new MockFileSystem();
+        fs.AddFile("/lib/a.jq", "module {version:1.7};\ndef a: \"a\";\n");
+        fs.AddFile("/lib/b/b.jq", "def a: \"b\";\ndef b: \"c\";\n");
+        var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "import \"a\" as foo; import \"b\" as bar; def fooa: foo::a; [fooa, bar::a, bar::b, foo::a]");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("[\n  \"a\",\n  \"b\",\n  \"c\",\n  \"a\"\n]\n", stdout);
+    }
+
+    [Fact]
+    public async Task Jq_Modules_UpstreamSingleInclude()
+    {
+        // Upstream jq.test single-include shadowing: the last definition wins.
+        var fs = new MockFileSystem();
+        fs.AddFile("/lib/shadow1.jq", "def e: 1;\ndef e: 2;\n");
+        var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "include \"shadow1\"; e");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("2\n", stdout);
+    }
+
+    [Fact]
+    public async Task Jq_Modules_UpstreamBindOrder()
+    {
+        // Upstream jq.test same-alias re-import order with byte-faithful fixtures.
+        var fs = new MockFileSystem();
+        fs.AddFile("/lib/test_bind_order.jq", "import \"test_bind_order0\" as t;\nimport \"test_bind_order1\" as t;\nimport \"test_bind_order2\" as t;\ndef check: if [t::sym0,t::sym1,t::sym2] == [0,1,2] then true else false end;\n");
+        fs.AddFile("/lib/test_bind_order0.jq", "def sym0: 0;\ndef sym1: 0;\n");
+        fs.AddFile("/lib/test_bind_order1.jq", "def sym1: 1;\ndef sym2: 1;\n");
+        fs.AddFile("/lib/test_bind_order2.jq", "def sym2: 2;\n");
+        var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", "/lib", "import \"test_bind_order\" as check; check::check");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("true\n", stdout);
+    }
+
+    [Fact]
     public async Task Jq_Modules_BuiltinsLists()
     {
         var fs = new MockFileSystem();
