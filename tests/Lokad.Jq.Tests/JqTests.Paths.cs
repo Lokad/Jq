@@ -225,6 +225,9 @@ public sealed partial class JqTests
     [InlineData("[[10, 20], 30]", "pick(first|first)", "[\n  [\n    10\n  ]\n]\n")]
     [InlineData("[1, 2]", "try pick(last) catch .", "\"Out of bounds negative array index\"\n")]
     [InlineData("[1,2,3,4]", "pick(.[2], .[0], .[0])", "[\n  1,\n  null,\n  3\n]\n")]
+    // Slice and iterator path expressions rebuild through the same path synthesis.
+    [InlineData("[0,1,2,3]", "pick(.[1:3])", "[\n  1,\n  2\n]\n")]
+    [InlineData("[1,2]", "pick(.[])", "[\n  1,\n  2\n]\n")]
     [InlineData("{\"a\":[{\"b\":1}]}", "del(getpath([\"a\",0,\"b\"]))", "{\n  \"a\": [\n    {}\n  ]\n}\n")]
     [InlineData("[0,1,2,3,4,5,6,7]", "del(.[2:4],.[0],.[-2:])", "[\n  1,\n  4,\n  5\n]\n")]
     [InlineData("[\"foo\", \"bar\", \"baz\"]", "del(.[1, 2])", "[\n  \"foo\"\n]\n")]
