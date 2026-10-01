@@ -79,6 +79,53 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_StreamObjectErrorsReportUpstreamDiagnostics()
+    {
+        // Malformed objects fail with the reference streaming diagnostics,
+        // keeping any events already produced like the shell suite expects.
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput("{\"a\":1,\"b\",");
+            var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
+            Assert.Equal(5, exit);
+            Assert.Equal("[\n  [\n    \"a\"\n  ],\n  1\n]\n", stdout);
+            Assert.Contains("jq: parse error: Objects must consist of key:value pairs", stderr);
+        }
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput("{{\"a\":\"b\"}}");
+            var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
+            Assert.Equal(5, exit);
+            Assert.Equal("", stdout);
+            Assert.Contains("jq: parse error: Expected string key after '{', not '{'", stderr);
+        }
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput("{\"x\":\"y\",{\"a\":\"b\"}}");
+            var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
+            Assert.Equal(5, exit);
+            Assert.Equal("[\n  [\n    \"x\"\n  ],\n  \"y\"\n]\n", stdout);
+            Assert.Contains("jq: parse error: Expected string key after ',' in object, not '{'", stderr);
+        }
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput("{[\"a\",\"b\"]}");
+            var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
+            Assert.Equal(5, exit);
+            Assert.Equal("", stdout);
+            Assert.Contains("jq: parse error: Expected string key after '{', not '['", stderr);
+        }
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput("{\"x\":\"y\",[\"a\",\"b\"]}");
+            var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
+            Assert.Equal(5, exit);
+            Assert.Equal("[\n  [\n    \"x\"\n  ],\n  \"y\"\n]\n", stdout);
+            Assert.Contains("jq: parse error: Expected string key after ',' in object, not '['", stderr);
+        }
+    }
+
+    [Fact]
     public async Task Jq_StreamErrorsRecover()
     {
         var host = new MockFileSystem();
