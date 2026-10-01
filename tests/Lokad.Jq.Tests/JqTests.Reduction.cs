@@ -55,6 +55,10 @@ public sealed partial class JqTests
     [InlineData("null | reduce . as $n (.; .)", "null\n")]
     [InlineData("[foreach range(5) as $item (0; $item)]", "[\n  0,\n  1,\n  2,\n  3,\n  4\n]\n")]
     [InlineData("[label $if | range(10) | ., (select(. == 5) | break $if)]", "[\n  0,\n  1,\n  2,\n  3,\n  4,\n  5\n]\n")]
+    // Empty updates end the run with no outputs. No upstream vector pins this corner and cell-lifetime readings differ, so this locks the established behavior.
+    [InlineData("reduce (1, 2) as $x (0; empty)", "")]
+    [InlineData("foreach (1, 2) as $x (0; empty)", "")]
+    [InlineData("reduce (1, 2) as $x (0; select($x > 10) | . + $x)", "")]
     public async Task Jq_ReduceFoldsStates(string filter, string expected)
     {
         var host = new MockFileSystem();
