@@ -242,6 +242,7 @@ public sealed partial class JqTests
     [InlineData("true", "try (.error = 1) catch .", "\"cannot index boolean with string \\\"error\\\"\"\n")]
     [InlineData("[{\"a\":0},{\"a\":1}]", "try ((map(select(.a == 1))[].a) |= .+1) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1}]\"\n")]
     [InlineData("null", "try (.foo[-2] = 0) catch .", "\"Out of bounds negative array index\"\n")]
+    [InlineData("[{\"a\":0},{\"a\":1}]", "try ((map(select(.a == 1))[].b) = 10) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1}]\"\n")]
     public async Task Jq_AssignReportsFailures(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

@@ -29,6 +29,7 @@ public sealed partial class JqTests
     [InlineData("1", "def while(cond; update): def _while: if cond then ., (update | _while) else empty end; _while; [while(.<100; .*2)]", "[\n  1,\n  2,\n  4,\n  8,\n  16,\n  32,\n  64\n]\n")]
     [InlineData("null", "def a: 0; . | a", "0\n")]
     [InlineData("123412345", "def f: (1000,2000); f", "1000\n2000\n")]
+    [InlineData("3.0", "def f: . + 1; def g: def g: . + 100; f | g | f; (f | g), g", "106\n105\n")]
     [InlineData("null", "def range(init; upto; by): def _range: if (by > 0 and . < upto) or (by < 0 and . > upto) then ., ((.+by)|_range) else empty end; if init == upto then empty elif by == 0 then init else init|_range end; range(0; 10; 3)", "0\n3\n6\n9\n")]
     public async Task Jq_DefDefinesCallableFilters(string input, string filter, string expected)
     {
