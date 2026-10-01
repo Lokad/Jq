@@ -204,6 +204,7 @@ public sealed partial class JqTests
     [InlineData("{\"a\":[{\"b\":0}]}", "try pick(.a | map(.)) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("[{\"b\":0},{\"b\":1}]", "del(.[] | select(.b == 0))", "[\n  {\n    \"b\": 1\n  }\n]\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "pick(.a)", "{\n  \"a\": [\n    {\n      \"b\": 0\n    }\n  ]\n}\n")]
+    [InlineData("{\"a\":1}", "try del(.a as $x | $x) catch .", "\"Invalid path expression with result 1\"\n")]
     public async Task Jq_DelAndPickReshape(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -313,6 +314,10 @@ public sealed partial class JqTests
     [InlineData("[{\"a\":0},{\"a\":1}]", "try ((map(select(.a == 1))[].a) |= .+1) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1}]\"\n")]
     [InlineData("null", "try (.foo[-2] = 0) catch .", "\"Out of bounds negative array index\"\n")]
     [InlineData("[{\"a\":0},{\"a\":1}]", "try ((map(select(.a == 1))[].b) = 10) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1}]\"\n")]
+    // Variable-bound update targets follow the path rule: heap reads fail even on coincidence, including whole-input identity aliases (upstream LOADV shares the stored pointer, so `(. as $x | $x) = 2` succeeds there).
+    [InlineData("{\"a\":1}", "try ((.a as $x | $x) = 2) catch .", "\"Invalid path expression with result 1\"\n")]
+    [InlineData("{\"a\":1}", "try ((.a as $x | $x) |= . + 1) catch .", "\"Invalid path expression with result 1\"\n")]
+    [InlineData("{\"a\":1}", "try ((. as $x | $x) = 2) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
     public async Task Jq_AssignReportsFailures(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
