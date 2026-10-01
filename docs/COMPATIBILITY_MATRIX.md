@@ -41,7 +41,7 @@ to read this file.
 | `-c`, `--compact-output` | Manual: Invoking jq | implemented | JqTests compact output | Default is pretty with two spaces; last formatting flag wins across spellings | stdout bytes | Existing output tests pass |
 | `-r`, `--raw-output` | Manual: Invoking jq | implemented | JqTests raw output | Strings printed without JSON quotes | stdout bytes | Existing tests pass |
 | `-j`, `--join-output` | Manual: Invoking jq | implemented | JqTests.Output join case | Implies raw output without newlines, like the reference | stdout bytes | Join-implies-raw test passes |
-| `-a`, `--ascii-output` | Manual: Invoking jq | implemented | Existing format paths | ASCII escaping via encoder | stdout bytes | Covered by serializer paths |
+| `-a`, `--ascii-output` | Manual: Invoking jq | implemented | Existing format paths | ASCII escaping via encoder on stdout and debug rendering; stderr values and `tostring` stay raw | stdout bytes | Covered by serializer paths |
 | `--tab` | Manual: Invoking jq | implemented | JqTests indent case | Tab indentation | stdout bytes | Inline indent test passes |
 | `--indent n` | Manual: Invoking jq | implemented | JqTests indent cases; JqTests.CommandLine range cases | Accepts -1 to 7 like the reference with strict values (optional sign plus digits); -1 selects tabs; failures report `jq: --indent takes a number between -1 and 7` | stdout bytes | Range and tab tests pass |
 | `--unbuffered` | Manual: Invoking jq | intentionally different | JqTests unbuffered case | Accepted as inert: outputs already stream one value at a time with host backpressure, and `IJqHost` exposes no separate flush primitive to trigger | stdout backpressure | Documented no-op |

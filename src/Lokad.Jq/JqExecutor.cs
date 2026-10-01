@@ -52,6 +52,7 @@ internal static class JqExecutor
         {
             Clock = invocation.Clock,
             SortKeys = invocation.SortKeys,
+            AsciiOutput = invocation.AsciiOutput,
         };
         var stage = 2;
         try

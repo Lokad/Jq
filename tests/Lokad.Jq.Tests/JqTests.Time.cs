@@ -123,6 +123,30 @@ public sealed partial class JqTests
         Assert.Equal("hello\nworldnull[false,0]{\"foo\":[\"bar\"]}\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
+    [Fact]
+    public async Task Jq_DebugAndStderrFollowOutputModes()
+    {
+        // Like the reference callbacks, debug rendering follows compactness,
+        // ascii escaping, and key sorting while stderr values stay raw JSON;
+        // tostring likewise ignores both modes. Hex case stays the recorded
+        // uppercase encoder divergence.
+        foreach (var (args, exit, stdout, stderr) in new (string[], int, string, string)[]
+        {
+            (new string[] { "-n", "-a", "\"\u00E9\" | debug" }, 0, "\"\\u00E9\"\n", "[\"DEBUG:\",\"\\u00E9\"]\n"),
+            (new string[] { "-n", "-S", "{\"b\":1,\"a\":2} | debug" }, 0, "{\n  \"a\": 2,\n  \"b\": 1\n}\n", "[\"DEBUG:\",{\"a\":2,\"b\":1}]\n"),
+            (new string[] { "-n", "-S", "{\"b\":1,\"a\":2} | tostring" }, 0, "\"{\\\"b\\\":1,\\\"a\\\":2}\"\n", ""),
+            (new string[] { "-n", "-a", "{\"x\":\"\u00E9\"} | stderr" }, 0, "{\n  \"x\": \"\\u00E9\"\n}\n", "{\"x\":\"\u00E9\"}"),
+            (new string[] { "-n", "-S", "{\"b\":1,\"a\":2} | stderr" }, 0, "{\n  \"a\": 2,\n  \"b\": 1\n}\n", "{\"b\":1,\"a\":2}"),
+        })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", args)));
+            Assert.Equal(exit, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
+
     [Theory]
     [InlineData("\"hi\" | stderr", "hi\n", "hi")]
     [InlineData("{\"a\":1} | stderr", "{\n  \"a\": 1\n}\n", "{\"a\":1}")]
