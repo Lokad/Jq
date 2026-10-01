@@ -185,7 +185,15 @@ internal sealed class JqInputCursor : IAsyncDisposable
             catch (JqException)
             {
                 if (_eof)
+                {
+                    // Count through the failing line like the reference
+                    // fgets-based total: consumed newlines plus one when the
+                    // failing line is terminated, so explicit-read failures
+                    // report the line being read rather than the last value.
+                    int line = _newlines + (IndexOfLf() >= 0 ? 1 : 0);
+                    SetPosition(line);
                     throw;
+                }
                 await FillAsync().ConfigureAwait(false);
                 continue;
             }
@@ -266,6 +274,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _newlines = 0;
         _active = true;
         LastName = _sources[_index].Name;
+        // Like the reference file activation, the filename is known before
+        // the first value parses, so explicit-read failures report the
+        // source instead of unknown; the line stays zero until pulls advance it.
+        _context.InputFilename = LastName;
+        _context.InputLineNumber = 0;
         Source source = _sources[_index];
         if (source.IsStdin)
         {

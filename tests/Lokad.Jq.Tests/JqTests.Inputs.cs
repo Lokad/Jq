@@ -326,6 +326,29 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_ExplicitReadFailuresTrackLivePosition()
+    {
+        // Explicit-read parse failures report the line being read like the
+        // reference fgets-based count: the source is known from activation
+        // even before the first value, and the failing line counts whether
+        // or not it is terminated.
+        foreach (var (stdin, args, exit, stdout, stderr) in new (string, string[], int, string, string)[]
+        {
+            ("{bad}", new string[] { "-n", "input" }, 5, "", "jq: error (at <stdin>:0): 'b' is an invalid start of a property name. Expected a '\"'. LineNumber: 0 | BytePositionInLine: 1.\n"),
+            ("1\n{bad}\n", new string[] { "-n", "[inputs]" }, 5, "", "jq: error (at <stdin>:2): 'b' is an invalid start of a property name. Expected a '\"'. LineNumber: 0 | BytePositionInLine: 1.\n"),
+            ("1\n{bad}", new string[] { "-n", "[inputs]" }, 5, "", "jq: error (at <stdin>:1): 'b' is an invalid start of a property name. Expected a '\"'. LineNumber: 0 | BytePositionInLine: 1.\n"),
+            ("\n\n{bad}", new string[] { "-n", "input" }, 5, "", "jq: error (at <stdin>:2): 'b' is an invalid start of a property name. Expected a '\"'. LineNumber: 0 | BytePositionInLine: 1.\n"),
+        })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput(stdin);
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", args)));
+            Assert.Equal(exit, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
+    [Fact]
     public async Task Jq_InputMetadataFollowsExplicitReads()
     {
         var inner = new MockFileSystem();
