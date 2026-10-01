@@ -133,6 +133,12 @@ public sealed partial class JqTests
     [InlineData("{\"a\": {\"b\": 2}, \"c\": {\"d\": 3, \"f\": 9}}", "{\"a\": {\"b\": 1}, \"c\": {\"d\": 2}, \"e\": 5} * .", "{\n  \"a\": {\n    \"b\": 2\n  },\n  \"c\": {\n    \"d\": 3,\n    \"f\": 9\n  },\n  \"e\": 5\n}\n")]
     [InlineData("null", "[add(null), add(range(range(10))), add(empty), add(10,range(10))]", "[\n  null,\n  120,\n  null,\n  55\n]\n")]
     [InlineData("null", "range(10;12)|IN(range(10))", "false\nfalse\n")]
+    [InlineData("{}", "[(\"foo\" | contains(\"foo\")), (\"foobar\" | contains(\"foo\")), (\"foo\" | contains(\"foobar\"))]", "[\n  true,\n  true,\n  false\n]\n")]
+    [InlineData("\"\\u0000\"", "[contains(\"\"), contains(\"\\u0000\")]", "[\n  true,\n  true\n]\n")]
+    [InlineData("\"ab\\u0000cd\"", "[contains(\"b\\u0000c\"), contains(\"b\\u0000cd\"), contains(\"b\\u0000cd\")]", "[\n  true,\n  true,\n  true\n]\n")]
+    [InlineData("{}", "[({foo: 12, bar:13} | contains({foo: 12})), ({foo: 12} | contains({})), ({foo: 12, bar:13} | contains({baz:14}))]", "[\n  true,\n  true,\n  false\n]\n")]
+    [InlineData("{}", "{foo: {baz: 12, blap: {bar: 13}}, bar: 14} | contains({bar: 14, foo: {blap: {}}})", "true\n")]
+    [InlineData("{}", "{foo: {baz: 12, blap: {bar: 13}}, bar: 14} | contains({bar: 14, foo: {blap: {bar: 14}}})", "false\n")]
     public async Task Jq_CollectionSearchFold(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
