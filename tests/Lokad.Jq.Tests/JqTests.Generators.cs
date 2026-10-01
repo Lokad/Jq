@@ -201,6 +201,10 @@ public sealed partial class JqTests
     [InlineData("\"\\(1,2)\"", "\"1\"\n\"2\"\n")]
     [InlineData("\"\\(1,2)\\(3,4)\"", "\"13\"\n\"23\"\n\"14\"\n\"24\"\n")]
     [InlineData("\"a\\(empty)b\"", "")]
+    // Interpolated values render through tostring: NaN as null, infinities clamped, duplicate keys last-wins.
+    [InlineData("\"\\(nan)\"", "\"null\"\n")]
+    [InlineData("\"\\(infinite)\"", "\"1.7976931348623157E+308\"\n")]
+    [InlineData("\"\\({\"a\":1,\"a\":2})\"", "\"{\\\"a\\\":2}\"\n")]
     public async Task Jq_InterpolationsDistribute(string filter, string expected)
     {
         var host = new MockFileSystem();
