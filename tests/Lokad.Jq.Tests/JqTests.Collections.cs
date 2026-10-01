@@ -29,6 +29,8 @@ public sealed partial class JqTests
     [InlineData("[1, \"a\", true, null, [], {}]", "[(.[] | arrays), (.[] | objects), (.[] | numbers)]", "[\n  [],\n  {},\n  1\n]\n")]
     [InlineData("[0, 1, 2]", "has(-1 | sqrt)", "false\n")]
     [InlineData("[0,1,2]", "has(nan)", "false\n")]
+    // Fractional indices truncate like the reference array get; the object number-key diagnostic matches jv_has byte-exact.
+    [InlineData("[1,2]", "has(1.5)", "true\n")]
     [InlineData("{\"a\":1,\"a\":2}", ".", "{\n  \"a\": 2\n}\n")]
     [InlineData("1", "in([1,2])", "true\n")]
     [InlineData("{\"a\":1,\"b\":2}", "pick(.a)", "{\n  \"a\": 1\n}\n")]
@@ -62,6 +64,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("5", "keys", "number (5) has no keys")]
     [InlineData("\"ab\"", "to_entries", "string (\"ab\") has no keys")]
+    [InlineData("{\"a\":1}", "has(0)", "Cannot check whether object has a number key")]
     // Scalar combinations fail at native iteration rather than the desugar length/index steps; wording follows the structured-error policy.
     [InlineData("1", "combinations", "cannot iterate over number")]
     [InlineData("\"a\"", "combinations", "cannot iterate over string")]
