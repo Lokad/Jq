@@ -581,6 +581,11 @@ internal sealed class JqRuntime(JqBudget budget)
         return merged;
     }
 
+    // Numeric projection with a string fallback. Callers decide strictness:
+    // arithmetic, negation, math builtins, and halt codes kind-check first
+    // (numeric strings stay rejected); count positions use TryCountLevel to
+    // keep the recorded leniency; flatten depths and slice bounds use
+    // TryDepthLevel to follow their reference kind rules instead.
     internal static double Number(JsonNode? node)
     {
         if (node is JsonValue v && v.TryGetValue<double>(out var d)) return d;
