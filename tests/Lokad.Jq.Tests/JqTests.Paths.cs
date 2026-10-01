@@ -283,6 +283,7 @@ public sealed partial class JqTests
     [InlineData("{\"a\": 1}", ".a |= (2, 3)", "{\n  \"a\": 2\n}\n")]
     [InlineData("{\"a\": 1}", "(.a, .a) |= . + 1", "{\n  \"a\": 3\n}\n")]
     [InlineData("{\"a\": 1, \"b\": 2}", "(.a, .b) |= . + 10", "{\n  \"a\": 11,\n  \"b\": 12\n}\n")]
+    [InlineData("null", "[{a:1}] | .[] | .a=999", "{\n  \"a\": 999\n}\n")]
     [InlineData("null", "(.a, .b) |= range(3)", "{\n  \"a\": 0,\n  \"b\": 0\n}\n")]
     [InlineData("[{\"a\":1,\"b\":2}]", ".[0].a |= {\"old\":., \"new\":(.+1)}", "[\n  {\n    \"a\": {\n      \"old\": 1,\n      \"new\": 2\n    },\n    \"b\": 2\n  }\n]\n")]
     [InlineData("{\"foo\":[0,1,2,3,4,5]}", ".foo[1,4,2,3] |= empty", "{\n  \"foo\": [\n    0,\n    5\n  ]\n}\n")]
