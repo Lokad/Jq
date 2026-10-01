@@ -107,6 +107,47 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SeqSkipsBarePrefixAcrossSources()
+    {
+        // Pre-separator content is skipped per source like the reference
+        // continuous parser: the bare first file contributes no record and
+        // no warning once a later file frames records.
+        var host = new MockFileSystem();
+        host.AddFile("/a.seq", "1\n");
+        host.AddFile("/b.seq", "\u001e2\n");
+        var (exit, stdout, stderr) = await RunSeqAsync(host, "--seq", ".", "/a.seq", "/b.seq");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("\u001e2\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
+    public async Task Jq_SeqStreamAbandonedWarns()
+    {
+        // The streaming sequence path reports unframed tails the same way:
+        // warnings in auto-drain with no records.
+        var host = new MockFileSystem();
+        host.SetStandardInput("1\n");
+        var (exit, stdout, stderr) = await RunSeqAsync(host, "--stream", "--seq", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("", stdout);
+        Assert.Contains("Unfinished abandoned text at EOF at line 2, column 0", stderr);
+    }
+
+    [Fact]
+    public async Task Jq_SeqTrailingNumberAfterRecordsWarns()
+    {
+        // Once a separator has been seen, a trailing bare number takes the
+        // truncation path rather than the abandoned one.
+        var host = new MockFileSystem();
+        host.SetStandardInput("\u001e1\n2");
+        var (exit, stdout, stderr) = await RunSeqAsync(host, "--seq", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("\u001e1\n", stdout);
+        Assert.Contains("Potentially truncated top-level numeric value at EOF", stderr);
+    }
+
+    [Fact]
     public async Task Jq_SeqEmptyInputWarnsAndEnds()
     {
         var host = new MockFileSystem();
