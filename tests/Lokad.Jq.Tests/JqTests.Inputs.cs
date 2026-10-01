@@ -99,6 +99,32 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_InputAbsurdExponentCannotOverflow()
+    {
+        // Absurd input exponents clamp through the double profile instead
+        // of overflowing any parser buffer (upstream CVE-2023-50246).
+        var host = new MockFileSystem();
+        host.SetStandardInput("-10E-1000000001\n");
+        var (exit, stdout, stderr) = await RunInputAsync(host, ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("-0\n", stdout);
+    }
+
+    [Fact]
+    public async Task Jq_NulByteInInputIsNotTruncation()
+    {
+        // An embedded NUL byte fails the input instead of truncating it:
+        // earlier values are kept and the exit stays 5 (upstream
+        // CVE-2026-33948).
+        var host = new MockFileSystem();
+        host.SetStandardInput("{}\0{}");
+        var (exit, stdout, stderr) = await RunInputAsync(host, ".");
+        Assert.Equal(5, exit);
+        Assert.Equal("{}\n", stdout);
+        Assert.Contains("parse error", stderr);
+    }
+
+    [Fact]
     public async Task Jq_SlurpAddsAcrossValues()
     {
         // Slurp collects sibling values before folding, like the reference.

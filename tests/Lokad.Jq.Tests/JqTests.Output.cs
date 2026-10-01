@@ -185,6 +185,25 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_ExitStatusAcrossInputs()
+    {
+        // Like the reference shell suite, selection with no matches exits 4
+        // while a final false value exits 1 across multiple inputs.
+        var selected = new MockFileSystem();
+        selected.SetStandardInput("{\"i\": 1}\n{\"i\": 2}\n{\"i\": 3}\n");
+        var (exit4, stdout4, stderr4) = await RunOutputAsync(selected, "--exit-status", "select(.i==4)");
+        Assert.Equal(4, exit4);
+        Assert.Equal("", stdout4);
+        Assert.Equal("", stderr4);
+        var falsy = new MockFileSystem();
+        falsy.SetStandardInput("{\"i\": 1}\n{\"i\": 2}\n{\"i\": 3}\n");
+        var (exit1, stdout1, stderr1) = await RunOutputAsync(falsy, "--exit-status", "select(.i==2) | false");
+        Assert.Equal(1, exit1);
+        Assert.Equal("false\n", stdout1);
+        Assert.Equal("", stderr1);
+    }
+
+    [Fact]
     public async Task Jq_RuntimeErrorContinuesWithNextInput()
     {
         var host = new MockFileSystem();
