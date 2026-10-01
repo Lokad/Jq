@@ -5,11 +5,14 @@ using static Lokad.Jq.JqRuntime;
 
 namespace Lokad.Jq;
 
-// `reduce SOURCE as PATTERNS (INIT; UPDATE)`: folds source items into
-// accumulator states. Initial values stream outermost; per item, per state,
-// the update runs in the matched environment (first-match-wins with
-// catchable retries, mirroring bindings). Multi-valued updates branch the
-// accumulator; empty updates kill their branch. Final states yield once.
+// `reduce SOURCE as PATTERNS (INIT; UPDATE)`: folds source items into a
+// single answer per initializer. Initial values stream outermost; per item,
+// the update runs against the running state in the matched environment
+// (first-match-wins with catchable retries, mirroring bindings). Like the
+// reference cell overwrite (compile.c gen_reduce, gojq compileReduce), the
+// last update output wins and earlier outputs are dropped; an update with no
+// outputs ends the run for that initializer. Each surviving initializer
+// yields its final state once.
 internal sealed class ReduceFilter(JqFilter Source, IReadOnlyList<BindingPattern> Alternatives, JqFilter Init, JqFilter Update) : JqFilter
 {
     private readonly HashSet<string> _allNames = AsFilter.CollectAll(Alternatives);
@@ -20,19 +23,29 @@ internal sealed class ReduceFilter(JqFilter Source, IReadOnlyList<BindingPattern
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? initial in Init.Evaluate(input, context, environment))
         {
-            var states = new List<JsonNode?> { initial };
+            JsonNode? state = initial;
+            bool alive = true;
             foreach (JsonNode? item in Source.Evaluate(input, context, environment))
             {
-                var next = new List<JsonNode?>();
-                foreach (JsonNode? state in states)
-                    foreach (var (_, updated) in AsFilter.DriveAlternatives(Alternatives, _allNames, item, environment, context, scope => Update.Evaluate(state, context, scope)))
-                    {
-                        context.Budget.ChargeNode();
-                        next.Add(updated);
-                    }
-                states = next;
+                bool produced = false;
+                JsonNode? last = null;
+                foreach (var (_, updated) in AsFilter.DriveAlternatives(Alternatives, _allNames, item, environment, context, scope => Update.Evaluate(state, context, scope)))
+                {
+                    context.Budget.ChargeNode();
+                    produced = true;
+                    last = updated;
+                }
+
+                if (!produced)
+                {
+                    alive = false;
+                    break;
+                }
+
+                state = last;
             }
-            foreach (JsonNode? state in states)
+
+            if (alive)
                 yield return state;
         }
     }
@@ -41,7 +54,8 @@ internal sealed class ReduceFilter(JqFilter Source, IReadOnlyList<BindingPattern
 // `foreach SOURCE as PATTERNS (INIT; UPDATE[; EXTRACT])`: like reduce, but
 // yields every intermediate state (or the extraction run against each
 // updated state in the matched environment). Initial values never yield
-// without items; empty updates end their branch silently.
+// without items; each update output is emitted while only the last threads
+// forward as state, and an update with no outputs ends the run silently.
 internal sealed class ForeachFilter(JqFilter Source, IReadOnlyList<BindingPattern> Alternatives, JqFilter Init, JqFilter Update, JqFilter? Extract) : JqFilter
 {
     private readonly HashSet<string> _allNames = AsFilter.CollectAll(Alternatives);
@@ -52,22 +66,27 @@ internal sealed class ForeachFilter(JqFilter Source, IReadOnlyList<BindingPatter
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? initial in Init.Evaluate(input, context, environment))
         {
-            var states = new List<JsonNode?> { initial };
+            JsonNode? state = initial;
             foreach (JsonNode? item in Source.Evaluate(input, context, environment))
             {
-                var next = new List<JsonNode?>();
-                foreach (JsonNode? state in states)
-                    foreach (var (scope, updated) in AsFilter.DriveAlternatives(Alternatives, _allNames, item, environment, context, scope => Update.Evaluate(state, context, scope)))
-                    {
-                        context.Budget.ChargeNode();
-                        next.Add(updated);
-                        if (Extract is null)
-                            yield return updated;
-                        else
-                            foreach (JsonNode? extracted in Extract.Evaluate(updated, context, scope))
-                                yield return extracted;
-                    }
-                states = next;
+                bool produced = false;
+                JsonNode? last = null;
+                foreach (var (scope, updated) in AsFilter.DriveAlternatives(Alternatives, _allNames, item, environment, context, scope => Update.Evaluate(state, context, scope)))
+                {
+                    context.Budget.ChargeNode();
+                    produced = true;
+                    last = updated;
+                    if (Extract is null)
+                        yield return updated;
+                    else
+                        foreach (JsonNode? extracted in Extract.Evaluate(updated, context, scope))
+                            yield return extracted;
+                }
+
+                if (!produced)
+                    break;
+
+                state = last;
             }
         }
     }
