@@ -81,6 +81,9 @@ public sealed partial class JqTests
     [InlineData("[nan < 1, 1 < nan, nan == nan]", "[\n  true,\n  false,\n  false\n]\n")]
     // Null orders strictly before NaN (reference kind difference) while NaN still compares as null against numbers.
     [InlineData("[nan > null, null < nan, nan < null, null > nan]", "[\n  true,\n  true,\n  false,\n  false\n]\n")]
+    // Cross-kind ordering follows the reference kind ranks, with reflexives and reverses false.
+    [InlineData("[null < false, false < true, true < 1, 1 < \"a\", \"a\" < [], [] < {}]", "[\n  true,\n  true,\n  true,\n  true,\n  true,\n  true\n]\n")]
+    [InlineData("[{} < null, 1 < 1, null < null, [] < [], {} < {}]", "[\n  false,\n  false,\n  false,\n  false,\n  false\n]\n")]
     public async Task Jq_ComparisonFollowsTotalOrdering(string filter, string expected)
     {
         var host = new MockFileSystem();
