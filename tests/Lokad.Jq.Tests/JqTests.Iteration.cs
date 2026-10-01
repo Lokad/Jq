@@ -124,6 +124,15 @@ public sealed partial class JqTests
     [InlineData("[range(4)]", "[\n  0,\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[range(2; 4)]", "[\n  2,\n  3\n]\n")]
     [InlineData("range(nan)", "")]
+    // NaN range bounds terminate empty here. The reference range/2 loop keeps
+    // iterating while !(current >= end), which never trips on NaN, so it hangs
+    // where this yields nothing; range/3 with a NaN step is empty on both sides
+    // through its sign desugar.
+    [InlineData("[range(0; nan)]", "[]\n")]
+    [InlineData("[range(nan; 5)]", "[]\n")]
+    [InlineData("[range(5; nan)]", "[]\n")]
+    [InlineData("[range(nan; nan)]", "[]\n")]
+    [InlineData("[range(nan; nan; nan)]", "[]\n")]
     public async Task Jq_IterationEdgeCases(string filter, string expected)
     {
         var host = new MockFileSystem();
