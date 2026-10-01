@@ -157,6 +157,10 @@ public sealed partial class JqTests
     [InlineData("0", "range(0.5; 2)", "0.5\n1.5\n")]
     [InlineData("0", "range(0; 1; 0)", "")]
     [InlineData("0", "range(0; 1; nan)", "")]
+    // Non-numeric bounds fail with the reference range diagnostic while numeric strings keep the recorded leniency.
+    [InlineData("0", "try range(\"a\") catch .", "\"Range bounds must be numeric\"\n")]
+    [InlineData("0", "try range(0;\"a\") catch .", "\"Range bounds must be numeric\"\n")]
+    [InlineData("0", "[range(\"2\";4)]", "[\n  2,\n  3\n]\n")]
     [InlineData("[1,2,3]", "map(if . > 1 then . end)", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("null", "{x: try 1 | . + 1}", "{\n  \"x\": 2\n}\n")]
     [InlineData("null", "{x: null // 1 | . + 1}", "{\n  \"x\": 2\n}\n")]

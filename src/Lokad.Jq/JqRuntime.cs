@@ -586,6 +586,40 @@ internal sealed class JqRuntime(JqBudget budget)
     // (numeric strings stay rejected); count positions use TryCountLevel to
     // keep the recorded leniency; flatten depths and slice bounds use
     // TryDepthLevel to follow their reference kind rules instead.
+    // Count positions keep the Number() leniency for numeric strings while
+    // reporting kind failures with the caller-chosen diagnostic.
+    internal static bool TryCountLevel(JsonNode? depth, out double level)
+    {
+        if (depth is JsonValue value)
+        {
+            if (value.TryGetValue<double>(out level))
+                return true;
+            if (value.TryGetValue<long>(out long whole))
+            {
+                level = whole;
+                return true;
+            }
+            if (value.TryGetValue<int>(out int integer))
+            {
+                level = integer;
+                return true;
+            }
+            if (value.TryGetValue<decimal>(out decimal dec))
+            {
+                level = (double)dec;
+                return true;
+            }
+            if (value.TryGetValue<string>(out string? raw) &&
+                double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+            {
+                level = parsed;
+                return true;
+            }
+        }
+        level = double.NaN;
+        return false;
+    }
+
     internal static double Number(JsonNode? node)
     {
         if (node is JsonValue v && v.TryGetValue<double>(out var d)) return d;
@@ -1527,9 +1561,9 @@ internal sealed class JqRuntime(JqBudget budget)
         // Upstream range/3 steps through doubles (fractional steps count) and
         // yields nothing for a zero step; range/1..2 always steps by one.
         // Integral outputs keep integral storage like literals and inputs.
-        double start = args.Count == 1 ? 0 : Number(args[0][0]);
-        double end = Number(args.Count == 1 ? args[0][0] : args[1][0]);
-        double step = args.Count > 2 ? Number(args[2][0]) : 1;
+        double start = args.Count == 1 ? 0 : RangeBound(args[0][0]);
+        double end = RangeBound(args.Count == 1 ? args[0][0] : args[1][0]);
+        double step = args.Count > 2 ? RangeBound(args[2][0]) : 1;
         if (args.Count > 2 && !(step > 0) && !(step < 0))
             yield break;
 
@@ -1538,6 +1572,15 @@ internal sealed class JqRuntime(JqBudget budget)
             budget.ChargeNode();
             yield return CreateNumber(value);
         }
+    }
+
+    // Like the reference RANGE opcode, non-numeric bounds fail while numeric
+    // strings keep the recorded count leniency.
+    private static double RangeBound(JsonNode? bound)
+    {
+        if (!TryCountLevel(bound, out double value))
+            throw new JqException("Range bounds must be numeric");
+        return value;
     }
 
     // Numbers that are whole and fit in a long keep integral storage like
