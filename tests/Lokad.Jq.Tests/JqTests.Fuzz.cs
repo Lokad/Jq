@@ -332,4 +332,68 @@ public sealed partial class JqTests
                 Assert.StartsWith("jq:", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
         }
     }
+
+    // Multi-input crash-freedom.
+    private const int MultiFuzzSeed = 20261002;
+    private const int MultiFuzzCases = 100;
+    private static readonly string[] MultiFuzzFilters =
+    [
+        """.""",
+        """., .""",
+        """add""",
+        """length""",
+        """type""",
+        """map(.)""",
+        """first(.)""",
+        """limit(1; .)""",
+        """try . catch 0""",
+        """1""",
+        """null""",
+        """.a""",
+        """tojson""",
+        """tostring""",
+        """.[]""",
+        """select(.)""",
+        """empty""",
+    ];
+    private static readonly string[][] MultiFuzzFlagSets =
+    [
+        [],
+        ["-e"],
+        ["-s"],
+        ["-c"],
+    ];
+
+    [Fact]
+    public async Task Jq_SeededMultiInputFuzzSettlesOnStagedExits()
+    {
+        var rng = new Random(MultiFuzzSeed);
+        for (int index = 0; index < MultiFuzzCases; index++)
+        {
+            string[] flags = MultiFuzzFlagSets[rng.Next(MultiFuzzFlagSets.Length)];
+            string filter = MultiFuzzFilters[rng.Next(MultiFuzzFilters.Length)];
+            var parts = new List<string>();
+            int count = 1 + rng.Next(3);
+            for (int part = 0; part < count; part++)
+                parts.Add(rng.Next(8) == 0 ? "{bad" : FuzzValue(rng, 2));
+            string input = string.Join("\n", parts) + "\n";
+            var host = new MockFileSystem();
+            host.SetStandardInput(input);
+            var arguments = new List<string>(flags) { filter };
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments.ToArray())));
+            int exit;
+            try
+            {
+                exit = await tool.ExecuteAsync(host, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail("Multi seed " + MultiFuzzSeed + " case " + index + " escaped: " + ex.GetType().Name);
+                throw new InvalidOperationException("Unreachable multi-input fuzz failure.");
+            }
+            Assert.True(exit is 0 or 1 or 4 or 5, "Multi seed " + MultiFuzzSeed + " case " + index + " gave exit " + exit);
+            if (exit == 5)
+                Assert.StartsWith("jq:", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
+        }
+    }
 }
