@@ -254,6 +254,27 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_ExplicitReadsComposeWithRawLines()
+    {
+        // Explicit input and inputs read raw lines like implicit iteration
+        // does, with per-line metadata following the reads.
+        foreach (var (stdin, filter, expected) in new (string, string, string)[]
+        {
+            ("a\nb\nc\n", "[input, [inputs]]", "[\n  \"a\",\n  [\n    \"b\",\n    \"c\"\n  ]\n]\n"),
+            ("a\nb\n", "[input | [., input_line_number]]", "[\n  [\n    \"a\",\n    1\n  ]\n]\n"),
+            ("a\n", "[inputs]", "[\n  \"a\"\n]\n"),
+        })
+        {
+            var inner = new MockFileSystem();
+            inner.SetStandardInput(stdin);
+            var (exit, stdout, stderr) = await RunInputAsync(inner, "-R", "-n", filter);
+            Assert.True(exit == 0, stderr);
+            Assert.Equal(expected, stdout);
+            Assert.Empty(stderr);
+        }
+    }
+
+    [Fact]
     public async Task Jq_InputConsecutiveFilesAndDash()
     {
         var inner = new MockFileSystem();
