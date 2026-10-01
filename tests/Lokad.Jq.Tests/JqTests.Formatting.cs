@@ -162,6 +162,13 @@ public sealed partial class JqTests
     [InlineData("[1,\"a\",\"b c\"]", "@tsv", "\"1\\ta\\tb c\"\n")]
     [InlineData("\"!()<>&'\\\"\\t\"", "@text,@json,([1,.]|@csv,@tsv),@html,(@uri|.,@urid),@sh,(@base64|.,@base64d)", "\"!()<>&'\\\"\\t\"\n\"\\\"!()<>&'\\\\\\\"\\\\t\\\"\"\n\"1,\\\"!()<>&'\\\"\\\"\\t\\\"\"\n\"1\\t!()<>&'\\\"\\\\t\"\n\"!()&lt;&gt;&amp;&apos;&quot;\\t\"\n\"%21%28%29%3C%3E%26%27%22%09\"\n\"!()<>&'\\\"\\t\"\n\"'!()<>&'\\\\''\\\"\\t'\"\n\"ISgpPD4mJyIJ\"\n\"!()<>&'\\\"\\t\"\n")]
     [InlineData("\"O'Hara's Ale\"", "@sh \"echo \\(.)\"", "\"echo 'O'\\\\''Hara'\\\\''s Ale'\"\n")]
+    // Empty rows render empty and NaN elements render empty like the reference; nested arrays fail, with the csv-row wording shared by tsv.
+    [InlineData("[]", "@csv", "\"\"\n")]
+    [InlineData("[[]]", "try @csv catch .", "\"array ([]) is not valid in a csv row\"\n")]
+    [InlineData("[]", "@tsv", "\"\"\n")]
+    [InlineData("[[]]", "try @tsv catch .", "\"array ([]) is not valid in a csv row\"\n")]
+    [InlineData("[nan]", "@csv", "\"\"\n")]
+    [InlineData("[nan]", "@tsv", "\"\"\n")]
     public async Task Jq_HtmlShellCsvVectors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
