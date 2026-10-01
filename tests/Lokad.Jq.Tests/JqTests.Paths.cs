@@ -162,6 +162,13 @@ public sealed partial class JqTests
     [InlineData("{}", "getpath([\"a\"])", "null\n")]
     [InlineData("{\"a\":1}", "setpath([]; 5)", "5\n")]
     [InlineData("{\"a\":1}", "getpath([])", "{\n  \"a\": 1\n}\n")]
+    [InlineData("{\"a\":1}", "getpath(path(.a))", "1\n")]
+    [InlineData("{\"a\":0,\"b\":0}", "setpath(path(.a); 1)", "{\n  \"a\": 1,\n  \"b\": 0\n}\n")]
+    [InlineData("[10,20]", "[getpath(path(.[]))]", "[\n  10,\n  20\n]\n")]
+    // No enumerated paths means no setpath combinations, so the output is empty.
+    [InlineData("{\"a\":1}", "setpath(path(empty); 1)", "")]
+    [InlineData("null", "getpath(path(.a))", "null\n")]
+    [InlineData("[1,2]", "setpath(path(.[]); 0)", "[\n  0,\n  2\n]\n[\n  1,\n  0\n]\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
