@@ -158,6 +158,13 @@ public sealed partial class JqTests
         """. or error("x")""",
         """. + 1e+0""",
         """1e+0+0.001e3""",
+        """map(try .a[] catch ., .a[]?)""",
+        """[.[]|try if . == 0 then error("foo") else . end catch .]""",
+        """reduce range(100) as $i ([]; .[$i] = $i)""",
+        """last(range(50)|.+86400|gmtime)""",
+        """try strflocaltime("%Y") catch .""",
+        """try 0[implode] catch .""",
+        """. * 1000000""",
     ];
 
     private static readonly string[] FuzzAtoms =
