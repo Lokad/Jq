@@ -182,6 +182,26 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_RawNulLinesComposeWithSlurpAndInputs()
+    {
+        // Like the reference shell suite, NUL-containing raw lines compare
+        // whole under -Rse and stream element-wise through inputs under -Rne.
+        foreach (string[] flags in new string[][]
+        {
+            new string[] { "-R", "-s", "-e", ". == \"a\\u0000b\\nc\\u0000d\\ne\"" },
+            new string[] { "-R", "-n", "-e", "[inputs] == [\"a\\u0000b\", \"c\\u0000d\", \"e\"]" },
+        })
+        {
+            var fileSystem = new MockFileSystem();
+            fileSystem.SetStandardInput("a\0b\nc\0d\ne");
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", flags)));
+            Assert.Equal(0, await tool.ExecuteAsync(fileSystem, CancellationToken.None));
+            Assert.Equal("true\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
+
+    [Fact]
     public async Task Jq_FilterFileReadsProgramThroughHost()
     {
         var fileSystem = new MockFileSystem();
