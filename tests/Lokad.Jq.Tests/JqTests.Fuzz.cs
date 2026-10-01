@@ -134,6 +134,11 @@ public sealed partial class JqTests
         """sort_by(.a)""",
         """debug""",
         """stderr""",
+        """. as $x | $x""",
+        """try @base64d catch .""",
+        """try @urid catch .""",
+        """getpath(path(.a))""",
+        """setpath(path(.a); 1)""",
     ];
 
     private static readonly string[] FuzzAtoms =
@@ -431,6 +436,11 @@ public sealed partial class JqTests
         """[paths]""",
         """limit(1; path(.a))""",
         """isempty(path(.a))""",
+        """path(. as $x | $x)""",
+        """try path(.a as $x | $x) catch .""",
+        """path(1 as $x | $x)""",
+        """path((.a as $x | .b))""",
+        """(.a as $x | $x) = 1""",
     ];
 
     [Fact]
