@@ -67,6 +67,11 @@ public sealed partial class JqTests
     [InlineData("1e1000 | sin", "null\n")]
     [InlineData("-10E-1000000001", "-0\n")]
     [InlineData("1 + 2 * 2 + 10 / 2", "10\n")]
+    // Upstream jq.test expects `20e-1` here, but its harness compares with
+    // jv_equal (value equality), and `2` is the double-domain rendering of
+    // that value per the numeric profile. The input literal is piped in
+    // because the program ignores its input.
+    [InlineData("\"I wonder what this will be?\" | 1e+0+0.001e3", "2\n")]
     [InlineData("1 | atan * 4 * 1000000|floor / 1000000", "3.141592\n")]
     [InlineData("[-1.1,1.1,1.9] | [.[]|floor]", "[\n  -2,\n  1,\n  1\n]\n")]
     [InlineData("[4,9] | [.[]|sqrt]", "[\n  2,\n  3\n]\n")]
