@@ -110,9 +110,10 @@ internal static class JqCommandLineParser
 
             JqArgs parsed;
             OutputFormat format;
+            bool helpFirst;
             try
             {
-                parsed = ParseArguments(special.Options, out format);
+                parsed = ParseArguments(special.Options, out format, out helpFirst);
             }
             catch (ParseException ex)
             {
@@ -196,10 +197,10 @@ internal static class JqCommandLineParser
                 AsciiOutput = parsed.AsciiOutput,
                 SortKeys = parsed.SortKeys,
                 ExitStatus = parsed.ExitStatus,
-                Help = parsed.Help,
+                Help = parsed.Help && (!parsed.Version || helpFirst),
                 UseTabs = useTabs,
                 Indent = indent,
-                Version = parsed.Version,
+                Version = parsed.Version && (!parsed.Help || !helpFirst),
                 BuildConfiguration = parsed.BuildConfiguration,
                 Filter = filter,
                 FilterFile = filterFile,
@@ -227,11 +228,18 @@ internal static class JqCommandLineParser
             budget.ChargeBytes(128 + 64 * maximumLength);
         }
 
-        static JqArgs ParseArguments(IReadOnlyList<string> arguments, out OutputFormat format)
+        static JqArgs ParseArguments(IReadOnlyList<string> arguments, out OutputFormat format, out bool helpFirst)
         {
             var tokens = ArgumentTokenizer.Tokenize(arguments, ShortOptions, LongOptions, false);
             var normalized = new List<ITokenizedArguments>();
             var seenBools = new HashSet<string>(StringComparer.Ordinal);
+            // Like the reference, help and version resolve first-seen: -Vh
+            // prints the version while -hV prints help. Order runs over every
+            // flag occurrence (dedup only drops repeats), so clusters record
+            // each letter left to right.
+            int order = 0;
+            int helpAt = int.MaxValue;
+            int versionAt = int.MaxValue;
             format = OutputFormat.Default;
             while (tokens.Shift() is { } token)
             {
@@ -264,6 +272,35 @@ internal static class JqCommandLineParser
                         break;
                 }
 
+                if (token is LongArg seenLong)
+                {
+                    if (seenLong.Name == "help")
+                    {
+                        helpAt = Math.Min(helpAt, order);
+                        order++;
+                    }
+                    else if (seenLong.Name == "version")
+                    {
+                        versionAt = Math.Min(versionAt, order);
+                        order++;
+                    }
+                }
+                else if (token is ShortArgSet seenCluster)
+                {
+                    foreach (char name in seenCluster.Options)
+                    {
+                        if (name == 'h')
+                        {
+                            helpAt = Math.Min(helpAt, order);
+                            order++;
+                        }
+                        else if (name == 'V')
+                        {
+                            versionAt = Math.Min(versionAt, order);
+                            order++;
+                        }
+                    }
+                }
                 if (token is LongArg longOption && BoolLongOptions.Contains(longOption.Name))
                 {
                     if (!seenBools.Add("L:" + longOption.Name))
@@ -298,6 +335,7 @@ internal static class JqCommandLineParser
             // All operands remain for validation; emit only the final formatting flag.
             if (format == OutputFormat.Compact) normalized.Add(new LongArg("compact-output"));
             else if (format == OutputFormat.Tabs) normalized.Add(new LongArg("tab"));
+            helpFirst = helpAt <= versionAt;
             return Parser.ParseTokenized<JqArgs>(new TokenizedArguments(normalized));
 
             void PreserveOperand(string option, bool validateIndent)

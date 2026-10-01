@@ -214,19 +214,25 @@ public sealed partial class JqTests
         Assert.Equal(0, host.OpenFileCount);
     }
 
-    [Fact]
-    public async Task Jq_HelpWinsOverVersionFlags()
+    [Theory]
+    [InlineData(new[] { "-hV" }, true)]
+    [InlineData(new[] { "-Vh" }, false)]
+    [InlineData(new[] { "-h", "-V" }, true)]
+    [InlineData(new[] { "-V", "-h" }, false)]
+    [InlineData(new[] { "--help", "--version" }, true)]
+    [InlineData(new[] { "--version", "--help" }, false)]
+    public async Task Jq_HelpVersionFirstSeenWins(string[] flags, bool expectHelp)
     {
-        // Like the reference, combined help/version spellings in either
-        // order print the help text.
-        foreach (var flags in new[] { new[] { "-hV" }, new[] { "-Vh" } })
-        {
-            var host = new MockFileSystem();
-            var (exit, stdout, stderr) = await RunOutputAsync(host, flags);
-            Assert.Equal(0, exit);
+        // Like the reference shell suite, whichever of help/version comes
+        // first wins: -hV prints help while -Vh prints the version.
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunOutputAsync(host, flags);
+        Assert.Equal(0, exit);
+        Assert.Equal("", stderr);
+        if (expectHelp)
             Assert.Contains("Usage: jq [options] filter [files...]", stdout);
-            Assert.Equal("", stderr);
-        }
+        else
+            Assert.Equal("Lokad jq\n", stdout);
     }
 
     [Fact]

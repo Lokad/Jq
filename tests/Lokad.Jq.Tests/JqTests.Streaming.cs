@@ -152,6 +152,19 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_StreamErrorsReportLivePathAtEof()
+    {
+        // Truncation at end of input reports the open-container path, not
+        // an empty one: the reference shell suite pins [0] after `[`.
+        var host = new MockFileSystem();
+        host.SetStandardInput("[");
+        var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream-errors", "-c", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("[\"Unfinished JSON term at EOF at line 1, column 1\",[0]]\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
     public async Task Jq_StreamDeepNestingErrors()
     {
         var host = new MockFileSystem();

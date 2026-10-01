@@ -111,6 +111,18 @@ public sealed partial class JqTests
         Assert.Equal(diagnostics, host.GetOutput(JqFileDescriptor.StdErr));
     }
 
+    [Fact]
+    public async Task Jq_StderrMirrorsJoinOutput()
+    {
+        // Like the reference shell suite, joined output and diagnostics
+        // carry the same bytes when stderr renders every value.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-c", "-j", "\"hello\\nworld\", null, [false, 0], {\"foo\":[\"bar\"]}, \"\\n\" | stderr")));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("hello\nworldnull[false,0]{\"foo\":[\"bar\"]}\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("hello\nworldnull[false,0]{\"foo\":[\"bar\"]}\n", host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
     [Theory]
     [InlineData("\"hi\" | stderr", "hi\n", "hi")]
     [InlineData("{\"a\":1} | stderr", "{\n  \"a\": 1\n}\n", "{\"a\":1}")]

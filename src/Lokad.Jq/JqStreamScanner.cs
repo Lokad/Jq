@@ -613,8 +613,9 @@ internal sealed class JqStreamScanner
         if (_inString)
         {
             _eofConcluded = true;
+            JsonArray errorPath = CopyPath();
             ResetRecordState();
-            return EofOutcome("Unfinished string");
+            return EofOutcome("Unfinished string", errorPath);
         }
         if (_tokenLength > 0)
         {
@@ -636,26 +637,30 @@ internal sealed class JqStreamScanner
             _tokenLength = 0;
             if (!decoded)
             {
+                JsonArray errorPath = CopyPath();
                 ResetRecordState();
-                return EofOutcome(literalStart ? "Invalid literal" : "Invalid numeric literal");
+                return EofOutcome(literalStart ? "Invalid literal" : "Invalid numeric literal", errorPath);
             }
             string? separator = BindValue(scalar);
             if (separator is not null)
             {
+                JsonArray errorPath = CopyPath();
                 ResetRecordState();
-                return EofOutcome(separator);
+                return EofOutcome(separator, errorPath);
             }
             if (_path.Count > 0)
             {
+                JsonArray errorPath = CopyPath();
                 ResetRecordState();
-                return EofOutcome("Unfinished JSON term");
+                return EofOutcome("Unfinished JSON term", errorPath);
             }
             if (_seq && scalar is JsonValue number
                 && (number.TryGetValue<long>(out _) || number.TryGetValue<double>(out _))
                 && !_lastWasWs)
             {
+                JsonArray errorPath = CopyPath();
                 ResetRecordState();
-                return EofOutcome("Potentially truncated top-level numeric value");
+                return EofOutcome("Potentially truncated top-level numeric value", errorPath);
             }
             JsonNode? emitted = CheckDone();
             ResetRecordState();
@@ -666,8 +671,9 @@ internal sealed class JqStreamScanner
         if (_path.Count > 0)
         {
             _eofConcluded = true;
+            JsonArray errorPath = CopyPath();
             ResetRecordState();
-            return EofOutcome("Unfinished JSON term");
+            return EofOutcome("Unfinished JSON term", errorPath);
         }
         if (_hasNext)
         {
@@ -675,19 +681,20 @@ internal sealed class JqStreamScanner
             _next = null;
             _hasNext = false;
             _eofConcluded = true;
+            JsonArray pendingPath = CopyPath();
             ResetRecordState();
             if (_seq && pending is JsonValue number
                 && (number.TryGetValue<long>(out _) || number.TryGetValue<double>(out _))
                 && !_lastWasWs)
             {
-                return EofOutcome("Potentially truncated top-level numeric value");
+                return EofOutcome("Potentially truncated top-level numeric value", pendingPath);
             }
             return StreamScanOutcome.WithEvent(0, LeafEvent(new JsonArray(), pending));
         }
         if (_seq && _seqWaiting)
         {
             _eofConcluded = true;
-            return EofOutcome("Unfinished abandoned text");
+            return EofOutcome("Unfinished abandoned text", CopyPath());
         }
         _eofConcluded = true;
         return StreamScanOutcome.Finished();
@@ -705,14 +712,17 @@ internal sealed class JqStreamScanner
         return _tokenLength >= 2 && _token[0] == (byte)110 && _token[1] == (byte)117;
     }
 
-    private StreamScanOutcome EofOutcome(string baseMessage)
+    // End-of-input failures report the open-container path snapshotted by
+    // the caller: resetting first (as before) would always yield [] while
+    // the reference reports the live path (for example [0] after `[`).
+    private StreamScanOutcome EofOutcome(string baseMessage, JsonArray errorPath)
     {
         string message = $"{baseMessage} at EOF at line {_line}, column {_column}";
         if (_streamErrors)
         {
             _budget.ChargeNode();
             _budget.ChargeString(message.Length);
-            var errorEvent = new JsonArray { JsonValue.Create(message), CopyPath() };
+            var errorEvent = new JsonArray { JsonValue.Create(message), errorPath };
             return StreamScanOutcome.WithErrorEvent(0, errorEvent, dropRest: false);
         }
         if (_seq)
