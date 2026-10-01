@@ -312,6 +312,27 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_DynamicKeysFollowUpstreamChecks()
+    {
+        // Constant non-string keys fail at compile time (parser.y check_object_key)
+        // while dynamic ones fail at evaluation (execute.c INSERT), with one wording.
+        foreach (var (filter, exit, stderr) in new (string, int, string)[]
+        {
+            ("{(1, 2): \"x\"}", 5, "jq: Cannot use number (1) as object key\n"),
+            ("{(error(\"x\")): 1}", 5, "jq: error: x\n"),
+            ("{(1): \"x\"}", 3, "jq: Cannot use number (1) as object key at line 1 column 2 (filter)\n"),
+            ("{(null): 1}", 3, "jq: Cannot use null (null) as object key at line 1 column 2 (filter)\n"),
+        })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+            Assert.Equal(exit, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        }
+    }
+
+    [Fact]
     public async Task Jq_BareInterpolatedKeysReadInputFields()
     {
         var host = new MockFileSystem();
