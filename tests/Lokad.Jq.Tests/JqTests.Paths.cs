@@ -44,6 +44,11 @@ public sealed partial class JqTests
     [InlineData("null", "1 | path(1 // 2)", "[]\n")]
     [InlineData("null", "0 | try path(range(1)) catch .", "\"Invalid path expression with result 0\"\n")]
     [InlineData("{\"a\":1}", "try path(del(.zzz)) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "def f: [.[]]; try path(.a | f) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "def id: .; path(.a | id)", "[\n  \"a\"\n]\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "def f: map(.); try path(.a | f) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "def s: select(.b == 0); path(.a[] | s)", "[\n  \"a\",\n  0\n]\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "def m: map(select(.b == 0)); try path(.a | m) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     public async Task Jq_PathEnumeratesSegments(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
