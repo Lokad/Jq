@@ -155,6 +155,66 @@ public sealed partial class JqTests
         return "{" + string.Join(",", props) + "}";
     }
 
+    // Deep values built at runtime bypass the ingress depth cap, so every
+    // operation must either compute or fail staged. Builders stay narrow and
+    // bounded (a few hundred levels) to keep the sweep fast.
+    private static readonly string[] DeepBuilders =
+    [
+        """setpath([range(200)|"a"]; 1)""",
+        """setpath([range(200)|0]; 0)""",
+    ];
+
+    private static readonly string[] DeepProbes =
+    [
+        """type""",
+        """length""",
+        """keys""",
+        """has("a")""",
+        """.. | length""",
+        """[paths] | length""",
+        """walk(true)""",
+        """tojson""",
+        """tostring""",
+        """flatten""",
+        """sort""",
+        """getpath([])""",
+        """setpath(["b"]; 1)""",
+        """delpaths([["a"]])""",
+        """to_entries""",
+        """map(.)""",
+        """select(.)""",
+        """isempty(..)""",
+        """path(..)""",
+    ];
+
+    [Fact]
+    public async Task Jq_DeepValuesSettleOnStagedExits()
+    {
+        foreach (string builder in DeepBuilders)
+        {
+            foreach (string probe in DeepProbes)
+            {
+                string filter = builder + " | " + probe;
+                var host = new MockFileSystem();
+                host.SetStandardInput("null");
+                var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+                int exit;
+                try
+                {
+                    exit = await tool.ExecuteAsync(host, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    Assert.Fail("Deep case escaped with " + ex.GetType().Name + ": " + filter);
+                    throw new InvalidOperationException("Unreachable deep failure.");
+                }
+                Assert.True(exit is 0 or 5, "Deep case gave exit " + exit + ": " + filter);
+                if (exit != 0)
+                    Assert.StartsWith("jq:", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
+            }
+        }
+    }
+
     [Fact]
     public async Task Jq_SeededFuzzSettlesOnStagedExits()
     {
