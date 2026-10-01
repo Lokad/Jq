@@ -277,4 +277,59 @@ public sealed partial class JqTests
                 Assert.StartsWith("jq:", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
         }
     }
+
+    // Flag-dimension crash-freedom: framing and input modes compose with
+    // every fuzz filter over hostile values. A separate seed keeps the
+    // base campaign reproducible; CLI failures join the staged set.
+    private const int CliFuzzSeed = 20261001;
+    private const int CliFuzzCases = 120;
+
+    private static readonly string[][] CliFlagSets =
+    [
+        [],
+        ["-c"],
+        ["-n"],
+        ["-e"],
+        ["-s"],
+        ["-R"],
+        ["-r"],
+        ["-j"],
+        ["--stream"],
+        ["--seq"],
+        ["-c", "-e"],
+        ["-s", "-c"],
+        ["-R", "-n"],
+        ["-n", "-e"],
+        ["-s", "--stream"],
+        ["--seq", "-c"],
+    ];
+
+    [Fact]
+    public async Task Jq_SeededCliFuzzSettlesOnStagedExits()
+    {
+        var rng = new Random(CliFuzzSeed);
+        for (int index = 0; index < CliFuzzCases; index++)
+        {
+            string[] flags = CliFlagSets[rng.Next(CliFlagSets.Length)];
+            string filter = FuzzFilters[rng.Next(FuzzFilters.Length)];
+            string input = rng.Next(10) == 0 ? "{bad" : FuzzValue(rng, 2);
+            var host = new MockFileSystem();
+            host.SetStandardInput(input);
+            var arguments = new List<string>(flags) { filter };
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments.ToArray())));
+            int exit;
+            try
+            {
+                exit = await tool.ExecuteAsync(host, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail("CLI seed " + CliFuzzSeed + " case " + index + " escaped with " + ex.GetType().Name + ": [" + string.Join(" ", arguments) + "] on " + input);
+                throw new InvalidOperationException("Unreachable CLI fuzz failure.");
+            }
+            Assert.True(exit is 0 or 1 or 2 or 3 or 4 or 5, "CLI seed " + CliFuzzSeed + " case " + index + " gave exit " + exit + ": [" + string.Join(" ", arguments) + "] on " + input);
+            if (exit is 2 or 3 or 5)
+                Assert.StartsWith("jq:", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
+        }
+    }
 }
