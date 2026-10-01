@@ -227,6 +227,25 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_AnyAllPropagateLeadingErrors()
+    {
+        // An error before any decisive output propagates instead of short-circuiting.
+        foreach (var (input, filter) in new (string, string)[]
+        {
+            ("[true]", "all(.[]; (error(\"x\"), false))"),
+            ("[false]", "any(.[]; (error(\"x\"), true))"),
+        })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput(input);
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+            Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal("jq: error: x\n", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        }
+    }
+
+    [Fact]
     public async Task Jq_SortRejectsNonArrays()
     {
         var host = new MockFileSystem();
@@ -255,6 +274,9 @@ public sealed partial class JqTests
     [InlineData("null", "IN(range(10; 20); range(10))", "false\n")]
     [InlineData("null", "IN(range(5; 20); range(10))", "true\n")]
     [InlineData("{\"a\":\"1\",\"b\":\"2\",\"c\":\"3\"}", "any(keys[]|tostring?;true)", "true\n")]
+    // Multi-output conditions evaluate per output on both sides of the quantifier.
+    [InlineData("[true]", "all(.[]; (., .))", "true\n")]
+    [InlineData("[false]", "any(.[]; (., .))", "false\n")]
     public async Task Jq_AnyAllShortCircuit(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
