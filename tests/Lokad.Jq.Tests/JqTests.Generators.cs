@@ -173,6 +173,9 @@ public sealed partial class JqTests
     [InlineData("\"\\u0000\\u0020\\u0000\" | \"\\u0000\\u0020\\u0000\" + .", "\"\\u0000 \\u0000\\u0000 \\u0000\"\n")]
     [InlineData("[16 / 4 / 2, 16 / 4 * 2, 16 - 4 - 2, 16 - 4 + 2]", "[\n  2,\n  8,\n  10,\n  14\n]\n")]
     [InlineData("1e-19 + 1e-20 - 5e-21", "1.05E-19\n")]
+    // Comma binds tighter than pipe (parser.y lists %left ',' above %right
+    // '|'), so mixed collection items group as [A | ((B, C) | D)].
+    [InlineData("[1 | ., 2 | .+10]", "[\n  11,\n  12\n]\n")]
     public async Task Jq_BinaryOperatorsDistribute(string filter, string expected)
     {
         // The left operand is inner (fast), matching reversed call
