@@ -208,6 +208,10 @@ public sealed partial class JqTests
     [InlineData("[{}, true, {\"a\":1}] | [.[] | .a?]", "[\n  null,\n  1\n]\n")]
     [InlineData("[\"1\", \"invalid\", \"3\", 4] | [.[] | tonumber?]", "[\n  1,\n  3,\n  4\n]\n")]
     [InlineData("0 | (.a[])?", "")]
+    [InlineData("0 | (.a[0])?", "")]
+    [InlineData("0 | (.a[1:2])?", "")]
+    [InlineData("{\"a\":5} | .a[0]?", "")]
+    [InlineData("{\"a\":5} | .a[1:2]?", "")]
     public async Task Jq_OptionalSuppressesCatchableErrors(string filter, string expected)
     {
         var host = new MockFileSystem();
