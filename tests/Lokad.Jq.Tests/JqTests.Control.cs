@@ -30,6 +30,14 @@ public sealed partial class JqTests
     [InlineData("true", "try .a catch \". is not an object\"", "\". is not an object\"\n")]
     [InlineData("\"foo\"", "[if error then 1 else 2 end?]", "[]\n")]
     [InlineData("null", "1, try error(2), 3", "1\n3\n")]
+    // Upstream skips pending comma alternatives once the body raises
+    // (execute.c ON_BACKTRACK(FORK) backtracks while raising): the first
+    // error aborts the body, earlier values are kept, the handler runs once.
+    [InlineData("null", "try (1, error(\"x\")) catch 99", "1\n99\n")]
+    [InlineData("null", "try (1, error(\"x\"), 2) catch 99", "1\n99\n")]
+    [InlineData("null", "try (error(\"x\"), 1) catch 99", "99\n")]
+    [InlineData("null", "try (error(\"x\"), error(\"y\")) catch .", "\"x\"\n")]
+    [InlineData("null", "try (1, 2) catch 99", "1\n2\n")]
     [InlineData("1", "[-try .]", "[\n  -1\n]\n")]
     [InlineData("[\"a\",1,2,3,4,5,6,7]", "try mktime catch .", "\"mktime requires parsed datetime inputs\"\n")]
     [InlineData("0", "try (1/.) catch .", "\"number (1) and number (0) cannot be divided because the divisor is zero\"\n")]
