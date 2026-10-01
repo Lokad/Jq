@@ -25,6 +25,8 @@ public sealed partial class JqTests
     [InlineData("7", "[if false then 3 else . end]", "[\n  7\n]\n")]
     [InlineData("1", "if true then 2 end", "2\n")]
     [InlineData("1", "if false then 2 elif true then 3 end", "3\n")]
+    [InlineData("7", "[if true then 3 end]", "[\n  3\n]\n")]
+    [InlineData("[1,0,false,null,true,\"hello\"]", "[.[] | not]", "[\n  false,\n  false,\n  true,\n  true,\n  false,\n  false\n]\n")]
     [InlineData("[{\"foo\":0},{\"foo\":1},{\"foo\":[]},{\"foo\":true},{\"foo\":false},{\"foo\":null},{\"foo\":\"foo\"},{}]", "[.[] | if .baz then \"strange\" elif .foo then \"yep\" else \"nope\" end]", "[\n  \"yep\",\n  \"yep\",\n  \"yep\",\n  \"yep\",\n  \"nope\",\n  \"nope\",\n  \"yep\",\n  \"nope\"\n]\n")]
     public async Task Jq_IdentityAtConditionalBoundaries(string input, string filter, string expected)
     {

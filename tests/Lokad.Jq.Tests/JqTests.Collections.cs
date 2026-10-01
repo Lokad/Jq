@@ -18,6 +18,7 @@ public sealed partial class JqTests
     [InlineData("[1, \"a\", true, null, [], {}]", "map(type)", "[\n  \"number\",\n  \"string\",\n  \"boolean\",\n  \"null\",\n  \"array\",\n  \"object\"\n]\n")]
     [InlineData("[1, \"a\", true, null, [], {}]", "[(.[] | arrays), (.[] | objects), (.[] | numbers)]", "[\n  [],\n  {},\n  1\n]\n")]
     [InlineData("[0, 1, 2]", "has(-1 | sqrt)", "false\n")]
+    [InlineData("[0,1,2]", "has(nan)", "false\n")]
     [InlineData("[{}, {\"abcd\":1,\"abc\":2,\"abcde\":3}, {\"x\":1, \"z\": 3, \"y\":2}]", "map(keys)", "[\n  [],\n  [\n    \"abc\",\n    \"abcd\",\n    \"abcde\"\n  ],\n  [\n    \"x\",\n    \"y\",\n    \"z\"\n  ]\n]\n")]
     [InlineData("[[], [1,2,3], [\"a\",\"b\",\"c\"], [[3],[4,5],[6]], [{\"a\":1}, {\"b\":2}, {\"a\":3}]]", "map(add)", "[\n  null,\n  6,\n  \"abc\",\n  [\n    3,\n    4,\n    5,\n    6\n  ],\n  {\n    \"a\": 3,\n    \"b\": 2\n  }\n]\n")]
     [InlineData("[0,1,2]", "map_values(.+1)", "[\n  1,\n  2,\n  3\n]\n")]

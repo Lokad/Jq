@@ -217,6 +217,7 @@ public sealed partial class JqTests
     [InlineData("null", "(.a, .b) = range(3)", "{\n  \"a\": 0,\n  \"b\": 0\n}\n{\n  \"a\": 1,\n  \"b\": 1\n}\n{\n  \"a\": 2,\n  \"b\": 2\n}\n")]
     [InlineData("{\"a\": {\"b\": 10}, \"b\": 20}", ".a |= .b", "{\n  \"a\": 10,\n  \"b\": 20\n}\n")]
     [InlineData("{\"foo\": 42}", ".foo += 1", "{\n  \"foo\": 43\n}\n")]
+    [InlineData("[{\"error\":true}]", ".[] | .error = \"no, it's OK\"", "{\n  \"error\": \"no, it's OK\"\n}\n")]
     public async Task Jq_AssignUpdatesValues(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

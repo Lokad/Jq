@@ -52,6 +52,7 @@ public sealed partial class JqTests
     [InlineData("{} == {}", "true\n")]
     [InlineData("{\"a\":1, \"b\": {\"c\": 3, \"d\": 4}} | . == {\"b\": {\"d\": (4 + 1e-20), \"c\": 3}, \"a\":1}", "true\n")]
     [InlineData("[1, 1.0, \"1\", \"banana\"] | [.[] == 1]", "[\n  true,\n  true,\n  false,\n  false\n]\n")]
+    [InlineData("[1, 1.0, 1.000, 100e-2, 1e+0, 0.0001e4] | map(. == 1)", "[\n  true,\n  true,\n  true,\n  true,\n  true,\n  true\n]\n")]
     public async Task Jq_EqualityFollowsValueSemantics(string filter, string expected)
     {
         var host = new MockFileSystem();

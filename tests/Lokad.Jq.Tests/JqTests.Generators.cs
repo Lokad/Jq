@@ -50,6 +50,7 @@ public sealed partial class JqTests
 [InlineData("[range(3)] | .[nan:1]", "[\n  0\n]\n")]
 [InlineData("[range(3)] | .[1:nan]", "[\n  1,\n  2\n]\n")]
     [InlineData("[1,null,true,false,\"abcdef\",{},{\"a\":1,\"b\":2},[],[1,2,3,4,5],[1,2]] | [.[]|.[1:3]?]", "[\n  null,\n  \"bc\",\n  [],\n  [\n    2,\n    3\n  ],\n  [\n    2\n  ]\n]\n")]
+    [InlineData("[-1, 1, 2, 3, 1000000000000000000] | map([1,2][0:.])", "[\n  [\n    1\n  ],\n  [\n    1\n  ],\n  [\n    1,\n    2\n  ],\n  [\n    1,\n    2\n  ],\n  [\n    1,\n    2\n  ]\n]\n")]
     public async Task Jq_SliceStreamsEveryBound(string filter, string expected)
     {
         var host = new MockFileSystem();
