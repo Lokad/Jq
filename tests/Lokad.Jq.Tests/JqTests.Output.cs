@@ -32,6 +32,16 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SortKeysLeavesTojsonUnsorted()
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("{\"b\":1,\"a\":2}");
+        var (exit, stdout, stderr) = await RunOutputAsync(host, "-S", "tojson");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("\"{\\\"b\\\":1,\\\"a\\\":2}\"\n", stdout);
+    }
+
+    [Fact]
     public async Task Jq_RawOutput0TerminatesWithNul()
     {
         var host = new MockFileSystem();

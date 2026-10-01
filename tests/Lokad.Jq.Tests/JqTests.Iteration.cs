@@ -139,6 +139,7 @@ public sealed partial class JqTests
     [InlineData("{\"foo\":[{\"foo\": []}, {\"foo\":[{\"foo\":[]}]}]}", "recurse(.foo[])", "{\n  \"foo\": [\n    {\n      \"foo\": []\n    },\n    {\n      \"foo\": [\n        {\n          \"foo\": []\n        }\n      ]\n    }\n  ]\n}\n{\n  \"foo\": []\n}\n{\n  \"foo\": [\n    {\n      \"foo\": []\n    }\n  ]\n}\n{\n  \"foo\": []\n}\n")]
     [InlineData("2", "recurse(. * .; . < 20)", "2\n4\n16\n")]
     [InlineData("[[4, 1, 7], [8, 5, 2], [3, 6, 9]]", "walk(if type == \"array\" then sort else . end)", "[\n  [\n    1,\n    4,\n    7\n  ],\n  [\n    2,\n    5,\n    8\n  ],\n  [\n    3,\n    6,\n    9\n  ]\n]\n")]
+    [InlineData("{\"a\":1}", "[paths(numbers)]", "[\n  [\n    \"a\"\n  ]\n]\n")]
     [InlineData("1", "def while(cond; update): def _while: if cond then ., (update | _while) else empty end; _while; [while(.<100; .*2)]", "[\n  1,\n  2,\n  4,\n  8,\n  16,\n  32,\n  64\n]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
