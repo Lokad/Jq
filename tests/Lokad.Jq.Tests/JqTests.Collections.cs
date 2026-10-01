@@ -219,6 +219,12 @@ public sealed partial class JqTests
     [InlineData("[null, nan]", "sort | map(type)", "[\n  \"null\",\n  \"number\"\n]\n")]
     [InlineData("[nan, null]", "min | type", "\"null\"\n")]
     [InlineData("[null, nan]", "max | type", "\"number\"\n")]
+    // Key expressions collect every output per element like map([f]), then compare lexically.
+    [InlineData("[[2,1],[1]]", "sort_by(.[])", "[\n  [\n    1\n  ],\n  [\n    2,\n    1\n  ]\n]\n")]
+    [InlineData("[[2],[1]]", "group_by(.[])", "[\n  [\n    [\n      1\n    ]\n  ],\n  [\n    [\n      2\n    ]\n  ]\n]\n")]
+    [InlineData("[{\"a\":1}]", "sort_by(empty)", "[\n  {\n    \"a\": 1\n  }\n]\n")]
+    [InlineData("[[1,2],[1,2],[1]]", "unique_by(.[])", "[\n  [\n    1\n  ],\n  [\n    1,\n    2\n  ]\n]\n")]
+    [InlineData("[[2,1],[0]]", "[min_by(.[]), max_by(.[])]", "[\n  [\n    0\n  ],\n  [\n    2,\n    1\n  ]\n]\n")]
     public async Task Jq_SortGroupUnique(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
