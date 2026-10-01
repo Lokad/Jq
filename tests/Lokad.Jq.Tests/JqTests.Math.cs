@@ -67,6 +67,9 @@ public sealed partial class JqTests
     [InlineData("1e1000 | sin", "null\n")]
     [InlineData("-10E-1000000001", "-0\n")]
     [InlineData("1 + 2 * 2 + 10 / 2", "10\n")]
+    // Multi-valued math arguments combine last-argument-outer like the
+    // generic C call prelude (unlike first-outer user value arguments).
+    [InlineData("[pow((2,3); (2,3))]", "[\n  4,\n  9,\n  8,\n  27\n]\n")]
     // Upstream jq.test expects `20e-1` here, but its harness compares with
     // jv_equal (value equality), and `2` is the double-domain rendering of
     // that value per the numeric profile. The input literal is piped in
