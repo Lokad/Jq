@@ -1520,10 +1520,12 @@ internal sealed class IfFilter(
 
 internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) : JqFilter
 {
-    // Rebuilt containers break path identity even when they coincide with
-    // the input (sorted, deduped, or reversed into place); pass-through
-    // selectors and scalar builtins keep the default rule.
-    internal override bool PreservesPathIdentity => name is not ("sort" or "unique" or "reverse" or "keys" or "keys_unsorted");
+    // Freshly computed values break path identity: only pass-through
+    // selectors (upstream definitions over select), subvalue extrema, and
+    // stderr keep the default value-based rule. Everything else built here
+    // (conversions, string operations, math, search predicates, formats,
+    // dates, and the remaining rebuilt containers) travels untracked.
+    internal override bool PreservesPathIdentity => name is ("stderr" or "min" or "max" or "arrays" or "objects" or "iterables" or "booleans" or "numbers" or "strings" or "nulls" or "values" or "scalars" or "finites" or "normals");
 
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {

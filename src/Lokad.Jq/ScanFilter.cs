@@ -5,6 +5,9 @@ namespace Lokad.Jq;
 
 internal sealed class ScanFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
+    // Scans emit fresh substrings, so results travel untracked.
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         if (args.Count is not (1 or 2))

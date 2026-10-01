@@ -9,6 +9,9 @@ namespace Lokad.Jq;
 
 internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) : JqFilter
 {
+    // Substitutions build fresh strings, so results travel untracked.
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         string filterName = firstOnly ? "sub" : "gsub";
