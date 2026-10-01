@@ -159,6 +159,10 @@ internal sealed class NthFilter(JqFilter Index, JqFilter Body) : JqFilter
             double position = Number(index);
             if (position < 0)
                 throw new JqException("nth doesn't support negative indices");
+            // The desugared skip surfaces its own diagnostic for NaN like the
+            // reference else branch (NaN is neither positive nor zero).
+            if (double.IsNaN(position))
+                throw new JqException("skip doesn't support negative count");
             long skip = (long)position;
             using IEnumerator<JsonNode?> results = Body.Evaluate(input, context, environment).GetEnumerator();
             bool exhausted = false;
@@ -496,7 +500,8 @@ internal sealed class SkipFilter(JqFilter Count, JqFilter Body) : JqFilter
         foreach (JsonNode? count in Count.Evaluate(input, context, environment))
         {
             double total = Number(count);
-            if (total < 0)
+            // NaN falls through to the reference else branch like negatives.
+            if (total < 0 || double.IsNaN(total))
                 throw new JqException("skip doesn't support negative count");
             long skip = (long)total;
             using IEnumerator<JsonNode?> results = Body.Evaluate(input, context, environment).GetEnumerator();

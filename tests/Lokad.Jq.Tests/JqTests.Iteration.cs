@@ -107,6 +107,11 @@ public sealed partial class JqTests
     [InlineData("try limit(-1; 1) catch .", "\"limit doesn't support negative count\"\n")]
     [InlineData("try nth(-1; 1) catch .", "\"nth doesn't support negative indices\"\n")]
     [InlineData("try skip(-1; error) catch .", "\"skip doesn't support negative count\"\n")]
+    // NaN counts fall through to the reference else branches: limit rejects
+    // with its own diagnostic while nth surfaces the desugared skip one.
+    [InlineData("try limit(nan; 1) catch .", "\"limit doesn't support negative count\"\n")]
+    [InlineData("try nth(nan; 1) catch .", "\"skip doesn't support negative count\"\n")]
+    [InlineData("try skip(nan; 1) catch .", "\"skip doesn't support negative count\"\n")]
     [InlineData("try isempty(error(\"x\")) catch .", "\"x\"\n")]
     [InlineData("isempty(empty)", "true\n")]
     [InlineData("1 | until(true; error(\"x\"))", "1\n")]
