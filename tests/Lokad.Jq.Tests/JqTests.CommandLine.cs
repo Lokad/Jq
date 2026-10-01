@@ -56,6 +56,11 @@ public sealed partial class JqTests
         var (exit, stdout, stderr) = await RunCliAsync(host, "--", "-5");
         Assert.True(exit == 0, stderr);
         Assert.Equal("-5\n", stdout);
+        var neginf = new MockFileSystem();
+        var (neginfExit, neginfOut, neginfErr) = await RunCliAsync(neginf, "-n", "--", "-infinite | length");
+        Assert.Equal(0, neginfExit);
+        Assert.Equal("1.7976931348623157E+308\n", neginfOut);
+        Assert.Empty(neginfErr);
     }
 
     [Fact]

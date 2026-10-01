@@ -112,6 +112,11 @@ public sealed partial class JqTests
         Assert.Equal(2, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Contains("unsupported option", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        var dashword = new MockFileSystem();
+        var dashwordTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-infinite | length")));
+        Assert.Equal(2, await dashwordTool.ExecuteAsync(dashword, CancellationToken.None));
+        Assert.Contains("unsupported option", dashword.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(dashword.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Fact]

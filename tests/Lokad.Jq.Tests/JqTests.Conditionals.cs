@@ -17,6 +17,7 @@ public sealed partial class JqTests
     [InlineData("7", "if true then .\nelse empty end", "7\n")]
     [InlineData("7", "if true then .\telse empty end", "7\n")]
     [InlineData("7", "if true then (.) else empty end", "7\n")]
+    [InlineData("null", "if true then 1 end | . + 1", "2\n")]
     [InlineData("1", "if false then 2 end", "1\n")]
     [InlineData("7", "[if false then 3 end]", "[\n  7\n]\n")]
     [InlineData("7", "[if false then 3 elif false then 4 end]", "[\n  7\n]\n")]

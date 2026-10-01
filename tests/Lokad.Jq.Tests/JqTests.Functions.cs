@@ -15,6 +15,7 @@ public sealed partial class JqTests
     [InlineData("0", "(def f: 3; f)", "3\n")]
     [InlineData("1", "1 | def f: 2; f", "2\n")]
     [InlineData("0", "def length: 42; length", "42\n")]
+    [InlineData("null", "[1, def f: 2; f]", "[\n  1,\n  2\n]\n")]
 [InlineData("null", "def f: 1; def g: f, def f: 2; def g: 3; f, def f: g; f, g; def f: 4; [f, def f: g; def g: 5; f, g]+[f,g]", "[\n  4,\n  1,\n  2,\n  3,\n  3,\n  5,\n  4,\n  1,\n  2,\n  3,\n  3\n]\n")]
     [InlineData("[1,2]", "def f(a;b;c;d;e;f): [a+1,b,c,d,e,f]; f(.[0];.[1];.[0];.[0];.[0];.[0])", "[\n  2,\n  2,\n  1,\n  1,\n  1,\n  1\n]\n")]
     [InlineData("[0,1,2,3,4,5,6,7,8,9]", "def f(a;b;c;d;e;f;g;h;i;j): [j,i,h,g,f,e,d,c,b,a]; f(.[0];.[1];.[2];.[3];.[4];.[5];.[6];.[7];.[8];.[9])", "[\n  9,\n  8,\n  7,\n  6,\n  5,\n  4,\n  3,\n  2,\n  1,\n  0\n]\n")]
