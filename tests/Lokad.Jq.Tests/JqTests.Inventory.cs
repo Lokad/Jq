@@ -134,6 +134,10 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("try (-true) catch .", "\"boolean (true) cannot be negated\"\n")]
     [InlineData("-5", "-5\n")]
+    // Unary minus rejects every non-number kind with the upstream payload shape.
+    [InlineData("null | try -. catch .", "\"null (null) cannot be negated\"\n")]
+    [InlineData("[1] | try -. catch .", "\"array ([1]) cannot be negated\"\n")]
+    [InlineData("{\"a\":1} | try -. catch .", "\"object ({\\\"a\\\":1}) cannot be negated\"\n")]
     public async Task Jq_InventoryUnaryNegate(string filter, string expected)
     {
         var host = new MockFileSystem();
