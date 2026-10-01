@@ -111,6 +111,12 @@ public sealed partial class JqTests
     [InlineData("\"AB=C\"", "@base64d", "\"\\u0000\"\n")]
     [InlineData("\"Not base64 data\"", ". | try @base64d catch .", "\"string (\\\"Not base64 data\\\") is not valid base64 data\"\n")]
     [InlineData("\"QUJDa\"", ". | try @base64d catch .", "\"string (\\\"QUJDa\\\") trailing base64 byte found\"\n")]
+    // The reference decode table rejects whitespace like any other
+    // non-alphabet byte: embedded newlines, spaces, and tabs fail.
+    [InlineData("\"QUJD\\n\"", ". | try @base64d catch .", "\"string (\\\"QUJD\\\\n\\\") is not valid base64 data\"\n")]
+    [InlineData("\"QU JD\"", ". | try @base64d catch .", "\"string (\\\"QU JD\\\") is not valid base64 data\"\n")]
+    [InlineData("\"QU\\tJD\"", ". | try @base64d catch .", "\"string (\\\"QU\\\\tJD\\\") is not valid base64 data\"\n")]
+    [InlineData("\" QUJD\"", ". | try @base64d catch .", "\"string (\\\" QUJD\\\") is not valid base64 data\"\n")]
     public async Task Jq_Base64Vectors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
