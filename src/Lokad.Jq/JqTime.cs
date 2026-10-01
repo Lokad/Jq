@@ -261,34 +261,20 @@ internal static class JqTime
         long epochSeconds;
         TimeSpan offset = TimeSpan.Zero;
         string zoneName = "UTC";
+        // Like the reference, input shape and the format string validate
+        // before any host time-zone lookup, so malformed formats report even
+        // when no zone is configured.
+        double epochNumber = 0;
+        BrokenDown? wallFields = null;
+        long wallTotal = 0;
         if (TypeName(input) == "number")
         {
-            double epoch = Number(input);
-            if (local)
-            {
-                TimeZoneInfo zone = context.Clock?.LocalTimeZone ?? throw new JqException("strflocaltime requires an explicit host time zone");
-                moment = DecomposeLocal(context, epoch);
-                (offset, zoneName) = LocalZoneParts(zone, moment);
-            }
-            else
-            {
-                moment = DecomposeUtc(epoch);
-            }
-            epochSeconds = (long)epoch;
+            epochNumber = Number(input);
         }
-        else if (input is JsonArray)
+        else if (input is JsonArray inputArray
+            && TryReadFields(inputArray, out long year, out long month0, out long day, out long hour, out long minute, out long second))
         {
-            if (!TryReadFields(input, out long year, out long month0, out long day, out long hour, out long minute, out long second))
-                throw new JqException(prefix + " requires parsed datetime inputs");
-            (BrokenDown wall, long total) = NormalizeWall(year, month0, day, hour, minute, second);
-            moment = wall;
-            epochSeconds = total;
-            if (local)
-            {
-                TimeZoneInfo zone = context.Clock?.LocalTimeZone ?? throw new JqException("strflocaltime requires an explicit host time zone");
-                (offset, zoneName) = LocalZoneParts(zone, wall);
-                epochSeconds = total - (long)offset.TotalSeconds;
-            }
+            (wallFields, wallTotal) = NormalizeWall(year, month0, day, hour, minute, second);
         }
         else
         {
@@ -296,6 +282,31 @@ internal static class JqTime
         }
         if (!TryGetString(formatNode, out string? format) || format is null)
             throw new JqException(prefix + " requires a string format");
+        if (wallFields is null)
+        {
+            if (local)
+            {
+                TimeZoneInfo zone = context.Clock?.LocalTimeZone ?? throw new JqException("strflocaltime requires an explicit host time zone");
+                moment = DecomposeLocal(context, epochNumber);
+                (offset, zoneName) = LocalZoneParts(zone, moment);
+            }
+            else
+            {
+                moment = DecomposeUtc(epochNumber);
+            }
+            epochSeconds = (long)epochNumber;
+        }
+        else
+        {
+            moment = wallFields;
+            epochSeconds = wallTotal;
+            if (local)
+            {
+                TimeZoneInfo zone = context.Clock?.LocalTimeZone ?? throw new JqException("strflocaltime requires an explicit host time zone");
+                (offset, zoneName) = LocalZoneParts(zone, wallFields);
+                epochSeconds = wallTotal - (long)offset.TotalSeconds;
+            }
+        }
         return RenderStrftime(context, moment, epochSeconds, offset, zoneName, format);
     }
 

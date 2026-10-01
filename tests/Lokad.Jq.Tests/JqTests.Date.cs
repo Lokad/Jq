@@ -66,7 +66,7 @@ public sealed partial class JqTests
     [InlineData("[2024,2,15] | strftime(\"%Y-%m-%dT%H:%M:%SZ\")", "\"2024-03-15T00:00:00Z\"\n")]
     [InlineData("[\"a\",1,2,3,4,5,6,7] | try strftime(\"%Y-%m-%dT%H:%M:%SZ\") catch .", "\"strftime/1 requires parsed datetime inputs\"\n")]
     [InlineData("[\"a\",1,2,3,4,5,6,7] | try strflocaltime(\"%Y-%m-%dT%H:%M:%SZ\") catch .", "\"strflocaltime/1 requires parsed datetime inputs\"\n")]
-    [InlineData("0 | try [\"OK\", strflocaltime({})] catch [\"KO\", .]", "[\n  \"KO\",\n  \"strflocaltime requires an explicit host time zone\"\n]\n")]
+    [InlineData("0 | try [\"OK\", strflocaltime({})] catch [\"KO\", .]", "[\n  \"KO\",\n  \"strflocaltime/1 requires a string format\"\n]\n")]
     public async Task Jq_DateFormatVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
