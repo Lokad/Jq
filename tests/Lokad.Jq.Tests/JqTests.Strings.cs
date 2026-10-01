@@ -109,6 +109,7 @@ public sealed partial class JqTests
     [InlineData("[\"1\", \"2a\", \"3\", \" 4\", \"5 \", \"6.7\", \".89\", \"-876\", \"+5.43\", 21]", ".[] |= try tonumber", "[\n  1,\n  3,\n  6.7,\n  0.89,\n  -876,\n  5.43,\n  21\n]\n")]
     [InlineData("[null, 0, \"tru\", \"truee\", \"fals\", \"falsee\", [], {}]", "[.[] | try toboolean catch .]", "[\n  \"null (null) cannot be parsed as a boolean\",\n  \"number (0) cannot be parsed as a boolean\",\n  \"string (\\\"tru\\\") cannot be parsed as a boolean\",\n  \"string (\\\"truee\\\") cannot be parsed as a boolean\",\n  \"string (\\\"fals\\\") cannot be parsed as a boolean\",\n  \"string (\\\"falsee\\\") cannot be parsed as a boolean\",\n  \"array ([]) cannot be parsed as a boolean\",\n  \"object ({}) cannot be parsed as a boolean\"\n]\n")]
     [InlineData("\"é🚀\"", "utf8bytelength", "6\n")]
+    [InlineData("1", "try utf8bytelength catch .", "\"number (1) only strings have UTF-8 byte length\"\n")]
     public async Task Jq_Conversions(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

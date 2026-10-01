@@ -33,6 +33,14 @@ public sealed partial class JqTests
     [InlineData("[1,2,3]", "map(.+1)", "[\n  2,\n  3,\n  4\n]\n")]
     [InlineData("[1,2]", "map(., .)", "[\n  1,\n  1,\n  2,\n  2\n]\n")]
     [InlineData("[\"a\",\"a\",\"b\",\"a\",\"d\",\"b\",\"d\",\"a\",\"d\"]", "add({(.[]):1}) | keys", "[\n  \"a\",\n  \"b\",\n  \"d\"\n]\n")]
+    // has() follows the reference kinds: null never has, mismatches error, float indices truncate.
+    [InlineData("null", "has(\"a\")", "false\n")]
+    [InlineData("1", "try has(\"a\") catch .", "\"Cannot check whether number has a string key\"\n")]
+    [InlineData("\"a\"", "try has(0) catch .", "\"Cannot check whether string has a number key\"\n")]
+    [InlineData("[1]", "try has(\"a\") catch .", "\"Cannot check whether array has a string key\"\n")]
+    [InlineData("{\"a\":1}", "try has(0) catch .", "\"Cannot check whether object has a number key\"\n")]
+    [InlineData("[1,2,3]", "has(1.9)", "true\n")]
+    [InlineData("1", "try keys catch .", "\"number (1) has no keys\"\n")]
     public async Task Jq_StructuralBuiltins(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
