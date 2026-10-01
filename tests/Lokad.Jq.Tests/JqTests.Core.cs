@@ -203,6 +203,26 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_ValueErrorsInterruptConstruction()
+    {
+        // Object construction distributes over value outputs, so completed objects
+        // escape before a later error, while array collection holds everything back.
+        foreach (var (filter, stdout) in new (string, string)[]
+        {
+            ("{a: (1, error(\"x\"))}", "{\n  \"a\": 1\n}\n"),
+            ("{a: (error(\"x\"), 1)}", ""),
+            ("[(1, error(\"x\"))]", ""),
+        })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+            Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal("jq: error: x\n", host.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
+
+    [Fact]
     public async Task Jq_RecursiveDescentMatchesManualExample()
     {
         var host = new MockFileSystem();
