@@ -33,6 +33,8 @@ public sealed partial class JqTests
     [InlineData("[1,2]", "has(1.5)", "true\n")]
     [InlineData("{\"a\":1,\"a\":2}", ".", "{\n  \"a\": 2\n}\n")]
     [InlineData("1", "in([1,2])", "true\n")]
+    // IN compares by equality, so NaN never matches, unlike INDEX tostring keys.
+    [InlineData("nan", "in([nan])", "false\n")]
     [InlineData("{\"a\":1,\"b\":2}", "pick(.a)", "{\n  \"a\": 1\n}\n")]
     [InlineData("{\"a\":1,\"b\":2}", "delpaths([[\"a\"]])", "{\n  \"b\": 2\n}\n")]
     [InlineData("[{}, {\"abcd\":1,\"abc\":2,\"abcde\":3}, {\"x\":1, \"z\": 3, \"y\":2}]", "map(keys)", "[\n  [],\n  [\n    \"abc\",\n    \"abcd\",\n    \"abcde\"\n  ],\n  [\n    \"x\",\n    \"y\",\n    \"z\"\n  ]\n]\n")]
