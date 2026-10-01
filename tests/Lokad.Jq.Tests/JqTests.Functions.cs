@@ -222,4 +222,24 @@ public sealed partial class JqTests
         Assert.Equal("[\n  [\n    1,\n    3,\n    4\n  ],\n  [\n    2,\n    3,\n    4\n  ]\n]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
+
+    [Fact]
+    public async Task Jq_CommaCallArgumentsDistribute()
+    {
+        // Comma items inside call parentheses form one multi-output argument
+        // per the upstream Args grammar, so each value runs the builtin body
+        // in turn with prior outputs kept on errors.
+        foreach (var (filter, exit, stdout, stderr) in new (string, int, string, string)[]
+        {
+            ("getpath([1], 2)", 5, "null\n", "jq: error (at <unknown>): Path must be specified as an array\n"),
+            ("delpaths([1], [2])", 5, "", "jq: error (at <unknown>): Path must be specified as array, not number\n"),
+        })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+            Assert.Equal(exit, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
 }

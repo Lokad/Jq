@@ -35,6 +35,13 @@ public sealed partial class JqTests
     [InlineData("input(1)", "input expects no arguments")]
     [InlineData("inputs(1)", "inputs expects no arguments")]
     [InlineData("halt(1)", "halt expects no arguments")]
+    [InlineData("getpath()", "getpath expects one argument")]
+    [InlineData("setpath([1])", "setpath expects 2 arguments")]
+    [InlineData("setpath([1], 1, 2)", "setpath expects 2 arguments")]
+    [InlineData("delpaths()", "delpaths expects one argument")]
+    [InlineData("del()", "del expects one argument")]
+    [InlineData("type(1)", "type expects no arguments")]
+    [InlineData("tonumber(1, 2)", "tonumber expects no arguments")]
     public async Task Jq_WrongArityIsCompileError(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
