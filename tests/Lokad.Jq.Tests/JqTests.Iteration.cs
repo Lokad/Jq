@@ -113,6 +113,12 @@ public sealed partial class JqTests
     [InlineData("try nth(nan; 1) catch .", "\"skip doesn't support negative count\"\n")]
     [InlineData("try skip(nan; 1) catch .", "\"skip doesn't support negative count\"\n")]
     [InlineData("try isempty(error(\"x\")) catch .", "\"x\"\n")]
+    // Extraction utilities pull lazily, so body errors propagate to handlers.
+    [InlineData("try first(error(\"x\")) catch .", "\"x\"\n")]
+    [InlineData("try last(error(\"x\")) catch .", "\"x\"\n")]
+    [InlineData("try nth(0; error(\"x\")) catch .", "\"x\"\n")]
+    [InlineData("try [limit(2; error(\"x\"))] catch .", "\"x\"\n")]
+    [InlineData("try [skip(1; error(\"x\"))] catch .", "\"x\"\n")]
     [InlineData("isempty(empty)", "true\n")]
     [InlineData("1 | until(true; error(\"x\"))", "1\n")]
     [InlineData("1 | while(false; error(\"x\"))", "")]
