@@ -150,6 +150,10 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "delpaths([])", "{\n  \"a\": 1\n}\n")]
     [InlineData("{\"a\": 1, \"b\": {\"c\": 2, \"d\": 3}, \"e\": 4}", "pick(.a, .b.c, .x)", "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2\n  },\n  \"x\": null\n}\n")]
     [InlineData("{\"foo\": 42, \"bar\": 9001, \"baz\": 42}", "del(.foo)", "{\n  \"bar\": 9001,\n  \"baz\": 42\n}\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "try del(.a | map(select(.b == 0))) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "del(.a | .[])", "{\n  \"a\": []\n}\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "try pick(.a | map(.)) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "pick(.a)", "{\n  \"a\": [\n    {\n      \"b\": 0\n    }\n  ]\n}\n")]
     public async Task Jq_DelAndPickReshape(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -230,6 +234,9 @@ public sealed partial class JqTests
     [InlineData("{\"a\": {\"b\": 10}, \"b\": 20}", ".a |= .b", "{\n  \"a\": 10,\n  \"b\": 20\n}\n")]
     [InlineData("{\"foo\": 42}", ".foo += 1", "{\n  \"foo\": 43\n}\n")]
     [InlineData("[{\"error\":true}]", ".[] | .error = \"no, it's OK\"", "{\n  \"error\": \"no, it's OK\"\n}\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "try ((.a | map(select(.b == 0))) = 1) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "(.a | .[0]) = 1", "{\n  \"a\": [\n    1\n  ]\n}\n")]
+    [InlineData("{\"a\":[{\"b\":0}]}", "try ((.a | [.[]]) = 1) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     public async Task Jq_AssignUpdatesValues(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
