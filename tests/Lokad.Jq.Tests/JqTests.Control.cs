@@ -30,6 +30,15 @@ public sealed partial class JqTests
     [InlineData("true", "try .a catch \". is not an object\"", "\". is not an object\"\n")]
     [InlineData("\"foo\"", "[if error then 1 else 2 end?]", "[]\n")]
     [InlineData("null", "1, try error(2), 3", "1\n3\n")]
+    [InlineData("1", "[-try .]", "[\n  -1\n]\n")]
+    [InlineData("[\"a\",1,2,3,4,5,6,7]", "try mktime catch .", "\"mktime requires parsed datetime inputs\"\n")]
+    [InlineData("0", "try (1/.) catch .", "\"number (1) and number (0) cannot be divided because the divisor is zero\"\n")]
+    [InlineData("0", "try (1/0) catch .", "\"number (1) and number (0) cannot be divided because the divisor is zero\"\n")]
+    [InlineData("0", "try (0/0) catch .", "\"number (0) and number (0) cannot be divided because the divisor is zero\"\n")]
+    [InlineData("0", "try (1%.) catch .", "\"number (1) and number (0) cannot be divided (remainder) because the divisor is zero\"\n")]
+    [InlineData("0", "try (1%0) catch .", "\"number (1) and number (0) cannot be divided (remainder) because the divisor is zero\"\n")]
+    [InlineData("1", ". |= try . catch .", "1\n")]
+    [InlineData("null", "\"foo\" | try ((try . catch \"caught too much\") | error) catch \"caught just right\"", "\"caught just right\"\n")]
     public async Task Jq_TryCatchHandlesErrors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

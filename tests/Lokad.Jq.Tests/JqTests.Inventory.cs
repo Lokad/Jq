@@ -61,6 +61,7 @@ public sealed partial class JqTests
     [InlineData("5 | _negate", "-5\n")]
     [InlineData("-5 | -.", "5\n")]
     [InlineData("try (true | _negate) catch .", "\"boolean (true) cannot be negated\"\n")]
+    [InlineData("\"foo\" | try -.? catch .", "\"string (\\\"foo\\\") cannot be negated\"\n")]
     public async Task Jq_InventoryNegate(string filter, string expected)
     {
         var host = new MockFileSystem();
