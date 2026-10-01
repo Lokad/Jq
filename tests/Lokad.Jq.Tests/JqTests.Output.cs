@@ -22,6 +22,18 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SortKeysRendersCoalescedDuplicates()
+    {
+        // Duplicate keys coalesce last-wins at parse, so sorted output
+        // orders the surviving entries without re-splitting them.
+        var host = new MockFileSystem();
+        host.SetStandardInput("{\"b\":1,\"a\":2,\"b\":3}");
+        var (exit, stdout, stderr) = await RunOutputAsync(host, "-S", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("{\n  \"a\": 2,\n  \"b\": 3\n}\n", stdout);
+    }
+
+    [Fact]
     public async Task Jq_SortKeysLeavesArraysAndScalars()
     {
         var host = new MockFileSystem();
