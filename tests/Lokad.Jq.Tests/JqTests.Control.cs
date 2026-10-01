@@ -110,6 +110,8 @@ public sealed partial class JqTests
     [InlineData("error(\"boom\")", "jq: error (at <stdin>:1): boom\n")]
     [InlineData("\"x\" | error", "jq: error (at <stdin>:1): x\n")]
     [InlineData("[1] | error", "jq: error (at <stdin>:1) (not a string): [1]\n")]
+    // Chained `?` suppresses only its own step (parser.y Term .[] ? / EACH_OPT): the source index error propagates, unlike the parenthesized whole-chain form.
+    [InlineData(".a[]?", "jq: error (at <stdin>:1): cannot index array with string \"a\"\n")]
     public async Task Jq_UncaughtErrorsFailWithPayload(string filter, string expectedError)
     {
         var host = new MockFileSystem();

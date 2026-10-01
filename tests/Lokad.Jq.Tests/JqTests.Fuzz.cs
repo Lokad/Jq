@@ -68,6 +68,10 @@ public sealed partial class JqTests
         """floor""",
         """not""",
         """empty""",
+        """try .a[] catch .""",
+        """.a[]?""",
+        """[.[]|try if . == 0 then error("foo") else . end catch .]""",
+        """last(range(20)|.+86400|gmtime)""",
         """gsub("a"; "b")""",
         """sub("a"; "b")""",
         """capture("(?<x>.)")""",
@@ -467,6 +471,10 @@ public sealed partial class JqTests
         """path(1 as $x | $x)""",
         """path((.a as $x | .b))""",
         """(.a as $x | $x) = 1""",
+        """path(try .a[])""",
+        """try del(.a[]) catch .""",
+        """.a[]?""",
+        """delpaths([paths(type == "number")])""",
     ];
 
     [Fact]
