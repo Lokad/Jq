@@ -205,6 +205,10 @@ public sealed partial class JqTests
     [InlineData("[\"chunky\", \"bacon\", \"kitten\", \"cicada\", \"asparagus\"]", "unique_by(length)", "[\n  \"bacon\",\n  \"chunky\",\n  \"asparagus\"\n]\n")]
     [InlineData("[{\"foo\":4, \"bar\":10}, {\"foo\":3, \"bar\":10}, {\"foo\":2, \"bar\":1}]", "sort_by(.foo)", "[\n  {\n    \"foo\": 2,\n    \"bar\": 1\n  },\n  {\n    \"foo\": 3,\n    \"bar\": 10\n  },\n  {\n    \"foo\": 4,\n    \"bar\": 10\n  }\n]\n")]
     [InlineData("[{\"foo\":4, \"bar\":10}, {\"foo\":3, \"bar\":20}, {\"foo\":2, \"bar\":1}, {\"foo\":3, \"bar\":10}]", "sort_by(.foo, .bar)", "[\n  {\n    \"foo\": 2,\n    \"bar\": 1\n  },\n  {\n    \"foo\": 3,\n    \"bar\": 10\n  },\n  {\n    \"foo\": 3,\n    \"bar\": 20\n  },\n  {\n    \"foo\": 4,\n    \"bar\": 10\n  }\n]\n")]
+    [InlineData("[]", "sort", "[]\n")]
+    [InlineData("[]", "group_by(.)", "[]\n")]
+    [InlineData("[]", "min", "null\n")]
+    [InlineData("[]", "max", "null\n")]
     public async Task Jq_SortGroupUnique(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

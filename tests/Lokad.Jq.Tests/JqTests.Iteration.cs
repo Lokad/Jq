@@ -32,11 +32,15 @@ public sealed partial class JqTests
     [InlineData("null", "first(.?,.?)", "null\n")]
     [InlineData("null", "isempty(range(3))", "false\n")]
     [InlineData("null", "[first(empty), last(empty), nth(5; empty)]", "[]\n")]
+    [InlineData("null", "nth(1000000000000000000; 1,2,3)", "")]
+    [InlineData("", "first", "")]
+    [InlineData("", "last", "")]
+    [InlineData("[]", "isempty(.[])", "true\n")]
+    [InlineData("null", "limit(1; empty)", "")]
     [InlineData("[]", "first(.[])", "")]
     [InlineData("[]", "last(.[])", "")]
     [InlineData("[]", "nth(0; .[])", "")]
     [InlineData("null", "nth(0; empty)", "")]
-    [InlineData("[]", "isempty(.[])", "true\n")]
     [InlineData("[1,2,3]", "limit(0; .[])", "")]
     public async Task Jq_LimitFirstNthIsempty(string input, string filter, string expected)
     {
@@ -112,6 +116,7 @@ public sealed partial class JqTests
     [InlineData("[range(0;-5;-1)]", "[\n  0,\n  -1,\n  -2,\n  -3,\n  -4\n]\n")]
     [InlineData("[range(4)]", "[\n  0,\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[range(2; 4)]", "[\n  2,\n  3\n]\n")]
+    [InlineData("range(nan)", "")]
     public async Task Jq_IterationEdgeCases(string filter, string expected)
     {
         var host = new MockFileSystem();
