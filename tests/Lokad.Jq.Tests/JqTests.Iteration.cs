@@ -223,6 +223,8 @@ public sealed partial class JqTests
     [InlineData("[[1,2]]", "[limit(3; recurse(if type == \"array\" then .[] else empty end))]", "[\n  [\n    [\n      1,\n      2\n    ]\n  ],\n  [\n    1,\n    2\n  ],\n  1\n]\n")]
     [InlineData("0", "[limit(4; while(true; (1,2)))]", "[\n  0,\n  1,\n  1,\n  1\n]\n")]
     [InlineData("0", "[limit(5; while(.<10; (.+1, .+2)))]", "[\n  0,\n  1,\n  2,\n  3,\n  4\n]\n")]
+    // Break unwinds dynamically across a while loop, keeping already-yielded states.
+    [InlineData("0", "[label $o | while(.<5; .+1 | if . == 3 then break $o else . end)]", "[\n  0,\n  1,\n  2\n]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
