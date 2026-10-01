@@ -12,6 +12,29 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_UnknownOptionsReportSystemError()
+    {
+        // Unknown options fail with exit 2 and empty stdout. Wording stays in our
+        // diagnostic shape: the reference says `Unknown option`, and cluster errors
+        // name the cluster head (`-c` for `-cZ`) where the reference names the
+        // failing flag (`-Z`).
+        foreach (var (flags, diagnostic) in new (string[], string)[]
+        {
+            (["--frobnicate", "."], "jq: unsupported option --frobnicate\n"),
+            (["-Z", "."], "jq: unsupported option -Z\n"),
+            (["-cZ", "."], "jq: unsupported option -c\n"),
+            (["-Zc", "."], "jq: unsupported option -Z\n"),
+        })
+        {
+            var host = new MockFileSystem();
+            var (exit, stdout, stderr) = await RunCliAsync(host, flags);
+            Assert.True(exit == 2, string.Join(" ", flags) + "|" + stderr);
+            Assert.Equal(diagnostic, stderr);
+            Assert.Empty(stdout);
+        }
+    }
+
+    [Fact]
     public async Task Jq_RepeatedBoolFlagsAreIdempotent()
     {
         foreach (var (flags, stdin, expected) in new (string[], string, string)[]
