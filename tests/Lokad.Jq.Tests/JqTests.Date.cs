@@ -102,6 +102,8 @@ public sealed partial class JqTests
     [InlineData("\"x\" | strftime(\"%Y\")", "strftime/1 requires parsed datetime inputs")]
     [InlineData("[2015,\"x\"] | strftime(\"%Y\")", "strftime/1 requires parsed datetime inputs")]
     [InlineData("\"x\" | localtime", "string (\"x\") localtime() requires numeric inputs")]
+    // Fractional ISO instants fail like system strptime without fraction support, not just garbage inputs.
+    [InlineData("\"2015-03-05T23:51:47.123Z\" | fromdate", "date \"2015-03-05T23:51:47.123Z\" does not match format \"%Y-%m-%dT%H:%M:%SZ\"")]
     public async Task Jq_DateFailures(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
