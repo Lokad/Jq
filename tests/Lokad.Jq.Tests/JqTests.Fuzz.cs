@@ -144,6 +144,12 @@ public sealed partial class JqTests
         """try @urid catch .""",
         """getpath(path(.a))""",
         """setpath(path(.a); 1)""",
+        """try (.a, error("x")) catch .""",
+        """try (., error("x"), .) catch 99""",
+        """. and error("x")""",
+        """. or error("x")""",
+        """. + 1e+0""",
+        """1e+0+0.001e3""",
     ];
 
     private static readonly string[] FuzzAtoms =
