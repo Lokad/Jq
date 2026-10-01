@@ -26,6 +26,14 @@ public sealed partial class JqTests
     [InlineData("\"2015-03-05T23:51:47Z\" | fromdate | todate", "\"2015-03-05T23:51:47Z\"\n")]
     [InlineData("\"2038-01-19T03:14:08Z\" | fromdate", "2147483648\n")]
     [InlineData("\"2015-03-05T23:51:47Z\" | strptime(\"%Y-%m-%dT%H:%M:%SZ\") | mktime", "1425599507\n")]
+    [InlineData("[2015,2,0,0,0,0] | mktime", "1425081600\n")]
+    [InlineData("[2015,0,32,0,0,0] | mktime", "1422748800\n")]
+    [InlineData("[2015,0,1,25,0,0] | mktime", "1420160400\n")]
+    [InlineData("[2015,0,1,0,-1,0] | mktime", "1420070340\n")]
+    [InlineData("[2015,0,1] | mktime", "1420070400\n")]
+    [InlineData("[2015,0,1,0,0,0,0] | mktime", "1420070400\n")]
+    [InlineData("[2015,0,1,0,0,0,0,0,99] | mktime", "1420070400\n")]
+    [InlineData("[2015,11,31,23,59,60] | mktime", "1451606400\n")]
     public async Task Jq_DateEpochVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
