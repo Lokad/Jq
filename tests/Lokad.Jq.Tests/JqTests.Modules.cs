@@ -126,6 +126,23 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_Modules_HomeAndOriginSearchDirsAreSkipped()
+    {
+        // The embeddable library performs no ambient home or executable-origin
+        // lookups: tilde and origin search entries resolve to nothing, so the
+        // module is simply not found even when a same-named file exists.
+        foreach (string dir in new[] { "~/lib", "$ORIGIN/lib" })
+        {
+            var fs = new MockFileSystem();
+            fs.AddFile("/lib/a.jq", "def a: \"a\";");
+            var (exit, stdout, stderr) = await RunModulesAsync(fs, "-n", "-L", dir, "import \"a\" as foo; foo::a");
+            Assert.Equal(3, exit);
+            Assert.Equal("", stdout);
+            Assert.Contains("module not found: a", stderr);
+        }
+    }
+
+    [Fact]
     public async Task Jq_Modules_MissingFails()
     {
         var fs = new MockFileSystem();
