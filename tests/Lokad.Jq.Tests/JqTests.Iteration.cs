@@ -169,6 +169,9 @@ public sealed partial class JqTests
     [InlineData("1", "[repeat(.*2, error)?]", "[\n  2\n]\n")]
     [InlineData("0", "limit(3; repeat(. + 1))", "1\n1\n1\n")]
     [InlineData("0", "limit(3; repeat(1))", "1\n1\n1\n")]
+    // Multi-valued bodies re-evaluate per round on the original input as a constant stream, never accumulating.
+    [InlineData("0", "[limit(6; repeat(1,2))]", "[\n  1,\n  2,\n  1,\n  2,\n  1,\n  2\n]\n")]
+    [InlineData("0", "[limit(4; repeat(.+1,.*10))]", "[\n  1,\n  0,\n  1,\n  0\n]\n")]
     [InlineData("[[1]]", "[recurse]", "[\n  [\n    [\n      1\n    ]\n  ],\n  [\n    1\n  ],\n  1\n]\n")]
     [InlineData("1", "[recurse(if . < 3 then . + 1 else empty end)]", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("1", "[recurse(. + 1; . < 4)]", "[\n  1,\n  2,\n  3\n]\n")]
