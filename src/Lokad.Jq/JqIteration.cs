@@ -401,10 +401,9 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
         return outputs.Current;
     }
 
-    // Every body output of a rebuilt level, cloned for array collection like
-    // map. Object levels use the first-only read above; array levels collect
-    // the whole stream, so empty levels contribute zero elements like the
-    // reference.
+    // Every body output of a rebuilt level. Object levels use the first-only
+    // read above; array levels collect the whole stream, so empty levels
+    // contribute zero elements like the reference.
     private List<JsonNode?> CollectWalkOutputs(JsonNode? rebuilt, JqContext context, JqEnvironment environment)
     {
         var outputs = new List<JsonNode?>();
@@ -412,7 +411,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
         {
             context.Budget.CheckCancellation();
             context.Budget.ChargeNode();
-            outputs.Add(context.Runtime.Clone(value));
+            outputs.Add(value);
         }
         return outputs;
     }
