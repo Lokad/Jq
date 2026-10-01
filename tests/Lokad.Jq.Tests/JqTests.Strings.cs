@@ -69,6 +69,7 @@ public sealed partial class JqTests
     [InlineData("\" 1\"", "fromjson", "1\n")]
     [InlineData("1", "try toboolean catch .", "\"number (1) cannot be parsed as a boolean\"\n")]
     [InlineData("\"1 2\"", "try fromjson catch .", "\"expected a single JSON value\"\n")]
+    [InlineData("[\"NaN\",\"-NaN\",\"NaN1\",\"NaN10\",\"NaN100\",\"NaN1000\",\"NaN10000\",\"NaN100000\"]", ".[] | try (fromjson | isnan) catch .", "true\ntrue\n\"Invalid numeric literal at EOF at line 1, column 4 (while parsing 'NaN1')\"\n\"Invalid numeric literal at EOF at line 1, column 5 (while parsing 'NaN10')\"\n\"Invalid numeric literal at EOF at line 1, column 6 (while parsing 'NaN100')\"\n\"Invalid numeric literal at EOF at line 1, column 7 (while parsing 'NaN1000')\"\n\"Invalid numeric literal at EOF at line 1, column 8 (while parsing 'NaN10000')\"\n\"Invalid numeric literal at EOF at line 1, column 9 (while parsing 'NaN100000')\"\n")]
     [InlineData("null", "nan | length", "null\n")]
     [InlineData("null", "infinite | length", "1.7976931348623157E+308\n")]
     [InlineData("null", "-0.0 | length", "0\n")]
@@ -114,7 +115,7 @@ public sealed partial class JqTests
     [InlineData("\"TRUE\"", "toboolean", "string (\"TRUE\") cannot be parsed as a boolean")]
     [InlineData("\" true\"", "toboolean", "string (\" true\") cannot be parsed as a boolean")]
     [InlineData("1", "toboolean", "number (1) cannot be parsed as a boolean")]
-    [InlineData("\"NaN1\"", "fromjson", "invalid start of a value")]
+    [InlineData("\"NaN1\"", "fromjson", "Invalid numeric literal at EOF at line 1, column 4 (while parsing 'NaN1')")]
     [InlineData("\"123\\u0000456\"", "tonumber", "string (\"123\\u0000456\") cannot be parsed as a number")]
     [InlineData("\"true\\u0000x\"", "toboolean", "string (\"true\\u0000x\") cannot be parsed as a boolean")]
     public async Task Jq_ConversionFailures(string input, string filter, string diagnostic)

@@ -189,6 +189,8 @@ internal sealed class JqRuntime(JqBudget budget)
                 budget.ChargeBytes(consumed - firstContent);
                 return JsonValue.Create(topValue);
             }
+            if (TryInvalidNonFiniteLiteral(text, firstContent, out string invalidMessage))
+                throw new JqException(invalidMessage);
             if (!reader.Read())
                 throw new JqException("expected a JSON value");
             var start = (int)reader.TokenStartIndex;
@@ -242,6 +244,57 @@ internal sealed class JqRuntime(JqBudget budget)
         return text[index] is (byte)'[' or (byte)',' or (byte)':';
     }
 
+    private static bool TryInvalidNonFiniteLiteral(ReadOnlySpan<byte> text, int position, out string message)
+    {
+        message = string.Empty;
+        int index = SkipJsonWhitespace(text, position);
+        if (index < text.Length && (text[index] == (byte)'+' || text[index] == (byte)'-'))
+            index++;
+        int word = index;
+        while (index < text.Length && IsAsciiLetter(text[index]))
+            index++;
+        if (word == index)
+            return false;
+        if (!IsWord(text, word, index, "nan"u8) && !IsWord(text, word, index, "inf"u8) && !IsWord(text, word, index, "infinity"u8))
+            return false;
+        if (index >= text.Length || IsValueBoundary(text[index]))
+            return false;
+        int junk = index;
+        while (junk < text.Length && IsLiteralByte(text[junk]))
+            junk++;
+        int tail = junk;
+        while (tail < text.Length && text[tail] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
+            tail++;
+        if (tail != text.Length)
+            return false;
+        ComputeEofPosition(text, out int line, out int column);
+        message = "Invalid numeric literal at EOF at line " + line + ", column " + column;
+        return true;
+    }
+
+    private static bool IsLiteralByte(byte value) =>
+        value != (byte)' ' && value != (byte)'\t' && value != (byte)'\r' && value != (byte)'\n' &&
+        value != (byte)'[' && value != (byte)',' && value != (byte)']' && value != (byte)'{' &&
+        value != (byte)':' && value != (byte)'}' && value != (byte)'"';
+
+    private static void ComputeEofPosition(ReadOnlySpan<byte> text, out int line, out int column)
+    {
+        line = 1;
+        column = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == (byte)'\n')
+            {
+                line++;
+                column = 0;
+            }
+            else
+            {
+                column++;
+            }
+        }
+    }
+
     private static bool TryMatchNonFinite(ReadOnlySpan<byte> text, int position, out double value, out int end)
     {
         value = 0;
@@ -280,6 +333,9 @@ internal sealed class JqRuntime(JqBudget budget)
             catch (JsonException)
             {
                 int failure = consumedBase + (int)reader.BytesConsumed;
+                if (IsValuePreceded(source, failure)
+                    && TryInvalidNonFiniteLiteral(source, failure, out string nestedInvalid))
+                    throw new JqException(nestedInvalid);
                 if (IsValuePreceded(source, failure)
                     && TryMatchNonFinite(source, failure, out double number, out int end))
                 {
@@ -380,7 +436,16 @@ internal sealed class JqRuntime(JqBudget budget)
         budget.ChargeBytes(Encoding.UTF8.GetByteCount(text));
         var bytes = Encoding.UTF8.GetBytes(text);
         int prefix = HasBomPrefix(bytes) ? 3 : 0;
-        var node = ReadJsonValue(bytes.AsSpan(prefix), out var consumed);
+        int consumed;
+        JsonNode? node;
+        try
+        {
+            node = ReadJsonValue(bytes.AsSpan(prefix), out consumed);
+        }
+        catch (JqException ex) when (ex is not JqQuotaException && ex.Message.StartsWith("Invalid numeric literal at EOF", StringComparison.Ordinal))
+        {
+            throw new JqException(ex.Message + " (while parsing '" + text + "')");
+        }
         consumed += prefix;
         if (!bytes.AsSpan(consumed).Trim(" \t\r\n"u8).IsEmpty)
             throw new JqException("expected a single JSON value");
