@@ -111,6 +111,13 @@ public sealed partial class JqTests
     [InlineData("isempty(empty)", "true\n")]
     [InlineData("1 | until(true; error(\"x\"))", "1\n")]
     [InlineData("1 | while(false; error(\"x\"))", "")]
+    // Empty loop updates against the recursive desugars (builtin.jq while/until):
+    // while yields the state before a dying update, until only yields the state
+    // when its condition holds, and falsy branches stay silent either way.
+    [InlineData("5 | while(true; empty)", "5\n")]
+    [InlineData("5 | until(false; empty)", "")]
+    [InlineData("5 | until(true; empty)", "5\n")]
+    [InlineData("5 | while(false; empty)", "")]
     [InlineData("[range(0;10)]", "[\n  0,\n  1,\n  2,\n  3,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
     [InlineData("[range(0;10;-1)]", "[]\n")]
     [InlineData("[range(0;-5;-1)]", "[\n  0,\n  -1,\n  -2,\n  -3,\n  -4\n]\n")]
