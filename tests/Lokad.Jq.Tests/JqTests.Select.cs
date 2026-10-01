@@ -14,6 +14,8 @@ public sealed partial class JqTests
     [InlineData("\"dropped\" | select(false,null)", "")]
     [InlineData("[1,2] | select(empty)", "")]
     [InlineData("[1,2] | [select(true,true)]", "[\n  [\n    1,\n    2\n  ],\n  [\n    1,\n    2\n  ]\n]\n")]
+    [InlineData("[1,5,3,0,7] | map(select(. >= 2))", "[\n  5,\n  3,\n  7\n]\n")]
+    [InlineData("[{\"id\": \"first\", \"val\": 1}, {\"id\": \"second\", \"val\": 2}] | .[] | select(.id == \"second\")", "{\n  \"id\": \"second\",\n  \"val\": 2\n}\n")]
     public async Task Jq_SelectPreservesMatchingInput(string filter, string expected)
     {
         var host = new MockFileSystem();

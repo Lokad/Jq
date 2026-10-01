@@ -55,6 +55,16 @@ public sealed partial class JqTests
     [InlineData("\"abc\" / \"\"", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     [InlineData("\"\" | split(\",\")", "[]\n")]
     [InlineData("\"abc\" | split(\"\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
+    [InlineData("1 | (. + 2) * 5", "15\n")]
+    [InlineData("{\"a\": 7} | .a + 1", "8\n")]
+    [InlineData("{} | .a + 1", "1\n")]
+    [InlineData("{a: 1} + {b: 2} + {c: 3} + {a: 42}", "{\n  \"a\": 42,\n  \"b\": 2,\n  \"c\": 3\n}\n")]
+    [InlineData("{\"a\":3} | 4 - .a", "1\n")]
+    [InlineData("[\"xml\", \"yaml\", \"json\"] | . - [\"xml\", \"yaml\"]", "[\n  \"json\"\n]\n")]
+    [InlineData("{\"a\": 1} | .a + null", "1\n")]
+    [InlineData("5 | 10 / . * 3", "6\n")]
+    [InlineData("\"a, b,c,d, e\" | . / \", \"", "[\n  \"a\",\n  \"b,c,d\",\n  \"e\"\n]\n")]
+    [InlineData("[true, false | not]", "[\n  false,\n  true\n]\n")]
     public async Task Jq_OperatorTypeCombinations(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -93,6 +103,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\": null, \"b\": true, \"c\": false} | map_values(. // empty)", "{\n  \"b\": true\n}\n")]
     [InlineData("(false, null, 1) | . // 42", "42\n42\n1\n")]
     [InlineData("1 // 2 // 3", "1\n")]
+    [InlineData("{\"foo\": 19} | .foo // 42", "19\n")]
+    [InlineData("{} | .foo // 42", "42\n")]
     public async Task Jq_AlternativeFiltersGoods(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -126,6 +138,8 @@ public sealed partial class JqTests
     [InlineData("[1,[2],{\"foo\":3,\"bar\":4},{},{\"foo\":5}] | [.[]|.foo?]", "[\n  3,\n  null,\n  5\n]\n")]
     [InlineData("[1,[2],[],{\"foo\":3},{\"foo\":{\"bar\":4}},{}] | [.[]|.foo?.bar?]", "[\n  4,\n  null\n]\n")]
     [InlineData("[1,null,[],[1,[2,[[3]]]],[{}],[{\"a\":[1,[2]]}]] | [.[]|.[]?]", "[\n  1,\n  [\n    2,\n    [\n      [\n        3\n      ]\n    ]\n  ],\n  {},\n  {\n    \"a\": [\n      1,\n      [\n        2\n      ]\n    ]\n  }\n]\n")]
+    [InlineData("[{}, true, {\"a\":1}] | [.[] | .a?]", "[\n  null,\n  1\n]\n")]
+    [InlineData("[\"1\", \"invalid\", \"3\", 4] | [.[] | tonumber?]", "[\n  1,\n  3,\n  4\n]\n")]
     public async Task Jq_OptionalSuppressesCatchableErrors(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -180,6 +194,7 @@ public sealed partial class JqTests
     [InlineData("{\"a\":{\"b\":2}} | .a.\"b\"", "2\n")]
     [InlineData("{\"a\":1} | {\"a$\\(1+1)\": 2}", "{\n  \"a$2\": 2\n}\n")]
     [InlineData("{\"a\":1, \"b\":2, \"c\":3, \"d\":\"c\"} | {a,b,(.d):.a,e:.b}", "{\n  \"a\": 1,\n  \"b\": 2,\n  \"c\": 1,\n  \"e\": 2\n}\n")]
+    [InlineData("{\"user\":\"stedolan\",\"titles\":[\"JQ Primer\", \"More JQ\"]} | {(.user): .titles}", "{\n  \"stedolan\": [\n    \"JQ Primer\",\n    \"More JQ\"\n  ]\n}\n")]
     public async Task Jq_DynamicAndQuotedKeys(string filter, string expected)
     {
         var host = new MockFileSystem();

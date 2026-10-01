@@ -69,6 +69,7 @@ public sealed partial class JqTests
     [InlineData("1 | atan * 4 * 1000000|floor / 1000000", "3.141592\n")]
     [InlineData("[-1.1,1.1,1.9] | [.[]|floor]", "[\n  -2,\n  1,\n  1\n]\n")]
     [InlineData("[4,9] | [.[]|sqrt]", "[\n  2,\n  3\n]\n")]
+    [InlineData("[1,0,-1] | [.[] | (1 / .)?]", "[\n  1,\n  -1\n]\n")]
     public async Task Jq_MathExact(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -125,6 +126,8 @@ public sealed partial class JqTests
     [InlineData("nan | type", "\"number\"\n")]
     [InlineData("have_decnum", "false\n")]
     [InlineData("have_literal_numbers", "false\n")]
+    [InlineData("[-1, 1] | .[] | (infinite * .) < 0", "true\nfalse\n")]
+    [InlineData("infinite, nan | type", "\"number\"\n\"number\"\n")]
     public async Task Jq_MathClassification(string filter, string expected)
     {
         var host = new MockFileSystem();

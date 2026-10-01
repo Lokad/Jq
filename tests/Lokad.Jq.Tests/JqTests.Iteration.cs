@@ -31,6 +31,7 @@ public sealed partial class JqTests
     [InlineData("null", "isempty(1,error(\"foo\"))", "false\n")]
     [InlineData("null", "first(.?,.?)", "null\n")]
     [InlineData("null", "isempty(range(3))", "false\n")]
+    [InlineData("null", "[first(empty), last(empty), nth(5; empty)]", "[]\n")]
     public async Task Jq_LimitFirstNthIsempty(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -103,6 +104,8 @@ public sealed partial class JqTests
     [InlineData("[range(0;10)]", "[\n  0,\n  1,\n  2,\n  3,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
     [InlineData("[range(0;10;-1)]", "[]\n")]
     [InlineData("[range(0;-5;-1)]", "[\n  0,\n  -1,\n  -2,\n  -3,\n  -4\n]\n")]
+    [InlineData("[range(4)]", "[\n  0,\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[range(2; 4)]", "[\n  2,\n  3\n]\n")]
     public async Task Jq_IterationEdgeCases(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -133,6 +136,9 @@ public sealed partial class JqTests
     [InlineData("[]", "[paths]", "[]\n")]
     [InlineData("{}", "[paths]", "[]\n")]
     [InlineData("{\"a\": [1]}", "[paths(type == \"number\")]", "[\n  [\n    \"a\",\n    0\n  ]\n]\n")]
+    [InlineData("{\"foo\":[{\"foo\": []}, {\"foo\":[{\"foo\":[]}]}]}", "recurse(.foo[])", "{\n  \"foo\": [\n    {\n      \"foo\": []\n    },\n    {\n      \"foo\": [\n        {\n          \"foo\": []\n        }\n      ]\n    }\n  ]\n}\n{\n  \"foo\": []\n}\n{\n  \"foo\": [\n    {\n      \"foo\": []\n    }\n  ]\n}\n{\n  \"foo\": []\n}\n")]
+    [InlineData("2", "recurse(. * .; . < 20)", "2\n4\n16\n")]
+    [InlineData("[[4, 1, 7], [8, 5, 2], [3, 6, 9]]", "walk(if type == \"array\" then sort else . end)", "[\n  [\n    1,\n    4,\n    7\n  ],\n  [\n    2,\n    5,\n    8\n  ],\n  [\n    3,\n    6,\n    9\n  ]\n]\n")]
     public async Task Jq_WhileUntilRepeatRecurseWalkPaths(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

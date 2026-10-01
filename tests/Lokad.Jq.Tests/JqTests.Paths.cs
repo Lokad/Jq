@@ -136,6 +136,8 @@ public sealed partial class JqTests
     [InlineData("[\"foo\", \"bar\", \"baz\"]", "del(.[1, 2])", "[\n  \"foo\"\n]\n")]
     [InlineData("{\"foo\": [0,1,2,3,4], \"bar\": [0,1]}", "del(.), del(empty), del((.foo,.bar,.baz) | .[2,3,0]), del(.foo[0], .bar[0], .foo, .baz.bar[0].x)", "null\n{\n  \"foo\": [\n    0,\n    1,\n    2,\n    3,\n    4\n  ],\n  \"bar\": [\n    0,\n    1\n  ]\n}\n{\n  \"foo\": [\n    1,\n    4\n  ],\n  \"bar\": [\n    1\n  ]\n}\n{\n  \"bar\": [\n    1\n  ]\n}\n")]
     [InlineData("null", "try delpaths([[range(10001) | 0]]) catch .", "\"Path too deep\"\n")]
+    [InlineData("{\"a\": 1, \"b\": {\"c\": 2, \"d\": 3}, \"e\": 4}", "pick(.a, .b.c, .x)", "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2\n  },\n  \"x\": null\n}\n")]
+    [InlineData("{\"foo\": 42, \"bar\": 9001, \"baz\": 42}", "del(.foo)", "{\n  \"bar\": 9001,\n  \"baz\": 42\n}\n")]
     public async Task Jq_DelAndPickReshape(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -212,6 +214,9 @@ public sealed partial class JqTests
     [InlineData("{\"a\":{\"b\":0}}", "getpath([\"a\",\"b\"]) = 5", "{\n  \"a\": {\n    \"b\": 5\n  }\n}\n")]
     [InlineData("null", "getpath([\"a\",\"b\"]) = 5", "{\n  \"a\": {\n    \"b\": 5\n  }\n}\n")]
     [InlineData("[0,1,2,3,4,5,6,7]", ".[2:4] = ([], [\"a\",\"b\"], [\"a\",\"b\",\"c\"])", "[\n  0,\n  1,\n  4,\n  5,\n  6,\n  7\n]\n[\n  0,\n  1,\n  \"a\",\n  \"b\",\n  4,\n  5,\n  6,\n  7\n]\n[\n  0,\n  1,\n  \"a\",\n  \"b\",\n  \"c\",\n  4,\n  5,\n  6,\n  7\n]\n")]
+    [InlineData("null", "(.a, .b) = range(3)", "{\n  \"a\": 0,\n  \"b\": 0\n}\n{\n  \"a\": 1,\n  \"b\": 1\n}\n{\n  \"a\": 2,\n  \"b\": 2\n}\n")]
+    [InlineData("{\"a\": {\"b\": 10}, \"b\": 20}", ".a |= .b", "{\n  \"a\": 10,\n  \"b\": 20\n}\n")]
+    [InlineData("{\"foo\": 42}", ".foo += 1", "{\n  \"foo\": 43\n}\n")]
     public async Task Jq_AssignUpdatesValues(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

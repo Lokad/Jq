@@ -16,6 +16,11 @@ public sealed partial class JqTests
     [InlineData("[10, 20, 30] | .[1.5]", "20\n")]
     [InlineData("[10, 20, 30] | .[-2.5]", "20\n")]
     [InlineData("1000000000000000000 | [][.]", "null\n")]
+    [InlineData("{\"foo\": 42} | .[\"foo\"]", "42\n")]
+    [InlineData("[1,2] | [.foo?]", "[]\n")]
+    [InlineData("[\"a\",\"b\",\"c\",\"d\",\"e\"] | .[:3]", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
+    [InlineData("[\"a\",\"b\",\"c\",\"d\",\"e\"] | .[4,2]", "\"e\"\n\"c\"\n")]
+    [InlineData("[{\"name\":\"JSON\", \"good\":true}, {\"name\":\"XML\", \"good\":false}] | .[] | .name", "\"JSON\"\n\"XML\"\n")]
     public async Task Jq_IndexStreamsEveryKey(string filter, string expected)
     {
         // Keys are outer: each key combines with every source value,

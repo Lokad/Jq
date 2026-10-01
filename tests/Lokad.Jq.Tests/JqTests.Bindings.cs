@@ -87,6 +87,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" as $x | \"a\"+\"y\" as $y | $x+\",\"+$y", "\"x,ay\"\n")]
     [InlineData("1 as $x | [$x,$x,$x as $x | $x]", "[\n  1,\n  1,\n  1\n]\n")]
     [InlineData("{if:0,and:1,or:2,then:3,else:4,elif:5,end:6,as:7,def:8,reduce:9,foreach:10,try:11,catch:12,label:13,import:14,include:15,module:16}", "{\n  \"if\": 0,\n  \"and\": 1,\n  \"or\": 2,\n  \"then\": 3,\n  \"else\": 4,\n  \"elif\": 5,\n  \"end\": 6,\n  \"as\": 7,\n  \"def\": 8,\n  \"reduce\": 9,\n  \"foreach\": 10,\n  \"try\": 11,\n  \"catch\": 12,\n  \"label\": 13,\n  \"import\": 14,\n  \"include\": 15,\n  \"module\": 16\n}\n")]
+    [InlineData("123 as $label | $label", "123\n")]
     public async Task Jq_BinderStreamsAndGroups(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -215,6 +216,7 @@ public sealed partial class JqTests
     [InlineData("[[3],[4],[5],6]", ".[] as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("null", "[[3],[4],[5],6][] | . as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("null", "[[3],[4],[5],6] | .[] as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
+    [InlineData("[[3]]", ".[] as [$a] ?// [$b] | if $a != null then error(\"err: \\($a)\") else {$a,$b} end", "{\n  \"a\": null,\n  \"b\": 3\n}\n")]
     public async Task Jq_AlternationChainsFromReference(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

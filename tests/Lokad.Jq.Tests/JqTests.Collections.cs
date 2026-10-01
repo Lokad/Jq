@@ -139,6 +139,10 @@ public sealed partial class JqTests
     [InlineData("{}", "[({foo: 12, bar:13} | contains({foo: 12})), ({foo: 12} | contains({})), ({foo: 12, bar:13} | contains({baz:14}))]", "[\n  true,\n  true,\n  false\n]\n")]
     [InlineData("{}", "{foo: {baz: 12, blap: {bar: 13}}, bar: 14} | contains({bar: 14, foo: {blap: {}}})", "true\n")]
     [InlineData("{}", "{foo: {baz: 12, blap: {bar: 13}}, bar: 14} | contains({bar: 14, foo: {blap: {bar: 14}}})", "false\n")]
+    [InlineData("\"foobar\"", "contains(\"bar\")", "true\n")]
+    [InlineData("\"bar\"", "inside(\"foobar\")", "true\n")]
+    [InlineData("[2, 0]", "map(in([0,1]))", "[\n  false,\n  true\n]\n")]
+    [InlineData("[{\"a\":3}, {\"a\":5}, {\"b\":6}]", "add(.[].a)", "8\n")]
     public async Task Jq_CollectionSearchFold(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -183,6 +187,8 @@ public sealed partial class JqTests
     [InlineData("[{\"a\": 1, \"b\": 4, \"c\": 14}, {\"a\": 4, \"b\": 1, \"c\": 3}, {\"a\": 1, \"b\": 4, \"c\": 3}, {\"a\": 0, \"b\": 2, \"c\": 43}]", "(sort_by(.b) | sort_by(.a)), sort_by(.a, .b), sort_by(.b, .c), group_by(.b), group_by(.a + .b - .c == 2)", "[\n  {\n    \"a\": 0,\n    \"b\": 2,\n    \"c\": 43\n  },\n  {\n    \"a\": 1,\n    \"b\": 4,\n    \"c\": 14\n  },\n  {\n    \"a\": 1,\n    \"b\": 4,\n    \"c\": 3\n  },\n  {\n    \"a\": 4,\n    \"b\": 1,\n    \"c\": 3\n  }\n]\n[\n  {\n    \"a\": 0,\n    \"b\": 2,\n    \"c\": 43\n  },\n  {\n    \"a\": 1,\n    \"b\": 4,\n    \"c\": 14\n  },\n  {\n    \"a\": 1,\n    \"b\": 4,\n    \"c\": 3\n  },\n  {\n    \"a\": 4,\n    \"b\": 1,\n    \"c\": 3\n  }\n]\n[\n  {\n    \"a\": 4,\n    \"b\": 1,\n    \"c\": 3\n  },\n  {\n    \"a\": 0,\n    \"b\": 2,\n    \"c\": 43\n  },\n  {\n    \"a\": 1,\n    \"b\": 4,\n    \"c\": 3\n  },\n  {\n    \"a\": 1,\n    \"b\": 4,\n    \"c\": 14\n  }\n]\n[\n  [\n    {\n      \"a\": 4,\n      \"b\": 1,\n      \"c\": 3\n    }\n  ],\n  [\n    {\n      \"a\": 0,\n      \"b\": 2,\n      \"c\": 43\n    }\n  ],\n  [\n    {\n      \"a\": 1,\n      \"b\": 4,\n      \"c\": 14\n    },\n    {\n      \"a\": 1,\n      \"b\": 4,\n      \"c\": 3\n    }\n  ]\n]\n[\n  [\n    {\n      \"a\": 1,\n      \"b\": 4,\n      \"c\": 14\n    },\n    {\n      \"a\": 0,\n      \"b\": 2,\n      \"c\": 43\n    }\n  ],\n  [\n    {\n      \"a\": 4,\n      \"b\": 1,\n      \"c\": 3\n    },\n    {\n      \"a\": 1,\n      \"b\": 4,\n      \"c\": 3\n    }\n  ]\n]\n")]
     [InlineData("[{\"foo\": 1, \"bar\": 2}, {\"foo\": 1, \"bar\": 3}, {\"foo\": 4, \"bar\": 5}]", "unique_by(.foo)", "[\n  {\n    \"foo\": 1,\n    \"bar\": 2\n  },\n  {\n    \"foo\": 4,\n    \"bar\": 5\n  }\n]\n")]
     [InlineData("[\"chunky\", \"bacon\", \"kitten\", \"cicada\", \"asparagus\"]", "unique_by(length)", "[\n  \"bacon\",\n  \"chunky\",\n  \"asparagus\"\n]\n")]
+    [InlineData("[{\"foo\":4, \"bar\":10}, {\"foo\":3, \"bar\":10}, {\"foo\":2, \"bar\":1}]", "sort_by(.foo)", "[\n  {\n    \"foo\": 2,\n    \"bar\": 1\n  },\n  {\n    \"foo\": 3,\n    \"bar\": 10\n  },\n  {\n    \"foo\": 4,\n    \"bar\": 10\n  }\n]\n")]
+    [InlineData("[{\"foo\":4, \"bar\":10}, {\"foo\":3, \"bar\":20}, {\"foo\":2, \"bar\":1}, {\"foo\":3, \"bar\":10}]", "sort_by(.foo, .bar)", "[\n  {\n    \"foo\": 2,\n    \"bar\": 1\n  },\n  {\n    \"foo\": 3,\n    \"bar\": 10\n  },\n  {\n    \"foo\": 3,\n    \"bar\": 20\n  },\n  {\n    \"foo\": 4,\n    \"bar\": 10\n  }\n]\n")]
     public async Task Jq_SortGroupUnique(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -242,6 +248,9 @@ public sealed partial class JqTests
     [InlineData("\"abc\"", "rindex(\"z\")", "null\n")]
     [InlineData("\"\\u6B63xyz\"", ".[:rindex(\"x\")]", "\"正\"\n")]
     [InlineData("\"abc\"", "rindex(\"\")", "null\n")]
+    [InlineData("[0,1,2,3,1,4,2,5,1,2,6,7]", "index([1,2])", "1\n")]
+    [InlineData("[0,1,2,1,3,1,4]", "rindex(1)", "5\n")]
+    [InlineData("[0,1,2,3,1,4,2,5,1,2,6,7]", "rindex([1,2])", "8\n")]
     public async Task Jq_SkipRindex(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
