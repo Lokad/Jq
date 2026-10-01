@@ -198,6 +198,10 @@ public sealed partial class JqTests
     [InlineData("true", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot update field at object index of boolean\"\n")]
     [InlineData("{\"a\":1}", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot update field at object index of object\"\n")]
     [InlineData("[10,20,30]", "getpath([{start:1,end:2}])", "[\n  20\n]\n")]
+    // Fractional path-value components resolve start-down/end-up through the shared resolution in every builtin.
+    [InlineData("[10,20,30]", "getpath([{start:0.5,end:2}])", "[\n  10,\n  20\n]\n")]
+    [InlineData("[10,20,30]", "setpath([{start:0.5,end:2}]; [9])", "[\n  9,\n  30\n]\n")]
+    [InlineData("[10,20,30]", "delpaths([[{start:0.5,end:2}]])", "[\n  30\n]\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
