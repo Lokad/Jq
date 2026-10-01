@@ -147,6 +147,29 @@ public sealed partial class JqTests
         }
     }
 
+    [Fact]
+    public async Task Jq_SeqAndJoinLeaveDiagnosticsUnframed()
+    {
+        // Like the reference callbacks, sequence framing and join treatment
+        // apply to stdout values only; debug lines, stderr payloads, and halt
+        // payloads keep their unframed bytes.
+        foreach (var (args, exit, stdout, stderr) in new (string[], int, string, string)[]
+        {
+            (new string[] { "-n", "--seq", "\"hi\" | debug" }, 0, "\x1E\"hi\"\n", "[\"DEBUG:\",\"hi\"]\n"),
+            (new string[] { "-n", "--seq", "\"hi\" | stderr" }, 0, "\x1E\"hi\"\n", "hi"),
+            (new string[] { "-n", "--seq", "\"xy\" | halt_error(1)" }, 1, "", "xy"),
+            (new string[] { "-n", "-j", "\"hi\" | debug" }, 0, "hi", "[\"DEBUG:\",\"hi\"]\n"),
+            (new string[] { "-n", "--seq", "{\"a\":1} | stderr" }, 0, "\x1E{\n  \"a\": 1\n}\n", "{\"a\":1}"),
+        })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", args)));
+            Assert.Equal(exit, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
+
     [Theory]
     [InlineData("\"hi\" | stderr", "hi\n", "hi")]
     [InlineData("{\"a\":1} | stderr", "{\n  \"a\": 1\n}\n", "{\"a\":1}")]
