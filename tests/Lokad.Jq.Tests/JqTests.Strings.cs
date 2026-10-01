@@ -68,6 +68,7 @@ public sealed partial class JqTests
     [InlineData("\" 1\"", "fromjson", "1\n")]
     [InlineData("1", "try toboolean catch .", "\"number (1) cannot be parsed as a boolean\"\n")]
     [InlineData("\"1 2\"", "try fromjson catch .", "\"expected a single JSON value\"\n")]
+    [InlineData("42", "\"The input was \\(.), which is one less than \\(.+1)\"", "\"The input was 42, which is one less than 43\"\n")]
     [InlineData("[\"foo\", 1, [\"a\", 1, \"b\", 2, {\"foo\":\"bar\"}]]", "[.[]|tojson|fromjson]", "[\n  \"foo\",\n  1,\n  [\n    \"a\",\n    1,\n    \"b\",\n    2,\n    {\n      \"foo\": \"bar\"\n    }\n  ]\n]\n")]
     [InlineData("[1, \"foo\", [\"foo\"]]", "[.[]|tojson|fromjson]", "[\n  1,\n  \"foo\",\n  [\n    \"foo\"\n  ]\n]\n")]
     [InlineData("null", "\"123\\u0000456\" | try tonumber catch .", "\"string (\\\"123\\\\u0000456\\\") cannot be parsed as a number\"\n")]

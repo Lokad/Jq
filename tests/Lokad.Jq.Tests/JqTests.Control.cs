@@ -119,6 +119,10 @@ public sealed partial class JqTests
     [InlineData("true or error(\"x\")", "true\n")]
     [InlineData("false or (true, false)", "true\nfalse\n")]
     [InlineData("(false, false) or (true, false)", "true\nfalse\ntrue\nfalse\n")]
+    [InlineData("(true, false) or false", "true\nfalse\n")]
+    [InlineData("(true, true) and (true, false)", "true\nfalse\ntrue\nfalse\n")]
+    [InlineData("[[true,[]], [false,1], [42,null], [null,false]] | .[] | [.[0] and .[1], .[0] or .[1]]", "[\n  true,\n  true\n]\n[\n  false,\n  true\n]\n[\n  false,\n  true\n]\n[\n  false,\n  false\n]\n")]
+    [InlineData("{} | [10 > 0, 10 > 10, 10 > 20, 10 < 0, 10 < 10, 10 < 20]", "[\n  true,\n  false,\n  false,\n  false,\n  false,\n  true\n]\n")]
     [InlineData("1 and 2", "true\n")]
     [InlineData("empty and true", "")]
     public async Task Jq_AndOrShortCircuitOverGenerators(string filter, string expected)

@@ -1102,9 +1102,9 @@ internal sealed class JqParser(
             ExpectIdentifier("then");
             branches.Add((elif, ParseQuery()));
         }
-        // A missing `else` behaves like `else empty`, matching the reference
+        // A missing `else` behaves like `else .`, matching the reference
         // ElseBody rule that accepts a bare `end`.
-        JqFilter otherwise = MatchIdentifier("else") ? ParseQuery() : new FunctionFilter("empty", []);
+        JqFilter otherwise = MatchIdentifier("else") ? ParseQuery() : new IdentityFilter();
         ExpectIdentifier("end");
         return new IfFilter(branches, otherwise);
     }

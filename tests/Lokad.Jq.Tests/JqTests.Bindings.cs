@@ -40,6 +40,10 @@ public sealed partial class JqTests
     [InlineData("[[3],[4],[5],6]", ".[] | . as {a:$a} ?// $a ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("[[3],[4],[5],6]", ".[] | . as $a ?// {a:$a} ?// {a:$a} | $a", "[\n  3\n]\n[\n  4\n]\n[\n  5\n]\n6\n")]
     [InlineData("null", ". as [$a] | $a", "null\n")]
+    [InlineData("null", "[1, {c:3, d:4}] as [$a, {c:$b, b:$c}] | $a, $b, $c", "1\n3\nnull\n")]
+    [InlineData("{\"as\": 1, \"str\": 2, \"exp\": 3}", ". as {as: $kw, \"str\": $str, (\"e\"+\"x\"+\"p\"): $exp} | [$kw, $str, $exp]", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[[1], [1, 2, 3]]", ".[] as [$a, $b] | [$b, $a]", "[\n  null,\n  1\n]\n[\n  2,\n  1\n]\n")]
+    [InlineData("{\"a\":1, \"b\":[2,{\"d\":3}]}", ". as {$a, $b:[$c, $d]}| [$a, $b, $c, $d]", "[\n  1,\n  [\n    2,\n    {\n      \"d\": 3\n    }\n  ],\n  2,\n  {\n    \"d\": 3\n  }\n]\n")]
     [InlineData("null", ". as {a: $x} | $x", "null\n")]
     [InlineData("{\"a\":4,\"b\":5}", "1 as $foreach | 2 as $and | 3 as $or | { $foreach, $and, $or, a }", "{\n  \"foreach\": 1,\n  \"and\": 2,\n  \"or\": 3,\n  \"a\": 4\n}\n")]
     public async Task Jq_DestructuringBindsMissingAsNull(string input, string filter, string expected)

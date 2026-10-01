@@ -17,8 +17,12 @@ public sealed partial class JqTests
     [InlineData("7", "if true then .\nelse empty end", "7\n")]
     [InlineData("7", "if true then .\telse empty end", "7\n")]
     [InlineData("7", "if true then (.) else empty end", "7\n")]
+    [InlineData("1", "if false then 2 end", "1\n")]
+    [InlineData("7", "[if false then 3 end]", "[\n  7\n]\n")]
+    [InlineData("7", "[if false then 3 elif false then 4 end]", "[\n  7\n]\n")]
+    [InlineData("7", "[if false then 3 elif false then 4 else . end]", "[\n  7\n]\n")]
+    [InlineData("7", "[if false then 3 else . end]", "[\n  7\n]\n")]
     [InlineData("1", "if true then 2 end", "2\n")]
-    [InlineData("1", "if false then 2 end", "")]
     [InlineData("1", "if false then 2 elif true then 3 end", "3\n")]
     public async Task Jq_IdentityAtConditionalBoundaries(string input, string filter, string expected)
     {
@@ -98,6 +102,13 @@ public sealed partial class JqTests
     [InlineData("if (false, true) then 1 else 2 end", "2\n1\n")]
     [InlineData("if empty then 1 else 2 end", "")]
     [InlineData("if (false, true) then 1 elif (true, false) then 2 else 3 end", "2\n3\n1\n")]
+    [InlineData("[-if true then 1 else 2 end]", "[\n  -1\n]\n")]
+    [InlineData("{x: if true then 1 else 2 end}", "{\n  \"x\": 1\n}\n")]
+    [InlineData("if true then [.] else . end []", "null\n")]
+    [InlineData("[if 1,null,2 then 3 else 4 end]", "[\n  3,\n  4,\n  3\n]\n")]
+    [InlineData("[if empty then 3 else 4 end]", "[]\n")]
+    [InlineData("[if 1 then 3,4 else 5 end]", "[\n  3,\n  4\n]\n")]
+    [InlineData("[if null then 3 else 5,6 end]", "[\n  5,\n  6\n]\n")]
     public async Task Jq_IfDistributesOverConditionOutputs(string filter, string expected)
     {
         // The manual routes every condition output independently:

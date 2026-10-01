@@ -9,6 +9,7 @@ public sealed partial class JqTests
     [InlineData("(([1,2]),([3,4]))[(0,1)]", "1\n3\n2\n4\n")]
     [InlineData("{\"a\":1,\"b\":2} | .[\"a\",\"b\"]", "1\n2\n")]
     [InlineData("[10, 20, 30] | .[1e18]", "null\n")]
+    [InlineData("{\"e0\": 1, \"E1\": 2, \"E\": 3} | .e0, .E1, .E-1, .E+1", "1\n2\n2\n4\n")]
     [InlineData("[10, 20, 30] | .[-1e18]", "null\n")]
     [InlineData("[10, 20, 30] | .[3000000000]", "null\n")]
     [InlineData("[10, 20, 30] | .[1.5]", "20\n")]
@@ -146,6 +147,12 @@ public sealed partial class JqTests
     [InlineData("(1,2) * (10,20)", "10\n20\n20\n40\n")]
     [InlineData("(\"a\",\"b\") + (\"c\",\"d\")", "\"ac\"\n\"bc\"\n\"ad\"\n\"bd\"\n")]
     [InlineData("(1,3) < (2,4)", "true\nfalse\ntrue\ntrue\n")]
+    [InlineData("{\"k\": {\"a\": 1, \"b\": 2}} * {\"k\": {\"a\": 0,\"c\": 3}}", "{\n  \"k\": {\n    \"a\": 0,\n    \"b\": 2,\n    \"c\": 3\n  }\n}\n")]
+    [InlineData("{\"a\":1} + {\"b\":2} + {\"c\":3} + {\"a\": 42}", "{\n  \"a\": 42,\n  \"b\": 2,\n  \"c\": 3\n}\n")]
+    [InlineData("\"some string\" | \"asdf\" + \"jkl;\" + . + . + .", "\"asdfjkl;some stringsome stringsome string\"\n")]
+    [InlineData("\"\\u0000\\u0020\\u0000\" | \"\\u0000\\u0020\\u0000\" + .", "\"\\u0000 \\u0000\\u0000 \\u0000\"\n")]
+    [InlineData("[16 / 4 / 2, 16 / 4 * 2, 16 - 4 - 2, 16 - 4 + 2]", "[\n  2,\n  8,\n  10,\n  14\n]\n")]
+    [InlineData("1e-19 + 1e-20 - 5e-21", "1.05E-19\n")]
     public async Task Jq_BinaryOperatorsDistribute(string filter, string expected)
     {
         // The left operand is inner (fast), matching reversed call
