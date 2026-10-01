@@ -106,6 +106,18 @@ public sealed partial class JqTests
         """max""",
         """skip(1; .[])""",
         """pick(.a)""",
+        """indices("")""",
+        """index("")""",
+        """rindex("")""",
+        """ascii_upcase""",
+        """ascii_downcase""",
+        """trim""",
+        """ltrimstr("a")""",
+        """@base64""",
+        """@uri""",
+        """max_by(.)""",
+        """min_by(.)""",
+        """tostream""",
         """del(.a)""",
     ];
 
@@ -132,6 +144,10 @@ public sealed partial class JqTests
         """[null]""",
         """{"a": 1}""",
         """{"a": {"b": [1]}}""",
+        """"a\ud83d\ude80b"""",
+        """"a\u0304b"""",
+        """"ab\u0000cd"""",
+        """{"a":1,"a":2}""",
     ];
 
     private static readonly string[] FuzzKeys = ["a", "b", "c", "x y"];
