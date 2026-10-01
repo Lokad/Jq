@@ -71,15 +71,17 @@ public sealed partial class JqTests
     public async Task Jq_StreamSlurpComposesEvents()
     {
         // Slurped streaming input decodes element-wise: each top-level value
-        // contributes its leaf and close events. The reference additionally
-        // emits a repeated [[0]] close between values (upstream #3273 pins
-        // [[[0],1],[[0]],[[0]],[[0],2],[[0]]]), which stays an open gap, so
-        // this pins our four-event composition, not byte parity there.
-        var host = new MockFileSystem();
-        host.SetStandardInput("[1][2]");
-        var (exit, stdout, stderr) = await RunStreamAsync(host, "-c", "-s", "--stream", ".");
-        Assert.True(exit == 0, stderr);
-        Assert.Equal("[[[0],1],[[0]],[[0],2],[[0]]]\n", stdout);
+        // contributes its leaf and close events. The upstream shtest #3273
+        // regression block expects exactly these four events for both the
+        // bare and newline-terminated inputs, so this is byte parity.
+        foreach (string stdin in new string[] { "[1][2]", "[1][2]\n" })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput(stdin);
+            var (exit, stdout, stderr) = await RunStreamAsync(host, "-c", "-s", "--stream", ".");
+            Assert.True(exit == 0, stdin + ": " + stderr);
+            Assert.Equal("[[[0],1],[[0]],[[0],2],[[0]]]\n", stdout);
+        }
     }
 
 [Fact]
