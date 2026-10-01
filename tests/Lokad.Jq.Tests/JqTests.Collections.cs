@@ -83,6 +83,7 @@ public sealed partial class JqTests
     [InlineData("[1, 2]", "combinations(2)", "[\n  1,\n  1\n]\n[\n  1,\n  2\n]\n[\n  2,\n  1\n]\n[\n  2,\n  2\n]\n")]
     [InlineData("[1, 2]", "combinations(0)", "[]\n")]
     [InlineData("[1, 2]", "combinations(-1)", "[]\n")]
+    [InlineData("[]", "combinations", "[]\n")]
     [InlineData("[1, 2, 3]", "bsearch(0, 1, 2, 3, 4)", "-1\n0\n1\n2\n-4\n")]
     [InlineData("[]", "bsearch(1)", "-1\n")]
     [InlineData("[[0, [1]]]", "flatten((1, 0))", "[\n  0,\n  [\n    1\n  ]\n]\n[\n  [\n    0,\n    [\n      1\n    ]\n  ]\n]\n")]

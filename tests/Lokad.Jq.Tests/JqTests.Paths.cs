@@ -103,6 +103,8 @@ public sealed partial class JqTests
     [InlineData("null", "setpath([0,\"a\"]; 1)", "[\n  {\n    \"a\": 1\n  }\n]\n")]
     [InlineData("[]", "try [\"OK\", setpath([[1]]; 1)] catch [\"KO\", .]", "[\n  \"KO\",\n  \"expected a number for indexing an array but got: [1]\"\n]\n")]
     [InlineData("{\"hi\": \"hello\"}", "try [\"ok\", setpath([1]; 1)] catch [\"ko\", .]", "[\n  \"ko\",\n  \"Cannot index object with number (1)\"\n]\n")]
+    [InlineData("{\"a\":1}", "setpath([]; 5)", "5\n")]
+    [InlineData("{\"a\":1}", "getpath([])", "{\n  \"a\": 1\n}\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -136,6 +138,7 @@ public sealed partial class JqTests
     [InlineData("[\"foo\", \"bar\", \"baz\"]", "del(.[1, 2])", "[\n  \"foo\"\n]\n")]
     [InlineData("{\"foo\": [0,1,2,3,4], \"bar\": [0,1]}", "del(.), del(empty), del((.foo,.bar,.baz) | .[2,3,0]), del(.foo[0], .bar[0], .foo, .baz.bar[0].x)", "null\n{\n  \"foo\": [\n    0,\n    1,\n    2,\n    3,\n    4\n  ],\n  \"bar\": [\n    0,\n    1\n  ]\n}\n{\n  \"foo\": [\n    1,\n    4\n  ],\n  \"bar\": [\n    1\n  ]\n}\n{\n  \"bar\": [\n    1\n  ]\n}\n")]
     [InlineData("null", "try delpaths([[range(10001) | 0]]) catch .", "\"Path too deep\"\n")]
+    [InlineData("{\"a\":1}", "delpaths([])", "{\n  \"a\": 1\n}\n")]
     [InlineData("{\"a\": 1, \"b\": {\"c\": 2, \"d\": 3}, \"e\": 4}", "pick(.a, .b.c, .x)", "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2\n  },\n  \"x\": null\n}\n")]
     [InlineData("{\"foo\": 42, \"bar\": 9001, \"baz\": 42}", "del(.foo)", "{\n  \"bar\": 9001,\n  \"baz\": 42\n}\n")]
     public async Task Jq_DelAndPickReshape(string input, string filter, string expected)
