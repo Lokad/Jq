@@ -51,6 +51,24 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_AndOrPropagateDecisiveErrors()
+    {
+        // Short-circuiting skips only unevaluated branches; errors on the taken path propagate.
+        foreach (var filter in new string[]
+        {
+            "true and error(\"x\")",
+            "false or error(\"x\")",
+        })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+            Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal("jq: error: x\n", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        }
+    }
+
+    [Fact]
     public async Task Jq_TryCatchObservesPayloads()
     {
         var host = new MockFileSystem();
