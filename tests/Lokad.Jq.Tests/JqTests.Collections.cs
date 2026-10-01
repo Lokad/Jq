@@ -235,6 +235,13 @@ public sealed partial class JqTests
     [InlineData("[[2,1],[1]]", "sort_by(.[])", "[\n  [\n    1\n  ],\n  [\n    2,\n    1\n  ]\n]\n")]
     [InlineData("[[2],[1]]", "group_by(.[])", "[\n  [\n    [\n      1\n    ]\n  ],\n  [\n    [\n      2\n    ]\n  ]\n]\n")]
     [InlineData("[{\"a\":1}]", "sort_by(empty)", "[\n  {\n    \"a\": 1\n  }\n]\n")]
+    // Empty key expressions compare equal across elements: stable order,
+    // a single group, first-of-group uniqueness, and first-min/last-max ties.
+    [InlineData("[3,1,2]", "sort_by(empty)", "[\n  3,\n  1,\n  2\n]\n")]
+    [InlineData("[3,1,2]", "group_by(empty)", "[\n  [\n    3,\n    1,\n    2\n  ]\n]\n")]
+    [InlineData("[3,1,2]", "unique_by(empty)", "[\n  3\n]\n")]
+    [InlineData("[3,1,2]", "min_by(empty)", "3\n")]
+    [InlineData("[3,1,2]", "max_by(empty)", "2\n")]
     [InlineData("[[1,2],[1,2],[1]]", "unique_by(.[])", "[\n  [\n    1\n  ],\n  [\n    1,\n    2\n  ]\n]\n")]
     [InlineData("[[2,1],[0]]", "[min_by(.[]), max_by(.[])]", "[\n  [\n    0\n  ],\n  [\n    2,\n    1\n  ]\n]\n")]
     public async Task Jq_SortGroupUnique(string input, string filter, string expected)
