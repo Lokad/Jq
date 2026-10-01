@@ -118,6 +118,19 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SeqTruncatedRecordExitsFour()
+    {
+        // Like the reference, a truncated final record warns and exits 4
+        // under --exit-status.
+        var host = new MockFileSystem();
+        host.SetStandardInput("\"foo");
+        var (exit, stdout, stderr) = await RunSeqAsync(host, "-c", "-e", "--seq", ".");
+        Assert.Equal(4, exit);
+        Assert.Equal("", stdout);
+        Assert.Contains("ignoring parse error", stderr);
+    }
+
+    [Fact]
     public async Task Jq_SeqSlurpsRecords()
     {
         var host = new MockFileSystem();
