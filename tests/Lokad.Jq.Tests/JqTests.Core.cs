@@ -101,6 +101,16 @@ public sealed partial class JqTests
     [InlineData("1 + \"x\"", "number (1) and string (\"x\") cannot be added")]
     [InlineData("\"a\" * {}", "string (\"a\") and object ({}) cannot be multiplied")]
     [InlineData("123456789012345678901234567890 + \"x\"", "and string (\"x\") cannot be added")]
+    // Unlike addition, subtraction and multiplication absorb no nulls (binop_minus/multiply).
+    [InlineData("{\"a\":1} * null", "object ({\"a\":1}) and null (null) cannot be multiplied")]
+    [InlineData("null * {\"a\":1}", "null (null) and object ({\"a\":1}) cannot be multiplied")]
+    [InlineData("1 * null", "number (1) and null (null) cannot be multiplied")]
+    [InlineData("null * 1", "null (null) and number (1) cannot be multiplied")]
+    [InlineData("1 - null", "number (1) and null (null) cannot be subtracted")]
+    [InlineData("null - 1", "null (null) and number (1) cannot be subtracted")]
+    [InlineData("\"a\" * null", "string (\"a\") and null (null) cannot be multiplied")]
+    [InlineData("[1] * null", "array ([1]) and null (null) cannot be multiplied")]
+    [InlineData("{\"a\":1} - {\"b\":2}", "object ({\"a\":1}) and object ({\"b\":2}) cannot be subtracted")]
     public async Task Jq_MixedTypeArithmeticFails(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
