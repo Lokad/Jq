@@ -173,6 +173,10 @@ public sealed partial class JqTests
     [InlineData("\"a,b, cd, efg, hijk\"", "rindex(\", \")", "12\n")]
     [InlineData("[2, 0]", "map(in([0,1]))", "[\n  false,\n  true\n]\n")]
     [InlineData("[{\"a\":3}, {\"a\":5}, {\"b\":6}]", "add(.[].a)", "8\n")]
+    // NaN targets use the strict null-first order, proving the ordering fix flows into bsearch.
+    [InlineData("[1,2]", "bsearch(nan)", "-1\n")]
+    [InlineData("[null,1]", "bsearch(nan)", "-2\n")]
+    [InlineData("[nan,1]", "bsearch(null)", "-1\n")]
     public async Task Jq_CollectionSearchFold(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
