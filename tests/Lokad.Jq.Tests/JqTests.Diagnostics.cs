@@ -319,6 +319,21 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_ImportOnlyFileNeedsMainProgram()
+    {
+        // An import list with no main expression reports the missing main
+        // program like an empty or definition-only program does.
+        var host = new MockFileSystem();
+        host.AddFile("/main.jq", "import \"a\" as y;\n");
+        host.AddFile("/a.jq", "def a: 1;");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-f", "/main.jq")));
+
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains("Top-level program not given", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
     public async Task Jq_FileProgramWithMainRuns()
     {
         var host = new MockFileSystem();

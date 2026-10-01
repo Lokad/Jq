@@ -148,6 +148,19 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SeqSlurpAbandonsUnframedTail()
+    {
+        // Slurp aggregation over an unframed tail warns and yields the empty
+        // framed array instead of failing or recording values.
+        var host = new MockFileSystem();
+        host.SetStandardInput("1\n");
+        var (exit, stdout, stderr) = await RunSeqAsync(host, "-s", "--seq", ".");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("\u001e[]\n", stdout);
+        Assert.Contains("Unfinished abandoned text at EOF", stderr);
+    }
+
+    [Fact]
     public async Task Jq_SeqEmptyInputWarnsAndEnds()
     {
         var host = new MockFileSystem();

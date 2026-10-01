@@ -56,6 +56,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\":[{\"b\":0}]}", "def m: map(select(.b == 0)); try path(.a | m) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("\"a\"", "try path(\"a\") catch .", "\"Invalid path expression with result \\\"a\\\"\"\n")]
     [InlineData("1", "path(1)", "[]\n")]
+    [InlineData("null", "1 | path(1.0)", "[]\n")]
+    [InlineData("null", "9007199254740993 | path(9007199254740993)", "[]\n")]
     [InlineData("true", "path(true)", "[]\n")]
     [InlineData("null", "path(null)", "[]\n")]
     [InlineData("[1]", "try path([1]) catch .", "\"Invalid path expression with result [1]\"\n")]

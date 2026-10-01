@@ -255,6 +255,18 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_HelpIgnoresPostSeparatorOperands()
+    {
+        // Options after -- stay positional: --help still wins and a later
+        // version flag never flips the first-seen decision.
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunOutputAsync(host, "--help", "--", "-V");
+        Assert.Equal(0, exit);
+        Assert.Contains("Usage: jq [options] filter [files...]", stdout);
+        Assert.Equal("", stderr);
+    }
+
+    [Fact]
     public async Task Jq_VersionAndConfigPrintWithoutReads()
     {
         var version = new MockFileSystem();

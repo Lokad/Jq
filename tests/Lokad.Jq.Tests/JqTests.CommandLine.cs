@@ -64,6 +64,18 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_DoubleDashHidesShortClusters()
+    {
+        // Like the reference, a short cluster after -- is an operand, so it
+        // never trips the help/version resolver either.
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunCliAsync(host, "--", "-h");
+        Assert.Equal(3, exit);
+        Assert.Contains("unsupported function h", stderr);
+        Assert.Equal("", stdout);
+    }
+
+    [Fact]
     public async Task Jq_DoubleDashMakesFlagsPositional()
     {
         var host = new MockFileSystem();
