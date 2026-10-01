@@ -302,6 +302,14 @@ public sealed partial class JqTests
         ["-n", "-e"],
         ["-s", "--stream"],
         ["--seq", "-c"],
+        ["--stream-errors"],
+        ["-a"],
+        ["-S"],
+        ["-s", "-e"],
+        ["-R", "-c"],
+        ["--seq", "-s"],
+        ["-n", "-r"],
+        ["--stream-errors", "-c"],
     ];
 
     [Fact]
