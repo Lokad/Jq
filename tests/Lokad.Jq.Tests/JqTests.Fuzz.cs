@@ -26,6 +26,8 @@ public sealed partial class JqTests
         """if . then 1 else 2 end""",
         """try . catch 0""",
         """type, length""",
+        """[10 > 0, 10 > 10, 10 > 20, 10 < 0, 10 < 10, 10 < 20]""",
+        """.[] //= .[0]""",
         """[., arrays, objects, iterables, scalars, numbers, strings, values, booleans, nulls]""",
         """keys""",
         """has("a")""",
