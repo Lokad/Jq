@@ -692,48 +692,68 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     // Decodes complete values ahead of a pending literal run. A malformed
     // prefix keeps already-queued values ahead of its own stashed error.
-    // Positions a resync reader failure at the offending byte: the wrapped
-    // reader reports a line offset and a byte offset within that line, both
-    // relative to the decoded span. Falls back to the unpositioned message
+    // Positions a resync reader failure like the reference pending-literal
+    // check: the wrapped reader reports a line offset and a byte offset
+    // within that line, both relative to the decoded span. A failure inside
+    // a literal run reports at the validating boundary (the run end), while
+    // structural failures report at the byte itself; runs reaching the
+    // record end defer to truncation. Falls back to the unpositioned message
     // when the offsets do not resolve or positioning is disabled.
-    private static string FormatSeqError(ReadOnlySpan<byte> fromOrigin, int spanBase, JqException error, int originLine, int originCol, bool positionErrors)
+    private static string FormatSeqError(ReadOnlySpan<byte> record, int spanBase, JqException error, int originLine, int originCol, bool positionErrors)
     {
         const string suffix = " (need RS to resync)";
         if (positionErrors
             && error.InnerException is System.Text.Json.JsonException json
             && json.LineNumber.HasValue
             && json.BytePositionInLine.HasValue
-            && TryLocateReaderError(fromOrigin, spanBase, json.LineNumber.Value, json.BytePositionInLine.Value, originLine, originCol, out int line, out int column))
+            && TryReaderOffset(record, spanBase, json.LineNumber.Value, json.BytePositionInLine.Value, out int failing))
         {
+            int reported = failing;
+            if (reported < record.Length && IsLiteralRunByte(record[reported]))
+            {
+                int start = reported;
+                while (start > 0 && IsLiteralRunByte(record[start - 1]))
+                    start--;
+                int end = reported;
+                while (end < record.Length && IsLiteralRunByte(record[end]))
+                    end++;
+                if (end >= record.Length)
+                {
+                    MeasurePosition(record, record.Length, originLine, originCol, out int truncLine, out int truncCol);
+                    return $"Truncated value at line {truncLine}, column {truncCol}";
+                }
+                if (!IsValidLoneLiteral(record[start..end]))
+                    reported = end;
+            }
             string core = error.Message;
             string tail = $" LineNumber: {json.LineNumber.Value} | BytePositionInLine: {json.BytePositionInLine.Value}.";
             if (core.EndsWith(tail, StringComparison.Ordinal))
                 core = core.Substring(0, core.Length - tail.Length);
+            MeasurePosition(record, reported, originLine, originCol, out int line, out int column);
             return $"{core} at line {line}, column {column}{suffix}";
         }
         return error.Message + suffix;
     }
 
-    private static bool TryLocateReaderError(ReadOnlySpan<byte> fromOrigin, int spanBase, long errorLine, long errorColumn, int originLine, int originCol, out int line, out int column)
+    private static bool TryReaderOffset(ReadOnlySpan<byte> record, int spanBase, long errorLine, long errorColumn, out int failing)
     {
-        line = originLine;
-        column = originCol;
-        if (errorLine < 0 || errorColumn < 0 || spanBase < 0 || spanBase > fromOrigin.Length)
+        failing = -1;
+        if (errorLine < 0 || errorColumn < 0 || spanBase < 0 || spanBase > record.Length)
             return false;
         int offset = spanBase;
         long skipped = errorLine;
-        while (offset < fromOrigin.Length && skipped > 0)
+        while (offset < record.Length && skipped > 0)
         {
-            if (fromOrigin[offset] == (byte)10)
+            if (record[offset] == (byte)10)
                 skipped--;
             offset++;
         }
         if (skipped != 0)
             return false;
         long target = (long)offset + errorColumn;
-        if (target < 0 || target > fromOrigin.Length)
+        if (target < 0 || target > record.Length)
             return false;
-        MeasurePosition(fromOrigin, target, originLine, originCol, out line, out column);
+        failing = (int)target;
         return true;
     }
 
@@ -755,31 +775,17 @@ internal sealed class JqInputCursor : IAsyncDisposable
         }
     }
 
-    // Balanced records with bare words outside strings defer to the
-    // reference pending-literal check, which reports truncation at the
-    // separator instead of a specific error.
-    private static bool HasBareLetters(ReadOnlySpan<byte> record)
+    private static bool IsLiteralRunByte(byte b) =>
+        (b >= (byte)97 && b <= (byte)122) || (b >= (byte)65 && b <= (byte)90) || (b >= (byte)48 && b <= (byte)57) || b == (byte)46 || b == (byte)43 || b == (byte)45;
+
+    private static bool IsValidLoneLiteral(ReadOnlySpan<byte> run)
     {
-        bool inString = false;
-        bool escaped = false;
-        for (int i = 0; i < record.Length; i++)
-        {
-            byte b = record[i];
-            if (inString)
-            {
-                if (escaped)
-                    escaped = false;
-                else if (b == (byte)92)
-                    escaped = true;
-                else if (b == (byte)34)
-                    inString = false;
-            }
-            else if (b == (byte)34)
-                inString = true;
-            else if ((b >= (byte)97 && b <= (byte)122) || (b >= (byte)65 && b <= (byte)90))
-                return true;
-        }
-        return false;
+        if (run.SequenceEqual("true"u8) || run.SequenceEqual("false"u8) || run.SequenceEqual("null"u8))
+            return true;
+        string text = System.Text.Encoding.UTF8.GetString(run);
+        return double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double value)
+            && !double.IsNaN(value)
+            && !double.IsInfinity(value);
     }
 
     private void DecodeSeqPrefix(ReadOnlySpan<byte> prefix, ReadOnlySpan<byte> record, int originLine, int originCol, bool positionErrors)
@@ -799,13 +805,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             }
             catch (JqException ex) when (ex is not JqQuotaException)
             {
-                if (positionErrors && HasBareLetters(record))
-                {
-                    MeasurePosition(record, record.Length, originLine, originCol, out int truncLine, out int truncCol);
-                    StashSeqError($"Truncated value at line {truncLine}, column {truncCol}");
-                    return;
-                }
-                StashSeqError(FormatSeqError(prefix, pos, ex, originLine, originCol, positionErrors));
+                StashSeqError(FormatSeqError(record, pos, ex, originLine, originCol, positionErrors));
                 return;
             }
             pos += consumed;
@@ -830,12 +830,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
             }
             catch (JqException ex) when (ex is not JqQuotaException)
             {
-                if (resyncSuffix && HasBareLetters(stripped))
-                {
-                    MeasurePosition(stripped, stripped.Length, originLine, originCol, out int truncLine, out int truncCol);
-                    StashSeqError($"Truncated value at line {truncLine}, column {truncCol}");
-                    return;
-                }
                 StashSeqError(resyncSuffix ? FormatSeqError(stripped, pos, ex, originLine, originCol, positionErrors: true) : ex.Message);
                 return;
             }

@@ -242,17 +242,17 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_SeqMalformedWarningsCarryPositions()
     {
-        // Balanced records with bare words defer to the pending-literal
-        // truncation check like the reference, while other malformed records
-        // report the offending byte (reader wording with the global line/column
-        // before the resync note). Boundary-error offsets in letter-bearing
-        // records stay approximate: no upstream vectors cover them.
+        // Literal failures validate at the following boundary like the reference
+        // pending-literal check: the run end positions the error, while valid
+        // lone literals keep the separator position; structural failures report
+        // at the byte itself (reader wording with the global line/column
+        // before the resync note). Runs reaching the separator defer to truncation.
         var first = new MockFileSystem();
         first.SetStandardInput("\u001e{bad}\u001e");
         var (firstExit, firstOut, firstErr) = await RunSeqAsync(first, "--seq", ".");
         Assert.True(firstExit == 0, firstErr);
         Assert.Equal("", firstOut);
-        Assert.Equal("jq: ignoring parse error: Truncated value at line 1, column 7\n", firstErr);
+        Assert.Equal("jq: ignoring parse error: 'b' is an invalid start of a property name. Expected a '\"'. at line 1, column 6 (need RS to resync)\n", firstErr);
 
         var second = new MockFileSystem();
         second.SetStandardInput("\u001e:5\u001e");
@@ -260,6 +260,13 @@ public sealed partial class JqTests
         Assert.True(secondExit == 0, secondErr);
         Assert.Equal("", secondOut);
         Assert.Equal("jq: ignoring parse error: ':' is an invalid start of a value. at line 1, column 2 (need RS to resync)\n", secondErr);
+
+        var third = new MockFileSystem();
+        third.SetStandardInput("\u001e[x]\u001e");
+        var (thirdExit, thirdOut, thirdErr) = await RunSeqAsync(third, "--seq", ".");
+        Assert.True(thirdExit == 0, thirdErr);
+        Assert.Equal("", thirdOut);
+        Assert.Equal("jq: ignoring parse error: 'x' is an invalid start of a value. at line 1, column 4 (need RS to resync)\n", thirdErr);
     }
 
     [Fact]
