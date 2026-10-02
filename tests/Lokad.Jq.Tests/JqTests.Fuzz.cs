@@ -242,6 +242,8 @@ public sealed partial class JqTests
         """try trim catch ., try ltrim catch ., try rtrim catch .""",
         """[match("a"; "gi")]""",
         """try capture("(?<x>a)?") catch .""",
+        """map(abs)""",
+        """try abs catch .""",
     ];
 
     private static readonly string[] FuzzAtoms =
