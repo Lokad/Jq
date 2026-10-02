@@ -195,10 +195,10 @@ internal static class JqTime
         ArgumentNullException.ThrowIfNull(context);
         if (TypeName(input) != "number")
             throw new JqException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") localtime() requires numeric inputs");
-        return BreakdownToJson(context, DecomposeLocal(context, Number(input)));
+        return BreakdownToJson(context, DecomposeLocal(context, Number(input), out _, out _));
     }
 
-    internal static BrokenDown DecomposeLocal(JqContext context, double epoch)
+    internal static BrokenDown DecomposeLocal(JqContext context, double epoch, out TimeSpan offset, out string zoneName)
     {
         ArgumentNullException.ThrowIfNull(context);
         TimeZoneInfo zone = context.Clock?.LocalTimeZone ?? throw new JqException("localtime requires an explicit host time zone");
@@ -224,6 +224,8 @@ internal static class JqTime
         {
             throw new JqException("error converting number of seconds since epoch to datetime");
         }
+        offset = local.Offset;
+        zoneName = zone.IsDaylightSavingTime(instant) ? zone.DaylightName : zone.StandardName;
         return new BrokenDown(local.Year, local.Month, local.Day, local.Hour, local.Minute, local.Second + frac, WeekdaySunday0(DaysFromCivil(local.Year, local.Month, local.Day)), local.DayOfYear - 1);
     }
 
@@ -286,9 +288,7 @@ internal static class JqTime
         {
             if (local)
             {
-                TimeZoneInfo zone = context.Clock?.LocalTimeZone ?? throw new JqException("strflocaltime requires an explicit host time zone");
-                moment = DecomposeLocal(context, epochNumber);
-                (offset, zoneName) = LocalZoneParts(zone, moment);
+                moment = DecomposeLocal(context, epochNumber, out offset, out zoneName);
             }
             else
             {

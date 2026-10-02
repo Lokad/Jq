@@ -54,6 +54,9 @@ public sealed partial class JqTests
     [InlineData("\"2026-07-01T12:00:00Z\" | fromdate | strflocaltime(\"%Y-%m-%d %H:%M %z %Z\")", "\"2026-07-01 14:00 +0200 TEST-DST\"\n")]
     [InlineData("\"2026-01-01T12:00:00Z\" | fromdate | strflocaltime(\"%Y-%m-%d %H:%M %z %Z\")", "\"2026-01-01 13:00 +0100 TEST-STD\"\n")]
     [InlineData("[2026,6,1,14,0,0] | strflocaltime(\"%H %z\")", "\"14 +0200\"\n")]
+    // Ambiguous local times report the instant's offset and DST state, not the wall default.
+    [InlineData("\"2026-10-25T00:30:00Z\" | fromdate | strflocaltime(\"%Y-%m-%d %H:%M %z %Z\")", "\"2026-10-25 02:30 +0200 TEST-DST\"\n")]
+    [InlineData("\"2026-10-25T01:30:00Z\" | fromdate | strflocaltime(\"%Y-%m-%d %H:%M %z %Z\")", "\"2026-10-25 02:30 +0100 TEST-STD\"\n")]
     public async Task Jq_DaylightZone(string filter, string expected)
     {
         var host = new MockFileSystem();
