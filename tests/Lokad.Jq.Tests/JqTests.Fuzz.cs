@@ -305,6 +305,15 @@ public sealed partial class JqTests
         return "{" + string.Join(",", props) + "}";
     }
 
+    // Malformed inputs cycle through shapes (bad token, trailing comma,
+    // missing separator) so strictness paths stay under fuzz.
+    private static string FuzzBadInput(Random rng) => rng.Next(3) switch
+    {
+        0 => "{bad",
+        1 => "[1,]",
+        _ => "[1 2]",
+    };
+
     // Deep values built at runtime bypass the ingress depth cap, so every
     // operation must either compute or fail staged. Builders stay narrow and
     // bounded (a few hundred levels) to keep the sweep fast.
@@ -373,7 +382,7 @@ public sealed partial class JqTests
         for (int index = 0; index < FuzzCases; index++)
         {
             string filter = FuzzFilters[rng.Next(FuzzFilters.Length)];
-            string input = rng.Next(10) == 0 ? "{bad" : FuzzValue(rng, 3);
+            string input = rng.Next(10) == 0 ? FuzzBadInput(rng) : FuzzValue(rng, 3);
             var host = new MockFileSystem();
             host.SetStandardInput(input);
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
@@ -435,7 +444,7 @@ public sealed partial class JqTests
         {
             string[] flags = CliFlagSets[rng.Next(CliFlagSets.Length)];
             string filter = FuzzFilters[rng.Next(FuzzFilters.Length)];
-            string input = rng.Next(10) == 0 ? "{bad" : FuzzValue(rng, 2);
+            string input = rng.Next(10) == 0 ? FuzzBadInput(rng) : FuzzValue(rng, 2);
             var host = new MockFileSystem();
             host.SetStandardInput(input);
             var arguments = new List<string>(flags) { filter };
@@ -498,7 +507,7 @@ public sealed partial class JqTests
             var parts = new List<string>();
             int count = 1 + rng.Next(3);
             for (int part = 0; part < count; part++)
-                parts.Add(rng.Next(8) == 0 ? "{bad" : FuzzValue(rng, 2));
+                parts.Add(rng.Next(8) == 0 ? FuzzBadInput(rng) : FuzzValue(rng, 2));
             string input = string.Join("\n", parts) + "\n";
             var host = new MockFileSystem();
             host.SetStandardInput(input);
@@ -573,7 +582,7 @@ public sealed partial class JqTests
         for (int index = 0; index < PathFuzzCases; index++)
         {
             string filter = PathFuzzFilters[rng.Next(PathFuzzFilters.Length)];
-            string input = rng.Next(10) == 0 ? "{bad" : FuzzValue(rng, 2);
+            string input = rng.Next(10) == 0 ? FuzzBadInput(rng) : FuzzValue(rng, 2);
             var host = new MockFileSystem();
             host.SetStandardInput(input);
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
