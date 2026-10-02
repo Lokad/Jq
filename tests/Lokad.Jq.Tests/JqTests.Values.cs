@@ -145,6 +145,10 @@ public sealed partial class JqTests
     // Past long range there is no integral storage: doubles render scientific-shortest, so these non-decimal full-digit comparisons fail per the rendering rule.
     [InlineData("12345678909876543212345 | [., tojson] == if have_decnum then [12345678909876543212345,\"12345678909876543212345\"] else [12345678909876543000000,\"12345678909876543000000\"] end", "false\n")]
     [InlineData("[1234567890987654321,-1234567890987654321 | tojson] == if have_decnum then [\"1234567890987654321\",\"-1234567890987654321\"] else [\"1234567890987654400\",\"-1234567890987654400\"] end", "false\n")]
+    // Non-finite values clamp to the largest finite doubles with an uppercase exponent, so these lowercase reference renderings compare false.
+    [InlineData("[1E+1000,-1E+1000 | tojson] == if have_decnum then [\"1E+1000\",\"-1E+1000\"] else [\"1.7976931348623157e+308\",\"-1.7976931348623157e+308\"] end", "false\n")]
+    [InlineData("[1E+1000,-1E+1000 | abs | tojson] | unique == if have_decnum then [\"1E+1000\"] else [\"1.7976931348623157e+308\"] end", "false\n")]
+    [InlineData("[1E+1000,-1E+1000 | length | tojson] | unique == if have_decnum then [\"1E+1000\"] else [\"1.7976931348623157e+308\"] end", "false\n")]
     public async Task Jq_NumbersFollowDoubleProfile(string filter, string expected)
     {
         var host = new MockFileSystem();
