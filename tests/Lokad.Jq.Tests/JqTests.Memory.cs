@@ -250,6 +250,24 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_RejectsDefinitionBombsAtCompileTime()
+    {
+        // Upstream issue 3458 caps parameters and local definitions at 4095; the
+        // per-program token limit trips strictly earlier (even a 4095th parameter
+        // exceeds it), so both regression shapes fail staged at compile time.
+        string manyParams = "def f(" + string.Join(";", Enumerable.Range(0, 4097).Select(i => "a" + i)) + "): .; f(" + string.Join(";", Enumerable.Repeat("0", 4097)) + ")";
+        string manyDefs = string.Join("; ", Enumerable.Range(0, 4097).Select(i => "def f" + i + ": " + i)) + "; " + string.Join(" + ", Enumerable.Range(0, 4097).Select(i => "f" + i));
+        foreach (string filter in new[] { manyParams, manyDefs })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+            Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Contains("4096-token limit", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        }
+    }
+
+    [Fact]
     public async Task Jq_RejectsOversizedTokenCount()
     {
         var host = new MockFileSystem();
