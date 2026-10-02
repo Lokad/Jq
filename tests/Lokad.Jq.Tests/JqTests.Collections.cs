@@ -43,6 +43,9 @@ public sealed partial class JqTests
     [InlineData("[1, 2, 3]", "[ .[] | . * 2]", "[\n  2,\n  4,\n  6\n]\n")]
     [InlineData("[1,2,3]", "map(.+1)", "[\n  2,\n  3,\n  4\n]\n")]
     [InlineData("[1,2]", "map(., .)", "[\n  1,\n  1,\n  2,\n  2\n]\n")]
+    [InlineData("{\"a\":1,\"b\":2}", "map(.)", "[\n  1,\n  2\n]\n")]
+    [InlineData("{\"a\":1,\"b\":2}", "map_values(.)", "{\n  \"a\": 1,\n  \"b\": 2\n}\n")]
+    [InlineData("{\"a\":1}", "map(., .)", "[\n  1,\n  1\n]\n")]
     [InlineData("[\"a\",\"a\",\"b\",\"a\",\"d\",\"b\",\"d\",\"a\",\"d\"]", "add({(.[]):1}) | keys", "[\n  \"a\",\n  \"b\",\n  \"d\"\n]\n")]
     // has() follows the reference kinds: null never has, mismatches error, float indices truncate.
     [InlineData("null", "has(\"a\")", "false\n")]

@@ -264,7 +264,7 @@ public sealed partial class JqTests
         // Iterating null fails like other scalars (the reference EACH errors);
         // suppression and handlers still apply, and collectors like map
         // inherit the failure.
-        foreach (string filter in new[] { ".[]", ".a[]", "map(.)", "[.[]]" })
+        foreach (string filter in new[] { ".[]", ".a[]", "map(.)", "[.[]]", "map(empty)" })
         {
             var host = new MockFileSystem();
             host.SetStandardInput("null");
