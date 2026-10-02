@@ -284,6 +284,10 @@ public sealed partial class JqTests
     [InlineData("[]", "max", "null\n")]
     [InlineData("[nan, null]", "sort | map(type)", "[\n  \"null\",\n  \"number\"\n]\n")]
     [InlineData("[null, nan]", "sort | map(type)", "[\n  \"null\",\n  \"number\"\n]\n")]
+    // Signed zeros compare equal in ordering (stable, deduped together)
+    // while staying bitwise distinct for path tracking.
+    [InlineData("[0.0, -0.0]", "sort", "[\n  0,\n  -0\n]\n")]
+    [InlineData("[-0.0, 0.0]", "unique", "[\n  -0\n]\n")]
     [InlineData("[nan, null]", "min | type", "\"null\"\n")]
     [InlineData("[null, nan]", "max | type", "\"number\"\n")]
     // Key expressions collect every output per element like map([f]), then compare lexically.
