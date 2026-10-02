@@ -486,4 +486,28 @@ public sealed partial class JqTests
         Assert.Equal("[\n  {\n    \"b\": 1\n  },\n  \"c\"\n]\n", backOut);
         Assert.Empty(backErr);
     }
+
+    [Fact]
+    public async Task Jq_ArgsMarkersMatchUpstreamVectors()
+    {
+        // Byte-exact shell-suite vectors: per-operand parsing across repeated
+        // markers, empty marker runs, and invalid JSON after the separator.
+        var mixed = new MockFileSystem();
+        var (mixedExit, mixedOut, mixedErr) = await RunCliAsync(mixed, "-n", "-c", "$ARGS.positional", "--args", "foo", "1", "--jsonargs", "2", "{}", "--args", "3", "4");
+        Assert.Equal(0, mixedExit);
+        Assert.Equal("[\"foo\",\"1\",2,{},\"3\",\"4\"]\n", mixedOut);
+        Assert.Empty(mixedErr);
+
+        var empty = new MockFileSystem();
+        var (emptyExit, emptyOut, emptyErr) = await RunCliAsync(empty, "-n", "-c", "$ARGS.positional", "--args", "--jsonargs");
+        Assert.Equal(0, emptyExit);
+        Assert.Equal("[]\n", emptyOut);
+        Assert.Empty(emptyErr);
+
+        var bad = new MockFileSystem();
+        var (badExit, badOut, badErr) = await RunCliAsync(bad, "-n", "--jsonargs", "null", "--", "invalid");
+        Assert.Equal(2, badExit);
+        Assert.Contains("invalid JSON", badErr);
+        Assert.Empty(badOut);
+    }
 }
