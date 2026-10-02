@@ -45,6 +45,9 @@ public sealed partial class JqTests
     [InlineData("foreach range(0; 5) as $x (0; . + $x)", "0\n1\n3\n6\n10\n")]
     [InlineData("foreach (1, 2, 3) as $x (0; . + $x; $x)", "1\n2\n3\n")]
     [InlineData("reduce empty as $x (1, 2; .)", "1\n2\n")]
+    [InlineData("reduce empty as $x (0; . + 1)", "0\n")]
+    [InlineData("reduce empty as $x (empty; 1)", "")]
+    [InlineData("reduce (1,2) as $x (empty; $x)", "")]
     // Multi-valued updates thread a single cell like the reference overwrite: the last output wins per item.
     [InlineData("reduce (1, 2) as $x (0; (., . + 100))", "200\n")]
     [InlineData("reduce range(3) as $x (0; . + $x, 100)", "100\n")]
