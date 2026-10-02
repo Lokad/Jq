@@ -1425,6 +1425,7 @@ internal sealed class OptionalFilter(JqFilter inner) : JqFilter
 // runs only when no such output exists.
 internal sealed class AlternativeFilter(JqFilter left, JqFilter right) : JqFilter
 {
+    internal JqFilter Left => left;
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         bool found = false;

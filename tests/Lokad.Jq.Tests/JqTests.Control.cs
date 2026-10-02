@@ -18,9 +18,9 @@ public sealed partial class JqTests
     [InlineData("null", "try ([\"hi\", \"ho\"] | .[] | (try . catch (if . == \"ho\" then \"BROKEN\" | error else empty end)) | if . == \"ho\" then error else \"\\(.) there!\" end) catch \"caught outside \\(.)\"", "\"hi there!\"\n\"caught outside ho\"\n")]
     [InlineData("\"foo\"", "try (try error catch \"inner catch \\(.)\") catch \"outer catch \\(.)\"", "\"inner catch foo\"\n")]
     [InlineData("\"foo\"", "try ((try error catch \"inner catch \\(.)\") | error) catch \"outer catch \\(.)\"", "\"outer catch inner catch foo\"\n")]
-    // Like the reference body-level `//`, the error propagates through the
-    // right branch and the suppressed run emits nothing.
-    [InlineData("null", "try error(0) // 1", "")]
+    // A catchless body stops before `//` per the reference reduce, so the
+    // fallback runs when the suppressed body emits nothing.
+    [InlineData("null", "try error(0) // 1", "1\n")]
     [InlineData("null", "try to_entries catch .", "\"null (null) has no keys\"\n")]
     [InlineData("null", "try error(\"\\($__loc__)\") catch .", "\"{\\\"file\\\":\\\"<top-level>\\\",\\\"line\\\":1}\"\n")]
     [InlineData("null", "1 + try 2 catch 3 + 4", "7\n")]

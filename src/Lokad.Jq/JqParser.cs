@@ -943,12 +943,16 @@ internal sealed class JqParser(
             return ParseReduce(isForeach: true);
         if (MatchIdentifier("try"))
         {
-            // Like the reference `try Expr catch Expr` rule with catch-wins
-            // precedence, the body takes alternative-level combinations while
-            // the handler stops before trailing binary operators, so pipes,
-            // commas, bindings, and definitions still need parentheses.
+            // Like the reference `"try" Expr` rules, the body takes
+            // alternative-level combinations while the handler stops before
+            // trailing binary operators, so pipes, commas, bindings, and
+            // definitions still need parentheses. Without a handler the
+            // body stops before `//` per the reference reduce, so a trailing
+            // fallback still runs (upstream: try error(0) // 1 yields 1).
             var body = ParseAlternative();
             JqFilter? handler = MatchIdentifier("catch") ? ParseUnary() : null;
+            if (handler is null && body is AlternativeFilter alternative)
+                return new AlternativeFilter(new TryFilter(alternative.Left, null), alternative.Right);
             return new TryFilter(body, handler);
         }
 
