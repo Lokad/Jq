@@ -244,6 +244,7 @@ public sealed partial class JqTests
         """try capture("(?<x>a)?") catch .""",
         """map(abs)""",
         """try abs catch .""",
+        """try fromdate catch .""",
     ];
 
     private static readonly string[] FuzzAtoms =
