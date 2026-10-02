@@ -167,6 +167,20 @@ public sealed partial class JqTests
         Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
+
+    // Long operands render in full while the reference truncates them with "..."; the failure stays catchable.
+    [Theory]
+    [InlineData("\"very-long-long-long-long-string\" | try (.-.) catch .", "\"string (\\\"very-long-long-long-long-string\\\") and string (\\\"very-long-long-long-long-string\\\") cannot be subtracted\"\n")]
+    public async Task Jq_CaughtSubtractRendersFullOperands(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
     [Theory]
     [InlineData("empty // 42", "42\n")]
     [InlineData("(false, null, 1) // 42", "1\n")]

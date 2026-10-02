@@ -64,6 +64,9 @@ public sealed partial class JqTests
     [InlineData("\"foo\" | try -.? catch .", "\"string (\\\"foo\\\") cannot be negated\"\n")]
     [InlineData("\"\u272B\u272B\u272B\u272B\u272B\u272B\u272B\u272B\" | try -. catch .", "\"string (\\\"\u272B\u272B\u272B\u272B\u272B\u272B\u272B\u272B\\\") cannot be negated\"\n")]
     [InlineData("\"xx\u272B\u272B\u272B\u272B\u272B\u272B\u272B\u272B\" | try -. catch .", "\"string (\\\"xx\u272B\u272B\u272B\u272B\u272B\u272B\u272B\u272B\\\") cannot be negated\"\n")]
+    // Long values render in full while the reference truncates them with "..."; the failures stay catchable.
+    [InlineData("\"very-long-long-long-long-string\" | try -. catch .", "\"string (\\\"very-long-long-long-long-string\\\") cannot be negated\"\n")]
+    [InlineData("null | \"x\" * range(0; 12; 2) + \"\u2606\u2606\u2606\u2606\u2606\u2606\u2606\u2606\" | try -. catch .", "\"string (\\\"\u2606\u2606\u2606\u2606\u2606\u2606\u2606\u2606\\\") cannot be negated\"\n\"string (\\\"xx\u2606\u2606\u2606\u2606\u2606\u2606\u2606\u2606\\\") cannot be negated\"\n\"string (\\\"xxxx\u2606\u2606\u2606\u2606\u2606\u2606\u2606\u2606\\\") cannot be negated\"\n\"string (\\\"xxxxxx\u2606\u2606\u2606\u2606\u2606\u2606\u2606\u2606\\\") cannot be negated\"\n\"string (\\\"xxxxxxxx\u2606\u2606\u2606\u2606\u2606\u2606\u2606\u2606\\\") cannot be negated\"\n\"string (\\\"xxxxxxxxxx\u2606\u2606\u2606\u2606\u2606\u2606\u2606\u2606\\\") cannot be negated\"\n")]
     public async Task Jq_InventoryNegate(string filter, string expected)
     {
         var host = new MockFileSystem();

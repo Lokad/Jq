@@ -39,6 +39,22 @@ public sealed partial class JqTests
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }
 
+    [Fact]
+    public async Task Jq_RejectsHugeRepeatUnderTry()
+    {
+        // Limit failures stage instead of surfacing as values, so try/catch cannot observe them.
+        var fileSystem = new MockFileSystem();
+        fileSystem.SetStandardInput("\"abc\"\n");
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "try (. * 1000000000) catch .")));
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var exitCode = await tool.ExecuteAsync(fileSystem, cancellation.Token);
+
+        Assert.Equal(5, exitCode);
+        Assert.Equal("jq: string result exceeds the 16 MiB UTF-16 limit\n", fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdOut));
+    }
+
     [Theory]
     [InlineData("\"x\" * 8388608 | length", "8388608\n")]
     [InlineData("(\"ab\" * 2097152) + (\"cd\" * 2097152) | length", "8388608\n")]
@@ -64,6 +80,8 @@ public sealed partial class JqTests
     [InlineData("\"x\" * -2", "null\n")]
     [InlineData("\"\" * 1000000", "\"\"\n")]
     [InlineData("\"\" * 1000000000", "\"\"\n")]
+    // Input form of the same upstream repeat vector; the literal form above covers the same path.
+    [InlineData("\"\" | . * 1000000000", "\"\"\n")]
     [InlineData("\"ab\" + \"cd\"", "\"abcd\"\n")]
     [InlineData("[2 * 3, 2 + 3, 2.5 * 4, -3 * 2]", "[\n  6,\n  5,\n  10,\n  -6\n]\n")]
     [InlineData("[\"a\", \"ab\", \"abc\"] | [.[] * 3]", "[\n  \"aaa\",\n  \"ababab\",\n  \"abcabcabc\"\n]\n")]
