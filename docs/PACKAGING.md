@@ -35,7 +35,7 @@ build props detached, an isolated packages folder, and a regenerated lock
 whose content hash matches the packed artifact. It executes JSON, regex,
 hosted file IO, cancellation, and non-finite parsing checks; all five
 report ok with exit code 0. The probe stays out of version control and
-never references the library source project. Always restore into a fresh isolated packages folder: reusing the shared global cache across repacks of the same version has been observed to serve stale bits (a check failing shared that passes isolated, with lock hash mismatches), so regenerate the lock per pack and compare its content hash against the packed artifact before running.
+never references the library source project. Copy the probe sources outside the repository directory tree before restoring: restoring inside the tree applies the repository build props, whose package allowlist rejects the under-test reference. Always restore into a fresh isolated packages folder: reusing the shared global cache across repacks of the same version has been observed to serve stale bits (a check failing shared that passes isolated, with lock hash mismatches), so regenerate the lock per pack and compare its content hash against the packed artifact before running.
 6. Finalize public API/version/changelog, confirm repository metadata, and select
    the desired publication mechanism. Publishing is separate from CI validation.
 
