@@ -268,6 +268,27 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_ExtremeExponentsDecodeBounded()
+    {
+        // Upstream CVE-2023-50246: giant exponents decode to bounded values
+        // promptly instead of exhausting memory like decimal expansion.
+        foreach (var (stdin, expected) in new (string, string)[]
+        {
+            ("-10E-1000000001", "-0\n"),
+            ("10E1000000001", "1.7976931348623157E+308\n"),
+            ("-0E-1000000001", "-0\n"),
+            ("1.5e-1000000001", "0\n"),
+        })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput(stdin);
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".")));
+            Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
+    [Fact]
     public async Task Jq_RejectsOversizedTokenCount()
     {
         var host = new MockFileSystem();
