@@ -238,6 +238,8 @@ public sealed partial class JqTests
         """. as {(true):$foo} | $foo""",
         """. as {(0):$foo} | $foo""",
         """def f: if . == 1 then 1 else . * (. - 1 | f) end; 5 | f""",
+        """trim, ltrim, rtrim""",
+        """try trim catch ., try ltrim catch ., try rtrim catch .""",
     ];
 
     private static readonly string[] FuzzAtoms =
