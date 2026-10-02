@@ -22,6 +22,8 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("\"2015-03-05T23:51:47Z\" | fromdate | localtime", "[\n  2015,\n  2,\n  5,\n  23,\n  51,\n  47,\n  4,\n  63\n]\n")]
     [InlineData("0 | localtime", "[\n  1970,\n  0,\n  1,\n  0,\n  0,\n  0,\n  4,\n  0\n]\n")]
+    // Literal and function-produced formats agree under an explicit zone.
+    [InlineData("0 | strflocaltime(\"\" | ., @uri)", "\"\"\n\"\"\n")]
     public async Task Jq_LocaltimeUtcZone(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -65,6 +67,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("0 | localtime", "explicit host time zone")]
     [InlineData("0 | strflocaltime(\"%Y\")", "explicit host time zone")]
+    [InlineData("0 | strflocaltime(\"\" | ., @uri)", "explicit host time zone")]
     [InlineData("(-1 | sqrt) | localtime", "explicit host time zone")]
     public async Task Jq_LocalWithoutZoneIsExplicit(string filter, string diagnostic)
     {
