@@ -193,12 +193,6 @@ internal sealed class TransposeFilter : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (input is null)
-        {
-            context.Budget.ChargeNode();
-            yield return new JsonArray();
-            yield break;
-        }
         var matrix = new List<JsonNode?>();
         if (input is JsonObject fields)
         {

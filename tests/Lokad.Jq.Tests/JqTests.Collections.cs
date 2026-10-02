@@ -118,7 +118,6 @@ public sealed partial class JqTests
     [InlineData("[[1], [2, 3]]", "transpose", "[\n  [\n    1,\n    2\n  ],\n  [\n    null,\n    3\n  ]\n]\n")]
     [InlineData("[]", "transpose", "[]\n")]
     [InlineData("[[]]", "transpose", "[]\n")]
-    [InlineData("null", "transpose", "[]\n")]
     [InlineData("{\"a\": [1, 2]}", "transpose", "[\n  [\n    1\n  ],\n  [\n    2\n  ]\n]\n")]
     [InlineData("[[],[1]]", "transpose", "[\n  [\n    null,\n    1\n  ]\n]\n")]
     // Null rows contribute zero width like empty rows; present nulls pad.
@@ -418,6 +417,13 @@ public sealed partial class JqTests
         Assert.Equal(5, await scalarTool.ExecuteAsync(scalar, CancellationToken.None));
         Assert.Contains("cannot iterate over number", scalar.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(scalar.GetOutput(JqFileDescriptor.StdOut));
+
+        var nil = new MockFileSystem();
+        nil.SetStandardInput("null");
+        var nilTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "transpose")));
+        Assert.Equal(5, await nilTool.ExecuteAsync(nil, CancellationToken.None));
+        Assert.Contains("cannot iterate over null", nil.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(nil.GetOutput(JqFileDescriptor.StdOut));
 
         var row = new MockFileSystem();
         row.SetStandardInput("[[1], 5]");
