@@ -150,6 +150,8 @@ public sealed partial class JqTests
         """foreach .[] as $x (0, 1; . + $x)""",
         """sort_by(.a)""",
         """debug""",
+        """$ARGS""",
+        """$ENV""",
         """stderr""",
         """reduce (1, 2) as $x (0; (., . + $x))""",
         """foreach (1, 2) as $x (0; (., . + $x))""",
