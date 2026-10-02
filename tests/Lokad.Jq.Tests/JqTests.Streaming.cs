@@ -267,6 +267,28 @@ public sealed partial class JqTests
         Assert.Equal("true\n", stdout);
     }
 
+    // Raw event shapes follow the reference definition order (children
+    // before closes): scalars and empty containers emit a single root
+    // event while composites stream leaves before their closes.
+    [Theory]
+    [InlineData("1", "[[],1]\n")]
+    [InlineData("null", "[[],null]\n")]
+    [InlineData("\"a\"", "[[],\"a\"]\n")]
+    [InlineData("true", "[[],true]\n")]
+    [InlineData("[]", "[[],[]]\n")]
+    [InlineData("{}", "[[],{}]\n")]
+    [InlineData("[1]", "[[0],1]\n[[0]]\n")]
+    [InlineData("{\"a\":1}", "[[\"a\"],1]\n[[\"a\"]]\n")]
+    public async Task Jq_TostreamEmitsDefinitionOrder(string input, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var (exit, stdout, stderr) = await RunStreamAsync(host, "-c", "tostream");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal(expected, stdout);
+        Assert.Empty(stderr);
+    }
+
     // Truncation depths over one event literal: depth 0 keeps every path,
     // depth 1 rebases longer paths, depth 2 drops paths of length 2 or less,
     // exactly per the builtin.jq conditional.
