@@ -407,6 +407,7 @@ public sealed partial class JqTests
     [InlineData("try (5 | setpath([\"a\"]; 1)) catch .", "\"Cannot index number with string (\\\"a\\\")\"\n")]
     [InlineData("try (\"abc\" | getpath([1])) catch .", "\"Cannot index string with number (1)\"\n")]
     [InlineData("try (null | getpath([true])) catch .", "\"expected a string for object key but got: true\"\n")]
+    [InlineData("try (\"ab\" * true) catch .", "\"string (\\\"ab\\\") and boolean (true) cannot be multiplied\"\n")]
     [InlineData("try (5 | flatten) catch .", "\"cannot iterate over number\"\n")]
     [InlineData("try (5 | add) catch .", "\"cannot iterate over number\"\n")]
     [InlineData("try (5 | bsearch(0)) catch .", "\"number (5) cannot be searched from\"\n")]

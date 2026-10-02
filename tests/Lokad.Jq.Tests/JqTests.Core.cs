@@ -74,6 +74,14 @@ public sealed partial class JqTests
     [InlineData("{\"k\": {\"a\": 0, \"c\": 3}, \"hello\": 1} as $in | {\"k\": {\"a\": 1, \"b\": 2}, \"hello\": {\"x\": 1}} * $in", "{\n  \"k\": {\n    \"a\": 0,\n    \"b\": 2,\n    \"c\": 3\n  },\n  \"hello\": 1\n}\n")]
     [InlineData("{\"k\": {\"a\": 0, \"c\": 3}, \"hello\": {\"x\": 1}} as $in | {\"k\": {\"a\": 1, \"b\": 2}, \"hello\": 1} * $in", "{\n  \"k\": {\n    \"a\": 0,\n    \"b\": 2,\n    \"c\": 3\n  },\n  \"hello\": {\n    \"x\": 1\n  }\n}\n")]
     [InlineData("\"ab\" * 2.5", "\"abab\"\n")]
+    [InlineData("\"x\" * nan", "null\n")]
+    [InlineData("nan * \"x\"", "null\n")]
+    [InlineData("\"x\" * -0.5", "null\n")]
+    [InlineData("\"ab\" * 2.99", "\"abab\"\n")]
+    [InlineData("\"\" * 5", "\"\"\n")]
+    [InlineData("nan | tostring", "\"null\"\n")]
+    [InlineData("infinite | tostring", "\"1.7976931348623157E+308\"\n")]
+    [InlineData("[1] | -infinite | tostring", "\"-1.7976931348623157E+308\"\n")]
     [InlineData("2 * \"ab\"", "\"abab\"\n")]
     [InlineData("2.5 * \"ab\"", "\"abab\"\n")]
     [InlineData("\"a,b\" / \",\"", "[\n  \"a\",\n  \"b\"\n]\n")]
@@ -175,6 +183,7 @@ public sealed partial class JqTests
     [InlineData("[1] + {}", "array ([1]) and object ({}) cannot be added")]
     [InlineData("{} + [1]", "object ({}) and array ([1]) cannot be added")]
     [InlineData("1 + []", "number (1) and array ([]) cannot be added")]
+    [InlineData("\"ab\" * true", "string (\"ab\") and boolean (true) cannot be multiplied")]
     public async Task Jq_MixedTypeArithmeticFails(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
