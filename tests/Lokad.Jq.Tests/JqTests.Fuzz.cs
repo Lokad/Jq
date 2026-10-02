@@ -60,6 +60,8 @@ public sealed partial class JqTests
         """transpose""",
         """bsearch(1)""",
         """contains(1)""",
+        """[contains(""), contains("\u0000")]""",
+        """[contains("cd"), contains("b\u0000")]""",
         """inside([1])""",
         """index(1)""",
         """indices(1)""",
