@@ -523,6 +523,7 @@ public sealed partial class JqTests
         """getpath(["a"])""",
         """setpath(["a"]; 1)""",
         """.a = 1""",
+        """.a[2].b = 1""",
         """.[] = 1""",
         """.a |= . + 1""",
         """(.a | map(.)) = 1""",
