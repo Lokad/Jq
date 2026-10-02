@@ -324,6 +324,19 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_FileVariablesCombineInOneInvocation()
+    {
+        // The shell suite binds a slurpfile array and a rawfile text side by
+        // side; both variables land together with their own decodings.
+        var host = new MockFileSystem();
+        host.AddFile("/data.json", "{\n  \"this\": \"is a check\",\n  \"that\": \"is too\"\n}\n");
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--slurpfile", "foo", "/data.json", "--rawfile", "bar", "/data.json", "{$foo, $bar}");
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("{\n  \"foo\": [\n    {\n      \"this\": \"is a check\",\n      \"that\": \"is too\"\n    }\n  ],\n  \"bar\": \"{\\n  \\\"this\\\": \\\"is a check\\\",\\n  \\\"that\\\": \\\"is too\\\"\\n}\\n\"\n}\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
     public async Task Jq_SlurpfileRejectsBadJson()
     {
         var host = new MockFileSystem();
