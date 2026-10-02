@@ -1096,7 +1096,7 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
                 foreach (var child in obj)
                     yield return context.Runtime.Clone(child.Value);
             }
-            else if (!optional && value != null)
+            else if (!optional)
                 throw new JqRuntimeException($"cannot iterate over {TypeName(value)}");
         }
     }
@@ -1117,7 +1117,7 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
                 foreach (var property in obj)
                     yield return new JqValuePath(Extend(pair.Segments, new KeySegment(property.Key)), property.Value, true);
             }
-            else if (pair.Value is not null)
+            else
             {
                 if (!pair.Tracked)
                     throw new JqException(InvalidIterate(pair.Value, context));

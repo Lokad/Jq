@@ -230,6 +230,7 @@ public sealed partial class JqTests
     [InlineData("1 | .foo?", "")]
     [InlineData("1 | .[0]?", "")]
     [InlineData("1 | .[]?", "")]
+    [InlineData("null | .[]?", "")]
     [InlineData("1 | .[0:1]?", "")]
     [InlineData("(1 | .foo)?", "")]
     [InlineData("{\"a\":1} | .b?", "null\n")]
@@ -255,6 +256,29 @@ public sealed partial class JqTests
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_IterateNullFailsStaged()
+    {
+        // Iterating null fails like other scalars (the reference EACH errors);
+        // suppression and handlers still apply, and collectors like map
+        // inherit the failure.
+        foreach (string filter in new[] { ".[]", ".a[]", "map(.)", "[.[]]" })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput("null");
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter)));
+            Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Contains("cannot iterate over null", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        }
+
+        var caught = new MockFileSystem();
+        caught.SetStandardInput("null");
+        var caughtTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "try .[] catch .")));
+        Assert.Equal(0, await caughtTool.ExecuteAsync(caught, CancellationToken.None));
+        Assert.Equal("\"cannot iterate over null\"\n", caught.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Fact]

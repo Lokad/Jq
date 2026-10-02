@@ -89,7 +89,7 @@ to read this file.
 
 | Feature | Normative reference | Status | Tests | Caveats | Host | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| null vs missing vs empty stream; truthiness | Manual: Types and Values | implemented | JqTests null/empty cases | C# null is JSON null; zero outputs is empty; missing fields read as null | none | Null/empty theory passes |
+| null vs missing vs empty stream; truthiness | Manual: Types and Values | implemented | JqTests null/empty cases | C# null is JSON null; zero outputs is empty; missing fields read as null; iterating null fails like other scalars (suppression and handlers still apply) | none | Null/empty theory passes |
 | Equality and total ordering | Manual: Conditionals and Comparisons; sort order | implemented | JqTests equality/ordering/min-max cases | Kind-aware equality; total order null, false, true, numbers, scalar strings, lexical arrays, sorted-key objects; NaN unequal, ordered immediately after null | none | Ordering/equality theories pass |
 | Number literals, precision, signed zero, non-finite | Manual: Types and Values; docs/NUMERIC_PROFILE.md | partial | JqTests double-profile/non-finite/division cases | Double domain with integral storage; deliberate decNumber divergences (literal text, >2^53 comparison, exponent case) recorded in the profile | none | Profile pins pass; math builtins complete in I14 with double-domain dispatch |
 | Object key order, duplicate keys | Manual: Types and Values | implemented | JqTests duplicate-key ingress cases | Insertion order kept; duplicates last-wins at first position with escapes decoded; equality order-insensitive | none | All four ingress paths pass |
