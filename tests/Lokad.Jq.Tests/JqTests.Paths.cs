@@ -266,6 +266,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\":[{\"b\":0}]}", "del(.a | .[])", "{\n  \"a\": []\n}\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "try pick(.a | map(.)) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("[{\"b\":0},{\"b\":1}]", "del(.[] | select(.b == 0))", "[\n  {\n    \"b\": 1\n  }\n]\n")]
+    [InlineData("[1,2,3]", "del(.[{\"start\":1}])", "[\n  1\n]\n")]
+    [InlineData("[1,2,3]", "del(.[{\"start\":1,\"end\":2}])", "[\n  1,\n  3\n]\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "pick(.a)", "{\n  \"a\": [\n    {\n      \"b\": 0\n    }\n  ]\n}\n")]
     [InlineData("{\"a\":1}", "try del(.a as $x | $x) catch .", "\"Invalid path expression with result 1\"\n")]
     // Fresh path arrays are untracked, so path() over them fails like the reference delpaths([path(f)]) and pick desugars.
@@ -360,6 +362,9 @@ public sealed partial class JqTests
     [InlineData("{\"a\":[{\"b\":0}]}", "(.a | .[0]) = 1", "{\n  \"a\": [\n    1\n  ]\n}\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "try ((.a | [.[]]) = 1) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("[{\"b\":0},{\"b\":1}]", "(.[] | select(.b == 0) | .b) |= . + 1", "[\n  {\n    \"b\": 1\n  },\n  {\n    \"b\": 1\n  }\n]\n")]
+    [InlineData("[1,2,3]", ".[{\"start\":1}] = [9]", "[\n  1,\n  9\n]\n")]
+    [InlineData("[1,2,3]", ".[{\"start\":1,\"end\":2}] = [9,8]", "[\n  1,\n  9,\n  8,\n  3\n]\n")]
+    [InlineData("[1,2,3]", ".[{\"start\":1}] |= . + [9]", "[\n  1,\n  2,\n  3,\n  9\n]\n")]
     public async Task Jq_AssignUpdatesValues(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

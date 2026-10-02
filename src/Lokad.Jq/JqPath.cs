@@ -179,6 +179,17 @@ internal static class JqPaths
         return value;
     }
 
+    // Path enumeration preserves exotic keys verbatim for rendering, while
+    // the reference re-parses path values at every update boundary with
+    // objects reading as slices; normalize those segments where updates
+    // consume them so both spellings share one slice machinery.
+    internal static JqValueSegment UpdateSegment(JqValueSegment segment)
+    {
+        if (segment is InvalidSegment invalid && invalid.Raw is JsonObject slice)
+            return new SliceSegment(ParseBound(slice, "start"), ParseBound(slice, "end"));
+        return segment;
+    }
+
     private static double? ParseBound(JsonObject slice, string name)
     {
         if (!slice.TryGetPropertyValue(name, out JsonNode? bound) || bound is null)
@@ -243,6 +254,10 @@ internal static class JqPathUpdates
             throw new JqException("Path too deep");
         if (segments.Count == 0)
             return context.Runtime.Clone(value);
+        var normalized = new List<JqValueSegment>(segments.Count);
+        foreach (JqValueSegment existing in segments)
+            normalized.Add(JqPaths.UpdateSegment(existing));
+        segments = normalized;
         var frames = new Stack<Frame>();
         JsonNode? current = root;
         for (int depth = 0; depth < segments.Count; depth++)
@@ -426,6 +441,10 @@ internal static class JqPathReads
     internal static JsonNode? GetPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments)
     {
         ArgumentNullException.ThrowIfNull(segments);
+        var normalized = new List<JqValueSegment>(segments.Count);
+        foreach (JqValueSegment existing in segments)
+            normalized.Add(JqPaths.UpdateSegment(existing));
+        segments = normalized;
         JsonNode? current = root;
         foreach (JqValueSegment segment in segments)
         {
@@ -506,6 +525,15 @@ internal static class JqPathDeletes
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(context);
+        var resolvedPaths = new List<IReadOnlyList<JqValueSegment>>(paths.Count);
+        foreach (IReadOnlyList<JqValueSegment> path in paths)
+        {
+            var mapped = new List<JqValueSegment>(path.Count);
+            foreach (JqValueSegment segment in path)
+                mapped.Add(JqPaths.UpdateSegment(segment));
+            resolvedPaths.Add(mapped);
+        }
+        paths = resolvedPaths;
         var effective = new List<IReadOnlyList<JqValueSegment>>();
         foreach (var path in paths)
         {
