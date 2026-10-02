@@ -53,6 +53,8 @@ public sealed partial class JqTests
         """limit(2; .[])""",
         """first(.[])""",
         """isempty(.[])""",
+        """[inputs]""",
+        """input""",
         """paths""",
         """.. | type""",
         """1 + 2 * 3""",
