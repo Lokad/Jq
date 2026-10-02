@@ -1009,7 +1009,13 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                     continue;
                 }
                 if (!FlattenFilter.TryDepthLevel(bound, out double start))
+                {
+                    // Like the reference postfix ?, a suppressed step yields
+                    // nothing instead of failing on bad bounds.
+                    if (optional)
+                        yield break;
                     throw new JqException("Array/string slice indices must be integers");
+                }
                 yield return start;
             }
         }
@@ -1029,7 +1035,11 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 if (bound == null || (bound is JsonValue edge && edge.TryGetValue<double>(out double nan) && double.IsNaN(nan)))
                     yield return null;
                 else if (!FlattenFilter.TryDepthLevel(bound, out double finish))
+                {
+                    if (optional)
+                        yield break;
                     throw new JqException("Array/string slice indices must be integers");
+                }
                 else
                     yield return finish;
             }
@@ -1039,8 +1049,8 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
     {
         foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
-            foreach (double? lower in SliceBoundValues(start, pair.Value, context, environment))
-                foreach (double? upper in SliceBoundValues(end, pair.Value, context, environment))
+            foreach (double? lower in SliceBoundValues(start, pair.Value, context, environment, optional))
+                foreach (double? upper in SliceBoundValues(end, pair.Value, context, environment, optional))
                 {
                     var segment = new SliceSegment(lower, upper);
                     RequireTracked(pair, segment, context);
@@ -1070,7 +1080,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 }
     }
 
-    private static IEnumerable<double?> SliceBoundValues(JqFilter? bound, JsonNode? input, JqContext context, JqEnvironment environment)
+    private static IEnumerable<double?> SliceBoundValues(JqFilter? bound, JsonNode? input, JqContext context, JqEnvironment environment, bool optional)
     {
         if (bound == null)
         {
@@ -1090,7 +1100,11 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 continue;
             }
             if (!FlattenFilter.TryDepthLevel(edge, out double position))
+            {
+                if (optional)
+                    yield break;
                 throw new JqException("Array/string slice indices must be integers");
+            }
             yield return position;
         }
     }
