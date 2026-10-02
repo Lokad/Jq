@@ -73,6 +73,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "combinations", "cannot iterate over object")]
     [InlineData("\"abcdef\"", ".[\"a\":]", "Array/string slice indices must be integers")]
     [InlineData("[[1]]", "combinations(\"a\")", "Range bounds must be numeric")]
+    [InlineData("[{}]", "from_entries", "Cannot use null (null) as object key")]
+    [InlineData("[{\"a\":1}]", "from_entries", "Cannot use null (null) as object key")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
     {
         var host = new MockFileSystem();

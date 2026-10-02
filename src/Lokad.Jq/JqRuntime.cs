@@ -1162,11 +1162,7 @@ internal sealed class JqRuntime(JqBudget budget)
                 }
             }
             if (key is null || !TryGetString(key, out string? keyName) || keyName is null)
-            {
-                if (key is null)
-                    continue;
                 throw new JqException($"Cannot use {TypeName(key)} ({ToJqString(key)}) as object key");
-            }
             budget.ChargeNode();
             JsonNode? value = entry.TryGetPropertyValue("value", out JsonNode? direct) ? direct
                 : entry.TryGetPropertyValue("Value", out JsonNode? capitalized) ? capitalized : null;
