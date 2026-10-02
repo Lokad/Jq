@@ -237,6 +237,16 @@ public sealed partial class JqTests
     [InlineData("null", "getpath([{start:0}])", "null\n")]
     [InlineData("\"abcdef\"", "getpath([{start:7,end:9}])", "\"\"\n")]
     [InlineData("[10,20,30]", "delpaths([[{start:0.5,end:2}]])", "[\n  30\n]\n")]
+    [InlineData("[0,0]", "setpath([0]; 1,2)", "[\n  1,\n  0\n]\n[\n  2,\n  0\n]\n")]
+    [InlineData("[0,0]", "setpath(([0],[1]); 8,9)", "[\n  8,\n  0\n]\n[\n  0,\n  8\n]\n[\n  9,\n  0\n]\n[\n  0,\n  9\n]\n")]
+    [InlineData("{\"a\":1}", "getpath(([\"a\"],[]))", "1\n{\n  \"a\": 1\n}\n")]
+    [InlineData("{\"a\":1,\"b\":2}", "delpaths([[\"a\"]], [[\"b\"]])", "{\n  \"b\": 2\n}\n{\n  \"a\": 1\n}\n")]
+    [InlineData("null", "setpath(([0],[1]); 9)", "[\n  9\n]\n[\n  null,\n  9\n]\n")]
+    [InlineData("{\"a\":[1]}", "setpath(([\"a\"],[]); 2)", "{\n  \"a\": 2\n}\n2\n")]
+    [InlineData("[0]", "setpath(empty; 1)", "")]
+    [InlineData("[0]", "setpath([0]; empty)", "")]
+    [InlineData("{\"a\":1}", "getpath(empty)", "")]
+    [InlineData("{\"a\":1,\"b\":2}", "delpaths(empty)", "")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
