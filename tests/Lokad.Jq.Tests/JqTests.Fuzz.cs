@@ -169,6 +169,13 @@ public sealed partial class JqTests
         """try strflocaltime("%Y") catch .""",
         """try 0[implode] catch .""",
         """. * 1000000""",
+        """1 / 1e-17""",
+        """9E999999999, 9999999999E999999990, 1E-999999999, 0.000000001E-999999990""",
+        """(1e999999999, 10e999999999) > (1e-1147483646, 0.1e-1147483646)""",
+        """try (. * 1000000000) catch .""",
+        """try ("very-long-long-long-long-string" | -.) catch .""",
+        """[13911860366432393] | .[0] | tostring | . == if have_decnum then "13911860366432393" else "13911860366432392" end""",
+        """13911860366432393 | -. | tojson == if have_decnum then "-13911860366432393" else "-13911860366432392" end""",
     ];
 
     private static readonly string[] FuzzAtoms =
@@ -202,6 +209,8 @@ public sealed partial class JqTests
         """""abc%""""",
         """""QUJDa""""",
         """""1E9999999999""""",
+        """13911860366432393""",
+        """1E-999999999""",
     ];
 
     private static readonly string[] FuzzKeys = ["a", "b", "c", "x y"];
