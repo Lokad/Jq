@@ -438,9 +438,10 @@ internal static class JqPathReads
 {
     // Read traversal mirroring value semantics: missing reads null,
     // mistyped containers raise the same errors as ordinary reads.
-    internal static JsonNode? GetPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments)
+    internal static JsonNode? GetPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(segments);
+        ArgumentNullException.ThrowIfNull(context);
         var normalized = new List<JqValueSegment>(segments.Count);
         foreach (JqValueSegment existing in segments)
             normalized.Add(JqPaths.UpdateSegment(existing));
@@ -500,6 +501,13 @@ internal static class JqPathReads
                         throw new JqRuntimeException($"cannot slice {JqRuntime.TypeName(current)}");
                     break;
                 default:
+                    if (segment is InvalidSegment invalid && invalid.Raw is JsonArray pattern && current is JsonArray)
+                    {
+                        // Like the reference get, an array key on an array
+                        // searches contiguous subsequence positions.
+                        current = context.Runtime.Indices(current, pattern);
+                        break;
+                    }
                     throw MismatchError(current, segment);
             }
         }
@@ -879,7 +887,7 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? paths in Paths.Evaluate(input, context, environment))
-            yield return context.Runtime.Clone(JqPathReads.GetPath(input, JqPaths.ParsePathValue(paths, context)));
+            yield return context.Runtime.Clone(JqPathReads.GetPath(input, JqPaths.ParsePathValue(paths, context), context));
     }
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
@@ -894,7 +902,7 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
         foreach (JsonNode? paths in Paths.Evaluate(pair.Value, context, environment))
         {
             List<JqValueSegment> segments = JqPaths.ParsePathValue(paths, context);
-            JsonNode? value = JqPathReads.GetPath(pair.Value, segments);
+            JsonNode? value = JqPathReads.GetPath(pair.Value, segments, context);
             if (!pair.Tracked)
             {
                 yield return new JqValuePath(pair.Segments, value, false);
@@ -964,7 +972,7 @@ internal sealed class PickFilter(IReadOnlyList<JqFilter> Args) : JqFilter
         JsonNode? state = null;
         foreach (JqFilter paths in Args)
             foreach (IReadOnlyList<JqValueSegment> segments in JqPaths.CollectPaths(paths, input, context, environment))
-                state = JqPathUpdates.SetPath(state, segments, JqPathReads.GetPath(input, segments), context);
+                state = JqPathUpdates.SetPath(state, segments, JqPathReads.GetPath(input, segments, context), context);
         yield return state;
     }
 }
@@ -1025,7 +1033,7 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
         foreach (IReadOnlyList<JqValueSegment> segments in paths)
         {
             bool ran = false;
-            using IEnumerator<JsonNode?> results = update.Evaluate(JqPathReads.GetPath(state, segments), context, environment).GetEnumerator();
+            using IEnumerator<JsonNode?> results = update.Evaluate(JqPathReads.GetPath(state, segments, context), context, environment).GetEnumerator();
             while (results.MoveNext())
             {
                 state = JqPathUpdates.SetPath(state, segments, context.Runtime.Clone(results.Current), context);

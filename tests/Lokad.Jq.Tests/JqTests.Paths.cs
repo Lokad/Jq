@@ -168,6 +168,9 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3]", "setpath([{\"start\": 1, \"end\": 3}]; [9])", "[\n  0,\n  9,\n  3\n]\n")]
     [InlineData("[0, 1, 2, 3]", "try setpath([{\"start\": 1, \"end\": 3}]; 9) catch .", "\"A slice of an array can only be assigned another array\"\n")]
     [InlineData("[0]", "setpath([-1]; 1)", "[\n  1\n]\n")]
+    [InlineData("[1,2,3]", "getpath([[1]])", "[\n  0\n]\n")]
+    [InlineData("[1,2,3]", "getpath([[9]])", "[]\n")]
+    [InlineData("[1,2,1]", "getpath([[1,2]])", "[\n  0\n]\n")]
     // Negative setpath indices resolve from the end up to the exact first element, then fail like the reference.
     [InlineData("[1,2,3]", "setpath([-3]; 9)", "[\n  9,\n  2,\n  3\n]\n")]
     [InlineData("[1,2,3]", "try setpath([-4]; 9) catch .", "\"Out of bounds negative array index\"\n")]

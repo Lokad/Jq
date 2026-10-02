@@ -1946,7 +1946,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     segments.Add(existing);
                 foreach (JqValueSegment added in extra)
                     segments.Add(added);
-                yield return new JqValuePath(segments, JqPathReads.GetPath(pair.Value, extra), true);
+                yield return new JqValuePath(segments, JqPathReads.GetPath(pair.Value, extra, context), true);
             }
             yield break;
         }
