@@ -75,6 +75,22 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
+    // Unlike construction literals, binding patterns validate computed keys
+    // when they run, so the same payload fails staged (5) rather than at
+    // compile time (3).
+    [Theory]
+    [InlineData(". as {(true):$foo} | $foo", "Cannot use boolean (true) as object key")]
+    [InlineData(". as {(0):$foo} | $foo", "Cannot use number (0) as object key")]
+    public async Task Jq_ObjectPatternRejectsNonStringKeys(string filter, string diagnostic)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
     [Theory]
     [InlineData("(1, 2) as $x | $x", "1\n2\n")]
     [InlineData("(1, 2) as $x | [$x]", "[\n  1\n]\n[\n  2\n]\n")]
