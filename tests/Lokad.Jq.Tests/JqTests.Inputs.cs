@@ -197,6 +197,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_TrailingCommaInInputIsMalformed()
+    {
+        // Trailing commas are not valid JSON: the reader rejects them
+        // like the reference instead of skipping to the bracket.
+        var host = new MockFileSystem();
+        host.SetStandardInput("[1,]\n");
+        var (exit, stdout, stderr) = await RunInputAsync(host, ".");
+
+        Assert.Equal(5, exit);
+        Assert.Equal("", stdout);
+        Assert.Contains("parse error", stderr);
+    }
+
+    [Fact]
     public async Task Jq_DuplicateInputKeysKeepFirstPosition()
     {
         // Like the reference object builder, later duplicates overwrite values

@@ -177,7 +177,7 @@ internal sealed class JqRuntime(JqBudget budget)
         {
             var reader = new Utf8JsonReader(text, new JsonReaderOptions
             {
-                AllowTrailingCommas = true,
+                AllowTrailingCommas = false,
                 AllowMultipleValues = true,
                 MaxDepth = JqBudget.MaximumDepth
             });
