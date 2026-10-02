@@ -288,6 +288,14 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         if (Count is null)
         {
+            // Like the reference length check, length-zero inputs yield
+            // one empty combination instead of iterating.
+            if (JqRuntime.Number(context.Runtime.Length(input)) == 0)
+            {
+                context.Budget.ChargeNode();
+                yield return new JsonArray();
+                yield break;
+            }
             foreach (JsonNode? combo in Combos(RequireMatrix(input), context))
                 yield return combo;
             yield break;

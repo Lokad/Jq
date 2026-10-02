@@ -131,6 +131,11 @@ public sealed partial class JqTests
     // Numeric-string counts coerce like other count positions; other kinds fail with the reference range diagnostic.
     [InlineData("[[1,2],[3,4]]", "combinations(\"2\")", "[\n  [\n    1,\n    2\n  ],\n  [\n    1,\n    2\n  ]\n]\n[\n  [\n    1,\n    2\n  ],\n  [\n    3,\n    4\n  ]\n]\n[\n  [\n    3,\n    4\n  ],\n  [\n    1,\n    2\n  ]\n]\n[\n  [\n    3,\n    4\n  ],\n  [\n    3,\n    4\n  ]\n]\n")]
     [InlineData("[]", "combinations", "[]\n")]
+    // Length-zero inputs yield one empty combination like the reference length check.
+    [InlineData("null", "combinations", "[]\n")]
+    [InlineData("\"\"", "combinations", "[]\n")]
+    [InlineData("{}", "combinations", "[]\n")]
+    [InlineData("0", "combinations", "[]\n")]
     // An empty row kills the cartesian product per the recursive desugar.
     [InlineData("[[]]", "combinations", "")]
     [InlineData("[[],[1]]", "combinations", "")]
