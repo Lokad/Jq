@@ -142,6 +142,9 @@ public sealed partial class JqTests
     [InlineData("(13911860366432393 == 13911860366432392) | . == if have_decnum then false else true end", "true\n")]
     [InlineData("13911860366432393 | -. | tojson == if have_decnum then \"-13911860366432393\" else \"-13911860366432392\" end", "true\n")]
     [InlineData("-0.12345678901234567890123456789 | -. | tojson == if have_decnum then \"0.12345678901234567890123456789\" else \"0.12345678901234568\" end", "true\n")]
+    // Past long range there is no integral storage: doubles render scientific-shortest, so these non-decimal full-digit comparisons fail per the rendering rule.
+    [InlineData("12345678909876543212345 | [., tojson] == if have_decnum then [12345678909876543212345,\"12345678909876543212345\"] else [12345678909876543000000,\"12345678909876543000000\"] end", "false\n")]
+    [InlineData("[1234567890987654321,-1234567890987654321 | tojson] == if have_decnum then [\"1234567890987654321\",\"-1234567890987654321\"] else [\"1234567890987654400\",\"-1234567890987654400\"] end", "false\n")]
     public async Task Jq_NumbersFollowDoubleProfile(string filter, string expected)
     {
         var host = new MockFileSystem();
