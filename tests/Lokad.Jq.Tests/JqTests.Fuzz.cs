@@ -190,6 +190,9 @@ public sealed partial class JqTests
         """[strptime("%Y-%m-%dT%H:%M:%SZ")|(.,mktime)]""",
         """try strftime("%Y-%m-%dT%H:%M:%SZ") catch .""",
         """try mktime catch .""",
+        """[label $o | [1,2,3][] | if . > 1 then break $o else . end]""",
+        """.[] | . as {a:$a} ?// {a:$a} | $a""",
+        """def f: if . == 1 then 1 else . * (. - 1 | f) end; 5 | f""",
     ];
 
     private static readonly string[] FuzzAtoms =
