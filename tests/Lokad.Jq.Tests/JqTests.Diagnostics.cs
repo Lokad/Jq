@@ -265,6 +265,29 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_MainProgramPresenceFromFile()
+    {
+        // Upstream file vectors: definitions alone fail like the empty
+        // program with file identity, while a trailing main expression
+        // succeeds.
+        var missing = new MockFileSystem();
+        missing.AddFile("/prog.jq", "def a: .;");
+        var missingTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-f", "/prog.jq")));
+        Assert.Equal(3, await missingTool.ExecuteAsync(missing, CancellationToken.None));
+        Assert.Equal("jq: Top-level program not given (try \".\") at line 1 column 10 (file \"/prog.jq\")\n", missing.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(missing.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(0, missing.OpenFileCount);
+
+        var present = new MockFileSystem();
+        present.AddFile("/prog.jq", "def a: .;\n0");
+        var presentTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-f", "/prog.jq")));
+        Assert.Equal(0, await presentTool.ExecuteAsync(present, CancellationToken.None));
+        Assert.Equal("0\n", present.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(present.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, present.OpenFileCount);
+    }
+
+    [Fact]
     public async Task Jq_EmptyFileProgramIsCompileError()
     {
         // The empty-program diagnostic carries the file identity like any
