@@ -175,6 +175,7 @@ public sealed partial class JqTests
     [InlineData("[[]]", "try @tsv catch .", "\"array ([]) is not valid in a csv row\"\n")]
     [InlineData("[nan]", "@csv", "\"\"\n")]
     [InlineData("[nan]", "@tsv", "\"\"\n")]
+    [InlineData("\"<>&\u0027\\\"\\t\"", "(@base64|@base64d)", "\"<>&\u0027\\\"\\t\"\n")]
     public async Task Jq_HtmlShellCsvVectors(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
