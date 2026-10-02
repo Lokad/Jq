@@ -12,6 +12,7 @@ public sealed partial class JqTests
     [InlineData("null | select(true)", "null\n")]
     [InlineData("\"kept\" | select(false,null,true,false,true)", "\"kept\"\n\"kept\"\n")]
     [InlineData("\"dropped\" | select(false,null)", "")]
+    [InlineData("0 | [select(.), 1]", "[\n  0,\n  1\n]\n")]
     [InlineData("[1,2] | select(empty)", "")]
     [InlineData("[1,2] | [select(true,true)]", "[\n  [\n    1,\n    2\n  ],\n  [\n    1,\n    2\n  ]\n]\n")]
     [InlineData("[1,5,3,0,7] | map(select(. >= 2))", "[\n  5,\n  3,\n  7\n]\n")]

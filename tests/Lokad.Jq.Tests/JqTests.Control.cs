@@ -201,6 +201,9 @@ public sealed partial class JqTests
     [InlineData("try (error(\"x\") and true) catch .", "\"x\"\n")]
     [InlineData("try (true and error(\"x\")) catch .", "\"x\"\n")]
     [InlineData("42 and \"a string\"", "true\n")]
+    [InlineData("0 or 1", "true\n")]
+    [InlineData("\"\" or 1", "true\n")]
+    [InlineData("0 and 2", "true\n")]
     public async Task Jq_AndOrShortCircuitOverGenerators(string filter, string expected)
     {
         var host = new MockFileSystem();
