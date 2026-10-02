@@ -301,6 +301,26 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_StreamMatchesPathRoundtrip()
+    {
+        // The upstream shell suite diffs path/getpath leaf pairs against
+        // --stream leaf events over its torture input; both decoders must
+        // agree byte-for-byte on scalars and empty containers in order.
+        const string doc = "{\"a\":[1,{\"b\":[]}],\"c\":{},\"d\":\"x\",\"e\":[[]],\"f\":[true,null]}";
+        const string expected = "[[\"a\",0],1]\n[[\"a\",1,\"b\"],[]]\n[[\"c\"],{}]\n[[\"d\"],\"x\"]\n[[\"e\",0],[]]\n[[\"f\",0],true]\n[[\"f\",1],null]\n";
+        var domHost = new MockFileSystem();
+        domHost.SetStandardInput(doc);
+        var (domExit, domOut, domErr) = await RunStreamAsync(domHost, "-c", ". as $d|path(..) as $p|$d|getpath($p)|select((type|. != \"array\" and . != \"object\") or length==0)|[$p,.]");
+        Assert.True(domExit == 0, domErr);
+        var streamHost = new MockFileSystem();
+        streamHost.SetStandardInput(doc);
+        var (streamExit, streamOut, streamErr) = await RunStreamAsync(streamHost, "-c", "--stream", ".|select(length==2)");
+        Assert.True(streamExit == 0, streamErr);
+        Assert.Equal(expected, domOut);
+        Assert.Equal(expected, streamOut);
+    }
+
+    [Fact]
     public async Task Jq_TruncateStreamVectors()
     {
         var host = new MockFileSystem();
