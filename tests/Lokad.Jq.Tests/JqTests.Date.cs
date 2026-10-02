@@ -65,8 +65,10 @@ public sealed partial class JqTests
     [InlineData("\"2015-W10-4\" | strptime(\"%G-W%V-%u\") | mktime", "1425513600\n")]
     [InlineData("\"2015 09 4\" | strptime(\"%Y %U %w\") | mktime", "1425513600\n")]
     [InlineData("\"2015 064\" | strptime(\"%Y %j\") | mktime", "1425513600\n")]
-    // Out-of-range days normalize through civil arithmetic while out-of-range months fail at parse.
+    // Out-of-range days normalize through civil arithmetic (strptime still rejects
+    // out-of-range months at parse), and mktime arrays roll over likewise.
     [InlineData("\"2015-02-30\" | strptime(\"%Y-%m-%d\") | mktime", "1425254400\n")]
+    [InlineData("[2015,13,1,0,0,0] | mktime", "1454284800\n")]
     // Bounded 400-day form of the upstream 67-year day-of-week/yearday loop; the full form exceeds the cumulative value budget (pinned in Memory).
     [InlineData("last(range(400)|(\"1970-03-01T01:02:03Z\"|strptime(\"%Y-%m-%dT%H:%M:%SZ\")|mktime) + (86400 * .)|strftime(\"%Y-%m-%dT%H:%M:%SZ\")|strptime(\"%Y-%m-%dT%H:%M:%SZ\"))", "[\n  1971,\n  3,\n  4,\n  1,\n  2,\n  3,\n  0,\n  93\n]\n")]
     [InlineData("[2015,2,5,23,51,47,4,63] | strftime(\"%Y-%m-%dT%H:%M:%SZ\")", "\"2015-03-05T23:51:47Z\"\n")]
