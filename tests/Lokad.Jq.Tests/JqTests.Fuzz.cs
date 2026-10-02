@@ -108,6 +108,7 @@ public sealed partial class JqTests
         """reverse""",
         """keys""",
         """recurse""",
+        """[limit(3; repeat(1))]""",
         """min""",
         """max""",
         """skip(1; .[])""",
