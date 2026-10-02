@@ -210,6 +210,24 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_RawInputRejectsInvalidBytesAsMalformed()
+    {
+        // Invalid bytes are malformed input (staged exit 5 like invalid
+        // JSON), never a bare decoder failure leaking the stage number.
+        // Both the terminated-line and unterminated-tail branches decode.
+        foreach (byte[] stdin in new byte[][] { new byte[] { 0xFF }, new byte[] { 0xFF, 0x0A } })
+        {
+            var fileSystem = new MockFileSystem();
+            fileSystem.SetStandardInputBytes(stdin);
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", ".")));
+
+            Assert.Equal(5, await tool.ExecuteAsync(fileSystem, CancellationToken.None));
+            Assert.Equal("jq: parse error: Cannot transcode invalid UTF-8 raw input to UTF-16 string.\n", fileSystem.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdOut));
+        }
+    }
+
+    [Fact]
     public async Task Jq_RawNulLinesComposeWithSlurpAndInputs()
     {
         // Like the reference shell suite, NUL-containing raw lines compare

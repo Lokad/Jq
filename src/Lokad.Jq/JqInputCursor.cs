@@ -231,7 +231,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 ReadOnlyMemory<byte> line = _buffer.AsMemory(_start, length);
                 _budget.ChargeNode();
                 _budget.ChargeString(Encoding.UTF8.GetCharCount(line.Span));
-                string text = Utf8Text.Decode(line);
+                string text = DecodeRawSegment(line);
                 _start = newline + 1;
                 _count -= length + 1;
                 SetPosition(1 + _newlines);
@@ -248,13 +248,27 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 ReadOnlyMemory<byte> tail = _buffer.AsMemory(_start, _count);
                 _budget.ChargeNode();
                 _budget.ChargeString(Encoding.UTF8.GetCharCount(tail.Span));
-                string tailText = Utf8Text.Decode(tail);
+                string tailText = DecodeRawSegment(tail);
                 _start += _count;
                 _count = 0;
                 SetPosition(1 + _newlines);
                 return (true, tailText, false);
             }
             await FillAsync().ConfigureAwait(false);
+        }
+    }
+
+    // Invalid bytes are malformed input (staged exit 5 like invalid JSON),
+    // never a bare decoder failure leaking the stage number.
+    private static string DecodeRawSegment(ReadOnlyMemory<byte> segment)
+    {
+        try
+        {
+            return Utf8Text.Decode(segment);
+        }
+        catch (DecoderFallbackException)
+        {
+            throw new JqInputException("parse error: Cannot transcode invalid UTF-8 raw input to UTF-16 string.", 5);
         }
     }
 
