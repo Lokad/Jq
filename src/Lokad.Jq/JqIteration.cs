@@ -97,6 +97,9 @@ internal sealed class LimitFilter(JqFilter Count, JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? count in Count.Evaluate(input, context, environment))
         {
+            // Null and booleans rank below numbers, so the reference order branches reject them like negatives.
+            if (count is null || (count is JsonValue countBool && countBool.TryGetValue<bool>(out _)))
+                throw new JqException("limit doesn't support negative count");
             double total = Number(count);
             if (total == 0)
                 continue;
@@ -156,6 +159,9 @@ internal sealed class NthFilter(JqFilter Index, JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? index in Index.Evaluate(input, context, environment))
         {
+            // Null and booleans rank below numbers, so the reference order branches reject them like negatives.
+            if (index is null || (index is JsonValue indexBool && indexBool.TryGetValue<bool>(out _)))
+                throw new JqException("nth doesn't support negative indices");
             double position = Number(index);
             if (position < 0)
                 throw new JqException("nth doesn't support negative indices");
@@ -499,6 +505,9 @@ internal sealed class SkipFilter(JqFilter Count, JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? count in Count.Evaluate(input, context, environment))
         {
+            // Null and booleans rank below numbers, so the reference order branches reject them like negatives.
+            if (count is null || (count is JsonValue skipBool && skipBool.TryGetValue<bool>(out _)))
+                throw new JqException("skip doesn't support negative count");
             double total = Number(count);
             // NaN falls through to the reference else branch like negatives.
             if (total < 0 || double.IsNaN(total))

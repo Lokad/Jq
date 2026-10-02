@@ -115,6 +115,17 @@ public sealed partial class JqTests
     [InlineData("try limit(nan; 1) catch .", "\"limit doesn't support negative count\"\n")]
     [InlineData("try nth(nan; 1) catch .", "\"skip doesn't support negative count\"\n")]
     [InlineData("try skip(nan; 1) catch .", "\"skip doesn't support negative count\"\n")]
+    // Null and boolean counts rank below numbers, so they take the same
+    // else branches as negatives (and NaN) in the reference order checks.
+    [InlineData("try limit(null; 1) catch .", "\"limit doesn't support negative count\"\n")]
+    [InlineData("try limit(false; 1) catch .", "\"limit doesn't support negative count\"\n")]
+    [InlineData("try limit(true; 1) catch .", "\"limit doesn't support negative count\"\n")]
+    [InlineData("try skip(null; 1) catch .", "\"skip doesn't support negative count\"\n")]
+    [InlineData("try skip(false; 1) catch .", "\"skip doesn't support negative count\"\n")]
+    [InlineData("try skip(true; 1) catch .", "\"skip doesn't support negative count\"\n")]
+    [InlineData("try nth(null; 1) catch .", "\"nth doesn't support negative indices\"\n")]
+    [InlineData("try nth(false; 1) catch .", "\"nth doesn't support negative indices\"\n")]
+    [InlineData("try nth(true; 1) catch .", "\"nth doesn't support negative indices\"\n")]
     [InlineData("try isempty(error(\"x\")) catch .", "\"x\"\n")]
     // Extraction utilities pull lazily, so body errors propagate to handlers.
     [InlineData("try first(error(\"x\")) catch .", "\"x\"\n")]
