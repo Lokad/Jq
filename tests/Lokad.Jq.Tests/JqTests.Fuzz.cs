@@ -68,6 +68,7 @@ public sealed partial class JqTests
         """@json""",
         """to_entries""",
         """flatten""",
+        """try flatten(\"a\") catch .""",
         """combinations""",
         """combinations(0)""",
         """combinations(2)""",

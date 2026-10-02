@@ -112,9 +112,9 @@ internal sealed class AddValuesFilter(JqFilter Values) : JqFilter
 }
 
 // `flatten` and `flatten(depth)`: depth-limited flattening over arrays.
-// Like the reference desugar, only numbers reach the negative guard: null
-// and booleans sort below zero and fail it, while strings, arrays, and
-// objects sort above it and flatten fully because they never equal zero.
+// Like the reference desugar, the negative guard compares with jq ordering:
+// null, booleans, and NaN (which sorts as null) fail it, while strings,
+// arrays, and objects sort above zero and recurse through depth - 1.
 internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
@@ -163,7 +163,7 @@ internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
         {
             if (TryDepthLevel(depth, out double level))
             {
-                if (level < 0)
+                if (level < 0 || double.IsNaN(level))
                     throw new JqException("flatten depth must not be negative");
                 yield return context.Runtime.Flatten(input, level);
             }
@@ -173,7 +173,7 @@ internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
             }
             else
             {
-                yield return context.Runtime.Flatten(input, double.NaN);
+                yield return context.Runtime.Flatten(input, depth);
             }
         }
     }
@@ -690,11 +690,13 @@ internal sealed class FlattenImplFilter(JqFilter Depth) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? depth in Depth.Evaluate(input, context, environment))
         {
-            // _flatten carries no negative guard upstream; every non-number
-            // flattens fully because it never equals zero.
-            if (!FlattenFilter.TryDepthLevel(depth, out double level))
-                level = double.NaN;
-            yield return context.Runtime.Flatten(input, level);
+            // _flatten carries no negative guard upstream; numeric depths
+            // recurse by decrementing while non-numeric depths recurse
+            // through depth - 1 and fail staged at the first nested array.
+            if (FlattenFilter.TryDepthLevel(depth, out double level))
+                yield return context.Runtime.Flatten(input, level);
+            else
+                yield return context.Runtime.Flatten(input, depth);
         }
     }
 }

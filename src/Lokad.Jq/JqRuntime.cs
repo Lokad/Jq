@@ -1230,6 +1230,50 @@ internal sealed class JqRuntime(JqBudget budget)
         }
     }
 
+    // Non-numeric depths follow the reference desugar instead of standing in
+    // for infinity: they never equal zero, so reaching a nested array
+    // evaluates depth - 1 with real subtraction semantics and fails staged.
+    internal JsonNode Flatten(JsonNode? input, JsonNode? depth)
+    {
+        var result = new JsonArray();
+        budget.ChargeNode();
+        if (input is JsonArray arr)
+        {
+            foreach (JsonNode? child in arr)
+                FlattenDepthInto(result, child, depth);
+            return result;
+        }
+        if (input is JsonObject obj)
+        {
+            foreach (var property in obj)
+                FlattenDepthInto(result, property.Value, depth);
+            return result;
+        }
+        throw new JqRuntimeException($"cannot iterate over {TypeName(input)}");
+    }
+
+    private void FlattenDepthInto(JsonArray result, JsonNode? node, JsonNode? depth)
+    {
+        // Explicit stack like the numeric path; the decremented depth is
+        // computed once per nested array, matching the single $x - 1 argument
+        // of each recursive reference call.
+        var pending = new List<(JsonNode? Node, JsonNode? Depth)> { (node, depth) };
+        while (pending.Count > 0)
+        {
+            var (current, level) = pending[pending.Count - 1];
+            pending.RemoveAt(pending.Count - 1);
+            if (current is JsonArray nested)
+            {
+                JsonNode? next = Subtract(level, JsonValue.Create(1));
+                for (int index = nested.Count - 1; index >= 0; index--)
+                    pending.Add((nested[index], next));
+                continue;
+            }
+            budget.ChargeNode();
+            result.Add(Clone(current));
+        }
+    }
+
     internal JsonArray SortArray(JsonNode? input)
     {
         if (input is not JsonArray arr)
