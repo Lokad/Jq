@@ -240,6 +240,8 @@ public sealed partial class JqTests
         """def f: if . == 1 then 1 else . * (. - 1 | f) end; 5 | f""",
         """trim, ltrim, rtrim""",
         """try trim catch ., try ltrim catch ., try rtrim catch .""",
+        """[match("a"; "gi")]""",
+        """try capture("(?<x>a)?") catch .""",
     ];
 
     private static readonly string[] FuzzAtoms =
