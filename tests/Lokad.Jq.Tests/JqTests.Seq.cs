@@ -270,6 +270,41 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SeqHostileBytesSettleOnStagedExits()
+    {
+        // Byte soup with record separators, quotes, brackets, NUL and invalid
+        // bytes exercises the resync warning paths (positions, boundary rule,
+        // fallbacks) at every chunk split without escaping staged exits.
+        byte[] alphabet = [0x1E, 0x1E, 0x0A, 0x20, 0x22, 0x5C, 0x5B, 0x5D, 0x7B, 0x7D, 0x3A, 0x2C, 0x2D, 0x2B, 0x2E, 0x30, 0x31, 0x61, 0x62, 0x65, 0x6E, 0x74, 0x72, 0x75, 0x66, 0x6C, 0x78, 0x00, 0xFF, 0xC3, 0xA9];
+        int[] chunks = [1, 2, 3, 5, 7, 1000000];
+        var rng = new Random(20261005);
+        for (int index = 0; index < 200; index++)
+        {
+            int length = rng.Next(48);
+            byte[] stdin = new byte[length];
+            for (int i = 0; i < length; i++)
+                stdin[i] = alphabet[rng.Next(alphabet.Length)];
+            var inner = new MockFileSystem();
+            inner.SetStandardInputBytes(stdin);
+            var host = new ChunkedHost(inner, chunks[index % chunks.Length]);
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--seq", ".")));
+            int exit;
+            try
+            {
+                exit = await tool.ExecuteAsync(host, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail("Seq hostile case " + index + " escaped with " + ex.GetType().Name);
+                throw new InvalidOperationException("Unreachable seq failure.");
+            }
+            Assert.True(exit is 0 or 5, "Seq hostile case " + index + " gave exit " + exit);
+            if (exit != 0)
+                Assert.StartsWith("jq:", inner.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public async Task Jq_SeqSlurpsRecords()
     {
         var host = new MockFileSystem();
