@@ -201,6 +201,8 @@ public sealed partial class JqTests
         """try mktime catch .""",
         """[label $o | [1,2,3][] | if . > 1 then break $o else . end]""",
         """.[] | . as {a:$a} ?// {a:$a} | $a""",
+        """. as {(true):$foo} | $foo""",
+        """. as {(0):$foo} | $foo""",
         """def f: if . == 1 then 1 else . * (. - 1 | f) end; 5 | f""",
     ];
 
