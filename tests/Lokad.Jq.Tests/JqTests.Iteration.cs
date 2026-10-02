@@ -120,6 +120,8 @@ public sealed partial class JqTests
     [InlineData("try first(error(\"x\")) catch .", "\"x\"\n")]
     [InlineData("try last(error(\"x\")) catch .", "\"x\"\n")]
     [InlineData("try nth(0; error(\"x\")) catch .", "\"x\"\n")]
+    [InlineData("try last(1, error(\"foo\")) catch .", "\"foo\"\n")]
+    [InlineData("try nth(5; 1, error(\"bar\")) catch .", "\"bar\"\n")]
     [InlineData("try [limit(2; error(\"x\"))] catch .", "\"x\"\n")]
     [InlineData("try [skip(1; error(\"x\"))] catch .", "\"x\"\n")]
     [InlineData("isempty(empty)", "true\n")]
