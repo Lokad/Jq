@@ -222,6 +222,7 @@ public sealed partial class JqTests
         """["2015 09 4"] | .[] | strptime("%Y %U %w") | mktime""",
         """["2015 064"] | .[] | strptime("%Y %j") | mktime""",
         """try error(0) // 1""",
+        """try error catch .""",
         """[label $o | [1,2,3][] | if . > 1 then break $o else . end]""",
         """.[] | . as {a:$a} ?// {a:$a} | $a""",
         """. as {(true):$foo} | $foo""",
