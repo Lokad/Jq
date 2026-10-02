@@ -18,6 +18,10 @@ public sealed partial class JqTests
     [InlineData("\"\"", "trim", "\"\"\n")]
     [InlineData("\"--hello--\"", "trimstr(\"--\")", "\"hello\"\n")]
     [InlineData("\"hello\"", "startswith(\"he\")", "true\n")]
+    [InlineData("\"abc\"", "startswith(\"abcd\")", "false\n")]
+    [InlineData("\"abc\"", "endswith(\"abcd\")", "false\n")]
+    [InlineData("\"abc\"", "ltrimstr(\"abcd\")", "\"abc\"\n")]
+    [InlineData("\"abc\"", "rtrimstr(\"abcd\")", "\"abc\"\n")]
     [InlineData("\"hi\"", "try ltrimstr(1) catch \"x\", try rtrimstr(1) catch \"x\" | \"ok\"", "\"ok\"\n\"ok\"\n")]
     [InlineData("[\" \\n\\t\\r\\f\\u000b\", \"\",\"  \", \"a\", \" a \", \"abc\", \"  abc  \", \"  abc\", \"abc  \"]", "map(trim), map(ltrim), map(rtrim)", "[\n  \"\",\n  \"\",\n  \"\",\n  \"a\",\n  \"a\",\n  \"abc\",\n  \"abc\",\n  \"abc\",\n  \"abc\"\n]\n[\n  \"\",\n  \"\",\n  \"\",\n  \"a\",\n  \"a \",\n  \"abc\",\n  \"abc  \",\n  \"abc\",\n  \"abc  \"\n]\n[\n  \"\",\n  \"\",\n  \"\",\n  \"a\",\n  \" a\",\n  \"abc\",\n  \"  abc\",\n  \"  abc\",\n  \"abc\"\n]\n")]
     [InlineData("123", "try trim catch ., try ltrim catch ., try rtrim catch .", "\"trim input must be a string\"\n\"trim input must be a string\"\n\"trim input must be a string\"\n")]
@@ -128,6 +132,7 @@ public sealed partial class JqTests
     [InlineData("[\"1\", \"2a\", \"3\", \" 4\", \"5 \", \"6.7\", \".89\", \"-876\", \"+5.43\", 21]", ".[] |= try tonumber", "[\n  1,\n  3,\n  6.7,\n  0.89,\n  -876,\n  5.43,\n  21\n]\n")]
     [InlineData("[null, 0, \"tru\", \"truee\", \"fals\", \"falsee\", [], {}]", "[.[] | try toboolean catch .]", "[\n  \"null (null) cannot be parsed as a boolean\",\n  \"number (0) cannot be parsed as a boolean\",\n  \"string (\\\"tru\\\") cannot be parsed as a boolean\",\n  \"string (\\\"truee\\\") cannot be parsed as a boolean\",\n  \"string (\\\"fals\\\") cannot be parsed as a boolean\",\n  \"string (\\\"falsee\\\") cannot be parsed as a boolean\",\n  \"array ([]) cannot be parsed as a boolean\",\n  \"object ({}) cannot be parsed as a boolean\"\n]\n")]
     [InlineData("\"é🚀\"", "utf8bytelength", "6\n")]
+    [InlineData("\"\"", "utf8bytelength", "0\n")]
     [InlineData("1", "try utf8bytelength catch .", "\"number (1) only strings have UTF-8 byte length\"\n")]
     public async Task Jq_Conversions(string input, string filter, string expected)
     {
@@ -189,6 +194,7 @@ public sealed partial class JqTests
     [InlineData("\"abc\"", "split(\"\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     [InlineData("\"a🚀b\"", "split(\"\")", "[\n  \"a\",\n  \"\\uD83D\\uDE80\",\n  \"b\"\n]\n")]
     [InlineData("\"hello\"", "explode", "[\n  104,\n  101,\n  108,\n  108,\n  111\n]\n")]
+    [InlineData("\"\"", "explode", "[]\n")]
     [InlineData("\"a\\u0000b\"", "explode", "[\n  97,\n  0,\n  98\n]\n")]
     [InlineData("\"bca\"", "explode | sort | implode", "\"abc\"\n")]
     [InlineData("\"bca\"", "explode | unique | implode", "\"abc\"\n")]
