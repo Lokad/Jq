@@ -561,8 +561,11 @@ internal static class JqPathDeletes
     private sealed record Group(IReadOnlyList<JqValueSegment> Path, int Start, int End);
 
     // Sorted grouped deletion: whole keys drop at once (so array indices
-    // never shift mid-run), deeper paths recurse. Missing containers skip;
-    // mistyped primitives raise ordinary read errors.
+    // never shift mid-run), deeper paths recurse through the shared read
+    // step. Missing containers skip; mistyped reads fail staged like the
+    // reference get, and terminal removals on scalars fail staged like the
+    // reference dels. NaN segments flow through: they read null (skipped)
+    // under arrays and null, and fail staged everywhere else.
     internal static JsonNode? DeletePaths(JsonNode? root, IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(paths);
@@ -581,12 +584,7 @@ internal static class JqPathDeletes
         {
             if (path.Count == 0)
                 return null;
-            bool usable = true;
-            foreach (var segment in path)
-                if (segment is IndexSegment index && index.IsNaN)
-                    usable = false;
-            if (usable)
-                effective.Add(path);
+            effective.Add(path);
         }
         if (effective.Count == 0)
             return root;
@@ -763,11 +761,20 @@ internal static class JqPathDeletes
                         throw new JqException("expected a number for indexing an array but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
                     throw new JqException("expected a string for object key but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
                 }
+                if (frame.Node is JsonObject && key is not KeySegment)
+                {
+                    // Like the reference dels, only string keys delete from
+                    // objects; numbers, slices, and fractions fail staged.
+                    // NaN renders as null like the reference printer, since
+                    // raw NaN values cannot serialize to JSON.
+                    string raw = key is IndexSegment nanIndex && nanIndex.IsNaN ? "null" : (key.ToJson()?.ToJsonString() ?? "null");
+                    throw new JqException("expected a string for object key but got: " + raw);
+                }
                 frame.Removals.Add(key);
                 frame.First = last;
                 continue;
             }
-            if (TryGetChild(frame.Node, key, out JsonNode? child, out bool missing))
+            if (TryGetChild(frame.Node, key, out JsonNode? child, out bool missing, context))
             {
                 if (!missing && child is not null)
                 {
@@ -784,50 +791,27 @@ internal static class JqPathDeletes
         frame.Result = Rebuild(frame.Node, frame.Replacements, frame.Removals, context);
         return true;
     }
-    private static bool TryGetChild(JsonNode? node, JqValueSegment key, out JsonNode? child, out bool missing)
+    private static bool TryGetChild(JsonNode? node, JqValueSegment key, out JsonNode? child, out bool missing, JqContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
         child = null;
-        if (key is FractionalSegment fractional)
-            key = new IndexSegment(JqPaths.TruncateIndex(fractional.Value), false);
         missing = true;
-        switch (key)
+        if (key is InvalidSegment && node is JsonArray)
         {
-            case KeySegment name:
-                if (node is JsonObject obj)
-                {
-                    if (obj.TryGetPropertyValue(name.Key, out JsonNode? existing))
-                    {
-                        child = existing;
-                        missing = false;
-                    }
-                    return true;
-                }
-                if (node is null || node is JsonArray)
-                    return node is null;
-                throw new JqRuntimeException($"cannot index {JqRuntime.TypeName(node)} with string \"{name.Key}\"");
-            case IndexSegment index:
-                if (node is JsonArray arr)
-                {
-                    long resolved = index.Index < 0 ? arr.Count + index.Index : index.Index;
-                    if (resolved >= 0 && resolved < arr.Count)
-                    {
-                        child = arr[(int)resolved];
-                        missing = false;
-                    }
-                    return true;
-                }
-                if (node is null || node is JsonObject)
-                    return node is null;
-                throw new JqRuntimeException($"cannot index {JqRuntime.TypeName(node)}");
-            case SliceSegment:
-                return node is null;
-            default:
-                if (node is null)
-                    return false;
-                if (node is JsonArray)
-                    throw new JqException("expected a number for indexing an array but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
-                throw new JqException("expected a string for object key but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
+            // Like the reference set, array keys cannot address into arrays
+            // for deletion: fail staged instead of searching subsequences.
+            throw new JqException("expected a number for indexing an array but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
         }
+        // Slice-on-array groups never reach here (the frame expands them
+        // first). Every other deeper read shares the reference get step, so
+        // kind mismatches fail staged, substrings recurse, and missing or
+        // NaN reads skip like the reference nulls.
+        JsonNode? read = JqPathReads.GetPath(node, new[] { key }, context);
+        if (read is null)
+            return true;
+        child = read;
+        missing = false;
+        return true;
     }
 
     private static JsonNode? Rebuild(JsonNode? node, List<(JqValueSegment Key, JsonNode? Value)> replacements, List<JqValueSegment> removals, JqContext context)
@@ -899,6 +883,12 @@ internal static class JqPathDeletes
                 rebuilt.Add(replaced.TryGetValue(position, out JsonNode? next) ? next : arr[position]?.DeepClone());
             }
             return rebuilt;
+        }
+        if (node is not null && removals.Count != 0)
+        {
+            // Like the reference dels, deleting fields from a scalar fails
+            // staged; null roots no-op like the reference null branch.
+            throw new JqException("Cannot delete fields from " + JqRuntime.TypeName(node));
         }
         return node;
     }

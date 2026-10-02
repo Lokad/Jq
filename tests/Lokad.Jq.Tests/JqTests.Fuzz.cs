@@ -602,6 +602,8 @@ public sealed partial class JqTests
         """pick(empty)""",
         """del(empty)""",
         """delpaths([[nan]])""",
+        """delpaths([[{start:0,end:1}]])""",
+        """delpaths([[0,"a"]])""",
     ];
 
     [Fact]
