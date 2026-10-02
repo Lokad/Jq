@@ -884,6 +884,16 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                     // contiguous subsequence positions instead of indexing.
                     yield return context.Runtime.Indices(value, pattern);
                 }
+                else if (key is JsonObject && (value is JsonArray || TryGetString(value, out _)))
+                {
+                    // Like the reference object-key get, slice objects on
+                    // arrays and strings read bounds from their fields.
+                    JqFilter held = new LiteralFilter(value);
+                    JqFilter lower = new IndexFilter(new IdentityFilter(), new LiteralFilter(JsonValue.Create("start")), false);
+                    JqFilter upper = new IndexFilter(new IdentityFilter(), new LiteralFilter(JsonValue.Create("end")), false);
+                    foreach (JsonNode? sliced in new SliceFilter(held, lower, upper, optional).Evaluate(key, context, environment))
+                        yield return sliced;
+                }
                 else if (value is JsonObject obj && TryGetString(key, out var name))
                 {
                     yield return context.Runtime.Clone(obj.TryGetPropertyValue(name, out var child) ? child : null);
