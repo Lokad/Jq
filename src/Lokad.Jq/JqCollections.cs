@@ -39,11 +39,6 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (input is null)
-        {
-            yield return null;
-            yield break;
-        }
         if (input is JsonArray array)
         {
             var result = new JsonArray();
