@@ -925,21 +925,12 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
             {
                 JqValueSegment segment = PathSegmentFor(key);
                 RequireTracked(pair, segment, context);
-                if (segment is KeySegment name && pair.Value is JsonObject obj)
-                    yield return new JqValuePath(Extend(pair.Segments, segment), obj.TryGetPropertyValue(name.Key, out JsonNode? child) ? child : null, true);
-                else if (segment is IndexSegment number && pair.Value is JsonArray arr && !number.IsNaN)
-                {
-                    long resolved = number.Index < 0 ? arr.Count + number.Index : number.Index;
-                    yield return new JqValuePath(Extend(pair.Segments, segment), resolved >= 0 && resolved < arr.Count ? arr[(int)resolved] : null, true);
-                }
-                else if (segment is IndexSegment nan && nan.IsNaN && pair.Value is JsonArray)
-                    yield return new JqValuePath(Extend(pair.Segments, segment), null, true);
-                else if (pair.Value == null)
-                    yield return new JqValuePath(Extend(pair.Segments, segment), null, true);
-                else if (segment is KeySegment field)
-                    throw new JqRuntimeException($"cannot index {TypeName(pair.Value)} with string \"{field.Key}\"");
-                else
-                    throw new JqRuntimeException($"cannot index {TypeName(pair.Value)}");
+                // Like the reference INDEX step, the read itself follows the
+                // value-mode get: exotic keys append as-is while get failures
+                // propagate (suppressed under ?) instead of branching here.
+                JqFilter read = new IndexFilter(new LiteralFilter(pair.Value), new LiteralFilter(key), optional);
+                foreach (JsonNode? got in read.Evaluate(pair.Value, context, environment))
+                    yield return new JqValuePath(Extend(pair.Segments, segment), got, true);
             }
     }
 
