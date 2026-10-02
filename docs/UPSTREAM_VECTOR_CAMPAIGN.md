@@ -1,6 +1,7 @@
 # Upstream value-vector campaign
 
-Scope: the value-output vectors in `tests/jq.test` and `tests/man.test` of
+Scope: the value-output vectors in `tests/jq.test`, `tests/man.test`,
+`tests/onig.test`, and `tests/manonig.test` of
 the jq 1.8.2 inspection checkout (see `docs/PROVENANCE.md`). Each vector is
 a (program, single JSON input, expected JSON values) triple. This campaign
 executes every triple through the public library API and compares parsed
@@ -17,7 +18,11 @@ decoded value, so encoder escape-case differences cannot false-positive.
 ## Latest sweep
 
 - Triples: 734 (`jq.test` plus `man.test`); 28 host-dependent skips, 19 `%FAIL` blocks set aside.
+- Regex triples: 66 (`onig.test` plus `manonig.test`); no skips.
 - Result: 690 pass, 44 miss, 0 escapes, 0 timeouts.
+- Regex result: 66 pass, 0 miss, 0 escapes, 0 timeouts, covering zero-width
+  global matches, combining codepoints, named and non-participating
+  captures, sub/gsub replacements, and the `g`/`gi`/`ig`/`gn`/`ix` flags.
 - 5 additional vectors produce byte-identical values with a trailing error
   (binding-alternation all-fail and error-after-output cases); the upstream
   runner ignores trailing errors the same way, so these match.
