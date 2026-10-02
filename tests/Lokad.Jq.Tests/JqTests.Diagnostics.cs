@@ -109,6 +109,8 @@ public sealed partial class JqTests
     [InlineData("[")]
     [InlineData("if true then .")]
     [InlineData("{a:}")]
+    [InlineData("[1,2] | . as [true, $x] | $x")]
+    [InlineData("[1,2] | . as [1, $x] | $x")]
     public async Task Jq_MalformedFilterIsCompileError(string filter)
     {
         var host = new MockFileSystem();

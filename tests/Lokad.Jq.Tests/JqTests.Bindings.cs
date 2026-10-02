@@ -56,6 +56,12 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", ". as {(\"a\"): $x} | $x", "1\n")]
     [InlineData("{\"a\":1,\"b\":2}", ". as {(\"a\",\"b\"):$x} | $x", "1\n2\n")]
     [InlineData("{\"a\":1}", ". as {b:$x} | $x", "null\n")]
+    [InlineData("{\"a\":null}", ". as {a: {b: $x}} | $x", "null\n")]
+    [InlineData("{\"a\":[1]}", ". as {a: [$x, $y]} | [$x,$y]", "[\n  1,\n  null\n]\n")]
+    [InlineData("{\"a\":1}", ". as {$x} | $x", "null\n")]
+    [InlineData("[1,2]", ". as [$x, $y] | [$x,$y]", "[\n  1,\n  2\n]\n")]
+    [InlineData("[1]", ". as [$x, $y] | [$x,$y]", "[\n  1,\n  null\n]\n")]
+    [InlineData("{\"a\":{\"b\":1}}", ". as {a: {b: $x}} | $x", "1\n")]
     public async Task Jq_DestructuringBindsMissingAsNull(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
