@@ -144,6 +144,10 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3]", "path(.[1:3]) as $p | getpath($p)", "[\n  1,\n  2\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[1.5:3.5]) as $p | getpath($p)", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("{\"a\": {\"b\": 1, \"c\": 2}}", "delpaths([[\"a\"], [\"a\", \"b\"]])", "{}\n")]
+    // Missing deep paths delete nothing while invalid segments fail staged, so unchanged subtrees never resurface attached.
+    [InlineData("{\"a\":{\"b\":1},\"c\":2}", "delpaths([[\"a\",\"x\",\"y\"]])", "{\n  \"a\": {\n    \"b\": 1\n  },\n  \"c\": 2\n}\n")]
+    [InlineData("{\"a\":{\"b\":1}}", "try delpaths([[\"a\",null]]) catch .", "\"expected a string for object key but got: null\"\n")]
+    [InlineData("[1,2]", "try delpaths([[null]]) catch .", "\"expected a number for indexing an array but got: null\"\n")]
     [InlineData("{\"a\": {\"b\": 1, \"c\": 2}}", "delpaths([[\"a\", \"b\"], [\"a\"]])", "{}\n")]
     [InlineData("[0, 1, 2, 3]", "delpaths([[{\"start\": 1, \"end\": 3}]])", "[\n  0,\n  3\n]\n")]
     [InlineData("{\"a\": 1}", "delpaths([])", "{\n  \"a\": 1\n}\n")]

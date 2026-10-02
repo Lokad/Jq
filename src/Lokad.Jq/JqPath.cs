@@ -599,7 +599,15 @@ internal static class JqPathDeletes
             JqValueSegment? slot = frame.Slot;
             if (slot is null)
                 throw new InvalidOperationException("Grouped deletion lost its result slot.");
-            stack.Peek().Replacements.Add((slot, frame.Result));
+            JsonNode? result = frame.Result;
+            if (result is not null && ReferenceEquals(result, frame.Node))
+            {
+                // An unchanged subtree keeps its parent; detach the copy the
+                // rebuilt parent adopts so missing or invalid paths that
+                // delete nothing still settle staged instead of escaping.
+                result = result.DeepClone();
+            }
+            stack.Peek().Replacements.Add((slot, result));
         }
         throw new InvalidOperationException("Grouped deletion left no result.");
     }
@@ -661,6 +669,20 @@ internal static class JqPathDeletes
                     whole = true;
             if (whole)
             {
+                if (key is not KeySegment and not IndexSegment and not SliceSegment)
+                {
+                    // Invalid segments (e.g. null) cannot delete: mirror
+                    // TryGetChild, skipping under null nodes and failing
+                    // staged otherwise like the reference nested descent.
+                    if (frame.Node is null)
+                    {
+                        frame.First = last;
+                        continue;
+                    }
+                    if (frame.Node is JsonArray)
+                        throw new JqException("expected a number for indexing an array but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
+                    throw new JqException("expected a string for object key but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
+                }
                 frame.Removals.Add(key);
                 frame.First = last;
                 continue;
@@ -721,8 +743,8 @@ internal static class JqPathDeletes
                 if (node is null)
                     return false;
                 if (node is JsonArray)
-                    throw new JqException("expected a number for indexing an array but got: " + key.ToJson()?.ToJsonString());
-                throw new JqException("expected a string for object key but got: " + key.ToJson()?.ToJsonString());
+                    throw new JqException("expected a number for indexing an array but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
+                throw new JqException("expected a string for object key but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
         }
     }
 
