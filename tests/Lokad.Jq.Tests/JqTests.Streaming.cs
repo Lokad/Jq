@@ -300,6 +300,31 @@ public sealed partial class JqTests
         Assert.Empty(stderr);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(5)]
+    [InlineData(7)]
+    public async Task Jq_StreamReconstructionMatchesChunks(int chunk)
+    {
+        // The shell suite agrees plain and --stream fromstream(inputs) output
+        // over every chunk split; reconstruction matches the document itself
+        // at every read size.
+        const string doc = "{\"a\":[1,{\"b\":[true,null]}],\"c\":\"x\"}";
+        const string expected = "{\"a\":[1,{\"b\":[true,null]}],\"c\":\"x\"}\n";
+        var plainInner = new MockFileSystem();
+        plainInner.SetStandardInput(doc);
+        var (plainExit, plainOut, plainErr) = await RunStreamAsync(new ChunkedHost(plainInner, chunk), "-c", ".");
+        Assert.True(plainExit == 0, plainErr);
+        var streamInner = new MockFileSystem();
+        streamInner.SetStandardInput(doc);
+        var (streamExit, streamOut, streamErr) = await RunStreamAsync(new ChunkedHost(streamInner, chunk), "-n", "--stream", "-c", "fromstream(inputs)");
+        Assert.True(streamExit == 0, streamErr);
+        Assert.Equal(expected, plainOut);
+        Assert.Equal(expected, streamOut);
+    }
+
     [Fact]
     public async Task Jq_StreamMatchesPathRoundtrip()
     {
