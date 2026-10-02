@@ -534,6 +534,8 @@ public sealed partial class JqTests
         """path(1 as $x | $x)""",
         """path((.a as $x | .b))""",
         """(.a as $x | $x) = 1""",
+        """(.a as $x | .b) = 1""",
+        """(.. | select(type == "object" and has("b")) | .b) |= 0""",
         """path(try .a[])""",
         """try del(.a[]) catch .""",
         """.a[]?""",
