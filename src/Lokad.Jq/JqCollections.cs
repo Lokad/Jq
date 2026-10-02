@@ -300,7 +300,9 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
             // diagnostic while numeric strings still coerce.
             if (!JqRuntime.TryCountLevel(count, out double level))
                 throw new JqException("Range bounds must be numeric");
-            int times = (int)level;
+            // Like the reference [range(n)|$dot] prelude, the repetition count
+            // is the number of range outputs: ceiling for positive fractionals.
+            int times = level <= 0 || double.IsNaN(level) ? 0 : (int)Math.Ceiling(level);
             var matrix = new List<JsonNode?>();
             for (int index = 0; index < times; index++)
             {

@@ -182,6 +182,10 @@ public sealed partial class JqTests
     [InlineData("[1, 2]", "combinations(2)", "[\n  1,\n  1\n]\n[\n  1,\n  2\n]\n[\n  2,\n  1\n]\n[\n  2,\n  2\n]\n")]
     [InlineData("[1, 2]", "combinations(0)", "[]\n")]
     [InlineData("[1, 2]", "combinations(-1)", "[]\n")]
+    [InlineData("[1, 2]", "combinations(0.5)", "[\n  1\n]\n[\n  2\n]\n")]
+    [InlineData("[1, 2]", "combinations(1.5)", "[\n  1,\n  1\n]\n[\n  1,\n  2\n]\n[\n  2,\n  1\n]\n[\n  2,\n  2\n]\n")]
+    [InlineData("[1, 2]", "combinations(2.5) | length", "3\n3\n3\n3\n3\n3\n3\n3\n")]
+    [InlineData("[1, 2]", "combinations(nan)", "[]\n")]
     // Numeric-string counts coerce like other count positions; other kinds fail with the reference range diagnostic.
     [InlineData("[[1,2],[3,4]]", "combinations(\"2\")", "[\n  [\n    1,\n    2\n  ],\n  [\n    1,\n    2\n  ]\n]\n[\n  [\n    1,\n    2\n  ],\n  [\n    3,\n    4\n  ]\n]\n[\n  [\n    3,\n    4\n  ],\n  [\n    1,\n    2\n  ]\n]\n[\n  [\n    3,\n    4\n  ],\n  [\n    3,\n    4\n  ]\n]\n")]
     [InlineData("[]", "combinations", "[]\n")]
