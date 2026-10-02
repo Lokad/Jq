@@ -155,6 +155,11 @@ public sealed partial class JqTests
     [InlineData("[range(0;1;0.25)]", "[\n  0,\n  0.25,\n  0.5,\n  0.75\n]\n")]
     [InlineData("[range(4)]", "[\n  0,\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[range(2; 4)]", "[\n  2,\n  3\n]\n")]
+    [InlineData("[range(0.5)]", "[\n  0\n]\n")]
+    [InlineData("[range(1.5)]", "[\n  0,\n  1\n]\n")]
+    [InlineData("[range(2.5)]", "[\n  0,\n  1,\n  2\n]\n")]
+    [InlineData("[range(0)]", "[]\n")]
+    [InlineData("[range(-1)]", "[]\n")]
     [InlineData("range(nan)", "")]
     // NaN range bounds terminate empty here. The reference range/2 loop keeps
     // iterating while !(current >= end), which never trips on NaN, so it hangs
