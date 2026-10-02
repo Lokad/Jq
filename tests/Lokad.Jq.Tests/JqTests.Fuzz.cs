@@ -4,7 +4,7 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
-    private const int FuzzSeed = 20260930;
+    private const int FuzzSeed = 20261016;
     private const int FuzzCases = 200;
 
     private static readonly string[] FuzzFilters =
@@ -428,7 +428,7 @@ public sealed partial class JqTests
     // Flag-dimension crash-freedom: framing and input modes compose with
     // every fuzz filter over hostile values. A separate seed keeps the
     // base campaign reproducible; CLI failures join the staged set.
-    private const int CliFuzzSeed = 20261001;
+    private const int CliFuzzSeed = 20261017;
     private const int CliFuzzCases = 120;
 
     private static readonly string[][] CliFlagSets =
@@ -489,7 +489,7 @@ public sealed partial class JqTests
     }
 
     // Multi-input crash-freedom.
-    private const int MultiFuzzSeed = 20261002;
+    private const int MultiFuzzSeed = 20261018;
     private const int MultiFuzzCases = 100;
     private static readonly string[] MultiFuzzFilters =
     [
@@ -556,7 +556,7 @@ public sealed partial class JqTests
     // and update targets over hostile values must settle on staged exits.
     // Filters stay fixed and valid; paths that resolve nowhere fail with
     // catchable diagnostics instead of escaping.
-    private const int PathFuzzSeed = 20261003;
+    private const int PathFuzzSeed = 20261019;
     private const int PathFuzzCases = 120;
 
     private static readonly string[] PathFuzzFilters =
@@ -596,6 +596,12 @@ public sealed partial class JqTests
         """delpaths([["a",null]])""",
         """delpaths([[null]])""",
         """delpaths([["a","x"],["a","y"]])""",
+        // NaN and empty path arguments: invalid-segment failures stay staged, empties detach.
+        """pick(nan)""",
+        """del(nan)""",
+        """pick(empty)""",
+        """del(empty)""",
+        """delpaths([[nan]])""",
     ];
 
     [Fact]
