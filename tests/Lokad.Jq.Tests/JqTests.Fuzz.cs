@@ -158,6 +158,8 @@ public sealed partial class JqTests
         """@base64d""",
         """foreach .[] as $x (0, 1; . + $x)""",
         """sort_by(.a)""",
+        """[nan,nan] | unique""",
+        """[2,nan,1] | sort""",
         """debug""",
         """$ARGS""",
         """$ENV""",
