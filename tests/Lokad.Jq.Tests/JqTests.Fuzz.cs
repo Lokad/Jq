@@ -25,6 +25,7 @@ public sealed partial class JqTests
         """select(type == "number")""",
         """if . then 1 else 2 end""",
         """try . catch 0""",
+        """try .a // 1""",
         """type, length""",
         """[10 > 0, 10 > 10, 10 > 20, 10 < 0, 10 < 10, 10 < 20]""",
         """.[] //= .[0]""",

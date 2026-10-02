@@ -21,6 +21,9 @@ public sealed partial class JqTests
     // A catchless body stops before `//` per the reference reduce, so the
     // fallback runs when the suppressed body emits nothing.
     [InlineData("null", "try error(0) // 1", "1\n")]
+    [InlineData("null", "try false // 2", "2\n")]
+    [InlineData("null", "try empty // 3", "3\n")]
+    [InlineData("null", "try try error // 1 // 2", "1\n")]
     [InlineData("null", "try to_entries catch .", "\"null (null) has no keys\"\n")]
     [InlineData("null", "try error(\"\\($__loc__)\") catch .", "\"{\\\"file\\\":\\\"<top-level>\\\",\\\"line\\\":1}\"\n")]
     [InlineData("null", "1 + try 2 catch 3 + 4", "7\n")]
