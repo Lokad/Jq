@@ -53,6 +53,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("null | test(\"x\")", "null (null) cannot be matched, as it is not a string")]
     [InlineData("\"x\" | test(1)", "number not a string or array")]
+    [InlineData("\"x\" | test(null)", "null not a string or array")]
     [InlineData("\"x\" | test(\"x\";1)", "number (1) is not a string")]
     [InlineData("\"x\" | test([\"x\"];null)", "array ([\"x\"]) is not a string")]
     [InlineData("\"x\" | test(\"[\")", "invalid regex")]

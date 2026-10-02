@@ -61,6 +61,8 @@ public sealed partial class JqTests
     [InlineData("5 | capture(\"x\")", "number (5) cannot be matched, as it is not a string")]
     [InlineData("\"x\" | capture(5)", "number not a string or array")]
     [InlineData("\"x\" | match(5)", "number not a string or array")]
+    [InlineData("\"x\" | match(null)", "null not a string or array")]
+    [InlineData("\"x\" | capture(null)", "null not a string or array")]
     public async Task Jq_MatchCaptureFailures(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
