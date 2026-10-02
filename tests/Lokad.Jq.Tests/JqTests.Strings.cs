@@ -220,6 +220,7 @@ public sealed partial class JqTests
     [InlineData("1", "try split(\",\") catch .", "\"split input and separator must be strings\"\n")]
     [InlineData("\"a\"", "try split(1) catch .", "\"split input and separator must be strings\"\n")]
     [InlineData("5", "try explode catch .", "\"explode input must be a string\"\n")]
+    [InlineData("[\"a\"]", "join(1)", "\"a\"\n")]
     public async Task Jq_SplitJoinExplode(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -236,6 +237,8 @@ public sealed partial class JqTests
     [InlineData("null", "split(\",\")", "split input and separator must be strings")]
     [InlineData("null", "explode", "explode input must be a string")]
     [InlineData("\"a\"", "split(1)", "split input and separator must be strings")]
+    [InlineData("\"a,b\"", "split(null)", "split input and separator must be strings")]
+    [InlineData("[\"a\",\"b\"]", "join(1)", "string (\"a\") and number (1) cannot be added")]
     [InlineData("5", "join(\",\")", "cannot iterate over number")]
     [InlineData("\"a\"", "join(\",\")", "cannot iterate over string")]
     [InlineData("{\"a\":1}", "join(\",\")", "cannot iterate over object")]
