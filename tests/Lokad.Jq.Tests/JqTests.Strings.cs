@@ -184,6 +184,8 @@ public sealed partial class JqTests
 [InlineData("\"a, b,c,d, e, \"", "split(\", \")", "[\n  \"a\",\n  \"b,c,d\",\n  \"e\",\n  \"\"\n]\n")]
     [InlineData("\"\"", "split(\",\")", "[]\n")]
     [InlineData("\"a,,b\"", "split(\",\")", "[\n  \"a\",\n  \"\",\n  \"b\"\n]\n")]
+    [InlineData("\"axb\"", "split(\".\")", "[\n  \"axb\"\n]\n")]
+    [InlineData("\"aXb\"", "split(\"X|Y\")", "[\n  \"aXb\"\n]\n")]
     [InlineData("\"abc\"", "split(\"\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     [InlineData("\"a🚀b\"", "split(\"\")", "[\n  \"a\",\n  \"\\uD83D\\uDE80\",\n  \"b\"\n]\n")]
     [InlineData("\"hello\"", "explode", "[\n  104,\n  101,\n  108,\n  108,\n  111\n]\n")]
