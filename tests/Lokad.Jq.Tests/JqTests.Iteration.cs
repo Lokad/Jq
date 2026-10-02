@@ -178,6 +178,11 @@ public sealed partial class JqTests
     [InlineData("[range(5; nan)]", "[]\n")]
     [InlineData("[range(nan; nan)]", "[]\n")]
     [InlineData("[range(nan; nan; nan)]", "[]\n")]
+    [InlineData("[range(\"3\")]", "[\n  0,\n  1,\n  2\n]\n")]
+    [InlineData("try range(\"a\") catch .", "\"Range bounds must be numeric\"\n")]
+    [InlineData("[limit(3; while(1; .+1))]", "[\n  null,\n  1,\n  2\n]\n")]
+    [InlineData("until(1; .+1)", "null\n")]
+    [InlineData("[first(1,2), last(1,2)]", "[\n  1,\n  2\n]\n")]
     public async Task Jq_IterationEdgeCases(string filter, string expected)
     {
         var host = new MockFileSystem();
