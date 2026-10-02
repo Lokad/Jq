@@ -29,6 +29,8 @@ public sealed partial class JqTests
         """map(.)""",
         """map_values(.)""",
         """add""",
+        """any(true, error; .)""",
+        """all(false, error; .)""",
         """sort""",
         """reverse""",
         """join(",")""",
