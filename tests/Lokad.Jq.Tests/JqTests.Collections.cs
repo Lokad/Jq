@@ -139,6 +139,8 @@ public sealed partial class JqTests
     [InlineData("\"a\"", ".a", "cannot index string with string \"a\"")]
     [InlineData("true", ".a", "cannot index boolean with string \"a\"")]
     [InlineData("[1]", ".a", "cannot index array with string \"a\"")]
+    [InlineData("[1,2]", "pick(nan)", "Invalid path expression with result null")]
+    [InlineData("[1,2]", "del(nan)", "Invalid path expression with result null")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
