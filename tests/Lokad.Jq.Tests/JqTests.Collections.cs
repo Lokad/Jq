@@ -494,6 +494,11 @@ public sealed partial class JqTests
     [InlineData("[]", "[min, max, min_by(.), max_by(.)]", "[\n  null,\n  null,\n  null,\n  null\n]\n")]
     // Like the reference minmax_by fold, ties keep the first minimum and the last maximum.
     [InlineData("[0,-0.0]", "[min,max]", "[\n  0,\n  -0\n]\n")]
+    [InlineData("0", "[1,\"a\",true,null] | [min,max]", "[\n  null,\n  \"a\"\n]\n")]
+    [InlineData("0", "[1,\"a\",true,null] | sort", "[\n  null,\n  true,\n  1,\n  \"a\"\n]\n")]
+    [InlineData("0", "[2,nan,1] | [min,max]", "[\n  null,\n  2\n]\n")]
+    [InlineData("0", "[\"b\",\"a\",null,true,1] | sort", "[\n  null,\n  true,\n  1,\n  \"a\",\n  \"b\"\n]\n")]
+    [InlineData("0", "[[2],[1],{\"a\":1},\"s\",1,true,null] | sort | map(type)", "[\n  \"null\",\n  \"boolean\",\n  \"number\",\n  \"string\",\n  \"array\",\n  \"array\",\n  \"object\"\n]\n")]
     [InlineData("[{\"a\":1,\"i\":0},{\"a\":2,\"i\":0}]", "[min_by(.i),max_by(.i)]", "[\n  {\n    \"a\": 1,\n    \"i\": 0\n  },\n  {\n    \"a\": 2,\n    \"i\": 0\n  }\n]\n")]
     [InlineData("[{\"a\": 1, \"b\": 4, \"c\": 14}, {\"a\": 4, \"b\": 1, \"c\": 3}, {\"a\": 1, \"b\": 4, \"c\": 3}, {\"a\": 0, \"b\": 2, \"c\": 43}]", "(sort_by(.b) | sort_by(.a)), sort_by(.a, .b)", "[\n  {\n    \"a\": 0,\n    \"b\": 2,\n    \"c\": 43\n  },\n  {\n    \"a\": 1,\n    \"b\": 4,\n    \"c\": 14\n  },\n  {\n    \"a\": 1,\n    \"b\": 4,\n    \"c\": 3\n  },\n  {\n    \"a\": 4,\n    \"b\": 1,\n    \"c\": 3\n  }\n]\n[\n  {\n    \"a\": 0,\n    \"b\": 2,\n    \"c\": 43\n  },\n  {\n    \"a\": 1,\n    \"b\": 4,\n    \"c\": 14\n  },\n  {\n    \"a\": 1,\n    \"b\": 4,\n    \"c\": 3\n  },\n  {\n    \"a\": 4,\n    \"b\": 1,\n    \"c\": 3\n  }\n]\n")]
     [InlineData("[{\"a\": 1, \"b\": 4, \"c\": 14}, {\"a\": 4, \"b\": 1, \"c\": 3}, {\"a\": 1, \"b\": 4, \"c\": 3}, {\"a\": 0, \"b\": 2, \"c\": 43}]", "group_by(.b)", "[\n  [\n    {\n      \"a\": 4,\n      \"b\": 1,\n      \"c\": 3\n    }\n  ],\n  [\n    {\n      \"a\": 0,\n      \"b\": 2,\n      \"c\": 43\n    }\n  ],\n  [\n    {\n      \"a\": 1,\n      \"b\": 4,\n      \"c\": 14\n    },\n    {\n      \"a\": 1,\n      \"b\": 4,\n      \"c\": 3\n    }\n  ]\n]\n")]
