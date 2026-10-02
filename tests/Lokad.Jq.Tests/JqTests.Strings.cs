@@ -60,6 +60,11 @@ public sealed partial class JqTests
     [InlineData("123", "trim", "trim input must be a string")]
     [InlineData("1", "startswith(\"1\")", "startswith() requires string inputs")]
     [InlineData("\"a\"", "endswith(1)", "endswith() requires string inputs")]
+    [InlineData("null", "startswith(\"a\")", "startswith() requires string inputs")]
+    [InlineData("null", "endswith(\"a\")", "endswith() requires string inputs")]
+    [InlineData("null", "ltrimstr(\"a\")", "startswith() requires string inputs")]
+    [InlineData("null", "rtrimstr(\"a\")", "endswith() requires string inputs")]
+    [InlineData("null", "trim", "trim input must be a string")]
     public async Task Jq_TrimAffixFailures(string input, string filter, string diagnostic)
     {
         var host = new MockFileSystem();
@@ -151,6 +156,7 @@ public sealed partial class JqTests
     [InlineData("\"0x10\"", "tonumber", "string (\"0x10\") cannot be parsed as a number")]
     [InlineData("\"nanx\"", "tonumber", "string (\"nanx\") cannot be parsed as a number")]
     [InlineData("5", "utf8bytelength", "only strings have UTF-8 byte length")]
+    [InlineData("null", "utf8bytelength", "only strings have UTF-8 byte length")]
     [InlineData("null", "toboolean", "null (null) cannot be parsed as a boolean")]
     [InlineData("0", "toboolean", "number (0) cannot be parsed as a boolean")]
     [InlineData("\"TRUE\"", "toboolean", "string (\"TRUE\") cannot be parsed as a boolean")]
@@ -226,6 +232,8 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("1", "split(\",\")", "split input and separator must be strings")]
+    [InlineData("null", "split(\",\")", "split input and separator must be strings")]
+    [InlineData("null", "explode", "explode input must be a string")]
     [InlineData("\"a\"", "split(1)", "split input and separator must be strings")]
     [InlineData("5", "join(\",\")", "cannot iterate over number")]
     [InlineData("\"a\"", "join(\",\")", "cannot iterate over string")]
@@ -236,6 +244,20 @@ public sealed partial class JqTests
     [InlineData("123", "implode", "implode input must be an array")]
     [InlineData("[\"a\"]", "implode", "string (\"a\") can't be imploded, unicode codepoint needs to be numeric")]
     public async Task Jq_SplitJoinExplodeFailures(string input, string filter, string diagnostic)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
+        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Theory]
+    [InlineData("null", "ascii_downcase", "explode input must be a string")]
+    [InlineData("null", "ascii_upcase", "explode input must be a string")]
+    public async Task Jq_AsciiCaseFailures(string input, string filter, string diagnostic)
     {
         var host = new MockFileSystem();
         host.SetStandardInput(input);

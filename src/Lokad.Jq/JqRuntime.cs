@@ -1400,9 +1400,11 @@ internal sealed class JqRuntime(JqBudget budget)
         throw new JqRuntimeException($"cannot search {TypeName(input)}");
     }
 
-    internal string AsciiCase(string text, bool lower)
+    internal string AsciiCase(JsonNode? input, bool lower)
     {
-        ArgumentNullException.ThrowIfNull(text);
+        // Like the reference explode|map|implode definition, non-strings fail at the explode step.
+        if (!TryGetString(input, out string? text) || text is null)
+            throw new JqException("explode input must be a string");
         var builder = new StringBuilder(text.Length);
         foreach (char ch in text)
         {

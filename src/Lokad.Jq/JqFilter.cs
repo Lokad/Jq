@@ -1777,8 +1777,8 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                         break;
                     }
                 case "join": yield return context.Runtime.Join(input, Arg(0)); break;
-                case "ascii_downcase": yield return JsonValue.Create(context.Runtime.AsciiCase(String(input), true)); break;
-                case "ascii_upcase": yield return JsonValue.Create(context.Runtime.AsciiCase(String(input), false)); break;
+                case "ascii_downcase": yield return JsonValue.Create(context.Runtime.AsciiCase(input, true)); break;
+                case "ascii_upcase": yield return JsonValue.Create(context.Runtime.AsciiCase(input, false)); break;
 
                 case "fromdate":
                 case "fromdateiso8601": yield return JqTime.FromDateIso(context, input); break;
