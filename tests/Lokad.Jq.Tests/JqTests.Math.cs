@@ -160,6 +160,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" | floor", "string (\"x\") number required")]
     [InlineData("true | sqrt", "boolean (true) number required")]
     [InlineData("null | sin", "null (null) number required")]
+    [InlineData("null | fabs", "null (null) number required")]
     [InlineData("5 | pow(\"x\"; 2)", "string (\"x\") number required")]
     [InlineData("pow(2; \"x\")", "string (\"x\") number required")]
     [InlineData("null | abs", "null (null) cannot be negated")]
