@@ -54,6 +54,23 @@ unexplained semantic gap:
 - Fixed: `map(abs)` over negative zero diverged (`-0` kept instead of
   `+0`); corrected with the upstream vector pinned.
 
+## Registry reconciliation
+
+The upstream registry (C `function_list` plus `libm.h` capability names,
+bytecoded `empty`/`not`/`path`/`last`/`range`/`builtins`, and every `def`
+in `builtin.jq`) was compared name-by-name against `JqBuiltinRegistry`
+(upstream C arities count the input; local arities count filter arguments
+only). Coverage is complete: every upstream name is implemented locally
+except eight already-recorded gaps — the parser-support internals
+`_assign`, `_modify`, `_repeat`, `_until`, `_while` and the intentionally
+unexposed host-identity queries `get_search_list`, `get_prog_origin`,
+`get_jq_origin` (compatibility matrix, inventory rows). Direct calls to all
+eight fail at compile time and `builtins/0` never advertises them, locked
+by the inventory rejection and omission cases plus the exact `builtins`
+count pin. Local extras are legitimate: `_negate` is the parser-internal
+unary-minus step (likewise unadvertised) and `lgamma_r` exists on both
+sides. Re-run this comparison when the target profile moves.
+
 ## Regeneration
 
 The triple parser and the throwaway sweep probe are local scratch only:
