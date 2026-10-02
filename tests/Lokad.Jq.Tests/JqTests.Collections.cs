@@ -189,6 +189,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "{(.b,.c): 2}", "Cannot use null (null) as object key")]
     [InlineData("{\"a\":1}", ". as {(1+1):$x} | $x", "Cannot use number (2) as object key")]
     [InlineData("{\"a\":1}", ". as {([1]):$x} | $x", "Cannot use array ([1]) as object key")]
+    [InlineData("[1,2]", "transpose", "cannot iterate over number")]
+    [InlineData("[\"ab\",\"c\"]", "transpose", "cannot iterate over string")]
     [InlineData("{\"a\":1}", ". as {a: {b: $x}} | $x", "cannot index number with string \"b\"")]
     [InlineData("[1,2]", ". as [$x, [$y]] | [$x,$y]", "cannot index number with number 0")]
     [InlineData("[1]", ". as [[$x]] | $x", "cannot index number with number 0")]
@@ -269,6 +271,9 @@ public sealed partial class JqTests
     // Null rows contribute zero width like empty rows; present nulls pad.
     [InlineData("[null]", "transpose", "[]\n")]
     [InlineData("[[1],null]", "transpose", "[\n  [\n    1,\n    null\n  ]\n]\n")]
+    [InlineData("[[],[]]", "transpose", "[]\n")]
+    [InlineData("[[1,2]]", "transpose", "[\n  [\n    1\n  ],\n  [\n    2\n  ]\n]\n")]
+    [InlineData("[[1,2,3]]", "transpose", "[\n  [\n    1\n  ],\n  [\n    2\n  ],\n  [\n    3\n  ]\n]\n")]
     [InlineData("[[1, 2], [3]]", "combinations", "[\n  1,\n  3\n]\n[\n  2,\n  3\n]\n")]
     [InlineData("[1, 2]", "combinations(2)", "[\n  1,\n  1\n]\n[\n  1,\n  2\n]\n[\n  2,\n  1\n]\n[\n  2,\n  2\n]\n")]
     [InlineData("[1, 2]", "combinations(0)", "[]\n")]
