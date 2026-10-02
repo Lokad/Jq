@@ -164,6 +164,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_StreamInvalidBytesFailStaged()
+    {
+        // Invalid bytes fail staged with no output, like other
+        // malformed stream content in the neighboring cases.
+        var host = new MockFileSystem();
+        host.SetStandardInputBytes(new byte[] { 0xFF });
+        var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream", ".");
+
+        Assert.Equal(5, exit);
+        Assert.Equal("", stdout);
+        Assert.Contains("jq: parse error", stderr);
+    }
+
+    [Fact]
     public async Task Jq_StreamErrorsReportLivePathAtEof()
     {
         // Truncation at end of input reports the open-container path, not

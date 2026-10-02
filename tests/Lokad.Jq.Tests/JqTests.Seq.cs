@@ -211,6 +211,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SeqInvalidBytesResyncWithWarning()
+    {
+        // Invalid bytes resync like other malformed records: warn,
+        // skip, and keep a zero status when nothing else fails.
+        var host = new MockFileSystem();
+        host.SetStandardInputBytes(new byte[] { 0x1E, 0xFF, 0x0A });
+        var (exit, stdout, stderr) = await RunSeqAsync(host, "--seq", ".");
+
+        Assert.Equal(0, exit);
+        Assert.Equal("", stdout);
+        Assert.Contains("jq: ignoring parse error", stderr);
+    }
+
+    [Fact]
     public async Task Jq_SeqSlurpsRecords()
     {
         var host = new MockFileSystem();
