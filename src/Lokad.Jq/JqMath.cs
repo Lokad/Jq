@@ -182,7 +182,10 @@ internal static class JqMath
 
     // The reference defines abs as if . < 0 then -. else . end over the total
     // order: strings, arrays, and objects above numbers pass through, while
-    // null, booleans, and negative numbers take the negation branch.
+    // null, booleans, and negative numbers take the negation branch. The reference
+    // decimal order ranks -0 below +0, so abs(-0) negates to +0; that quirk
+    // stays local to abs (ordering keeps signed zeros equal) while the result
+    // matches the upstream vector.
     private static JsonNode? Abs(JqContext context, JsonNode? input)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -192,6 +195,8 @@ internal static class JqMath
                 return JsonValue.Create(-Number(input));
             throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") cannot be negated");
         }
+        if (TypeName(input) == "number" && Number(input) == 0.0 && double.IsNegative(Number(input)))
+            return JsonValue.Create(0.0);
         return context.Runtime.Clone(input);
     }
 
