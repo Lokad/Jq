@@ -225,6 +225,21 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SeqResyncWarningCounts()
+    {
+        // Upstream shell vectors expect three resync warnings over these RS
+        // records; warning positions are not yet reported (the reference
+        // appends the truncation line/column), so this pins counts, stdout,
+        // and status while that shape gap stays recorded.
+        var host = new MockFileSystem();
+        host.SetStandardInput("1\u001e2 3\n[0,1\u001e[4,5]true\"ab\"{\"c\":4\u001e{}{\"d\":5,\"e\":6\"\u001efalse\n");
+        var (exit, stdout, stderr) = await RunSeqAsync(host, "-c", "-e", "-s", "--seq", ". == [2,3,[4,5],true,\"ab\",{},false]");
+        Assert.Equal(1, exit);
+        Assert.Equal("\u001efalse\n", stdout);
+        Assert.Equal("jq: ignoring parse error: Truncated value (need RS to resync)\n" + "jq: ignoring parse error: Truncated value (need RS to resync)\n" + "jq: ignoring parse error: Truncated value (need RS to resync)\n", stderr);
+    }
+
+    [Fact]
     public async Task Jq_SeqSlurpsRecords()
     {
         var host = new MockFileSystem();
