@@ -402,6 +402,32 @@ public sealed partial class JqTests
     [InlineData("[1,2,3]", ".[{\"start\":1}] = [9]", "[\n  1,\n  9\n]\n")]
     [InlineData("[1,2,3]", ".[{\"start\":1,\"end\":2}] = [9,8]", "[\n  1,\n  9,\n  8,\n  3\n]\n")]
     [InlineData("[1,2,3]", ".[{\"start\":1}] |= . + [9]", "[\n  1,\n  2,\n  3,\n  9\n]\n")]
+    [InlineData("{\"a\":1}", ".a |= empty", "{}\n")]
+    [InlineData("{\"a\":1,\"b\":2}", ".b |= empty", "{\n  \"a\": 1\n}\n")]
+    [InlineData("null", ".a.b.c |= 1", "{\n  \"a\": {\n    \"b\": {\n      \"c\": 1\n    }\n  }\n}\n")]
+    [InlineData("{\"a\":false}", ".a //= 1", "{\n  \"a\": 1\n}\n")]
+    [InlineData("{\"a\":0}", ".a //= 1", "{\n  \"a\": 0\n}\n")]
+    [InlineData("{\"a\":null}", ".a //= 1", "{\n  \"a\": 1\n}\n")]
+    [InlineData("null", ".a //= 1", "{\n  \"a\": 1\n}\n")]
+    [InlineData("{\"a\":[]}", ".a //= 1", "{\n  \"a\": []\n}\n")]
+    [InlineData("{\"a\":{}}", ".a //= 1", "{\n  \"a\": {}\n}\n")]
+    [InlineData("{\"a\":\"\"}", ".a //= 1", "{\n  \"a\": \"\"\n}\n")]
+    [InlineData("{\"a\":1,\"b\":2}", ".[] |= empty", "{}\n")]
+    [InlineData("[1,2]", ".[] |= empty", "[]\n")]
+    [InlineData("null", ".a |= 1", "{\n  \"a\": 1\n}\n")]
+    [InlineData("[1,2,3]", ".[5] |= 1", "[\n  1,\n  2,\n  3,\n  null,\n  null,\n  1\n]\n")]
+    [InlineData("{\"a\":[1,2]}", ".a[5] |= 1", "{\n  \"a\": [\n    1,\n    2,\n    null,\n    null,\n    null,\n    1\n  ]\n}\n")]
+    [InlineData("[1,2]", ".[0] |= empty", "[\n  2\n]\n")]
+    [InlineData("{\"a\":{\"b\":1}}", ".a.b |= empty", "{\n  \"a\": {}\n}\n")]
+    [InlineData("{\"a\":1}", ".b |= .", "{\n  \"a\": 1,\n  \"b\": null\n}\n")]
+    [InlineData("{\"a\":1,\"b\":2}", "(.a,.b) |= empty", "{}\n")]
+    [InlineData("{\"a\":1}", ".a |= .", "{\n  \"a\": 1\n}\n")]
+    [InlineData("{\"a\":null}", ".a //= (1,2)", "{\n  \"a\": 1\n}\n{\n  \"a\": 2\n}\n")]
+    [InlineData("{\"a\":1}", ".a += (10,20)", "{\n  \"a\": 11\n}\n{\n  \"a\": 21\n}\n")]
+    [InlineData("{\"a\":null}", ".a //= empty", "")]
+    [InlineData("{\"a\":1}", ".a //= empty", "")]
+    [InlineData("{\"a\":false}", ".a //= empty", "")]
+    [InlineData("[1,2,3]", ".[10] |= 1", "[\n  1,\n  2,\n  3,\n  null,\n  null,\n  null,\n  null,\n  null,\n  null,\n  null,\n  1\n]\n")]
     public async Task Jq_AssignUpdatesValues(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -430,6 +456,8 @@ public sealed partial class JqTests
     // Variable-bound update targets follow the path rule: heap reads fail even on coincidence, including whole-input identity aliases (upstream LOADV shares the stored pointer, so `(. as $x | $x) = 2` succeeds there).
     [InlineData("{\"a\":1}", "try ((.a as $x | $x) = 2) catch .", "\"Invalid path expression with result 1\"\n")]
     [InlineData("{\"a\":1}", "try ((.a as $x | $x) |= . + 1) catch .", "\"Invalid path expression with result 1\"\n")]
+    [InlineData("{\"a\":1,\"b\":2}", "try ((.a,.b) |= (if . == 1 then error(\"x\") else . end)) catch .", "\"x\"\n")]
+    [InlineData("\"hello\"", "try (.[1:2] |= \"X\") catch .", "\"Cannot update string slices\"\n")]
     [InlineData("{\"a\":1}", "try ((. as $x | $x) = 2) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
     public async Task Jq_AssignReportsFailures(string input, string filter, string expected)
     {
