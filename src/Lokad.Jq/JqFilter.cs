@@ -1683,6 +1683,15 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             return new JqErrorException(held, message);
         }
 
+        // Like the reference indices definition, only array inputs and
+        // string haystacks with string needles use the search tables; every
+        // other combination falls through to a plain .[$i] index read.
+        static bool UsesSearchTables(JsonNode? input, JsonNode? needle) =>
+            input is JsonArray || (TryGetString(input, out _) && TryGetString(needle, out _));
+
+        static JqFilter FallthroughGet(JsonNode? needle) =>
+            new IndexFilter(new IdentityFilter(), new LiteralFilter(needle), false);
+
         IEnumerable<JsonNode?> EvaluateWith(JsonNode?[] combo)
         {
             JsonNode? Arg(int i) => combo[i];
@@ -1698,7 +1707,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "type": yield return JsonValue.Create(TypeName(input)); break;
                 case "not": yield return JsonValue.Create(!Truthy(input)); break;
                 case "now": yield return JsonValue.Create(JqTime.Now(context)); break;
-                case "env": yield return context.Runtime.Clone(context.Variables.TryGetValue("ENV", out JsonNode? environment) ? environment : new JsonObject()); break;
+                case "env": yield return context.Runtime.Clone(context.Variables.TryGetValue("ENV", out JsonNode? envValue) ? envValue : new JsonObject()); break;
                 case "stderr":
                     if (TryGetString(input, out string? message) && message is not null)
                         context.EmitStderr(Utf8Text.Encode(message).ToArray());
@@ -1750,8 +1759,20 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "contains": yield return JsonValue.Create(context.Runtime.Contains(input, Arg(0))); break;
                 case "inside": yield return JsonValue.Create(context.Runtime.Contains(Arg(0), input)); break;
                 case "has": yield return JsonValue.Create(context.Runtime.Has(input, Arg(0))); break;
-                case "indices": yield return context.Runtime.Indices(input, Arg(0)); break;
-                case "index": yield return context.Runtime.Index(input, Arg(0)); break;
+                case "indices":
+                    if (UsesSearchTables(input, Arg(0)))
+                        yield return context.Runtime.Indices(input, Arg(0));
+                    else
+                        foreach (JsonNode? got in FallthroughGet(Arg(0)).Evaluate(input, context, environment))
+                            yield return got;
+                    break;
+                case "index":
+                    if (UsesSearchTables(input, Arg(0)))
+                        yield return context.Runtime.Index(input, Arg(0));
+                    else
+                        foreach (JsonNode? got in new IndexFilter(FallthroughGet(Arg(0)), new LiteralFilter(JsonValue.Create(0)), false).Evaluate(input, context, environment))
+                            yield return got;
+                    break;
                 case "startswith": yield return JsonValue.Create(StartsEndsWith(input, Arg(0), true)); break;
                 case "endswith": yield return JsonValue.Create(StartsEndsWith(input, Arg(0), false)); break;
                 case "ltrimstr": yield return JsonValue.Create(TrimAffix(input, Arg(0), true, false)); break;

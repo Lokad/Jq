@@ -95,6 +95,13 @@ public sealed partial class JqTests
     [InlineData("null", "to_entries", "null (null) has no keys")]
     [InlineData("null", "contains(\"a\")", "null (null) and string (\"a\") cannot have their containment checked")]
     [InlineData("null", "inside(\"a\")", "string (\"a\") and null (null) cannot have their containment checked")]
+    [InlineData("5", "indices(\"a\")", "cannot index number")]
+    [InlineData("5", "index(0)", "cannot index number")]
+    [InlineData("true", "index(0)", "cannot index boolean")]
+    [InlineData("\"abc\"", "indices(0)", "cannot index string")]
+    [InlineData("{\"a\":1}", "indices(0)", "cannot index object")]
+    [InlineData("{\"a\":1}", "index(\"a\")", "cannot index number")]
+    [InlineData("{\"a\":1}", "rindex(\"a\")", "cannot slice number")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
@@ -257,6 +264,12 @@ public sealed partial class JqTests
     [InlineData("{\"a\":nan}", "contains({a:nan})", "false\n")]
     [InlineData("[nan]", "inside([nan])", "false\n")]
     [InlineData("[nan]", "bsearch(nan)", "0\n")]
+    [InlineData("null", "indices(\"a\")", "null\n")]
+    [InlineData("null", "index(\"a\")", "null\n")]
+    [InlineData("null", "rindex(\"a\")", "null\n")]
+    [InlineData("{\"a\":1}", "indices(\"a\")", "1\n")]
+    [InlineData("{\"a\":1}", "indices(\"missing\")", "null\n")]
+    [InlineData("{\"a\":1}", "rindex(\"missing\")", "null\n")]
     public async Task Jq_CollectionSearchFold(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
