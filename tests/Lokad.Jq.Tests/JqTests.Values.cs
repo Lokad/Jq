@@ -136,6 +136,12 @@ public sealed partial class JqTests
     [InlineData("nan | tojson", "\"null\"\n")]
     [InlineData("[nan] | tojson", "\"[null]\"\n")]
     [InlineData("{\"a\": nan} | tojson", "\"{\\\"a\\\":null}\"\n")]
+    // Conversions keep integral storage exactly while arithmetic and equality project to doubles, so decimal-sensitive conditionals may take neither upstream branch.
+    [InlineData("[13911860366432393] | .[0] | tostring | . == if have_decnum then \"13911860366432393\" else \"13911860366432392\" end", "false\n")]
+    [InlineData("{\"x\":13911860366432393} | .x | tojson | . == if have_decnum then \"13911860366432393\" else \"13911860366432392\" end", "false\n")]
+    [InlineData("(13911860366432393 == 13911860366432392) | . == if have_decnum then false else true end", "true\n")]
+    [InlineData("13911860366432393 | -. | tojson == if have_decnum then \"-13911860366432393\" else \"-13911860366432392\" end", "true\n")]
+    [InlineData("-0.12345678901234567890123456789 | -. | tojson == if have_decnum then \"0.12345678901234567890123456789\" else \"0.12345678901234568\" end", "true\n")]
     public async Task Jq_NumbersFollowDoubleProfile(string filter, string expected)
     {
         var host = new MockFileSystem();

@@ -15,6 +15,7 @@ explicitly disabled).
 - Integers that fit in `long` keep integral storage. They render exactly
   through identity and conversion (`9007199254740993 | tostring` is exact),
   but arithmetic still projects them to doubles first.
+- As a consequence, decimal-sensitive conditionals comparing exact conversions against double-rounded text take neither upstream branch: `tostring` of a large integral literal stays exact, so the non-decimal comparison against the rounded form is false, while arithmetic and equality on the same literal project to doubles.
 - Filter literals follow the same rule: `42` is integral, `1.5` and `1e3`
   are doubles, and `-0` stays a double so it renders with its sign.
 - Input decoding follows the same rule, so large integral inputs survive
