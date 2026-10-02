@@ -861,11 +861,36 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
 
 internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional) : JqFilter
 {
+        // Like the reference postfix ?, a suppressed step ends key enumeration
+        // keeping prior outputs instead of failing when keys themselves error.
+        private static IEnumerable<JsonNode?> SuppressedKeys(JqFilter index, JsonNode? input, JqContext context, JqEnvironment environment)
+        {
+            using IEnumerator<JsonNode?> keys = index.Evaluate(input, context, environment).GetEnumerator();
+            while (true)
+            {
+                bool moved;
+                try
+                {
+                    moved = keys.MoveNext();
+                }
+                catch (Exception exception) when (JqErrors.IsCatchable(exception))
+                {
+                    yield break;
+                }
+                if (!moved)
+                    yield break;
+                yield return keys.Current;
+            }
+        }
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         // Key-major order: each key combines with every source value,
         // matching index-then-source evaluation with backtracking.
-        foreach (var key in index.Evaluate(input, context, environment))
+        IEnumerable<JsonNode?> stepKeys = optional
+            ? SuppressedKeys(index, input, context, environment)
+            : index.Evaluate(input, context, environment);
+        foreach (var key in stepKeys)
             foreach (var value in source.Evaluate(input, context, environment))
             {
                 if (value is JsonArray arr && TryGetArrayIndex(key, out long ix))
@@ -921,7 +946,11 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
     {
         foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
-            foreach (JsonNode? key in index.Evaluate(pair.Value, context, environment))
+        {
+            IEnumerable<JsonNode?> pathKeys = optional
+                ? SuppressedKeys(index, pair.Value, context, environment)
+                : index.Evaluate(pair.Value, context, environment);
+            foreach (JsonNode? key in pathKeys)
             {
                 JqValueSegment segment = PathSegmentFor(key);
                 RequireTracked(pair, segment, context);
@@ -932,6 +961,7 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                 foreach (JsonNode? got in read.Evaluate(pair.Value, context, environment))
                     yield return new JqValuePath(Extend(pair.Segments, segment), got, true);
             }
+        }
     }
 
     private static JqValueSegment PathSegmentFor(JsonNode? key)
