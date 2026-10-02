@@ -79,6 +79,11 @@ public sealed partial class JqTests
     [InlineData("[{}]", "from_entries", "Cannot use null (null) as object key")]
     [InlineData("[{\"a\":1}]", "from_entries", "Cannot use null (null) as object key")]
     [InlineData("null", "flatten", "cannot iterate over null")]
+    [InlineData("null", "sort_by(.)", "cannot iterate over null")]
+    [InlineData("null", "group_by(.)", "cannot iterate over null")]
+    [InlineData("null", "unique_by(.)", "cannot iterate over null")]
+    [InlineData("null", "min_by(.)", "cannot iterate over null")]
+    [InlineData("null", "max_by(.)", "cannot iterate over null")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
