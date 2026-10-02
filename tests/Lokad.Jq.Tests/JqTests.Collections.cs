@@ -123,6 +123,9 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "has(null)", "Cannot check whether object has a null key")]
     [InlineData("{\"a\":1}", "getpath([[\"a\"]])", "expected a string for object key but got: [\"a\"]")]
     [InlineData("null", "getpath([[1]])", "expected a string for object key but got: [1]")]
+    [InlineData("[1,2,3]", "setpath(path(.[[1]]); 9)", "expected a number for indexing an array but got: [1]")]
+    [InlineData("[1,2,3]", "delpaths([path(.[[1]])])", "expected a number for indexing an array but got: [1]")]
+    [InlineData("[1,2,3]", "pick(.[[1]])", "expected a string for object key but got: [1]")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
