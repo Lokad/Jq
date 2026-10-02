@@ -234,6 +234,8 @@ public sealed partial class JqTests
     [InlineData("[10,20,30]", "getpath([{start:0.5,end:2}])", "[\n  10,\n  20\n]\n")]
     [InlineData("[10,20,30]", "setpath([{start:0.5,end:2}]; [9])", "[\n  9,\n  30\n]\n")]
     [InlineData("null", "setpath([{start:0}]; [1])", "[\n  1\n]\n")]
+    [InlineData("null", "getpath([{start:0}])", "null\n")]
+    [InlineData("\"abcdef\"", "getpath([{start:7,end:9}])", "\"\"\n")]
     [InlineData("[10,20,30]", "delpaths([[{start:0.5,end:2}]])", "[\n  30\n]\n")]
     public async Task Jq_PathBuiltinsReadWriteDelete(string input, string filter, string expected)
     {
