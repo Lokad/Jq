@@ -5,7 +5,7 @@ arguments. `Jq.ExecuteAsync` drives the existing command evaluator:
 
 1. `JqCommandLineParser` separates variables, positional values, format options,
    filter files, and input file operands. `JqArgs` uses Lokad.Cli generation.
-2. `JqLexer` and `JqParser` construct `JqFilter` nodes. Filter compilation currently
+2. `Lexer` and `JqParser` construct `JqFilter` nodes. Filter compilation currently
    occurs during execution, not during command-name recognition.
 3. `JqExecutor` loads input and filter files through `IJqHost`, creates a fresh
    `JqBudget`/`JqContext`, enumerates filter results, and writes UTF-8 output.
@@ -47,8 +47,8 @@ parser, subprocess launcher, or reference-jq binary belongs in this library.
 ## Project structure
 
 The library includes its own invocation, canonical path, descriptor, and byte IO
-types. It has no dependency on other checkouts. The bounded read loop uses a
-MemoryStream and fixed-size read requests. Paths use Unix-style separators and
+types. It has no dependency on other checkouts. The bounded read loop uses
+fixed-size read requests into byte buffers. Paths use Unix-style separators and
 are resolved against an explicit current directory.
 
 The tests reference the built assembly. Most exercise the public command API;
