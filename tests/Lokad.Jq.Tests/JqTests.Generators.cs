@@ -66,6 +66,8 @@ public sealed partial class JqTests
     [InlineData("[1,2,3] | .[1e400]", "null\n")]
     [InlineData("[1,2,3] | .[-1e400]", "null\n")]
 [InlineData("[0,1,2] | .[0:infinite]", "[\n  0,\n  1,\n  2\n]\n")]
+    [InlineData("[1,2] | .[1000000000000000000]", "null\n")]
+    [InlineData("[1,2] | .[-1000000000000000000]", "null\n")]
 [InlineData("[1,2,3] | .[{\"start\":1}]", "[\n  2,\n  3\n]\n")]
 [InlineData("[1,2,3] | .[{\"end\":2}]", "[\n  1,\n  2\n]\n")]
 [InlineData("[1,2,3] | .[{}]", "[\n  1,\n  2,\n  3\n]\n")]
