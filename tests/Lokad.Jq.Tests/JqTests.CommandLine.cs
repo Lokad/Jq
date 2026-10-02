@@ -190,6 +190,16 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_ArgjsonRejectsTrailingComma()
+    {
+        var host = new MockFileSystem();
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--argjson", "data", "[1,]", "$data");
+        Assert.Equal(2, exit);
+        Assert.Empty(stdout);
+        Assert.Contains("invalid JSON for --argjson data", stderr);
+    }
+
+    [Fact]
     public async Task Jq_IndentSevenUsesSevenSpaces()
     {
         var host = new MockFileSystem();
