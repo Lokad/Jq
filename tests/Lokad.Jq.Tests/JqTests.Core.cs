@@ -382,6 +382,7 @@ public sealed partial class JqTests
     // Constant non-string keys fail at compile time, matching key validation.
     [InlineData("{(0):1}", "jq: Cannot use number (0) as object key at line 1 column 2 (filter)\n")]
     [InlineData("{(true):1}", "jq: Cannot use boolean (true) as object key at line 1 column 2 (filter)\n")]
+    [InlineData("{(1.5):1}", "jq: Cannot use number (1.5) as object key at line 1 column 2 (filter)\n")]
     public async Task Jq_ConstantNonStringKeysFailAtCompile(string filter, string expectedError)
     {
         var host = new MockFileSystem();
@@ -427,12 +428,15 @@ public sealed partial class JqTests
     {
         // Constant non-string keys fail at compile time (parser.y check_object_key)
         // while dynamic ones fail at evaluation (execute.c INSERT), with one wording.
+        // Container literals count as dynamic like the reference const check, which only sees scalars.
         foreach (var (filter, exit, stderr) in new (string, int, string)[]
         {
             ("{(1, 2): \"x\"}", 5, "jq: error (at <unknown>): Cannot use number (1) as object key\n"),
             ("{(error(\"x\")): 1}", 5, "jq: error (at <unknown>): x\n"),
             ("{(1): \"x\"}", 3, "jq: Cannot use number (1) as object key at line 1 column 2 (filter)\n"),
             ("{(null): 1}", 3, "jq: Cannot use null (null) as object key at line 1 column 2 (filter)\n"),
+            ("{([]): 2}", 5, "jq: error (at <unknown>): Cannot use array ([]) as object key\n"),
+            ("{({\"a\":1}): 2}", 5, "jq: error (at <unknown>): Cannot use object ({\"a\":1}) as object key\n"),
         })
         {
             var host = new MockFileSystem();

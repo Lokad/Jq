@@ -672,10 +672,14 @@ internal sealed class JqParser(
     private void CheckConstantKey(JqFilter key, JqSourceSpan span)
     {
         // Constant non-string keys fail at compile time; computed keys
-        // report the same shape at runtime instead.
+        // report the same shape at runtime instead. Like the reference
+        // const-key check, only scalar constants qualify: container
+        // literals evaluate like computed keys and fail staged instead.
         if (key is not LiteralFilter literal)
             return;
         if (literal.Value is JsonValue scalar && scalar.TryGetValue<string>(out _))
+            return;
+        if (literal.Value is JsonObject || literal.Value is JsonArray)
             return;
         string text = new JqRuntime(_budget).ToJqString(literal.Value);
         throw Error($"Cannot use {JqRuntime.TypeName(literal.Value)} ({text}) as object key", span);
