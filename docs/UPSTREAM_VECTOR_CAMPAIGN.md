@@ -19,10 +19,14 @@ decoded value, so encoder escape-case differences cannot false-positive.
 
 - Triples: 734 (`jq.test` plus `man.test`); 28 host-dependent skips, 19 `%FAIL` blocks set aside.
 - Regex triples: 66 (`onig.test` plus `manonig.test`); no skips.
+- Encoding triples: 32 (`uri.test`, `base64.test`, `optional.test`); no skips.
 - Result: 690 pass, 44 miss, 0 escapes, 0 timeouts.
 - Regex result: 66 pass, 0 miss, 0 escapes, 0 timeouts, covering zero-width
   global matches, combining codepoints, named and non-participating
   captures, sub/gsub replacements, and the `g`/`gi`/`ig`/`gn`/`ix` flags.
+- Encoding result: 32 pass, 0 miss, 0 escapes, 0 timeouts, covering URI
+  unreserved sets, NUL and multibyte roundtrips, base64 padding variants and
+  rejection messages, the 2038 `fromdate` boundary, and `%e` formatting.
 - 5 additional vectors produce byte-identical values with a trailing error
   (binding-alternation all-fail and error-after-output cases); the upstream
   runner ignores trailing errors the same way, so these match.
