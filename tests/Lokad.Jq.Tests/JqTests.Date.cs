@@ -61,6 +61,10 @@ public sealed partial class JqTests
     [InlineData("\"2015-03-05T23:51:47+02:00\" | strptime(\"%Y-%m-%dT%H:%M:%S%z\")", "[\n  2015,\n  2,\n  5,\n  23,\n  51,\n  47,\n  4,\n  63\n]\n")]
     [InlineData("\"Thu Mar  5 23:51:47 2015\" | strptime(\"%c\")", "[\n  2015,\n  2,\n  5,\n  23,\n  51,\n  47,\n  4,\n  63\n]\n")]
     [InlineData("\"2015-03-05T23:51:47Z\" | [strptime(\"%Y-%m-%dT%H:%M:%SZ\")|(.,mktime)]", "[\n  [\n    2015,\n    2,\n    5,\n    23,\n    51,\n    47,\n    4,\n    63\n  ],\n  1425599507\n]\n")]
+    // Week-based inputs resolve to the same civil instants at the epoch level, not just in broken-down form.
+    [InlineData("\"2015-W10-4\" | strptime(\"%G-W%V-%u\") | mktime", "1425513600\n")]
+    [InlineData("\"2015 09 4\" | strptime(\"%Y %U %w\") | mktime", "1425513600\n")]
+    [InlineData("\"2015 064\" | strptime(\"%Y %j\") | mktime", "1425513600\n")]
     // Bounded 400-day form of the upstream 67-year day-of-week/yearday loop; the full form exceeds the cumulative value budget (pinned in Memory).
     [InlineData("last(range(400)|(\"1970-03-01T01:02:03Z\"|strptime(\"%Y-%m-%dT%H:%M:%SZ\")|mktime) + (86400 * .)|strftime(\"%Y-%m-%dT%H:%M:%SZ\")|strptime(\"%Y-%m-%dT%H:%M:%SZ\"))", "[\n  1971,\n  3,\n  4,\n  1,\n  2,\n  3,\n  0,\n  93\n]\n")]
     [InlineData("[2015,2,5,23,51,47,4,63] | strftime(\"%Y-%m-%dT%H:%M:%SZ\")", "\"2015-03-05T23:51:47Z\"\n")]
