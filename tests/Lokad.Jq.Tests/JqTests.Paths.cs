@@ -281,6 +281,8 @@ public sealed partial class JqTests
     [InlineData("try getpath(null) catch .", "\"Path must be specified as an array\"\n")]
     [InlineData("try setpath(null; 1) catch .", "\"Path must be specified as an array\"\n")]
     [InlineData("try delpaths(null) catch .", "\"Paths must be specified as an array\"\n")]
+    [InlineData("try getpath([null]) catch .", "\"expected a string for object key but got: null\"\n")]
+    [InlineData("try setpath([null]; 1) catch .", "\"expected a string for object key but got: null\"\n")]
     public async Task Jq_PathBuiltinsRequireArrayPaths(string filter, string expected)
     {
         // Non-array paths and path elements fail catchably with array-shaped
