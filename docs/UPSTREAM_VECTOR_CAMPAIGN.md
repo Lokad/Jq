@@ -27,6 +27,9 @@ decoded value, so encoder escape-case differences cannot false-positive.
 - Encoding result: 32 pass, 0 miss, 0 escapes, 0 timeouts, covering URI
   unreserved sets, NUL and multibyte roundtrips, base64 padding variants and
   rejection messages, the 2038 `fromdate` boundary, and `%e` formatting.
+- Re-sweep after subsequent fixes reproduces all three tallies with zero
+  escapes; a positive control with corrupted expectations proves mismatch
+  sensitivity.
 - 5 additional vectors produce byte-identical values with a trailing error
   (binding-alternation all-fail and error-after-output cases); the upstream
   runner ignores trailing errors the same way, so these match.
