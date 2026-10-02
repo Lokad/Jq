@@ -240,6 +240,26 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SeqMalformedWarningsCarryPositions()
+    {
+        // Malformed records report the offending byte like the reference:
+        // reader wording with the global line/column before the resync note.
+        var first = new MockFileSystem();
+        first.SetStandardInput("\u001e{bad}\u001e");
+        var (firstExit, firstOut, firstErr) = await RunSeqAsync(first, "--seq", ".");
+        Assert.True(firstExit == 0, firstErr);
+        Assert.Equal("", firstOut);
+        Assert.Equal("jq: ignoring parse error: 'b' is an invalid start of a property name. Expected a '\"'. at line 1, column 3 (need RS to resync)\n", firstErr);
+
+        var second = new MockFileSystem();
+        second.SetStandardInput("\u001e:5\u001e");
+        var (secondExit, secondOut, secondErr) = await RunSeqAsync(second, "--seq", ".");
+        Assert.True(secondExit == 0, secondErr);
+        Assert.Equal("", secondOut);
+        Assert.Equal("jq: ignoring parse error: ':' is an invalid start of a value. at line 1, column 2 (need RS to resync)\n", secondErr);
+    }
+
+    [Fact]
     public async Task Jq_SeqSlurpsRecords()
     {
         var host = new MockFileSystem();

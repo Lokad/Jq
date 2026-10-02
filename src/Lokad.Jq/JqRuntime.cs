@@ -202,7 +202,7 @@ internal sealed class JqRuntime(JqBudget budget)
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
-            throw new JqException(ex.Message);
+            throw new JqException(ex.Message, ex);
         }
     }
 

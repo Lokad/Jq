@@ -651,6 +651,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
     {
         int length = rsIdx - _start;
         ReadOnlySpan<byte> record = _buffer.AsSpan(_start, length);
+        int recordLine = _scanLine;
+        int recordCol = _scanCol + 1;
         Advance(length);
         int truncLine = _scanLine;
         int truncCol = _scanCol + 1;
@@ -675,7 +677,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         }
         if (trailingRun > 0)
         {
-            DecodeSeqPrefix(record[..^trailingRun]);
+            DecodeSeqPrefix(record[..^trailingRun], recordLine, recordCol, positionErrors: true);
             if (_seqError is not null)
                 return;
             ReadOnlySpan<byte> run = record[^trailingRun..];
@@ -685,12 +687,68 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 StashSeqError($"Truncated value at line {truncLine}, column {truncCol}");
             return;
         }
-        DecodeSeqValues(record, resyncSuffix: true);
+        DecodeSeqValues(record, resyncSuffix: true, recordLine, recordCol);
     }
 
     // Decodes complete values ahead of a pending literal run. A malformed
     // prefix keeps already-queued values ahead of its own stashed error.
-    private void DecodeSeqPrefix(ReadOnlySpan<byte> prefix)
+    // Positions a resync reader failure at the offending byte: the wrapped
+    // reader reports a line offset and a byte offset within that line, both
+    // relative to the decoded span. Falls back to the unpositioned message
+    // when the offsets do not resolve or positioning is disabled.
+    private static string FormatSeqError(ReadOnlySpan<byte> fromOrigin, int spanBase, JqException error, int originLine, int originCol, bool positionErrors)
+    {
+        const string suffix = " (need RS to resync)";
+        if (positionErrors
+            && error.InnerException is System.Text.Json.JsonException json
+            && json.LineNumber.HasValue
+            && json.BytePositionInLine.HasValue
+            && TryLocateReaderError(fromOrigin, spanBase, json.LineNumber.Value, json.BytePositionInLine.Value, originLine, originCol, out int line, out int column))
+        {
+            string core = error.Message;
+            string tail = $" LineNumber: {json.LineNumber.Value} | BytePositionInLine: {json.BytePositionInLine.Value}.";
+            if (core.EndsWith(tail, StringComparison.Ordinal))
+                core = core.Substring(0, core.Length - tail.Length);
+            return $"{core} at line {line}, column {column}{suffix}";
+        }
+        return error.Message + suffix;
+    }
+
+    private static bool TryLocateReaderError(ReadOnlySpan<byte> fromOrigin, int spanBase, long errorLine, long errorColumn, int originLine, int originCol, out int line, out int column)
+    {
+        line = originLine;
+        column = originCol;
+        if (errorLine < 0 || errorColumn < 0 || spanBase < 0 || spanBase > fromOrigin.Length)
+            return false;
+        int offset = spanBase;
+        long skipped = errorLine;
+        while (offset < fromOrigin.Length && skipped > 0)
+        {
+            if (fromOrigin[offset] == (byte)10)
+                skipped--;
+            offset++;
+        }
+        if (skipped != 0)
+            return false;
+        long target = (long)offset + errorColumn;
+        if (target < 0 || target > fromOrigin.Length)
+            return false;
+        for (long i = 0; i < target; i++)
+        {
+            if (fromOrigin[(int)i] == (byte)10)
+            {
+                line++;
+                column = 1;
+            }
+            else
+            {
+                column++;
+            }
+        }
+        return true;
+    }
+
+    private void DecodeSeqPrefix(ReadOnlySpan<byte> prefix, int originLine, int originCol, bool positionErrors)
     {
         int pos = 0;
         while (pos < prefix.Length)
@@ -707,7 +765,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             }
             catch (JqException ex) when (ex is not JqQuotaException)
             {
-                StashSeqError(ex.Message + " (need RS to resync)");
+                StashSeqError(FormatSeqError(prefix, pos, ex, originLine, originCol, positionErrors));
                 return;
             }
             pos += consumed;
@@ -715,7 +773,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         }
     }
 
-    private void DecodeSeqValues(ReadOnlySpan<byte> stripped, bool resyncSuffix)
+    private void DecodeSeqValues(ReadOnlySpan<byte> stripped, bool resyncSuffix, int originLine, int originCol)
     {
         int pos = 0;
         while (pos < stripped.Length)
@@ -732,7 +790,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             }
             catch (JqException ex) when (ex is not JqQuotaException)
             {
-                StashSeqError(ex.Message + (resyncSuffix ? " (need RS to resync)" : string.Empty));
+                StashSeqError(resyncSuffix ? FormatSeqError(stripped, pos, ex, originLine, originCol, positionErrors: true) : ex.Message);
                 return;
             }
             pos += consumed;
@@ -744,6 +802,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
     // variants instead of resync continuations.
     private void FinishSeqTail()
     {
+        int tailLine = _scanLine;
+        int tailCol = _scanCol + 1;
         int length = _count;
         ReadOnlySpan<byte> tail = _buffer.AsSpan(_start, length);
         int begin = 0;
@@ -792,7 +852,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         if (trailingRun > 0)
         {
             ReadOnlySpan<byte> run = tail[^trailingRun..];
-            DecodeSeqPrefix(tail[..^trailingRun]);
+            DecodeSeqPrefix(tail[..^trailingRun], tailLine, tailCol, positionErrors: false);
             if (_seqError is not null)
             {
                 Advance(length);
@@ -823,7 +883,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 : $"Invalid literal at EOF at line {_scanLine}, column {_scanCol}");
             return;
         }
-        DecodeSeqValues(tail, resyncSuffix: false);
+        DecodeSeqValues(tail, resyncSuffix: false, tailLine, tailCol);
         Advance(length);
         _seqDone = true;
     }
