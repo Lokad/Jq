@@ -45,6 +45,8 @@ public sealed partial class JqTests
     [InlineData("[]", "nth(0; .[])", "")]
     [InlineData("null", "nth(0; empty)", "")]
     [InlineData("[1,2,3]", "limit(0; .[])", "")]
+    [InlineData("0", "[limit(infinite; (1,2,3))]", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("0", "[skip(infinite; (1,2,3))]", "[]\n")]
     public async Task Jq_LimitFirstNthIsempty(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -125,6 +127,8 @@ public sealed partial class JqTests
     [InlineData("try skip(true; 1) catch .", "\"skip doesn't support negative count\"\n")]
     [InlineData("try nth(null; 1) catch .", "\"nth doesn't support negative indices\"\n")]
     [InlineData("try nth(false; 1) catch .", "\"nth doesn't support negative indices\"\n")]
+    [InlineData("try limit(-infinite; 1) catch .", "\"limit doesn't support negative count\"\n")]
+    [InlineData("try nth(-infinite; 1) catch .", "\"nth doesn't support negative indices\"\n")]
     [InlineData("try nth(true; 1) catch .", "\"nth doesn't support negative indices\"\n")]
     [InlineData("try isempty(error(\"x\")) catch .", "\"x\"\n")]
     // Extraction utilities pull lazily, so body errors propagate to handlers.
