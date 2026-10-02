@@ -212,6 +212,8 @@ public sealed partial class JqTests
         """[strptime("%Y-%m-%dT%H:%M:%SZ")|(.,mktime)]""",
         """try strftime("%Y-%m-%dT%H:%M:%SZ") catch .""",
         """try mktime catch .""",
+        """["2015-W10-4"] | .[] | strptime("%G-W%V-%u") | mktime""",
+        """try error(0) // 1""",
         """[label $o | [1,2,3][] | if . > 1 then break $o else . end]""",
         """.[] | . as {a:$a} ?// {a:$a} | $a""",
         """. as {(true):$foo} | $foo""",
