@@ -176,6 +176,11 @@ public sealed partial class JqTests
         """try ("very-long-long-long-long-string" | -.) catch .""",
         """[13911860366432393] | .[0] | tostring | . == if have_decnum then "13911860366432393" else "13911860366432392" end""",
         """13911860366432393 | -. | tojson == if have_decnum then "-13911860366432393" else "-13911860366432392" end""",
+        """0 | strflocaltime("" | ., @uri)""",
+        """12345678909876543212345 | [., tojson] == if have_decnum then [12345678909876543212345,\"12345678909876543212345\"] else [12345678909876543000000,\"12345678909876543000000\"] end""",
+        """[1234567890987654321,-1234567890987654321 | tojson] == if have_decnum then [\"1234567890987654321\",\"-1234567890987654321\"] else [\"1234567890987654400\",\"-1234567890987654400\"] end""",
+        """[1E+1000,-1E+1000 | tojson] == if have_decnum then [\"1E+1000\",\"-1E+1000\"] else [\"1.7976931348623157e+308\",\"-1.7976931348623157e+308\"] end""",
+        """[1E+1000,-1E+1000 | length | tojson] | unique == if have_decnum then [\"1E+1000\"] else [\"1.7976931348623157e+308\"] end""",
     ];
 
     private static readonly string[] FuzzAtoms =
