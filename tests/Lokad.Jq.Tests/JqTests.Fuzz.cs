@@ -69,6 +69,8 @@ public sealed partial class JqTests
         """to_entries""",
         """flatten""",
         """combinations""",
+        """combinations(0)""",
+        """combinations(2)""",
         """[range(0;5) | [pow(2;.), log2]]""",
         """transpose""",
         """bsearch(1)""",
