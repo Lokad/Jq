@@ -112,6 +112,9 @@ public sealed partial class JqTests
     [InlineData("5", "path(.[0])", "cannot index number")]
     [InlineData("[1,2,3]", ".[[1]] = [9]", "expected a number for indexing an array but got: [1]")]
     [InlineData("\"abcdef\"", ".[{\"start\":1}] = \"X\"", "Cannot update string slices")]
+    [InlineData("5", "bsearch(1)", "number (5) cannot be searched from")]
+    [InlineData("null", "bsearch(1)", "null (null) cannot be searched from")]
+    [InlineData("\"a\"", "bsearch(1)", "string (\"a\") cannot be searched from")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)

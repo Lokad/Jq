@@ -253,6 +253,9 @@ public sealed partial class JqTests
     // Slice and iterator path expressions rebuild through the same path synthesis.
     [InlineData("[0,1,2,3]", "pick(.[1:3])", "[\n  1,\n  2\n]\n")]
     [InlineData("[1,2]", "pick(.[])", "[\n  1,\n  2\n]\n")]
+    [InlineData("[1,2]", "pick(.[0])", "[\n  1\n]\n")]
+    [InlineData("{\"a\":1}", "try pick(\"a\") catch .", "\"Invalid path expression with result \\\"a\\\"\"\n")]
+    [InlineData("[1,2]", "try pick(5) catch .", "\"Invalid path expression with result 5\"\n")]
     [InlineData("{\"a\":[{\"b\":1}]}", "del(getpath([\"a\",0,\"b\"]))", "{\n  \"a\": [\n    {}\n  ]\n}\n")]
     [InlineData("[0,1,2,3,4,5,6,7]", "del(.[2:4],.[0],.[-2:])", "[\n  1,\n  4,\n  5\n]\n")]
     [InlineData("[\"foo\", \"bar\", \"baz\"]", "del(.[1, 2])", "[\n  \"foo\"\n]\n")]
@@ -286,6 +289,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("try getpath(0) catch .", "\"Path must be specified as an array\"\n")]
+    [InlineData("try getpath(\"a\") catch .", "\"Path must be specified as an array\"\n")]
     [InlineData("try setpath(0; 1) catch .", "\"Path must be specified as an array\"\n")]
     [InlineData("try delpaths([0]) catch .", "\"Path must be specified as array, not number\"\n")]
     [InlineData("try getpath(null) catch .", "\"Path must be specified as an array\"\n")]
