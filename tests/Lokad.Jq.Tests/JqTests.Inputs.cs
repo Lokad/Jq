@@ -145,6 +145,23 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_ControlBytesInInputAreMalformed()
+    {
+        // Raw control bytes inside strings fail like the reference issue
+        // 2909 vectors; the diagnostic keeps the JSON reader wording per
+        // the recorded input policy.
+        foreach (byte control in new byte[] { 0x01, 0x1F })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInputBytes(new byte[] { 0x22, control, 0x22 });
+            var (exit, stdout, stderr) = await RunInputAsync(host, ".");
+            Assert.Equal(5, exit);
+            Assert.Empty(stdout);
+            Assert.Contains("is invalid within a JSON string", stderr);
+        }
+    }
+
+    [Fact]
     public async Task Jq_NulByteInInputIsNotTruncation()
     {
         // An embedded NUL byte fails the input instead of truncating it:
