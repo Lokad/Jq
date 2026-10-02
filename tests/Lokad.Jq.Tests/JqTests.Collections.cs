@@ -175,6 +175,9 @@ public sealed partial class JqTests
     [InlineData("[[]]", "transpose", "[]\n")]
     [InlineData("{\"a\": [1, 2]}", "transpose", "[\n  [\n    1\n  ],\n  [\n    2\n  ]\n]\n")]
     [InlineData("[[],[1]]", "transpose", "[\n  [\n    null,\n    1\n  ]\n]\n")]
+    [InlineData("{}", "transpose", "[]\n")]
+    [InlineData("{\"a\":[1,2],\"b\":[3]}", "transpose", "[\n  [\n    1,\n    3\n  ],\n  [\n    2,\n    null\n  ]\n]\n")]
+    [InlineData("[[1,2],[3]]", "transpose", "[\n  [\n    1,\n    3\n  ],\n  [\n    2,\n    null\n  ]\n]\n")]
     // Null rows contribute zero width like empty rows; present nulls pad.
     [InlineData("[null]", "transpose", "[]\n")]
     [InlineData("[[1],null]", "transpose", "[\n  [\n    1,\n    null\n  ]\n]\n")]
