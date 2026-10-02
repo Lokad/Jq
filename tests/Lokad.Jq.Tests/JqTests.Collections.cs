@@ -135,6 +135,10 @@ public sealed partial class JqTests
     [InlineData("{}", "delpaths([[true]])", "expected a string for object key but got: true")]
     [InlineData("{\"a\":1}", "getpath([nan])", "Cannot index object with number (null)")]
     [InlineData("[0,1,2]", "setpath([infinite]; 9)", "Array index too large")]
+    [InlineData("5", ".a", "cannot index number with string \"a\"")]
+    [InlineData("\"a\"", ".a", "cannot index string with string \"a\"")]
+    [InlineData("true", ".a", "cannot index boolean with string \"a\"")]
+    [InlineData("[1]", ".a", "cannot index array with string \"a\"")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
