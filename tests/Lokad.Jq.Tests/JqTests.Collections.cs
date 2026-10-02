@@ -29,6 +29,13 @@ public sealed partial class JqTests
     [InlineData("[1, \"a\", true, null, [], {}]", "[(.[] | arrays), (.[] | objects), (.[] | numbers)]", "[\n  [],\n  {},\n  1\n]\n")]
     [InlineData("[0, 1, 2]", "has(-1 | sqrt)", "false\n")]
     [InlineData("[0,1,2]", "has(nan)", "false\n")]
+    [InlineData("\"a\"", "in(null)", "false\n")]
+    [InlineData("0", "in(null)", "false\n")]
+    [InlineData("null", "in(null)", "false\n")]
+    [InlineData("1", "in(empty)", "")]
+    [InlineData("\"a\"", "in(empty)", "")]
+    [InlineData("null", "nan | IN([nan])", "false\n")]
+    [InlineData("[1,2,3]", "has(-0.5)", "true\n")]
     // Fractional indices truncate like the reference array get; the object number-key diagnostic matches jv_has byte-exact.
     [InlineData("[1,2]", "has(1.5)", "true\n")]
     [InlineData("{\"a\":1,\"a\":2}", ".", "{\n  \"a\": 2\n}\n")]
