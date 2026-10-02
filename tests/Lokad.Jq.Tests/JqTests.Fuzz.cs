@@ -185,6 +185,7 @@ public sealed partial class JqTests
         """foreach (1,2,3) as $x (0; . + $x; . * 10)""",
         """sort_by(.a)""",
         """[nan,nan] | unique""",
+        """[nan,null] | group_by(.)""",
         """[0.0, -0.0] | sort""",
         """[2,nan,1] | sort""",
         """debug""",

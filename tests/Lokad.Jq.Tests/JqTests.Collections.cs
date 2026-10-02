@@ -426,6 +426,11 @@ public sealed partial class JqTests
     [InlineData("[]", "unique", "[]\n")]
     [InlineData("0", "[nan, nan] | unique", "[\n  null,\n  null\n]\n")]
     [InlineData("0", "[nan, 1] | group_by(.)", "[\n  [\n    null\n  ],\n  [\n    1\n  ]\n]\n")]
+    [InlineData("0", "[nan,nan] | group_by(.)", "[\n  [\n    null\n  ],\n  [\n    null\n  ]\n]\n")]
+    [InlineData("0", "[nan,null] | group_by(.)", "[\n  [\n    null\n  ],\n  [\n    null\n  ]\n]\n")]
+    [InlineData("0", "[null,nan] | group_by(.)", "[\n  [\n    null\n  ],\n  [\n    null\n  ]\n]\n")]
+    [InlineData("0", "[nan,null] | unique", "[\n  null,\n  null\n]\n")]
+    [InlineData("0", "[nan,null,nan] | group_by(.) | length", "3\n")]
     [InlineData("[[4, 2, \"a\"], [3, 1, \"a\"], [2, 4, \"a\"], [1, 3, \"a\"]]", "[min, max, min_by(.[1]), max_by(.[1]), min_by(.[2]), max_by(.[2])]", "[\n  [\n    1,\n    3,\n    \"a\"\n  ],\n  [\n    4,\n    2,\n    \"a\"\n  ],\n  [\n    3,\n    1,\n    \"a\"\n  ],\n  [\n    2,\n    4,\n    \"a\"\n  ],\n  [\n    4,\n    2,\n    \"a\"\n  ],\n  [\n    1,\n    3,\n    \"a\"\n  ]\n]\n")]
     [InlineData("[]", "[min, max, min_by(.), max_by(.)]", "[\n  null,\n  null,\n  null,\n  null\n]\n")]
     // Like the reference minmax_by fold, ties keep the first minimum and the last maximum.
