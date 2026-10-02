@@ -187,6 +187,9 @@ public sealed partial class JqTests
         """1e1000 | isfinite""",
         """0.1 + 0.2 == 0.3""",
         """fmod(5.5; 2)""",
+        """[strptime("%Y-%m-%dT%H:%M:%SZ")|(.,mktime)]""",
+        """try strftime("%Y-%m-%dT%H:%M:%SZ") catch .""",
+        """try mktime catch .""",
     ];
 
     private static readonly string[] FuzzAtoms =
