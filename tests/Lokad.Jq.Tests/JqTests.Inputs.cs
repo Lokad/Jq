@@ -159,6 +159,30 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_SlurpRejectsInvalidBytesAsMalformed()
+    {
+        // Slurp aggregation stages invalid bytes like the per-value paths:
+        // JSON slurp reports the transcoding failure and raw slurp uses the
+        // shared raw-segment decoder, both with empty output.
+        var cases = new (string[] Args, byte[] Stdin)[]
+        {
+            (new string[] { "-s", "." }, new byte[] { 0x22, 0x61, 0xFF, 0x62, 0x22, 0x0A }),
+            (new string[] { "-R", "-s", "." }, new byte[] { 0xFF }),
+            (new string[] { "-R", "-s", "." }, new byte[] { 0xFF, 0x0A }),
+        };
+        foreach (var (args, stdin) in cases)
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInputBytes(stdin);
+            var (exit, stdout, stderr) = await RunInputAsync(host, args);
+
+            Assert.Equal(5, exit);
+            Assert.Equal("", stdout);
+            Assert.Contains("jq: parse error: Cannot transcode invalid UTF-8", stderr);
+        }
+    }
+
+    [Fact]
     public async Task Jq_DuplicateInputKeysKeepFirstPosition()
     {
         // Like the reference object builder, later duplicates overwrite values
