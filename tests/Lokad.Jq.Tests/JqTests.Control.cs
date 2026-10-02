@@ -195,6 +195,11 @@ public sealed partial class JqTests
     [InlineData("{} | [10 > 0, 10 > 10, 10 > 20, 10 < 0, 10 < 10, 10 < 20]", "[\n  true,\n  false,\n  false,\n  false,\n  false,\n  true\n]\n")]
     [InlineData("1 and 2", "true\n")]
     [InlineData("empty and true", "")]
+    [InlineData("empty or true", "")]
+    [InlineData("(1,empty) and true", "true\n")]
+    [InlineData("(false,empty) or true", "true\n")]
+    [InlineData("try (error(\"x\") and true) catch .", "\"x\"\n")]
+    [InlineData("try (true and error(\"x\")) catch .", "\"x\"\n")]
     [InlineData("42 and \"a string\"", "true\n")]
     public async Task Jq_AndOrShortCircuitOverGenerators(string filter, string expected)
     {
