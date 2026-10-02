@@ -145,6 +145,27 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_LoneSurrogatesInInputAreMalformed()
+    {
+        // Unpaired escapes fail staged instead of smuggling WTF-8 bytes:
+        // the reference rejects lone highs and keeps lone lows, while the
+        // strict decoder rejects both with reader wording.
+        foreach (var (stdin, fragment) in new (string, string)[]
+        {
+            ("\"\\ud800\"", "missing low surrogate"),
+            ("\"\\udc00\"", "Invalid surrogate"),
+        })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput(stdin);
+            var (exit, stdout, stderr) = await RunInputAsync(host, ".");
+            Assert.Equal(5, exit);
+            Assert.Empty(stdout);
+            Assert.Contains(fragment, stderr);
+        }
+    }
+
+    [Fact]
     public async Task Jq_ControlBytesInInputAreMalformed()
     {
         // Raw control bytes inside strings fail like the reference issue
