@@ -125,6 +125,7 @@ public sealed partial class JqTests
         """min_by(.)""",
         """tostream""",
         """[tostream] | fromstream""",
+        """. as $dot | fromstream($dot | tostream) | . == $dot""",
         """[tostream] | truncate_stream(1) | fromstream""",
         """[input_filename, input_line_number]""",
         """del(.a)""",
