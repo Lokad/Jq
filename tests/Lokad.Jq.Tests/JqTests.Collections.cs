@@ -36,6 +36,7 @@ public sealed partial class JqTests
     [InlineData("\"a\"", "in(empty)", "")]
     [InlineData("null", "nan | IN([nan])", "false\n")]
     [InlineData("[1,2,3]", "has(-0.5)", "true\n")]
+    [InlineData("{\"a\":1}", "has((\"a\",\"b\"))", "true\nfalse\n")]
     // Fractional indices truncate like the reference array get; the object number-key diagnostic matches jv_has byte-exact.
     [InlineData("[1,2]", "has(1.5)", "true\n")]
     [InlineData("{\"a\":1,\"a\":2}", ".", "{\n  \"a\": 2\n}\n")]
@@ -113,6 +114,7 @@ public sealed partial class JqTests
     [InlineData("5", "contains([])", "number (5) and array ([]) cannot have their containment checked")]
     [InlineData("\"abc\"", "contains([])", "string (\"abc\") and array ([]) cannot have their containment checked")]
     [InlineData("{}", "contains([])", "object ({}) and array ([]) cannot have their containment checked")]
+    [InlineData("[1,2]", "contains((1,2))", "array ([1,2]) and number (1) cannot have their containment checked")]
     [InlineData("null", "inside(\"a\")", "string (\"a\") and null (null) cannot have their containment checked")]
     [InlineData("5", "indices(\"a\")", "cannot index number")]
     [InlineData("5", "index(0)", "cannot index number")]

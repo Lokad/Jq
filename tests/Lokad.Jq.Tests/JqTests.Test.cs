@@ -19,6 +19,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" | test([\"x\"])", "true\n")]
     [InlineData("\"Inventory\" | test([\"inventory\",\"i\"])", "true\n")]
     [InlineData("\"A\" | test((\"a\",\"A\");(\"\",\"i\"))", "false\ntrue\ntrue\ntrue\n")]
+    [InlineData("\"ab\" | test((\"a\",\"b\"))", "true\ntrue\n")]
     [InlineData("\"A\" | test(empty;\"i\")", "")]
     [InlineData("\"A\" | test(\"A\";empty)", "")]
     [InlineData("null | test(empty)", "")]

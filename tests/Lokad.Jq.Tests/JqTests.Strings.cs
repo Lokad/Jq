@@ -179,6 +179,10 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("[\"1\",2,true,false,3.4]", "join(\",\")", "\"1,2,true,false,3.4\"\n")]
+    [InlineData("[\"a\",\"b\"]", "join(empty)", "")]
+    [InlineData("[\"a\",\"b\"]", "join(\"x\",\"y\")", "\"axb\"\n\"ayb\"\n")]
+    [InlineData("\"ab\"", "startswith((\"a\",\"b\"))", "true\nfalse\n")]
+    [InlineData("\"hello\"", "ltrimstr((\"h\",\"e\"))", "\"ello\"\n\"hello\"\n")]
     [InlineData("[[],[null],[null,null],[null,null,null]]", ".[] | join(\",\")", "\"\"\n\"\"\n\",\"\n\",,\"\n")]
     [InlineData("[[\"a\",null],[null,\"a\"]]", ".[] | join(\",\")", "\"a,\"\n\",a\"\n")]
     [InlineData("[[],[\"\"],[\"\",\"\"],[\"\",\"\",\"\"]]", "[.[]|join(\"a\")]", "[\n  \"\",\n  \"\",\n  \"a\",\n  \"aa\"\n]\n")]
