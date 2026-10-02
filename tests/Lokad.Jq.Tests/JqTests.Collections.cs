@@ -55,6 +55,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "try has(0) catch .", "\"Cannot check whether object has a number key\"\n")]
     [InlineData("[1,2,3]", "has(1.9)", "true\n")]
     [InlineData("1", "try keys catch .", "\"number (1) has no keys\"\n")]
+    [InlineData("null", "contains(null)", "true\n")]
+    [InlineData("null", "inside(null)", "true\n")]
     public async Task Jq_StructuralBuiltins(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -88,6 +90,11 @@ public sealed partial class JqTests
     [InlineData("null", "unique", "cannot be sorted, as it is not an array")]
     [InlineData("null", "min", "cannot be iterated over")]
     [InlineData("null", "max", "cannot be iterated over")]
+    [InlineData("null", "keys", "null (null) has no keys")]
+    [InlineData("null", "keys_unsorted", "null (null) has no keys")]
+    [InlineData("null", "to_entries", "null (null) has no keys")]
+    [InlineData("null", "contains(\"a\")", "null (null) and string (\"a\") cannot have their containment checked")]
+    [InlineData("null", "inside(\"a\")", "string (\"a\") and null (null) cannot have their containment checked")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)

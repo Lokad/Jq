@@ -444,6 +444,15 @@ internal sealed class JqRuntime(JqBudget budget)
             }
         }
 
+    // Like the reference fromjson, only strings parse; other inputs fail
+    // with the upstream diagnostic before any decoding.
+    internal JsonNode? ParseJson(JsonNode? input)
+    {
+        if (!TryGetString(input, out string? text) || text is null)
+            throw new JqException($"{TypeName(input)} ({Serialize(input, false, null, false)}) only strings can be parsed");
+        return ParseJson(text);
+    }
+
     internal JsonNode? ParseJson(string text)
     {
         budget.ChargeBytes(Encoding.UTF8.GetByteCount(text));

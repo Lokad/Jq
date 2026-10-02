@@ -1711,7 +1711,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "utf8bytelength": yield return JsonValue.Create(Utf8ByteLength(input, context)); break;
                 case "tostring": yield return JsonValue.Create(context.Runtime.ToJqString(input)); break;
                 case "tojson": yield return JsonValue.Create(context.Runtime.Serialize(input, false, null, false)); break;
-                case "fromjson": yield return context.Runtime.ParseJson(String(input)); break;
+                case "fromjson": yield return context.Runtime.ParseJson(input); break;
                 case "min": yield return context.Runtime.MinMax(input, false); break;
                 case "max": yield return context.Runtime.MinMax(input, true); break;
                 case "reverse": yield return context.Runtime.Reverse(input); break;

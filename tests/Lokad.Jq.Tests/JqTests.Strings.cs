@@ -157,6 +157,7 @@ public sealed partial class JqTests
     [InlineData("\"nanx\"", "tonumber", "string (\"nanx\") cannot be parsed as a number")]
     [InlineData("5", "utf8bytelength", "only strings have UTF-8 byte length")]
     [InlineData("null", "utf8bytelength", "only strings have UTF-8 byte length")]
+    [InlineData("null", "fromjson", "null (null) only strings can be parsed")]
     [InlineData("null", "toboolean", "null (null) cannot be parsed as a boolean")]
     [InlineData("0", "toboolean", "number (0) cannot be parsed as a boolean")]
     [InlineData("\"TRUE\"", "toboolean", "string (\"TRUE\") cannot be parsed as a boolean")]
