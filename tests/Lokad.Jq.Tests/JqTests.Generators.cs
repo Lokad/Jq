@@ -59,6 +59,7 @@ public sealed partial class JqTests
     [InlineData("[[range(10)] | .[1.1,1.5,1.7]]", "[\n  1,\n  1,\n  1\n]\n")]
 [InlineData("[range(3)] | .[nan:1]", "[\n  0\n]\n")]
 [InlineData("[range(3)] | .[1:nan]", "[\n  1,\n  2\n]\n")]
+[InlineData("[0,1,2] | .[0:infinite]", "[\n  0,\n  1,\n  2\n]\n")]
 [InlineData("[1,2,3] | .[{\"start\":1}]", "[\n  2,\n  3\n]\n")]
 [InlineData("[1,2,3] | .[{\"end\":2}]", "[\n  1,\n  2\n]\n")]
 [InlineData("[1,2,3] | .[{}]", "[\n  1,\n  2,\n  3\n]\n")]

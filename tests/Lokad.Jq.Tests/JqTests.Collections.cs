@@ -56,6 +56,7 @@ public sealed partial class JqTests
     [InlineData("[1,2,3]", "has(1.9)", "true\n")]
     [InlineData("1", "try keys catch .", "\"number (1) has no keys\"\n")]
     [InlineData("null", "has(null)", "false\n")]
+    [InlineData("[0]", ".[infinite]", "null\n")]
     [InlineData("1", "in(null)", "false\n")]
     [InlineData("[1,2,3]", ".[[1,2]]", "[\n  0\n]\n")]
     [InlineData("null", ".[{}]", "null\n")]
@@ -133,6 +134,7 @@ public sealed partial class JqTests
     [InlineData("[1,2]", "delpaths([[true]])", "expected a number for indexing an array but got: true")]
     [InlineData("{}", "delpaths([[true]])", "expected a string for object key but got: true")]
     [InlineData("{\"a\":1}", "getpath([nan])", "Cannot index object with number (null)")]
+    [InlineData("[0,1,2]", "setpath([infinite]; 9)", "Array index too large")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
