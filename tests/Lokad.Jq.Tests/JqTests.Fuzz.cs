@@ -200,6 +200,8 @@ public sealed partial class JqTests
         """1e1000 | isinfinite""",
         """0 | log""",
         """1e1000 | isfinite""",
+        """[nan % 1, 1 % nan | isnan]""",
+        """[(infinite, -infinite) % (1, -1, infinite)]""",
         """0.1 + 0.2 == 0.3""",
         """fmod(5.5; 2)""",
         """[strptime("%Y-%m-%dT%H:%M:%SZ")|(.,mktime)]""",
