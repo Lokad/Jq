@@ -69,7 +69,9 @@ eight fail at compile time and `builtins/0` never advertises them, locked
 by the inventory rejection and omission cases plus the exact `builtins`
 count pin. Local extras are legitimate: `_negate` is the parser-internal
 unary-minus step (likewise unadvertised) and `lgamma_r` exists on both
-sides. Re-run this comparison when the target profile moves.
+sides. Arity parity was checked executably: all 202 registry names accept and
+reject at boundary arities exactly per the upstream ranges (544 checks, exit-3
+compile diagnostics, no escapes). Re-run this comparison when the target profile moves.
 
 ## Regeneration
 
