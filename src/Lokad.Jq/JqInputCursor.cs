@@ -651,7 +651,10 @@ internal sealed class JqInputCursor : IAsyncDisposable
     {
         int length = rsIdx - _start;
         ReadOnlySpan<byte> record = _buffer.AsSpan(_start, length);
-        Advance(length + 1);
+        Advance(length);
+        int truncLine = _scanLine;
+        int truncCol = _scanCol + 1;
+        Advance(1);
         bool skippedPrefix = _seqWaiting;
         _seqWaiting = false;
         if (skippedPrefix)
@@ -667,7 +670,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         ScanSeqRecord(record, out int depth, out bool inString, out int trailingRun);
         if (depth > 0 || inString)
         {
-            StashSeqError("Truncated value (need RS to resync)");
+            StashSeqError($"Truncated value at line {truncLine}, column {truncCol}");
             return;
         }
         if (trailingRun > 0)
@@ -677,9 +680,9 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 return;
             ReadOnlySpan<byte> run = record[^trailingRun..];
             if (IsCompleteSeqNumber(run))
-                StashSeqError("Potentially truncated top-level numeric value (need RS to resync)");
+                StashSeqError($"Potentially truncated top-level numeric value at line {truncLine}, column {truncCol}");
             else
-                StashSeqError("Truncated value (need RS to resync)");
+                StashSeqError($"Truncated value at line {truncLine}, column {truncCol}");
             return;
         }
         DecodeSeqValues(record, resyncSuffix: true);

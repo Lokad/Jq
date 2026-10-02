@@ -60,7 +60,7 @@ public sealed partial class JqTests
         var (exit, stdout, stderr) = await RunSeqAsync(host, "--seq", ".");
         Assert.True(exit == 0, stderr);
         Assert.Equal("\u001e1\n\u001e2\n", stdout);
-        Assert.Contains("jq: ignoring parse error: Truncated value (need RS to resync)", stderr);
+        Assert.Contains("jq: ignoring parse error: Truncated value at line 3, column 1", stderr);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public sealed partial class JqTests
         var (exit, stdout, stderr) = await RunSeqAsync(host, "--seq", ".");
         Assert.True(exit == 0, stderr);
         Assert.Equal("", stdout);
-        Assert.Contains("Potentially truncated top-level numeric value (need RS to resync)", stderr);
+        Assert.Contains("Potentially truncated top-level numeric value at line 1, column 4", stderr);
     }
 
     [Fact]
@@ -227,16 +227,16 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_SeqResyncWarningCounts()
     {
-        // Upstream shell vectors expect three resync warnings over these RS
-        // records; warning positions are not yet reported (the reference
-        // appends the truncation line/column), so this pins counts, stdout,
-        // and status while that shape gap stays recorded.
+        // Upstream shell vectors expect three positioned resync warnings over
+        // these RS records; truncation reports the record-end line/column
+        // like the reference. This pins the byte-exact stderr with stdout
+        // and status.
         var host = new MockFileSystem();
         host.SetStandardInput("1\u001e2 3\n[0,1\u001e[4,5]true\"ab\"{\"c\":4\u001e{}{\"d\":5,\"e\":6\"\u001efalse\n");
         var (exit, stdout, stderr) = await RunSeqAsync(host, "-c", "-e", "-s", "--seq", ". == [2,3,[4,5],true,\"ab\",{},false]");
         Assert.Equal(1, exit);
         Assert.Equal("\u001efalse\n", stdout);
-        Assert.Equal("jq: ignoring parse error: Truncated value (need RS to resync)\n" + "jq: ignoring parse error: Truncated value (need RS to resync)\n" + "jq: ignoring parse error: Truncated value (need RS to resync)\n", stderr);
+        Assert.Equal("jq: ignoring parse error: Truncated value at line 2, column 5\n" + "jq: ignoring parse error: Truncated value at line 2, column 25\n" + "jq: ignoring parse error: Truncated value at line 2, column 41\n", stderr);
     }
 
     [Fact]
