@@ -84,6 +84,10 @@ public sealed partial class JqTests
     [InlineData("null", "unique_by(.)", "cannot iterate over null")]
     [InlineData("null", "min_by(.)", "cannot iterate over null")]
     [InlineData("null", "max_by(.)", "cannot iterate over null")]
+    [InlineData("null", "sort", "cannot be sorted, as it is not an array")]
+    [InlineData("null", "unique", "cannot be sorted, as it is not an array")]
+    [InlineData("null", "min", "cannot be iterated over")]
+    [InlineData("null", "max", "cannot be iterated over")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
