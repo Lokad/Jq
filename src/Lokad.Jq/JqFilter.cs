@@ -67,15 +67,16 @@ internal abstract class JqFilter
             yield return new JqValuePath(pair.Segments, value, pair.Tracked && PreservesPathIdentity && PathIntact(context.Runtime, pair.Value, value));
     }
 
-    // Path intactness mirrors upstream bitwise identity for doubles (so
-    // signed zeros stay distinct) while keeping value equality elsewhere.
+    // Path intactness mirrors upstream identity: bitwise for doubles (so
+    // signed zeros stay distinct) with NaN-tolerant structural equality
+    // for containers (a surviving NaN is still the same value).
     internal static bool PathIntact(JqRuntime runtime, JsonNode? expected, JsonNode? actual)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         if (expected is JsonValue a && actual is JsonValue b
             && a.TryGetValue<double>(out double x) && b.TryGetValue<double>(out double y))
             return BitConverter.DoubleToInt64Bits(x) == BitConverter.DoubleToInt64Bits(y);
-        return runtime.JsonEquals(actual, expected);
+        return runtime.IntactEquals(actual, expected);
     }
 }
 

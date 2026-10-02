@@ -845,6 +845,56 @@ internal sealed class JqRuntime(JqBudget budget)
         return EqualsValue(l, r);
     }
 
+    // Structural intactness for path tracking: mirrors value equality
+    // except NaN equals NaN, since intactness asks whether the value
+    // survived rather than whether jq `==` holds. Signed zeros stay
+    // indistinguishable, matching the double-domain projection.
+    internal bool IntactEquals(JsonNode? l, JsonNode? r)
+    {
+        budget.ChargeTree(l);
+        budget.ChargeTree(r);
+        return IntactValue(l, r, 0);
+    }
+
+    private static bool IntactValue(JsonNode? left, JsonNode? right, int depth)
+    {
+        if (depth > JqBudget.MaximumDepth)
+            throw new JqQuotaException("value nesting limit exceeded");
+        if (left is null || right is null)
+            return left is null && right is null;
+        if (left is JsonArray leftArray && right is JsonArray rightArray)
+        {
+            if (leftArray.Count != rightArray.Count)
+                return false;
+            for (var index = 0; index < leftArray.Count; index++)
+                if (!IntactValue(leftArray[index], rightArray[index], depth + 1))
+                    return false;
+            return true;
+        }
+        if (left is JsonObject leftObject && right is JsonObject rightObject)
+        {
+            if (leftObject.Count != rightObject.Count)
+                return false;
+            foreach (var property in leftObject)
+            {
+                if (!rightObject.TryGetPropertyValue(property.Key, out JsonNode? other))
+                    return false;
+                if (!IntactValue(property.Value, other, depth + 1))
+                    return false;
+            }
+            return true;
+        }
+        if (TryGetString(left, out string leftText) && TryGetString(right, out string rightText))
+            return string.Equals(leftText, rightText, StringComparison.Ordinal);
+        if (left is JsonValue leftScalar && right is JsonValue rightScalar
+            && leftScalar.TryGetValue<bool>(out bool leftBool) && rightScalar.TryGetValue<bool>(out bool rightBool))
+            return leftBool == rightBool;
+        if (TypeName(left) == "number" && TypeName(right) == "number")
+            return Number(left) == Number(right)
+                || (double.IsNaN(Number(left)) && double.IsNaN(Number(right)));
+        return false;
+    }
+
     // Mirrors the reference value equality: kind-sensitive, objects
     // order-insensitive, arrays ordered, numbers by double value with
     // NaN unequal to everything including itself.

@@ -233,6 +233,9 @@ public sealed partial class JqTests
     [InlineData("[1, 2, 3]", "del(.[nan,nan])", "[\n  1,\n  2,\n  3\n]\n")]
     // A NaN index reads null while sets fail and dels pass through.
     [InlineData("[1, 2, 3]", ".[nan]", "null\n")]
+    // NaN elements still travel intact, so iterator targets resolve like the reference.
+    [InlineData("[1,null,Infinity,-Infinity,NaN,-NaN]", ".[] = 1", "[\n  1,\n  1,\n  1,\n  1,\n  1,\n  1\n]\n")]
+    [InlineData("[nan]", "path(.[])", "[\n  0\n]\n")]
     [InlineData("[[10, 20], 30]", "pick(first|first)", "[\n  [\n    10\n  ]\n]\n")]
     [InlineData("[1, 2]", "try pick(last) catch .", "\"Out of bounds negative array index\"\n")]
     [InlineData("[1,2,3,4]", "pick(.[2], .[0], .[0])", "[\n  1,\n  null,\n  3\n]\n")]
