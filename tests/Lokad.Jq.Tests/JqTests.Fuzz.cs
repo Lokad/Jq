@@ -24,6 +24,8 @@ public sealed partial class JqTests
         """., .""",
         """select(type == "number")""",
         """if . then 1 else 2 end""",
+        """[if 1,null,2 then 3 else 4 end]""",
+        """with_entries(.key |= "K" + .)""",
         """try . catch 0""",
         """try .a // 1""",
         """type, length""",
