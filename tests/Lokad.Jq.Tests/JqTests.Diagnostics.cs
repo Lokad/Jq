@@ -16,6 +16,22 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_RemovedLeafPathsIsCompileError()
+    {
+        // leaf_paths was removed upstream in 1.8.2, so calling it fails at
+        // compile time like any unknown function, inside try too.
+        foreach (var filter in new[] { "leaf_paths", "try leaf_paths catch ." })
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+            Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.StartsWith("jq: unsupported function leaf_paths", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        }
+    }
+
+    [Fact]
     public async Task Jq_NestedUnknownFunctionHasNoPartialOutput()
     {
         var host = new MockFileSystem();

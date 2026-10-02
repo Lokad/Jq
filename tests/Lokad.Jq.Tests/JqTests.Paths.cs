@@ -41,6 +41,10 @@ public sealed partial class JqTests
     [InlineData("[1,2]", "path(.[error(\"x\")]?)", "")]
     [InlineData("[1,2]", "path(.[0,error(\"x\")]?)", "[\n  0\n]\n")]
     [InlineData("[1,[[],{\"a\":2}]]", "[paths]", "[\n  [\n    0\n  ],\n  [\n    1\n  ],\n  [\n    1,\n    0\n  ],\n  [\n    1,\n    1\n  ],\n  [\n    1,\n    1,\n    \"a\"\n  ]\n]\n")]
+    [InlineData("{\"a\":1}", "[paths((1,2))]", "[\n  [\n    \"a\"\n  ],\n  [\n    \"a\"\n  ]\n]\n")]
+    [InlineData("{\"a\":1}", "[paths(empty)]", "[]\n")]
+    [InlineData("[1]", "[paths(.)]", "[\n  [\n    0\n  ]\n]\n")]
+    [InlineData("{\"a\":{\"b\":1}}", "[paths(1)]", "[\n  [\n    \"a\"\n  ],\n  [\n    \"a\",\n    \"b\"\n  ]\n]\n")]
     // Empty-string keys and empty containers enumerate like any other leaf path.
     [InlineData("{\"\":1}", "[paths]", "[\n  [\n    \"\"\n  ]\n]\n")]
     [InlineData("{\"a\":{},\"b\":[]}", "[paths]", "[\n  [\n    \"a\"\n  ],\n  [\n    \"b\"\n  ]\n]\n")]
