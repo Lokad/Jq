@@ -23,6 +23,13 @@ internal sealed record IndexSegment(long Index, bool IsNaN) : JqValueSegment
     internal override JsonNode? ToJson() => IsNaN ? JsonValue.Create(double.NaN) : JsonValue.Create(Index);
 }
 
+// A fractional array index preserves its double for rendering and deletion
+// bucketing; reads and writes truncate it toward zero like the reference.
+internal sealed record FractionalSegment(double Value) : JqValueSegment
+{
+    internal override JsonNode? ToJson() => JsonValue.Create(Value);
+}
+
 internal sealed record SliceSegment(double? Start, double? End) : JqValueSegment
 {
     internal override JsonNode? ToJson()
@@ -133,6 +140,8 @@ internal static class JqPaths
         {
             if (TryGetString(element, out string? key))
                 segments.Add(new KeySegment(key));
+            else if (TryGetFractional(element, out double fractional))
+                segments.Add(new FractionalSegment(fractional));
             else if (TryGetIndex(element, out long index, out bool isNaN))
                 segments.Add(new IndexSegment(index, isNaN));
             else if (element is JsonObject slice)
@@ -172,6 +181,22 @@ internal static class JqPaths
         return false;
     }
 
+    // Reads and writes truncate fractional indices toward zero like the
+    // reference casts; deletions resolve the sign separately.
+    internal static long TruncateIndex(double value) => (long)ClampDouble(value);
+
+    internal static bool TryGetFractional(JsonNode? key, out double value)
+    {
+        value = 0;
+        if (key is JsonValue real && real.TryGetValue<double>(out double candidate) &&
+            double.IsFinite(candidate) && candidate != Math.Truncate(candidate))
+        {
+            value = candidate;
+            return true;
+        }
+        return false;
+    }
+
     private static double ClampDouble(double value)
     {
         if (value < long.MinValue) return long.MinValue;
@@ -187,6 +212,15 @@ internal static class JqPaths
     {
         if (segment is InvalidSegment invalid && invalid.Raw is JsonObject slice)
             return new SliceSegment(ParseBound(slice, "start"), ParseBound(slice, "end"));
+        return segment;
+    }
+
+    // Reads and writes share one truncation for fractional segments; the
+    // deletion grouping below resolves the sign itself.
+    internal static JqValueSegment TruncateFractional(JqValueSegment segment)
+    {
+        if (segment is FractionalSegment fractional)
+            return new IndexSegment(TruncateIndex(fractional.Value), false);
         return segment;
     }
 
@@ -256,7 +290,7 @@ internal static class JqPathUpdates
             return context.Runtime.Clone(value);
         var normalized = new List<JqValueSegment>(segments.Count);
         foreach (JqValueSegment existing in segments)
-            normalized.Add(JqPaths.UpdateSegment(existing));
+            normalized.Add(JqPaths.TruncateFractional(JqPaths.UpdateSegment(existing)));
         segments = normalized;
         var frames = new Stack<Frame>();
         JsonNode? current = root;
@@ -444,7 +478,7 @@ internal static class JqPathReads
         ArgumentNullException.ThrowIfNull(context);
         var normalized = new List<JqValueSegment>(segments.Count);
         foreach (JqValueSegment existing in segments)
-            normalized.Add(JqPaths.UpdateSegment(existing));
+            normalized.Add(JqPaths.TruncateFractional(JqPaths.UpdateSegment(existing)));
         segments = normalized;
         JsonNode? current = root;
         foreach (JqValueSegment segment in segments)
@@ -577,8 +611,10 @@ internal static class JqPathDeletes
         int rank = Rank(left).CompareTo(Rank(right));
         if (rank != 0)
             return rank;
-        if (left is IndexSegment li && right is IndexSegment ri)
+        if (left is IndexSegment li && right is IndexSegment ri && !li.IsNaN && !ri.IsNaN)
             return li.Index.CompareTo(ri.Index);
+        if (Rank(left) == 0 && Rank(right) == 0)
+            return SegmentNumber(left).CompareTo(SegmentNumber(right));
         if (left is KeySegment lk && right is KeySegment rk)
             return string.Compare(lk.Key, rk.Key, StringComparison.Ordinal);
         if (left is SliceSegment ls && right is SliceSegment rs)
@@ -592,9 +628,17 @@ internal static class JqPathDeletes
     private static int Rank(JqValueSegment segment) => segment switch
     {
         IndexSegment => 0,
+        FractionalSegment => 0,
         KeySegment => 1,
         SliceSegment => 2,
         _ => 3,
+    };
+
+    private static double SegmentNumber(JqValueSegment segment) => segment switch
+    {
+        IndexSegment index => index.IsNaN ? double.NaN : index.Index,
+        FractionalSegment fractional => fractional.Value,
+        _ => double.NaN,
     };
 
     // Heap-allocated frame for iterative grouped deletion. Deletion depth is path
@@ -705,7 +749,7 @@ internal static class JqPathDeletes
                     whole = true;
             if (whole)
             {
-                if (key is not KeySegment and not IndexSegment and not SliceSegment)
+                if (key is not KeySegment and not IndexSegment and not SliceSegment and not FractionalSegment)
                 {
                     // Invalid segments (e.g. null) cannot delete: mirror
                     // TryGetChild, skipping under null nodes and failing
@@ -743,6 +787,8 @@ internal static class JqPathDeletes
     private static bool TryGetChild(JsonNode? node, JqValueSegment key, out JsonNode? child, out bool missing)
     {
         child = null;
+        if (key is FractionalSegment fractional)
+            key = new IndexSegment(JqPaths.TruncateIndex(fractional.Value), false);
         missing = true;
         switch (key)
         {
@@ -786,6 +832,10 @@ internal static class JqPathDeletes
 
     private static JsonNode? Rebuild(JsonNode? node, List<(JqValueSegment Key, JsonNode? Value)> replacements, List<JqValueSegment> removals, JqContext context)
     {
+        var placed = new List<(JqValueSegment Key, JsonNode? Value)>(replacements.Count);
+        foreach (var (key, value) in replacements)
+            placed.Add((JqPaths.TruncateFractional(key), value));
+        replacements = placed;
         if (node is JsonObject obj)
         {
             var removed = new HashSet<string>(StringComparer.Ordinal);
@@ -820,6 +870,15 @@ internal static class JqPathDeletes
                     long resolved = index.Index < 0 ? arr.Count + index.Index : index.Index;
                     if (resolved >= 0 && resolved < arr.Count)
                         removed.Add((int)resolved);
+                }
+                else if (removal is FractionalSegment fractional)
+                {
+                    // Like the reference deletion loop, negative doubles
+                    // bucket from the end before truncating toward zero.
+                    double at = fractional.Value;
+                    long position = at < 0 ? arr.Count + JqPaths.TruncateIndex(at) : JqPaths.TruncateIndex(at);
+                    if (position >= 0 && position < arr.Count)
+                        removed.Add((int)position);
                 }
             var replaced = new Dictionary<int, JsonNode?>();
             foreach (var (key, value) in replacements)

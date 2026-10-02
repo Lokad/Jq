@@ -968,6 +968,8 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
     {
         if (TryGetString(key, out string? name))
             return new KeySegment(name);
+        if (JqPaths.TryGetFractional(key, out double fractional))
+            return new FractionalSegment(fractional);
         if (TryGetIndex(key, out long index, out bool isNaN))
             return new IndexSegment(index, isNaN);
         return new InvalidSegment(key?.DeepClone());
