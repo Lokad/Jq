@@ -242,14 +242,17 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_SeqMalformedWarningsCarryPositions()
     {
-        // Malformed records report the offending byte like the reference:
-        // reader wording with the global line/column before the resync note.
+        // Balanced records with bare words defer to the pending-literal
+        // truncation check like the reference, while other malformed records
+        // report the offending byte (reader wording with the global line/column
+        // before the resync note). Boundary-error offsets in letter-bearing
+        // records stay approximate: no upstream vectors cover them.
         var first = new MockFileSystem();
         first.SetStandardInput("\u001e{bad}\u001e");
         var (firstExit, firstOut, firstErr) = await RunSeqAsync(first, "--seq", ".");
         Assert.True(firstExit == 0, firstErr);
         Assert.Equal("", firstOut);
-        Assert.Equal("jq: ignoring parse error: 'b' is an invalid start of a property name. Expected a '\"'. at line 1, column 3 (need RS to resync)\n", firstErr);
+        Assert.Equal("jq: ignoring parse error: Truncated value at line 1, column 7\n", firstErr);
 
         var second = new MockFileSystem();
         second.SetStandardInput("\u001e:5\u001e");

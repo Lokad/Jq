@@ -677,7 +677,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         }
         if (trailingRun > 0)
         {
-            DecodeSeqPrefix(record[..^trailingRun], recordLine, recordCol, positionErrors: true);
+            DecodeSeqPrefix(record[..^trailingRun], record, recordLine, recordCol, positionErrors: true);
             if (_seqError is not null)
                 return;
             ReadOnlySpan<byte> run = record[^trailingRun..];
@@ -733,9 +733,17 @@ internal sealed class JqInputCursor : IAsyncDisposable
         long target = (long)offset + errorColumn;
         if (target < 0 || target > fromOrigin.Length)
             return false;
-        for (long i = 0; i < target; i++)
+        MeasurePosition(fromOrigin, target, originLine, originCol, out line, out column);
+        return true;
+    }
+
+    private static void MeasurePosition(ReadOnlySpan<byte> span, long length, int originLine, int originCol, out int line, out int column)
+    {
+        line = originLine;
+        column = originCol;
+        for (long i = 0; i < length; i++)
         {
-            if (fromOrigin[(int)i] == (byte)10)
+            if (span[(int)i] == (byte)10)
             {
                 line++;
                 column = 1;
@@ -745,10 +753,36 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 column++;
             }
         }
-        return true;
     }
 
-    private void DecodeSeqPrefix(ReadOnlySpan<byte> prefix, int originLine, int originCol, bool positionErrors)
+    // Balanced records with bare words outside strings defer to the
+    // reference pending-literal check, which reports truncation at the
+    // separator instead of a specific error.
+    private static bool HasBareLetters(ReadOnlySpan<byte> record)
+    {
+        bool inString = false;
+        bool escaped = false;
+        for (int i = 0; i < record.Length; i++)
+        {
+            byte b = record[i];
+            if (inString)
+            {
+                if (escaped)
+                    escaped = false;
+                else if (b == (byte)92)
+                    escaped = true;
+                else if (b == (byte)34)
+                    inString = false;
+            }
+            else if (b == (byte)34)
+                inString = true;
+            else if ((b >= (byte)97 && b <= (byte)122) || (b >= (byte)65 && b <= (byte)90))
+                return true;
+        }
+        return false;
+    }
+
+    private void DecodeSeqPrefix(ReadOnlySpan<byte> prefix, ReadOnlySpan<byte> record, int originLine, int originCol, bool positionErrors)
     {
         int pos = 0;
         while (pos < prefix.Length)
@@ -765,6 +799,12 @@ internal sealed class JqInputCursor : IAsyncDisposable
             }
             catch (JqException ex) when (ex is not JqQuotaException)
             {
+                if (positionErrors && HasBareLetters(record))
+                {
+                    MeasurePosition(record, record.Length, originLine, originCol, out int truncLine, out int truncCol);
+                    StashSeqError($"Truncated value at line {truncLine}, column {truncCol}");
+                    return;
+                }
                 StashSeqError(FormatSeqError(prefix, pos, ex, originLine, originCol, positionErrors));
                 return;
             }
@@ -790,6 +830,12 @@ internal sealed class JqInputCursor : IAsyncDisposable
             }
             catch (JqException ex) when (ex is not JqQuotaException)
             {
+                if (resyncSuffix && HasBareLetters(stripped))
+                {
+                    MeasurePosition(stripped, stripped.Length, originLine, originCol, out int truncLine, out int truncCol);
+                    StashSeqError($"Truncated value at line {truncLine}, column {truncCol}");
+                    return;
+                }
                 StashSeqError(resyncSuffix ? FormatSeqError(stripped, pos, ex, originLine, originCol, positionErrors: true) : ex.Message);
                 return;
             }
@@ -852,7 +898,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         if (trailingRun > 0)
         {
             ReadOnlySpan<byte> run = tail[^trailingRun..];
-            DecodeSeqPrefix(tail[..^trailingRun], tailLine, tailCol, positionErrors: false);
+            DecodeSeqPrefix(tail[..^trailingRun], tail, tailLine, tailCol, positionErrors: false);
             if (_seqError is not null)
             {
                 Advance(length);
