@@ -55,6 +55,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "try has(0) catch .", "\"Cannot check whether object has a number key\"\n")]
     [InlineData("[1,2,3]", "has(1.9)", "true\n")]
     [InlineData("1", "try keys catch .", "\"number (1) has no keys\"\n")]
+    [InlineData("[1,2,3]", ".[[1,2]]", "[\n  0\n]\n")]
+    [InlineData("null", ".[{}]", "null\n")]
     [InlineData("null", "contains(null)", "true\n")]
     [InlineData("null", "inside(null)", "true\n")]
     public async Task Jq_StructuralBuiltins(string input, string filter, string expected)
@@ -102,6 +104,9 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "indices(0)", "cannot index object")]
     [InlineData("{\"a\":1}", "index(\"a\")", "cannot index number")]
     [InlineData("{\"a\":1}", "rindex(\"a\")", "cannot slice number")]
+    [InlineData("null", ".[null]", "cannot index null")]
+    [InlineData("null", ".[true]", "cannot index null")]
+    [InlineData("null", ".[[0]]", "cannot index null")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)

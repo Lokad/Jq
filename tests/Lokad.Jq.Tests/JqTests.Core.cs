@@ -231,6 +231,8 @@ public sealed partial class JqTests
     [InlineData("1 | .[0]?", "")]
     [InlineData("1 | .[]?", "")]
     [InlineData("null | .[]?", "")]
+    [InlineData("null | .[null]?", "")]
+    [InlineData("5 | .[[1]]?", "")]
     [InlineData("1 | .[0:1]?", "")]
     [InlineData("(1 | .foo)?", "")]
     [InlineData("{\"a\":1} | .b?", "null\n")]

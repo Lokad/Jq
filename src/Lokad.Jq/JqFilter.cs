@@ -878,13 +878,28 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                     // A NaN index reads null instead of failing.
                     yield return null;
                 }
+                else if (value is JsonArray && key is JsonArray pattern)
+                {
+                    // Like the reference array get, an array key searches
+                    // contiguous subsequence positions instead of indexing.
+                    yield return context.Runtime.Indices(value, pattern);
+                }
                 else if (value is JsonObject obj && TryGetString(key, out var name))
                 {
                     yield return context.Runtime.Clone(obj.TryGetPropertyValue(name, out var child) ? child : null);
                 }
                 else if (value == null)
                 {
-                    yield return null;
+                    // Like the reference null-tolerant read, only string,
+                    // number, and slice-object keys yield null here; exotic
+                    // keys fail staged unless suppressed like other kinds.
+                    if (key is null || key is JsonArray || (key is JsonValue scalar && scalar.TryGetValue<bool>(out _)))
+                    {
+                        if (!optional)
+                            throw new JqRuntimeException("cannot index null");
+                    }
+                    else
+                        yield return null;
                 }
                 else if (!optional)
                 {
