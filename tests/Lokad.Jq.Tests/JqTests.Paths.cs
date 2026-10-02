@@ -198,6 +198,8 @@ public sealed partial class JqTests
     [InlineData("{\"hi\": \"hello\"}", "try [\"ok\", setpath([1]; 1)] catch [\"ko\", .]", "[\n  \"ko\",\n  \"Cannot index object with number (1)\"\n]\n")]
     [InlineData("null", "setpath([\"a\",\"b\",\"c\"]; 1)", "{\n  \"a\": {\n    \"b\": {\n      \"c\": 1\n    }\n  }\n}\n")]
     [InlineData("{}", "getpath([\"a\"])", "null\n")]
+    [InlineData("[1,2,3]", "getpath([nan])", "null\n")]
+    [InlineData("null", "getpath([nan])", "null\n")]
     [InlineData("{\"a\":1}", "setpath([]; 5)", "5\n")]
     [InlineData("{\"a\":1}", "getpath([])", "{\n  \"a\": 1\n}\n")]
     [InlineData("{\"a\":1}", "getpath(path(.a))", "1\n")]

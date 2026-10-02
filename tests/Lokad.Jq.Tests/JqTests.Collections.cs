@@ -132,6 +132,7 @@ public sealed partial class JqTests
     [InlineData("[1,2]", "getpath([true])", "expected a number for indexing an array but got: true")]
     [InlineData("[1,2]", "delpaths([[true]])", "expected a number for indexing an array but got: true")]
     [InlineData("{}", "delpaths([[true]])", "expected a string for object key but got: true")]
+    [InlineData("{\"a\":1}", "getpath([nan])", "Cannot index object with number (null)")]
     [InlineData("\"ab\"", "reverse", "cannot reverse string")]
     [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)

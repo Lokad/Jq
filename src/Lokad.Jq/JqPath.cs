@@ -507,7 +507,7 @@ internal static class JqPathReads
                     else if (current is null)
                         current = null;
                     else
-                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with number (" + (index.IsNaN ? "NaN" : index.Index.ToString(System.Globalization.CultureInfo.InvariantCulture)) + ")");
+                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with number (" + (index.IsNaN ? "null" : index.Index.ToString(System.Globalization.CultureInfo.InvariantCulture)) + ")");
                     break;
                 case SliceSegment slice:
                     if (current is JsonArray array)

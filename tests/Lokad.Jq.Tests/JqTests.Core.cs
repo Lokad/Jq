@@ -145,6 +145,7 @@ public sealed partial class JqTests
     [InlineData("[1, 2] * 2", "array ([1,2]) and number (2) cannot be multiplied")]
     [InlineData("2 * [1, 2]", "number (2) and array ([1,2]) cannot be multiplied")]
     [InlineData("1 + \"x\"", "number (1) and string (\"x\") cannot be added")]
+    [InlineData("nan + \"a\"", "number (null) and string (\"a\") cannot be added")]
     [InlineData("\"a\" * {}", "string (\"a\") and object ({}) cannot be multiplied")]
     // Arithmetic stays strict even for numeric strings; only count positions coerce.
     [InlineData("\"2\" + 1", "string (\"2\") and number (1) cannot be added")]
