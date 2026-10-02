@@ -475,6 +475,11 @@ public sealed partial class JqTests
         """try del(.a[]) catch .""",
         """.a[]?""",
         """delpaths([paths(type == "number")])""",
+        // Missing-deep and invalid-segment deletions: unchanged subtrees detach, invalid fails staged.
+        """delpaths([["a","x","y"]])""",
+        """delpaths([["a",null]])""",
+        """delpaths([[null]])""",
+        """delpaths([["a","x"],["a","y"]])""",
     ];
 
     [Fact]
