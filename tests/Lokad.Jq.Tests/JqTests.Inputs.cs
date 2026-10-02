@@ -183,6 +183,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_LeadingZeroInInputIsMalformed()
+    {
+        // A leading zero fails the whole input as malformed with no
+        // partial output, like other reader rejections.
+        var host = new MockFileSystem();
+        host.SetStandardInput("[0,01]\n");
+        var (exit, stdout, stderr) = await RunInputAsync(host, ".");
+
+        Assert.Equal(5, exit);
+        Assert.Equal("", stdout);
+        Assert.Contains("leading zero", stderr);
+    }
+
+    [Fact]
     public async Task Jq_DuplicateInputKeysKeepFirstPosition()
     {
         // Like the reference object builder, later duplicates overwrite values
