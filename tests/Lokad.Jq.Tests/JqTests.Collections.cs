@@ -78,6 +78,9 @@ public sealed partial class JqTests
     [InlineData("[[1]]", "combinations(\"a\")", "Range bounds must be numeric")]
     [InlineData("[{}]", "from_entries", "Cannot use null (null) as object key")]
     [InlineData("[{\"a\":1}]", "from_entries", "Cannot use null (null) as object key")]
+    [InlineData("null", "flatten", "cannot iterate over null")]
+    [InlineData("\"ab\"", "reverse", "cannot reverse string")]
+    [InlineData("5", "reverse", "cannot reverse number")]
     public async Task Jq_StructuralFailures(string input, string filter, string diagnostic)
     {
         var host = new MockFileSystem();
@@ -114,6 +117,11 @@ public sealed partial class JqTests
     [InlineData("[1,[2,[3]]]", "flatten(\"1\")", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[1,[2,[3]]]", "flatten([])", "[\n  1,\n  2,\n  3\n]\n")]
     [InlineData("[1,[2]]", "_flatten(null)", "[\n  1,\n  2\n]\n")]
+    [InlineData("{\"a\":1}", "flatten", "[\n  1\n]\n")]
+    [InlineData("\"\"", "reverse", "[]\n")]
+    [InlineData("{}", "reverse", "[]\n")]
+    [InlineData("null", "reverse", "[]\n")]
+    [InlineData("[3,1,2]", "reverse", "[\n  2,\n  1,\n  3\n]\n")]
     [InlineData("{\"arr\": [1, 2, 3]}", ".sum = add(.arr[])", "{\n  \"arr\": [\n    1,\n    2,\n    3\n  ],\n  \"sum\": 6\n}\n")]
     [InlineData("[[1], [2, 3]]", "transpose", "[\n  [\n    1,\n    2\n  ],\n  [\n    null,\n    3\n  ]\n]\n")]
     [InlineData("[]", "transpose", "[]\n")]
@@ -141,8 +149,6 @@ public sealed partial class JqTests
     [InlineData("[1, 2, 3]", "bsearch(0, 1, 2, 3, 4)", "-1\n0\n1\n2\n-4\n")]
     [InlineData("[]", "bsearch(1)", "-1\n")]
     [InlineData("[[0, [1]]]", "flatten((1, 0))", "[\n  0,\n  [\n    1\n  ]\n]\n[\n  [\n    0,\n    [\n      1\n    ]\n  ]\n]\n")]
-    [InlineData("null", "flatten", "[]\n")]
-    [InlineData("null", "flatten(2)", "[]\n")]
     [InlineData("{\"a\": [1]}", "flatten", "[\n  1\n]\n")]
     [InlineData("{\"a\": [1, [2]]}", "flatten(1)", "[\n  1,\n  [\n    2\n  ]\n]\n")]
     [InlineData("[0, [1], [[2]], [[[3]]]]", "flatten(3,2,1)", "[\n  0,\n  1,\n  2,\n  3\n]\n[\n  0,\n  1,\n  2,\n  [\n    3\n  ]\n]\n[\n  0,\n  1,\n  [\n    2\n  ],\n  [\n    [\n      3\n    ]\n  ]\n]\n")]

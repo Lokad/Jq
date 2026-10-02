@@ -1181,12 +1181,10 @@ internal sealed class JqRuntime(JqBudget budget)
 
     internal JsonNode Flatten(JsonNode? input, double depth)
     {
-        // Like the reference reduce over `.[]`, null iterates empty and
-        // objects contribute their values; other scalars fail.
+        // Like the reference reduce over `.[]`, objects contribute their
+        // values while other scalars (including null) fail.
         var result = new JsonArray();
         budget.ChargeNode();
-        if (input is null)
-            return result;
         if (input is JsonArray arr)
         {
             foreach (JsonNode? child in arr)
@@ -1279,20 +1277,19 @@ internal sealed class JqRuntime(JqBudget budget)
 
     internal JsonNode Reverse(JsonNode? input)
     {
-        if (TryGetString(input, out var s))
-        {
-            budget.ChargeString(s.Length);
-            return JsonValue.Create(string.Create(s.Length, s, static (target, source) =>
-            {
-                source.AsSpan().CopyTo(target);
-                target.Reverse();
-            }));
-        }
+        // Mirror the reference definition ([.[length-1-range(0;length)]]):
+        // length-zero inputs yield [], arrays reverse natively, and anything
+        // else fails staged (the reference raises index errors there).
         if (input is JsonArray arr)
         {
             var rev = new JsonArray();
             for (var i = arr.Count - 1; i >= 0; i--) rev.Add(Clone(arr[i]));
             return rev;
+        }
+        if (Number(Length(input)) == 0)
+        {
+            budget.ChargeNode();
+            return new JsonArray();
         }
         throw new JqRuntimeException($"cannot reverse {TypeName(input)}");
     }
