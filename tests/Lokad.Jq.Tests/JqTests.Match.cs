@@ -63,6 +63,10 @@ public sealed partial class JqTests
     [InlineData("\"x\" | match(5)", "number not a string or array")]
     [InlineData("\"x\" | match(null)", "null not a string or array")]
     [InlineData("\"x\" | capture(null)", "null not a string or array")]
+    [InlineData("\"ab\" | capture(\"(?<x>a)(?<x>b)\")", "invalid regex")]
+    [InlineData("\"ab\" | test(\"(?<x>a)(?<x>b)\")", "invalid regex")]
+    [InlineData("\"ab\" | match(\"(?<x>a)|(?<x>b)\")", "invalid regex")]
+    [InlineData("\"ab\" | capture(\"(?<1>a)\")", "invalid regex")]
     public async Task Jq_MatchCaptureFailures(string filter, string diagnostic)
     {
         var host = new MockFileSystem();

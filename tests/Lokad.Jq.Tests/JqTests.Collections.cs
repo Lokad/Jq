@@ -432,6 +432,7 @@ public sealed partial class JqTests
     [InlineData("try (\"abc\" | getpath([1])) catch .", "\"Cannot index string with number (1)\"\n")]
     [InlineData("try (null | getpath([true])) catch .", "\"expected a string for object key but got: true\"\n")]
     [InlineData("try (\"ab\" * true) catch .", "\"string (\\\"ab\\\") and boolean (true) cannot be multiplied\"\n")]
+    [InlineData("try (\"ab\" | capture(\"(?<x>a)(?<x>b)\")) catch .", "\"invalid regex: Invalid pattern '(?<x>a)(?<x>b)': two named subpatterns have the same name (PCRE2_DUPNAMES not set) at offset 12.\"\n")]
     [InlineData("try ({([]): 2}) catch .", "\"Cannot use array ([]) as object key\"\n")]
     [InlineData("try ({({\"a\":1}): 2}) catch .", "\"Cannot use object ({\\\"a\\\":1}) as object key\"\n")]
     [InlineData("try (5 | flatten) catch .", "\"cannot iterate over number\"\n")]
