@@ -53,6 +53,9 @@ public sealed partial class JqTests
     [InlineData("null", ". as {a: $x} | $x", "null\n")]
     [InlineData("{\"a\":4,\"b\":5}", "1 as $foreach | 2 as $and | 3 as $or | { $foreach, $and, $or, a }", "{\n  \"foreach\": 1,\n  \"and\": 2,\n  \"or\": 3,\n  \"a\": 4\n}\n")]
     [InlineData("{\"a\":1, \"b\":[2,{\"d\":3}]}", ". as {$a, b: [$c, {$d}]} | [$a, $c, $d]", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("{\"a\":1}", ". as {(\"a\"): $x} | $x", "1\n")]
+    [InlineData("{\"a\":1,\"b\":2}", ". as {(\"a\",\"b\"):$x} | $x", "1\n2\n")]
+    [InlineData("{\"a\":1}", ". as {b:$x} | $x", "null\n")]
     public async Task Jq_DestructuringBindsMissingAsNull(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -75,19 +78,19 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
-    // Unlike construction literals, binding patterns validate computed keys
-    // when they run, so the same payload fails staged (5) rather than at
-    // compile time (3).
+    // Like construction keys, scalar-constant pattern keys fail at compile
+    // time through the reference object-pattern check; computed keys fail
+    // staged when they run instead.
     [Theory]
-    [InlineData(". as {(true):$foo} | $foo", "Cannot use boolean (true) as object key")]
-    [InlineData(". as {(0):$foo} | $foo", "Cannot use number (0) as object key")]
-    public async Task Jq_ObjectPatternRejectsNonStringKeys(string filter, string diagnostic)
+    [InlineData(". as {(true):$foo} | $foo", "jq: Cannot use boolean (true) as object key at line 1 column 7 (filter)\n")]
+    [InlineData(". as {(0):$foo} | $foo", "jq: Cannot use number (0) as object key at line 1 column 7 (filter)\n")]
+    public async Task Jq_ObjectPatternRejectsNonStringKeys(string filter, string expectedError)
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expectedError, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 

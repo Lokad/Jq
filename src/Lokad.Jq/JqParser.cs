@@ -646,6 +646,9 @@ internal sealed class JqParser(
             Token open = Next();
             key = ParsePipe();
             Expect(")");
+            // Like construction keys and the reference pattern check,
+            // scalar non-string constants fail at compile time here too.
+            CheckConstantKey(key, open.Span);
         }
         else
         {

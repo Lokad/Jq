@@ -187,6 +187,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "{([1]): 2}", "Cannot use array ([1]) as object key")]
     [InlineData("{\"a\":1}", "{(.a): 2}", "Cannot use number (1) as object key")]
     [InlineData("{\"a\":1}", "{(.b,.c): 2}", "Cannot use null (null) as object key")]
+    [InlineData("{\"a\":1}", ". as {(1+1):$x} | $x", "Cannot use number (2) as object key")]
+    [InlineData("{\"a\":1}", ". as {([1]):$x} | $x", "Cannot use array ([1]) as object key")]
     [InlineData("\"s\"", ".a |= 1", "cannot index string with string \"a\"")]
     [InlineData("5", "setpath([\"a\"]; 1)", "Cannot index number with string (\"a\")")]
     [InlineData("\"hello\"", ".[1:4] = \"XY\"", "Cannot update string slices")]
