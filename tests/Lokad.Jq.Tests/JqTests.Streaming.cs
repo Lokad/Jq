@@ -326,6 +326,27 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_StreamAgreesWithPlainOnTruncatedPrefixes()
+    {
+        // The shell suite agrees plain and --stream fromstream(inputs) output
+        // over every truncation split; complete prefixes stay record-complete
+        // on both sides with no escapes.
+        const string doc = "{\"a\":1}\n[2,{\"b\":";
+        for (int cut = 0; cut <= doc.Length; cut++)
+        {
+            string prefix = doc.Substring(0, cut);
+            var plainHost = new MockFileSystem();
+            plainHost.SetStandardInput(prefix);
+            var (plainExit, plainOut, _) = await RunStreamAsync(plainHost, "-c", ".");
+            var streamHost = new MockFileSystem();
+            streamHost.SetStandardInput(prefix);
+            var (streamExit, streamOut, _) = await RunStreamAsync(streamHost, "-n", "--stream", "-c", "fromstream(inputs)");
+            Assert.Equal(plainExit, streamExit);
+            Assert.Equal(plainOut, streamOut);
+        }
+    }
+
+    [Fact]
     public async Task Jq_StreamMatchesPathRoundtrip()
     {
         // The upstream shell suite diffs path/getpath leaf pairs against
