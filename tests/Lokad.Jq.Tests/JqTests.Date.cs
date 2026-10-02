@@ -69,6 +69,9 @@ public sealed partial class JqTests
     // out-of-range months at parse), and mktime arrays roll over likewise.
     [InlineData("\"2015-02-30\" | strptime(\"%Y-%m-%d\") | mktime", "1425254400\n")]
     [InlineData("[2015,13,1,0,0,0] | mktime", "1454284800\n")]
+    [InlineData("[2015,1,32,0,0,0] | mktime", "1425427200\n")]
+    [InlineData("[2015,1,1,25,0,0] | mktime", "1422838800\n")]
+    [InlineData("[2015,1,0,0,0,0] | mktime", "1422662400\n")]
     // Bounded 400-day form of the upstream 67-year day-of-week/yearday loop; the full form exceeds the cumulative value budget (pinned in Memory).
     [InlineData("last(range(400)|(\"1970-03-01T01:02:03Z\"|strptime(\"%Y-%m-%dT%H:%M:%SZ\")|mktime) + (86400 * .)|strftime(\"%Y-%m-%dT%H:%M:%SZ\")|strptime(\"%Y-%m-%dT%H:%M:%SZ\"))", "[\n  1971,\n  3,\n  4,\n  1,\n  2,\n  3,\n  0,\n  93\n]\n")]
     [InlineData("[2015,2,5,23,51,47,4,63] | strftime(\"%Y-%m-%dT%H:%M:%SZ\")", "\"2015-03-05T23:51:47Z\"\n")]
