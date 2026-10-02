@@ -110,6 +110,8 @@ public sealed partial class JqTests
         """pick(first)""",
         """setpath([1]; 1)""",
         """.[1e18]""",
+        """.[999999999999]""",
+        """[null < 1, 1 < null, null == null]""",
         """.[1.5]""",
         """tonumber""",
         """toboolean""",
