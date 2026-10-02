@@ -105,6 +105,8 @@ public sealed partial class JqTests
     [InlineData("5 + null", "5\n")]
     [InlineData("null + 5", "5\n")]
     [InlineData("null + null", "null\n")]
+    [InlineData("true + null", "true\n")]
+    [InlineData("null + true", "true\n")]
     // Null ranks first in the total order with kind-sensitive equality.
     [InlineData("[null < 1, 1 < null, null < null]", "[\n  true,\n  false,\n  false\n]\n")]
     [InlineData("[null == null, null == false, null == 0]", "[\n  true,\n  false,\n  false\n]\n")]
