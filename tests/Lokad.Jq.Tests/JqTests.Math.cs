@@ -134,6 +134,11 @@ public sealed partial class JqTests
     [InlineData("null | isinfinite", "false\n")]
     [InlineData("infinite | isinfinite", "true\n")]
     [InlineData("infinite", "1.7976931348623157E+308\n")]
+    // Upstream exponent vectors: overflow clamps to the largest finite double on render while tiny quotients keep the uppercase exponent.
+    [InlineData("1 / 1e-17", "1E+17\n")]
+    [InlineData("9E999999999, 9999999999E999999990, 1E-999999999, 0.000000001E-999999990", "1.7976931348623157E+308\n1.7976931348623157E+308\n0\n0\n")]
+    [InlineData("5E500000000 > 5E-5000000000, 10000E500000000 > 10000E-5000000000", "true\ntrue\n")]
+    [InlineData("(1e999999999, 10e999999999) > (1e-1147483646, 0.1e-1147483646)", "true\ntrue\ntrue\ntrue\n")]
     [InlineData("nan", "null\n")]
     [InlineData("nan | type", "\"number\"\n")]
     [InlineData("have_decnum", "false\n")]
