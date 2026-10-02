@@ -186,6 +186,8 @@ public sealed partial class JqTests
         """try (.a, error("x")) catch .""",
         """try (., error("x"), .) catch 99""",
         """. and error("x")""",
+        """[(1,2,3) | ((. > 1) and (. < 3))]""",
+        """[(1,2,3) | ((. > 2) or (. < 2))]""",
         """. or error("x")""",
         """. + 1e+0""",
         """1e+0+0.001e3""",
