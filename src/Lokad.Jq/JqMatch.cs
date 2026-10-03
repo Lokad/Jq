@@ -57,10 +57,7 @@ internal static class JqMatch
         bool global = modifiers.Contains('g');
         JqRegexCache.Pattern compiled = context.Regexes.Get(pattern, options.Pattern);
         PcreMatchOptions matchOptions = options.Match;
-        var names = new Dictionary<int, string>();
-        foreach (string name in compiled.Regex.PatternInfo.GroupNames)
-            foreach (int index in compiled.Regex.PatternInfo.GetGroupIndexesByName(name))
-                names[index] = name;
+        Dictionary<int, string> names = GroupNameMap(compiled);
         int captureCount = compiled.Regex.PatternInfo.CaptureCount;
         var results = new List<JsonObject>();
         int start = 0;
@@ -91,6 +88,48 @@ internal static class JqMatch
                 break;
         }
         return results;
+    }
+
+    internal static Dictionary<int, string> GroupNameMap(JqRegexCache.Pattern compiled)
+    {
+        ArgumentNullException.ThrowIfNull(compiled);
+        var names = new Dictionary<int, string>();
+        foreach (string name in compiled.Regex.PatternInfo.GroupNames)
+            foreach (int index in compiled.Regex.PatternInfo.GetGroupIndexesByName(name))
+                names[index] = name;
+        return names;
+    }
+
+    // Named-capture fold for sub/gsub replacements: numbered groups in
+    // order with last-wins, including null for non-participating groups,
+    // mirroring `def sub`'s reduce over .captures in builtin.jq. Duplicate
+    // names (enabled via PCRE2_DUPNAMES) fold the same way.
+    internal static JsonObject FoldNamedCaptures(JqContext context, PcreRefMatch match, Dictionary<int, string> names, int captureCount)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(names);
+        var captures = new JsonObject();
+        context.Budget.ChargeNode();
+        for (int index = 1; index <= captureCount; index++)
+        {
+            if (!names.TryGetValue(index, out string? name) || name is null)
+                continue;
+            if (!match.TryGetGroup(index, out PcreRefGroup group))
+                break;
+            context.Budget.ChargeNode();
+            context.Budget.ChargeString(name.Length);
+            if (group.Success)
+            {
+                string value = group.Value.ToString();
+                context.Budget.ChargeString(value.Length);
+                captures[name] = JsonValue.Create(value);
+            }
+            else
+            {
+                captures[name] = null;
+            }
+        }
+        return captures;
     }
 
     private static JsonObject BuildMatch(JqContext context, string text, PcreRefMatch match, Dictionary<int, string> names, int captureCount)

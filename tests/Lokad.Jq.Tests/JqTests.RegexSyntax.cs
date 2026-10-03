@@ -30,6 +30,7 @@ public sealed partial class JqTests
     [InlineData("\"ab\" | [match(\".\"; \"g\") | .string] | .[] | match(\".\"; \"g\") | .offset", "0\n0\n")]
     [InlineData("\"ab\" | split(\".\")", "[\n  \"ab\"\n]\n")]
     [InlineData("\"ab\" | split(\".\"; \"\")", "[\n  \"\",\n  \"\",\n  \"\"\n]\n")]
+    [InlineData("\"ab\" | capture(\"(?<x>.)(?<x>.)\")", "{\n  \"x\": \"b\"\n}\n")]
     public async Task Jq_RegexSyntaxVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -51,7 +52,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" | capture(\"x\"; \"l\")", "unsupported regex flag")]
     [InlineData("\"aaa\" | splits(\"a\"; \"l\")", "unsupported regex flag")]
     [InlineData("\"x\" | gsub(\"x\"; \"y\"; \"q\")", "q is not a valid modifier string")]
-    [InlineData("\"ab\" | capture(\"(?<x>.)(?<x>.)\")", "two named subpatterns have the same name")]
+
     [InlineData("\"x\" | scan(\"x\"; \"q\")", "gq is not a valid modifier string")]
     [InlineData("\"x\" | splits(\"x\"; \"q\")", "qg is not a valid modifier string")]
     [InlineData("\"x\" | split(\"x\"; \"q\")", "qg is not a valid modifier string")]

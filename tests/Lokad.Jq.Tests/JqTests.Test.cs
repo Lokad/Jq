@@ -28,6 +28,7 @@ public sealed partial class JqTests
     [InlineData("\"\\u0101\" | [test(\"\\u0101\")]", "[\n  true\n]\n")]
     [InlineData("\"foo\" | test(\"foo\")", "true\n")]
     [InlineData("[\"xabcd\", \"ABC\"] | .[] | test(\"a b c # spaces are ignored\"; \"ix\")", "true\ntrue\n")]
+    [InlineData("\"ab\" | test(\"(?<x>a)(?<x>b)\")", "true\n")]
     public async Task Jq_TestReturnsBooleansWithRegexFlagsAndArgumentStreams(string filter, string expected)
     {
         var host = new MockFileSystem();

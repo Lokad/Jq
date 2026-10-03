@@ -32,9 +32,11 @@ tests, and evidence):
   precision, ordering, and non-finite rendering each carry byte-exact
   pins there, and decimal-literal fidelity is out of scope by design.
 - Regex support uses PCRE.NET. The reference Oniguruma syntax, flags,
-  captures, offsets, and substitutions are covered except `l`
-  (longest match) and `\C`, which stay explicitly rejected; the full
-  differential matrix remains open.
+  captures, offsets, and substitutions are covered, including duplicate
+  capture names with reference-ordered folds; `l` (longest match) and
+  `\C` stay permanently excluded (no standard-API equivalent; the
+  scalar-offset model forbids single-unit matching). The onig/manonig
+  sweep passes 66/66.
 - Bessel math (`j0`/`j1`/`y0`/`y1`/`jn`/`yn`) stays registered but unavailable,
   like the reference missing-capability path.
 - Parser-support helpers (`_assign`/`_modify`) and host-identity queries

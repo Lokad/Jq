@@ -66,7 +66,7 @@ internal sealed class JqRegexCache : IDisposable
         {
             regex = new PcreRegex(pattern, new PcreRegexSettings
             {
-                Options = options | PcreOptions.Utf | PcreOptions.Ucp | PcreOptions.AutoCallout | PcreOptions.NeverBackslashC,
+                Options = options | PcreOptions.Utf | PcreOptions.Ucp | PcreOptions.AutoCallout | PcreOptions.NeverBackslashC | PcreOptions.DupNames,
                 NewLine = PcreNewLine.Lf,
                 ParensLimit = JqBudget.MaximumDepth,
                 MaxPatternLength = MaximumPatternLength,

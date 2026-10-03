@@ -45,16 +45,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                     throw new JqException("gsub requires non-overlapping forward matches");
                 var gapStart = previous;
                 var gapLength = match.Index - previous;
-                var captures = new JsonObject();
-                context.Budget.ChargeNode();
-                foreach (var name in regex.Regex.PatternInfo.GroupNames)
-                {
-                    context.Budget.ChargeNode();
-                    context.Budget.ChargeString(name.Length);
-                    var group = match[name];
-                    if (group.Success) context.Budget.ChargeString(group.Length);
-                    captures[name] = group.Success ? JsonValue.Create(group.Value.ToString()) : null;
-                }
+                JsonObject captures = JqMatch.FoldNamedCaptures(context, match, JqMatch.GroupNameMap(regex), regex.Regex.PatternInfo.CaptureCount);
 
                 // All match positions and captures are now copied. A nested gsub may reuse the buffer.
                 var index = 0;

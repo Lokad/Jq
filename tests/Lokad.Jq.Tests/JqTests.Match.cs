@@ -44,6 +44,10 @@ public sealed partial class JqTests
     [InlineData("\"a\\u0304 two-codepoint grapheme\" | [match(\".+?\\\\b\")]", "[\n  {\n    \"offset\": 0,\n    \"length\": 2,\n    \"string\": \"ā\",\n    \"captures\": []\n  }\n]\n")]
     [InlineData("\"a\",\"b\",\"c\" | match(\"(?<x>a?)?b?\")", "{\n  \"offset\": 0,\n  \"length\": 1,\n  \"string\": \"a\",\n  \"captures\": [\n    {\n      \"offset\": 0,\n      \"length\": 1,\n      \"string\": \"a\",\n      \"name\": \"x\"\n    }\n  ]\n}\n{\n  \"offset\": 0,\n  \"length\": 1,\n  \"string\": \"b\",\n  \"captures\": [\n    {\n      \"offset\": 0,\n      \"length\": 0,\n      \"string\": \"\",\n      \"name\": \"x\"\n    }\n  ]\n}\n{\n  \"offset\": 0,\n  \"length\": 0,\n  \"string\": \"\",\n  \"captures\": [\n    {\n      \"offset\": 0,\n      \"length\": 0,\n      \"string\": \"\",\n      \"name\": \"x\"\n    }\n  ]\n}\n")]
     [InlineData("\"foo bar foo\" | match(\"foo\")", "{\n  \"offset\": 0,\n  \"length\": 3,\n  \"string\": \"foo\",\n  \"captures\": []\n}\n")]
+    [InlineData("\"ab\" | capture(\"(?<x>a)(?<x>b)\")", "{\n  \"x\": \"b\"\n}\n")]
+    [InlineData("\"ab\" | capture(\"(?<x>a)|(?<x>b)\")", "{\n  \"x\": null\n}\n")]
+    [InlineData("\"b\" | capture(\"(?<x>a)|(?<x>b)\")", "{\n  \"x\": \"b\"\n}\n")]
+    [InlineData("\"ab\" | match(\"(?<x>a)|(?<x>b)\")", "{\n  \"offset\": 0,\n  \"length\": 1,\n  \"string\": \"a\",\n  \"captures\": [\n    {\n      \"offset\": 0,\n      \"length\": 1,\n      \"string\": \"a\",\n      \"name\": \"x\"\n    },\n    {\n      \"offset\": -1,\n      \"length\": 0,\n      \"string\": null,\n      \"name\": \"x\"\n    }\n  ]\n}\n")]
     public async Task Jq_MatchCaptureVectors(string filter, string expected)
     {
         var host = new MockFileSystem();
@@ -63,9 +67,9 @@ public sealed partial class JqTests
     [InlineData("\"x\" | match(5)", "number not a string or array")]
     [InlineData("\"x\" | match(null)", "null not a string or array")]
     [InlineData("\"x\" | capture(null)", "null not a string or array")]
-    [InlineData("\"ab\" | capture(\"(?<x>a)(?<x>b)\")", "invalid regex")]
-    [InlineData("\"ab\" | test(\"(?<x>a)(?<x>b)\")", "invalid regex")]
-    [InlineData("\"ab\" | match(\"(?<x>a)|(?<x>b)\")", "invalid regex")]
+
+
+
     [InlineData("\"ab\" | capture(\"(?<1>a)\")", "invalid regex")]
     public async Task Jq_MatchCaptureFailures(string filter, string diagnostic)
     {
