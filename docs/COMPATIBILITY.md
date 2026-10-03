@@ -27,8 +27,10 @@ tests, and evidence):
   per the reference fork structure (`gen_dictpair`, `_plus` chains, `gen_index`,
   `gen_slice_index`); execution-oracle confirmation remains open, so do not
   relabel those without oracle evidence.
-- Numbers use doubles with integral storage for integers;
-  literal precision, ordering, and non-finite rendering follow docs/NUMERIC_PROFILE.md, with deliberate decimal-build divergences recorded there.
+- Numbers use doubles with integral storage for integers under the
+  permanent double-domain policy in docs/NUMERIC_PROFILE.md; literal
+  precision, ordering, and non-finite rendering each carry byte-exact
+  pins there, and decimal-literal fidelity is out of scope by design.
 - Regex support uses PCRE.NET. The reference Oniguruma syntax, flags,
   captures, offsets, and substitutions are covered except `l`
   (longest match) and `\C`, which stay explicitly rejected; the full

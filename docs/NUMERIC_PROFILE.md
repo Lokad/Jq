@@ -37,9 +37,19 @@ explicitly disabled).
   finite extremes (see below) rather than preserving the literal.
 
 These differ deliberately from decimal-literal builds, which preserve
-literal text and compare decimals exactly. The implementation stays
-dependency-free (no native decimal library); the profile is pinned by
-`JqTests.Jq_NumbersFollowDoubleProfile`.
+literal text and compare decimals exactly. This is a permanent scope
+decision, not a deferred task: exact-decimal fidelity would require an
+exact-decimal arithmetic dependency, while the reference itself enables
+decimal literals only as a build configuration, so the double domain above
+is the embedding contract. The implementation stays dependency-free (no
+native decimal library). Every observable divergence in this section
+carries a byte-exact pin: `JqTests.Jq_NumbersFollowDoubleProfile` locks
+literal rounding (`1.10` rendering `1.1`, `1e3` rendering `1000`), exact
+integral rendering with double-projected arithmetic past 2^53, clamped
+overflow rendering with uppercase exponents, and the neither-branch
+decimal-sensitive conditionals; the capability queries are pinned false in
+`JqTests.Math`, and input-side decoding is pinned through the
+large-integral ingress vectors.
 
 ## Division and remainder
 
