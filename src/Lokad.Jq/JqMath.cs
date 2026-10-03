@@ -49,6 +49,10 @@ internal static class JqMath
         ["lgamma"] = static value => LogGammaSigned(value).Value,
         ["erf"] = Erf,
         ["erfc"] = static value => 1.0 - Erf(value),
+        ["j0"] = JqBessel.J0,
+        ["j1"] = JqBessel.J1,
+        ["y0"] = JqBessel.Y0,
+        ["y1"] = JqBessel.Y1,
     };
 
     private static readonly Dictionary<string, Func<double, double, double>> Binary = new(StringComparer.Ordinal)
@@ -155,18 +159,16 @@ internal static class JqMath
                 (double lgammaValue, int lgammaSign) = LogGammaSigned(RequireNumber(context.Runtime, input));
                 result = new JsonArray(JsonValue.Create(lgammaValue), JsonValue.Create(lgammaSign));
                 return true;
-            case "j0":
-            case "j1":
-            case "y0":
-            case "y1":
-                if (combo.Length != 0)
-                    return false;
-                throw Unavailable(name, 0);
             case "jn":
             case "yn":
                 if (combo.Length != 2)
                     return false;
-                throw Unavailable(name, 2);
+                double order = RequireNumber(context.Runtime, combo[0]);
+                double point = RequireNumber(context.Runtime, combo[1]);
+                result = JsonValue.Create(name == "yn"
+                    ? JqBessel.Yn(context.Budget, order, point)
+                    : JqBessel.Jn(context.Budget, order, point));
+                return true;
             default:
                 return false;
         }
@@ -408,6 +410,4 @@ internal static class JqMath
         return 1.0 - (poly * t * Math.Exp(-x * x));
     }
 
-    private static Exception Unavailable(string name, int arity) =>
-        new JqException("Error: " + name + "/" + arity + " not found at build time");
 }

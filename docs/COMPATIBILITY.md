@@ -39,8 +39,9 @@ tests, and evidence):
   `\C` stay permanently excluded (no standard-API equivalent; the
   scalar-offset model forbids single-unit matching). The onig/manonig
   sweep passes 66/66.
-- Bessel math (`j0`/`j1`/`y0`/`y1`/`jn`/`yn`) stays registered but unavailable,
-  like the reference missing-capability path.
+- Bessel math (`j0`/`j1`/`y0`/`y1`/`jn`/`yn`) is implemented in managed
+  code and verified against jq 1.8.2 within 1e-12; extreme orders and
+  non-finite inputs take documented boundary values.
 - Parser-support helpers (`_assign`/`_modify`) and host-identity queries
   (`get_search_list`/`get_prog_origin`/`get_jq_origin`) stay intentionally
   unexposed; direct calls fail at compile time with no `builtins/0` entry.

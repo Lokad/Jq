@@ -153,7 +153,7 @@ to read this file.
 | `modf/0`, `frexp/0`, `lgamma_r/0` | Manual: Math; `libm.h` capability matrix | implemented | JqTests.Math remainder and special cases | Array returns with fraction, integral, exponent, and sign parts; zero, infinite, and NaN edges documented in tests | none | I14 vectors pass |
 | `logb/0`, `log1p/0`, `expm1/0`, `significand/0` | Manual: Math; `libm.h` capability matrix | implemented | JqTests.Math remainder cases | Pole and edge handling; compensated log1p and series expm1 under one half | none | I14 vectors pass |
 | `tgamma/0`, `gamma/0`, `lgamma/0`, `erf/0`, `erfc/0` | Manual: Math; `libm.h` capability matrix | implemented | JqTests.Math special cases | Lanczos gamma with reflection and pole rules; rational erf with a 1.5e-7 bound asserted at 1e-6; gamma poles yield NaN | none | I14 vectors pass |
-| `j0/0`, `j1/0`, `y0/0`, `y1/0`, `jn/2`, `yn/2` | Manual: Math; `libm.h` capability matrix | unimplemented | JqTests.Math failure cases | Bessel functions have no managed implementation; names stay registered but raise build-time availability errors like the reference missing-capability path | none | Rejection passes |
+| `j0/0`, `j1/0`, `y0/0`, `y1/0`, `jn/2`, `yn/2` | Manual: Math; `libm.h` capability matrix | implemented | JqTests.Math Bessel value, boundary, and operand cases | Managed Bessel implementation verified against jq 1.8.2 within 1e-12: ascending series, Hankel asymptotics, Miller and forward recurrences with dtoi-like truncation and negative-order reflection; poles, domains, and non-finite inputs follow the reference; orders past 100000 steps and non-finite orders take documented boundary values | none | Bessel vectors pass |
 
 ## Time, IO, control, and introspection
 
