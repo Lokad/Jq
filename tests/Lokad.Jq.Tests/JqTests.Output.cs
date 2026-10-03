@@ -307,7 +307,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var (exit, stdout, stderr) = await RunOutputAsync(host, flag, "-n", ".");
         Assert.Equal(2, exit);
-        Assert.Contains("unsupported option", stderr);
+        Assert.Contains("Unknown option", stderr);
         Assert.Equal("", stdout);
     }
 

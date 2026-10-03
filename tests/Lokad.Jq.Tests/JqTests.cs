@@ -329,7 +329,7 @@ public sealed partial class JqTests
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.Equal(2, exitCode);
-        Assert.Contains("unsupported option", fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("Unknown option", fileSystem.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]
@@ -341,7 +341,7 @@ public sealed partial class JqTests
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.Equal(2, exitCode);
-        Assert.Contains("unsupported option --bogus-flag", fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("Unknown option --bogus-flag", fileSystem.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]

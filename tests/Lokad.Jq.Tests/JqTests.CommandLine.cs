@@ -14,16 +14,20 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_UnknownOptionsReportSystemError()
     {
-        // Unknown options fail with exit 2 and empty stdout. Wording stays in our
-        // diagnostic shape: the reference says `Unknown option`, and cluster errors
-        // name the cluster head (`-c` for `-cZ`) where the reference names the
-        // failing flag (`-Z`).
+        // Unknown options fail with exit 2 and empty stdout, naming the
+        // failing flag like the reference (`-Z` for `-cZ`). Only clusters
+        // interrupted by a value-taking short (`-cfZ`) keep the binder
+        // wording: upstream would take the rest as its file, which the
+        // binder rejects before that.
         foreach (var (flags, diagnostic) in new (string[], string)[]
         {
-            (["--frobnicate", "."], "jq: unsupported option --frobnicate\n"),
-            (["-Z", "."], "jq: unsupported option -Z\n"),
-            (["-cZ", "."], "jq: unsupported option -c\n"),
-            (["-Zc", "."], "jq: unsupported option -Z\n"),
+            (["--frobnicate", "."], "jq: Unknown option --frobnicate\n"),
+            (["-Z", "."], "jq: Unknown option -Z\n"),
+            (["-cZ", "."], "jq: Unknown option -Z\n"),
+            (["-rcZ", "."], "jq: Unknown option -Z\n"),
+            (["-Zc", "."], "jq: Unknown option -Z\n"),
+            (["-c", "-cZ", "."], "jq: Unknown option -Z\n"),
+            (["-cfZ", "."], "jq: Unknown option -c\n"),
         })
         {
             var host = new MockFileSystem();

@@ -16,6 +16,7 @@ internal static class JqCommandLineParser
     private static readonly string[] LongOptions;
     private static readonly HashSet<string> BoolLongOptions = new(StringComparer.Ordinal);
     private static readonly HashSet<char> BoolShortOptions = new();
+    private static readonly HashSet<char> ValueShortOptions = new();
 
     static JqCommandLineParser()
     {
@@ -30,6 +31,18 @@ internal static class JqCommandLineParser
         LongOptions = options.Select(option => option.Long).OfType<string>().ToArray();
         foreach (var property in properties)
         {
+            var annotation = property.GetCustomAttribute<ArgumentAttribute>();
+            if (annotation is null || annotation.Short == (char)0)
+                continue;
+            if (property.PropertyType == typeof(bool))
+            {
+                BoolShortOptions.Add(annotation.Short);
+                continue;
+            }
+            ValueShortOptions.Add(annotation.Short);
+        }
+        foreach (var property in properties)
+        {
             if (property.PropertyType != typeof(bool))
                 continue;
             var annotation = property.GetCustomAttribute<ArgumentAttribute>();
@@ -37,8 +50,6 @@ internal static class JqCommandLineParser
                 continue;
             if (annotation.Long is string longName)
                 BoolLongOptions.Add(longName);
-            if (annotation.Short != (char)0)
-                BoolShortOptions.Add(annotation.Short);
         }
     }
 
@@ -117,7 +128,7 @@ internal static class JqCommandLineParser
             }
             catch (ParseException ex)
             {
-                return Error(FormatParseError(ex.Message));
+                return Error(FormatParseError(ex.Message, special.Options));
             }
 
             if (parsed.Indent is < -1 or > 7)
@@ -583,11 +594,57 @@ internal static class JqCommandLineParser
         return new SpecialArguments(options, operands, variables, positional, fromFile, fileVariables, libraryDirs, null);
     }
 
-    private static string FormatParseError(string message)
+    private static string FormatParseError(string message, IReadOnlyList<string> options)
     {
+        ArgumentNullException.ThrowIfNull(options);
         if (TryExtractQuotedOption(message, out var option))
-            return $"jq: unsupported option {option}";
+            return $"jq: Unknown option {ResolveClusterFlag(option, options)}";
         return $"jq: {message}";
+    }
+
+    // Upstream names the failing flag inside dash clusters (`-cZ` reports
+    // `-Z`) while the binder quotes the cluster head. Walk the letters of
+    // the failing cluster like getopt: known boolean shorts combine, and
+    // the first other letter is the failure unless a value-taking short
+    // claims the rest, in which case the binder wording stands.
+    private static string ResolveClusterFlag(string option, IReadOnlyList<string> options)
+    {
+        if (option.Length != 2 || option[0] != '-' || !char.IsAsciiLetter(option[1]))
+            return option;
+        string? cluster = null;
+        foreach (string argument in options)
+        {
+            if (argument.Length > 2 && argument.StartsWith(option, StringComparison.Ordinal)
+                && argument[1] != '-' && IsAsciiLetters(argument[2..]))
+            {
+                cluster = argument;
+                break;
+            }
+        }
+        cluster ??= options.Contains(option) ? option : null;
+        if (cluster is null || cluster.Length < 3)
+            return option;
+        foreach (char flag in cluster.AsSpan(1))
+        {
+            if (BoolShortOptions.Contains(flag))
+                continue;
+            if (ValueShortOptions.Contains(flag))
+                return option;
+            return "-" + flag;
+        }
+        return option;
+    }
+
+    private static bool IsAsciiLetters(string text)
+    {
+        if (text.Length == 0)
+            return false;
+        foreach (char flag in text)
+        {
+            if (!char.IsAsciiLetter(flag))
+                return false;
+        }
+        return true;
     }
 
     private static bool TryExtractQuotedOption(string message, out string option)
