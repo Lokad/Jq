@@ -101,8 +101,12 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", "try path(delpaths([])) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
     [InlineData("[1]", "try path(setpath([0]; 1)) catch .", "\"Invalid path expression with result [1]\"\n")]
     [InlineData("\"\"", "try path(@base64) catch .", "\"Invalid path expression with result \\\"\\\"\"\n")]
-    // Heap variable reads travel untracked even when value-equal: upstream LOADV shares the stored pointer (execute.c LOADV/STOREV with path_intact/jv_identical), so an identity alias succeeds there and fails here.
-    [InlineData("{\"a\":1}", "try path(. as $x | $x) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
+    // Variable reads keep tracking when the stored reference is the current path value (upstream LOADV pushes the stored pointer and PATH_END compares it by jv_identical, which is pointer equality for heap values), so whole-input identity aliases succeed; variables bound to any other heap value still fail.
+    [InlineData("{\"a\":1}", "path(. as $x | $x)", "[]\n")]
+    [InlineData("{\"a\":1}", ". as $x | path($x)", "[]\n")]
+    [InlineData("{\"a\":{\"b\":1}}", ". as $x | path($x.a.b)", "[\n  \"a\",\n  \"b\"\n]\n")]
+    [InlineData("\"hi\"", ". as $x | path($x)", "[]\n")]
+    [InlineData("[0,1,2]", ". as $x | path($x)", "[]\n")]
     [InlineData("{\"a\":1}", "try path({\"a\":1} as $x | $x) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "try path(.a as $x | $x) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("1", "path(1 as $x | $x)", "[]\n")]
@@ -451,6 +455,11 @@ public sealed partial class JqTests
     [InlineData("[1,2]", "(.[] |= .+1)", "[\n  2,\n  3\n]\n")]
     [InlineData("[1,2,3]", "(.[0,1] = 9)", "[\n  9,\n  9,\n  3\n]\n")]
     [InlineData("{\"a\":{\"b\":1}}", "(.a.b, .a) = 0", "{\n  \"a\": 0\n}\n")]
+    [InlineData("{\"a\":1}", "(. as $x | $x) = 2", "2\n")]
+    [InlineData("{\"a\":1}", ". as $x | $x.a = 2", "{\n  \"a\": 2\n}\n")]
+    [InlineData("{\"a\":1}", ". as $x | ($x | .a = 2) | $x", "{\n  \"a\": 1\n}\n")]
+    [InlineData("{\"a\":{\"b\":1}}", ".a |= (.b = .)", "{\n  \"a\": {\n    \"b\": {\n      \"b\": 1\n    }\n  }\n}\n")]
+    [InlineData("{\"a\":[1,2]}", ". as $x | [($x.a = 9), $x]", "[\n  {\n    \"a\": 9\n  },\n  {\n    \"a\": [\n      1,\n      2\n    ]\n  }\n]\n")]
     [InlineData("{\"a\":{\"b\":1}}", "try ((.a, .a.b) = 0) catch .", "\"Cannot index number with string (\\\"b\\\")\"\n")]
     [InlineData("{\"a\":1}", ".a += (10,20)", "{\n  \"a\": 11\n}\n{\n  \"a\": 21\n}\n")]
     [InlineData("{\"a\":null}", ".a //= empty", "")]
@@ -486,12 +495,13 @@ public sealed partial class JqTests
     [InlineData("[{\"a\":0},{\"a\":1}]", "try ((map(select(.a == 1))[].a) |= .+1) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1}]\"\n")]
     [InlineData("null", "try (.foo[-2] = 0) catch .", "\"Out of bounds negative array index\"\n")]
     [InlineData("[{\"a\":0},{\"a\":1}]", "try ((map(select(.a == 1))[].b) = 10) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1}]\"\n")]
-    // Variable-bound update targets follow the path rule: heap reads fail even on coincidence, including whole-input identity aliases (upstream LOADV shares the stored pointer, so `(. as $x | $x) = 2` succeeds there).
+    // Variable-bound update targets follow the pointer-identity path rule: whole-input identity aliases succeed like the reference while variables bound to any other heap value still fail.
     [InlineData("{\"a\":1}", "try ((.a as $x | $x) = 2) catch .", "\"Invalid path expression with result 1\"\n")]
     [InlineData("{\"a\":1}", "try ((.a as $x | $x) |= . + 1) catch .", "\"Invalid path expression with result 1\"\n")]
+    [InlineData("{\"a\":{\"b\":1}}", "try ((.a as $x | $x) = 0) catch .", "\"Invalid path expression with result {\\\"b\\\":1}\"\n")]
     [InlineData("{\"a\":1,\"b\":2}", "try ((.a,.b) |= (if . == 1 then error(\"x\") else . end)) catch .", "\"x\"\n")]
     [InlineData("\"hello\"", "try (.[1:2] |= \"X\") catch .", "\"Cannot update string slices\"\n")]
-    [InlineData("{\"a\":1}", "try ((. as $x | $x) = 2) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
+
     public async Task Jq_AssignReportsFailures(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

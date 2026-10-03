@@ -84,7 +84,18 @@ internal sealed class IdentityFilter : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        yield return context.Runtime.Clone(input);
+        context.Budget.ChargeTree(input);
+        yield return input;
+    }
+
+    // Upstream DUP shares the input pointer, and path-mode values are
+    // read-only carriers: update spines are cloned before ApplyFrame mutates
+    // them, and CollectPaths only keeps segments. Yielding the pair itself
+    // lets as-bindings observe the same reference the body input carries,
+    // which the variable identity rule below depends on.
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    {
+        yield return pair;
     }
 }
 
@@ -114,15 +125,23 @@ internal sealed class VariableFilter(string name) : JqFilter
     }
 
     // Upstream LOADV pushes the stored pointer without touching path state,
-    // so PATH_END compares the loaded value against value_at_path by pointer
-    // identity (execute.c LOADV/STOREV with path_intact/jv_identical; jv.c).
-    // Cloned heap values are fresh allocations even when value-equal, so
-    // variable reads travel untracked for strings/arrays/objects while
-    // immediates (null/booleans/numbers) keep the value-identity rule.
+    // and PATH_END compares it against value_at_path by jv_identical, which
+    // is pointer equality for heap values (execute.c LOADV/STOREV with
+    // path_intact; jv.c jv_identical). Bindings store references (see Match),
+    // so a variable holding the current path value keeps the incoming
+    // segments and tracking exactly like the reference. Anything else keeps
+    // the previous rules: immediates compare by value, other heap values
+    // travel untracked.
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
         if (!environment.TryGetValue(name, out JsonNode? value))
             throw new JqException($"undefined variable ${name}");
+        if (ReferenceEquals(value, pair.Value))
+        {
+            yield return new JqValuePath(pair.Segments, value, pair.Tracked);
+            yield break;
+        }
+
         JsonNode? clone = context.Runtime.Clone(value);
         if (clone is null || (clone is JsonValue scalar && !TryGetString(scalar, out _)))
         {
@@ -247,10 +266,12 @@ internal sealed class AsFilter(
         switch (pattern)
         {
             case VariablePattern variable:
-                yield return scope.Extend(variable.Name, context.Runtime.Clone(value));
+                context.Budget.ChargeTree(value);
+                yield return scope.Extend(variable.Name, value);
                 break;
             case AliasPattern alias:
-                JqEnvironment aliased = scope.Extend(alias.Name, context.Runtime.Clone(value));
+                context.Budget.ChargeTree(value);
+                JqEnvironment aliased = scope.Extend(alias.Name, value);
                 foreach (JqEnvironment inner in Match(alias.Inner, value, aliased, context))
                     yield return inner;
                 break;
@@ -321,13 +342,18 @@ internal sealed class AsFilter(
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        // The source binds in value mode; the body extends the incoming path
-        // against the outer input, mirroring upstream binding behavior.
+        // The source binds in path mode while the body extends the incoming
+        // path against the outer input. Upstream wraps the binding source in
+        // a subexpression (compile.c gen_destructure via gen_subexp), so the
+        // source leaves path state alone and the stored pointer is compared
+        // against the outer value downstream, which is what the reference
+        // check in the variable rule reproduces.
         JqEnvironment prebound = environment;
         foreach (string name in _allNames)
             prebound = prebound.Extend(name, null);
-        foreach (JsonNode? bound in source.Evaluate(pair.Value, context, environment))
+        foreach (JqValuePath sourcePair in source.EvaluatePaths(pair, context, environment))
         {
+            JsonNode? bound = sourcePair.Value;
             bool completed = false;
             for (int index = 0; index < alternatives.Count && !completed; index++)
             {

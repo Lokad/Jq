@@ -374,10 +374,10 @@ internal static class JqPathUpdates
         switch (frame.Segment)
         {
             case KeySegment key when frame.Container is JsonObject obj:
-                obj[key.Key] = leaf;
+                obj[key.Key] = context.Runtime.Detach(leaf);
                 return obj;
             case IndexSegment when frame.Container is JsonArray arr:
-                arr[frame.Index] = leaf;
+                arr[frame.Index] = context.Runtime.Detach(leaf);
                 return arr;
             case SliceSegment when frame.Container is JsonArray arr:
                 if (leaf is not JsonArray pieces)
@@ -838,11 +838,11 @@ internal static class JqPathDeletes
             {
                 if (removed.Contains(property.Key))
                     continue;
-                rebuilt.Add(property.Key, replaced.TryGetValue(property.Key, out JsonNode? next) ? next : property.Value?.DeepClone());
+                rebuilt.Add(property.Key, replaced.TryGetValue(property.Key, out JsonNode? next) ? context.Runtime.Detach(next) : property.Value?.DeepClone());
             }
             foreach (var entry in replaced)
                 if (!rebuilt.ContainsKey(entry.Key))
-                    rebuilt.Add(entry.Key, entry.Value);
+                    rebuilt.Add(entry.Key, context.Runtime.Detach(entry.Value));
             return rebuilt;
         }
         if (node is JsonArray arr)
@@ -880,7 +880,7 @@ internal static class JqPathDeletes
             {
                 if (removed.Contains(position))
                     continue;
-                rebuilt.Add(replaced.TryGetValue(position, out JsonNode? next) ? next : arr[position]?.DeepClone());
+                rebuilt.Add(replaced.TryGetValue(position, out JsonNode? next) ? context.Runtime.Detach(next) : arr[position]?.DeepClone());
             }
             return rebuilt;
         }

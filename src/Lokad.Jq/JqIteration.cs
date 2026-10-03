@@ -382,7 +382,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
             var walked = new JsonArray();
             foreach (Walklevel part in frame.Parts)
                 foreach (JsonNode? output in part.Outputs)
-                    walked.Add(output);
+                    walked.Add(context.Runtime.Detach(output));
             return walked;
         }
         if (frame.Node is JsonObject)
@@ -391,7 +391,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
             var walked = new JsonObject();
             foreach (Walklevel part in frame.Parts)
                 if (part.Key is string name && part.Outputs.Count > 0)
-                    walked.Add(name, part.Outputs[0]);
+                    walked.Add(name, context.Runtime.Detach(part.Outputs[0]));
             return walked;
         }
         return frame.Node;

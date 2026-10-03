@@ -169,6 +169,20 @@ internal sealed class JqRuntime(JqBudget budget)
         return node?.DeepClone();
     }
 
+    // Embeds a possibly-shared node into a fresh container. Pass-through
+    // evaluation can now yield live references (identity shares its input
+    // pointer like upstream DUP), and System.Text.Json forbids multiple
+    // parents, so nodes that are already parented elsewhere are detached
+    // first. The charge matches the previous clone-on-produce accounting
+    // for those subtrees.
+    internal JsonNode? Detach(JsonNode? node)
+    {
+        if (node is null || node.Parent is null)
+            return node;
+        budget.ChargeTree(node);
+        return node.DeepClone();
+    }
+
     // Single-pass decode: builds values while charging, so duplicate object
     // keys resolve last-wins at first position like object assignment.
     internal JsonNode? ReadJsonValue(ReadOnlySpan<byte> text, out int consumed)
