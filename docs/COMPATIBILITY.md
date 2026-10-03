@@ -16,47 +16,86 @@ use ASCII-only case conversion per the reference definition.
 Their full upstream semantics and overloads are pinned per matrix row,
 not implied by their presence here.
 
-Tracked gaps to investigate and close (see the matrix for row status,
-tests, and evidence):
+Closed structural gaps (delivered since the scaffold baseline; see the matrix rows for pins and evidence):
 
-- Cartesian argument-combination order splits by callee, confirmed by an
-  opt-in oracle run (jq 1.8.2, official win64 binary, SHA256
-  a6fc67fedaf9128a3309a1e2ebb8b986aeccf70122ee46d2cb4849e423f0c627):
-  C-builtin calls enumerate with the last value argument slowest, matching
-  the reversed call-prelude evaluation order, while native operators, `range`
-  bounds, and user value arguments enumerate with the first slowest (pinned
-  by the range-order and user-argument-order tests). Object, interpolation,
-  index, and slice orders enumerate first-key/piece/key/bound slowest per
-  the reference fork structure (`gen_dictpair`, left-nested `gen_binop`
-  `+` chains, `gen_index`, `gen_slice_index`), likewise oracle-confirmed.
-- Numbers use doubles with integral storage for integers under the
-  permanent double-domain policy in docs/NUMERIC_PROFILE.md; literal
-  precision, ordering, and non-finite rendering each carry byte-exact
-  pins there, and decimal-literal fidelity is out of scope by design.
-- Regex support uses PCRE.NET. The reference Oniguruma syntax, flags,
-  captures, offsets, and substitutions are covered, including duplicate
-  capture names with reference-ordered folds; `l` (longest match) and
-  `\C` stay permanently excluded (no standard-API equivalent; the
-  scalar-offset model forbids single-unit matching). The onig/manonig
-  sweep passes 66/66.
-- Bessel math (`j0`/`j1`/`y0`/`y1`/`jn`/`yn`) is implemented in managed
-  code and verified against jq 1.8.2 within 1e-12; extreme orders and
+- Value and path identity: `as`-bindings, variables, and function value
+  parameters share references with pointer-identity path tracking
+  (upstream `LOADV`/`STOREV` plus `jv_identical`), so whole-input aliases
+  succeed in path, assign, and update positions.
+- Combination orders confirmed by an opt-in oracle run (jq 1.8.2, official
+  win64 binary, SHA256 a6fc67fedaf9128a3309a1e2ebb8b986aeccf70122ee46d2cb4849e423f0c627):
+  C-builtin calls enumerate with the last value argument slowest, while
+  native operators, `range` bounds, user value arguments, objects,
+  interpolation, index, and slice enumerate first slowest (pinned by
+  range-order, user-argument-order, and operator vectors).
+- Numbers use doubles with integral storage under the permanent
+  double-domain policy in `docs/NUMERIC_PROFILE.md`; literal precision,
+  ordering, and non-finite rendering each carry byte-exact pins, and
+  decimal-literal fidelity is out of scope by design.
+- Regex uses PCRE.NET with duplicate capture names accepted and
+  reference-ordered folds; `l` (longest match) and `\C` stay permanently
+  excluded (no standard-API equivalent; the scalar-offset model forbids
+  single-unit matching). The onig/manonig sweep passes 66/66.
+- Rendering and diagnostics: lowercase `\uXXXX` escapes like the reference,
+  `jv_dump_string_trunc` ports for long operands, reference Unknown-option
+  wording with failing-flag cluster resolution, UTF-16 diagnostic columns
+  with JSON-reader wording as permanent policy.
+- Bessel math (`j0`/`j1`/`y0`/`y1`/`jn`/`yn`) implemented in managed code
+  and verified against jq 1.8.2 within 1e-12; extreme orders and
   non-finite inputs take documented boundary values.
-- Parser-support helpers (`_assign`/`_modify`) and host-identity queries
-  (`get_search_list`/`get_prog_origin`/`get_jq_origin`) stay intentionally
-  unexposed; direct calls fail at compile time with no `builtins/0` entry.
-- Tool switches (`--run-tests`, `--debug-dump-disasm`, `--debug-trace[...]`)
-  stay explicitly rejected, never silently ignored.
-- Slice path components render as start/end objects (best effort);
-  diagnostics columns count UTF-16 code units with LF line breaks (permanent
-  policy matching the host string model, pinned with astral vectors).
-- Escaped output uses lowercase hex digits (for example `\u00e9`) like the
-  reference; the serializer aligns the encoder's uppercase escapes.
-- Differential comparison is opt-in against an independently installed
-  executable with recorded version, configuration, hash, seeds, and cases;
-  ordinary builds and tests never require it.
-- Canonical virtual paths reject controls and traversal above root. Hosts own
-  file access policy; native OS filename support is not yet a compatibility claim.
+- Performance: 13 benchmark families with UTF-8 input-to-output coverage,
+  per-iteration exit/output validation, and allocation diagnosis, plus one
+  measured clone-removal optimization (-8% to -15% allocations on
+  input-heavy workloads, zero semantic delta).
+- Packaging: out-of-tree consumer proof re-verified against the packed
+  artifact with locked restore. Value sweep 704/734 re-run after every
+  semantic increment with all 30 misses triaged
+  (`docs/UPSTREAM_VECTOR_CAMPAIGN.md`).
+
+Value-model contract (binding before further expansion): UTF-8 bytes at
+the IO boundary, scalar-based string semantics, the `JsonNode` model with
+C# null as JSON null, insertion-ordered objects with last-wins duplicates,
+storage-agnostic numeric projections, and cumulative budgets. Structural
+gaps (identity, numerics, regex) were fixed before byte-parity items, and
+no new builtins, flags, or options land until the open rows below close.
+
+Remaining finite gaps, ranked, each with its completion criterion (a
+documented divergence alone never closes its row):
+
+1. Paths row (partial): slice path components render as start/end objects
+   and exotic segments stay best-effort. Done when oracle slice-path
+   vectors are pinned byte-exact or a permanent policy note with oracle
+   evidence replaces them.
+2. Exit categories (partial): success, compile (3), input/quota (5),
+   missing operands (2), halt codes, and `-e` modes are covered, with the
+   unterminated-tail +1 line offset pinned as permanent policy (the
+   reference `fgets` loop only counts consumed newlines). Done when the
+   row flips to implemented with that policy note, or the artifact is
+   matched with cursor-accounting evidence.
+3. Descriptor ownership and budgets (partial): borrowing, lazy opens,
+   owned-only closes, backpressure, reuse snapshots, and cumulative
+   budgets are covered. Done when an explicit execution-policy API lands
+   that distinguishes exhaustion/cancellation from catchable errors, or
+   the cumulative policy is locked as the permanent contract.
+4. Parser-support internals (2 unimplemented rows): `_assign`, `_modify`,
+   `_repeat`, `_until`, `_while` and the `BINOPS` operator internals stay
+   unexposed locally with rejection/omission pins, but the matrix still
+   marks them unimplemented. Done when an opt-in oracle run confirms what
+   upstream direct calls do, then the rows flip (to intentionally
+   different if upstream also hides them, else to implemented).
+5. Release externals: SourceLink validation from a real committed public
+   checkout (no public remote exists yet) and hosted Windows/Linux CI
+   passage. Done when both are observed, not before; no release,
+   publication, or availability is claimed until then.
+
+Also intentionally different by design (not gaps): `--unbuffered` (inert),
+`-V`/`--build-configuration` (assembly identity, never upstream identity),
+`-C`/`-M` (terminal-profile capability), `-b` (binary-safe no-op),
+tool switches (`--run-tests`, `--debug-*`, rejected), host-identity
+queries (`get_search_list`, `get_prog_origin`, `get_jq_origin`), plus
+`~`/home and `$ORIGIN` module lookups, native OS filename support, and
+strict lone-surrogate rejection. Each carries pins or policy notes in its
+matrix row.
 
 ## Current resource policy
 
