@@ -62,14 +62,11 @@ no new builtins, flags, or options land until the open rows below close.
 Remaining finite gaps, ranked, each with its completion criterion (a
 documented divergence alone never closes its row):
 
-1. Paths row (partial): evaluated slices render byte-exact (oracle run:
-   jq 1.8.2 win64, recorded hash; 74 probes covering roundtrips,
-   fractional/negative/NaN/expression bounds, partial objects, and scalar
-   containers, all pinned). A bare `[:]` is a compile error, partial slice
-   objects enforce the both-keys rule, and scalar slices report
-   Cannot-index shapes like the reference. Remaining: exotic-segment notes
-   plus the shared unterminated-tail line-number and exponent-case
-   policies. Done when those carry oracle vectors or permanent notes.
+1. Paths row (closed by oracle run: jq 1.8.2 win64, recorded hash;
+   108 vectors over exotic keys in every position on every container):
+   every failure stages catchably on both sides with matching exits; only
+   caught-error wording differs, kept as local diagnostic policy
+   (jq-shaped, no CLR leakage). Row flipped to implemented.
 2. Exit categories (closed by oracle run: jq 1.8.2 win64, recorded hash;
    48 scenarios covering success, compile, input, missing-file, halt,
    `-e`, option-error, and depth cases): every exit code matches, with the

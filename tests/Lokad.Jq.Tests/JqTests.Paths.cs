@@ -410,6 +410,7 @@ public sealed partial class JqTests
     [InlineData("try delpaths(null) catch .", "\"Paths must be specified as an array\"\n")]
     [InlineData("try getpath([null]) catch .", "\"expected a string for object key but got: null\"\n")]
     [InlineData("try setpath([null]; 1) catch .", "\"expected a string for object key but got: null\"\n")]
+
     public async Task Jq_PathBuiltinsRequireArrayPaths(string filter, string expected)
     {
         // Non-array paths and path elements fail catchably with array-shaped
@@ -417,6 +418,44 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("{}");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+    [Theory]
+    // Exotic keys (booleans, nulls, arrays) fail staged in every path
+    // position on every container, like the reference get/set/dels steps.
+    // Categories confirmed cell-by-cell against jq 1.8.2 (108 vectors);
+    // caught-error wording follows the local diagnostic policy.
+    [InlineData("[1,2,3]", "try .[true] catch .", "\"cannot index array\"\n")]
+    [InlineData("{\"a\":1}", "try .[true] catch .", "\"cannot index object\"\n")]
+    [InlineData("5", "try .[null] catch .", "\"cannot index number\"\n")]
+    [InlineData("\"abc\"", "try .[[0]] catch .", "\"cannot index string\"\n")]
+    [InlineData("[1,2,3]", "try path(.[true]) catch .", "\"cannot index array\"\n")]
+    [InlineData("{\"a\":1}", "try path(.[[0]]) catch .", "\"cannot index object\"\n")]
+    [InlineData("\"abc\"", "try getpath([true]) catch .", "\"expected a string for object key but got: true\"\n")]
+    [InlineData("null", "try getpath([true]) catch .", "\"expected a string for object key but got: true\"\n")]
+    [InlineData("5", "try getpath([null]) catch .", "\"expected a string for object key but got: null\"\n")]
+    [InlineData("\"abc\"", "try getpath([[0]]) catch .", "\"expected a string for object key but got: [0]\"\n")]
+    [InlineData("\"abc\"", "try setpath([true];9) catch .", "\"expected a string for object key but got: true\"\n")]
+    [InlineData("5", "try setpath([true];9) catch .", "\"expected a string for object key but got: true\"\n")]
+    [InlineData("5", "try setpath([null];9) catch .", "\"expected a string for object key but got: null\"\n")]
+    [InlineData("[1,2,3]", "try setpath([[0]];9) catch .", "\"expected a number for indexing an array but got: [0]\"\n")]
+    [InlineData("5", "try setpath([[0]];9) catch .", "\"expected a string for object key but got: [0]\"\n")]
+    [InlineData("\"abc\"", "try delpaths([[true]]) catch .", "\"expected a string for object key but got: true\"\n")]
+    [InlineData("5", "try delpaths([[true]]) catch .", "\"expected a string for object key but got: true\"\n")]
+    [InlineData("5", "try delpaths([[null]]) catch .", "\"expected a string for object key but got: null\"\n")]
+    [InlineData("5", "try delpaths([[[0]]]) catch .", "\"expected a string for object key but got: [0]\"\n")]
+    [InlineData("[1,2,3]", "try (.[true] = 9) catch .", "\"cannot index array\"\n")]
+    [InlineData("[1,2,3]", "try (.[null] = 9) catch .", "\"cannot index array\"\n")]
+    [InlineData("[1,2,3]", "try (.[[0]] = 9) catch .", "\"expected a number for indexing an array but got: [0]\"\n")]
+    [InlineData("{\"a\":1}", "try (.[[0]] = 9) catch .", "\"cannot index object\"\n")]
+    public async Task Jq_ExoticKeysFailStaged(string input, string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
+
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));

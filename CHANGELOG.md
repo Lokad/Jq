@@ -4,7 +4,7 @@
 
 Embeddable jq 1.8.2 runtime with host-mediated IO. Compatibility is
 incomplete; see `docs/COMPATIBILITY_MATRIX.md` for the per-row inventory
-(94 implemented, 8 intentionally different, 2 partial, no unimplemented
+(95 implemented, 8 intentionally different, 1 partial, no unimplemented
 rows) and `docs/UPSTREAM_VECTOR_CAMPAIGN.md` for the
 differential record (704 of 734 value vectors pass with every miss
 triaged).
@@ -28,6 +28,9 @@ Delivered since the scaffold baseline:
 - Regex: duplicate capture names accepted with reference-ordered folds;
   longest-match and single-unit matching permanently excluded with engine
   evidence; the onig/manonig sweep passes 66/66.
+- Paths: pointer-identity tracking plus byte-exact slice rendering and
+  raw slice objects; exotic keys fail staged in every position on every
+  container like the reference get/set/dels steps.
 - Exit categories: success, compile (3), input/quota (5), missing files
   (2), halt codes, and `-e` modes all match the reference command over a
   48-scenario sweep (halt codes win, `-e` follows the last value).
