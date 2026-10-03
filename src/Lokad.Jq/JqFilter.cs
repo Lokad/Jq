@@ -869,7 +869,13 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
         foreach (var value in source.Evaluate(input, context, environment))
         {
             if (value is JsonObject obj)
-                yield return context.Runtime.Clone(obj.TryGetPropertyValue(name, out var child) ? child : null);
+            {
+                // Reads share the child reference: nothing mutates shared
+                // nodes in place downstream, so only the budget charge stays.
+                JsonNode? field = obj.TryGetPropertyValue(name, out var child) ? child : null;
+                context.Budget.ChargeTree(field);
+                yield return field;
+            }
             else if (value == null)
                 yield return null;
             else if (!optional)
@@ -929,7 +935,9 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                 if (value is JsonArray arr && TryGetArrayIndex(key, out long ix))
                 {
                     long resolved = ix < 0 ? arr.Count + ix : ix;
-                    yield return resolved >= 0 && resolved < arr.Count ? context.Runtime.Clone(arr[(int)resolved]) : null;
+                    JsonNode? element = resolved >= 0 && resolved < arr.Count ? arr[(int)resolved] : null;
+                    context.Budget.ChargeTree(element);
+                    yield return element;
                 }
                 else if (value is JsonArray && key is JsonValue nan && nan.TryGetValue<double>(out double missing) && double.IsNaN(missing))
                 {
@@ -954,7 +962,9 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                 }
                 else if (value is JsonObject obj && TryGetString(key, out var name))
                 {
-                    yield return context.Runtime.Clone(obj.TryGetPropertyValue(name, out var child) ? child : null);
+                    JsonNode? field = obj.TryGetPropertyValue(name, out var child) ? child : null;
+                    context.Budget.ChargeTree(field);
+                    yield return field;
                 }
                 else if (value == null)
                 {
@@ -1184,12 +1194,18 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
             if (value is JsonArray arr)
             {
                 foreach (var child in arr)
-                    yield return context.Runtime.Clone(child);
+                {
+                    context.Budget.ChargeTree(child);
+                    yield return child;
+                }
             }
             else if (value is JsonObject obj)
             {
                 foreach (var child in obj)
-                    yield return context.Runtime.Clone(child.Value);
+                {
+                    context.Budget.ChargeTree(child.Value);
+                    yield return child.Value;
+                }
             }
             else if (!optional)
                 throw new JqRuntimeException($"cannot iterate over {TypeName(value)}");
@@ -1237,7 +1253,8 @@ internal sealed class RecursiveDescentFilter : JqFilter
         {
             context.Budget.CheckCancellation();
             JsonNode? current = stack.Pop();
-            yield return context.Runtime.Clone(current);
+            context.Budget.ChargeTree(current);
+            yield return current;
             if (current is JsonArray array)
             {
                 for (int index = array.Count - 1; index >= 0; index--)
