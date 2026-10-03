@@ -16,6 +16,9 @@ public sealed partial class JqTests
     [InlineData("{\"a\": 1, \"b\": 2}", "to_entries", "[\n  {\n    \"key\": \"a\",\n    \"value\": 1\n  },\n  {\n    \"key\": \"b\",\n    \"value\": 2\n  }\n]\n")]
     [InlineData("[{\"key\": \"a\", \"value\": 1}, {\"Key\": \"b\", \"Value\": 2}, {\"name\": \"c\", \"value\": 3}, {\"Name\": \"d\", \"Value\": 4}]", "from_entries", "{\n  \"a\": 1,\n  \"b\": 2,\n  \"c\": 3,\n  \"d\": 4\n}\n")]
     [InlineData("{\"a\": 1, \"b\": 2}", "with_entries(.key |= \"KEY_\" + .)", "{\n  \"KEY_a\": 1,\n  \"KEY_b\": 2\n}\n")]
+    [InlineData("{\"b\":1,\"a\":2}", "with_entries(.key |= ascii_upcase) | tojson", "\"{\\\"B\\\":1,\\\"A\\\":2}\"\n")]
+    [InlineData("{\"b\":1,\"a\":2}", "to_entries | from_entries | tojson", "\"{\\\"b\\\":1,\\\"a\\\":2}\"\n")]
+    [InlineData("{\"b\":1,\"a\":2}", "[paths] | tojson", "\"[[\\\"b\\\"],[\\\"a\\\"]]\"\n")]
     [InlineData("[{\"key\":\"a\", \"value\":1}, {\"key\":\"a\", \"value\":2}]", "from_entries", "{\n  \"a\": 2\n}\n")]
     [InlineData("[]", "to_entries", "[]\n")]
     // Entries roundtrip fixes every object; duplicate keys coalesce last-wins and stay visible as one entry.

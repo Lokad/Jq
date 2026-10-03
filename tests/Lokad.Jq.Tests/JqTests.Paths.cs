@@ -445,6 +445,10 @@ public sealed partial class JqTests
     [InlineData("{\"a\":1}", ".a //= empty", "")]
     [InlineData("{\"a\":false}", ".a //= empty", "")]
     [InlineData("[1,2,3]", ".[10] |= 1", "[\n  1,\n  2,\n  3,\n  null,\n  null,\n  null,\n  null,\n  null,\n  null,\n  null,\n  1\n]\n")]
+    [InlineData("{\"b\":1,\"a\":2}", ".a = 3 | tojson", "\"{\\\"b\\\":1,\\\"a\\\":3}\"\n")]
+    [InlineData("{\"b\":1,\"a\":2}", "del(.b) | tojson", "\"{\\\"a\\\":2}\"\n")]
+    [InlineData("{\"b\":1,\"a\":2}", ".c = 4 | tojson", "\"{\\\"b\\\":1,\\\"a\\\":2,\\\"c\\\":4}\"\n")]
+    [InlineData("{\"b\":1,\"a\":2}", ".a |= . + 10 | tojson", "\"{\\\"b\\\":1,\\\"a\\\":12}\"\n")]
     public async Task Jq_AssignUpdatesValues(string input, string filter, string expected)
     {
         var host = new MockFileSystem();
