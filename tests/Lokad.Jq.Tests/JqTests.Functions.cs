@@ -31,6 +31,7 @@ public sealed partial class JqTests
     [InlineData("123412345", "def f: (1000,2000); f", "1000\n2000\n")]
     [InlineData("3.0", "def f: . + 1; def g: def g: . + 100; f | g | f; (f | g), g", "106\n105\n")]
     [InlineData("null", "def range(init; upto; by): def _range: if (by > 0 and . < upto) or (by < 0 and . > upto) then ., ((.+by)|_range) else empty end; if init == upto then empty elif by == 0 then init else init|_range end; range(0; 10; 3)", "0\n3\n6\n9\n")]
+    [InlineData("{\"a\":1}", "def f($x): ($x | .a = 9) | $x; f(.)", "{\n  \"a\": 1\n}\n")]
     public async Task Jq_DefDefinesCallableFilters(string input, string filter, string expected)
     {
         var host = new MockFileSystem();

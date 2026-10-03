@@ -121,7 +121,8 @@ internal sealed class VariableFilter(string name) : JqFilter
     {
         if (!environment.TryGetValue(name, out JsonNode? value))
             throw new JqException($"undefined variable ${name}");
-        yield return context.Runtime.Clone(value);
+        context.Budget.ChargeTree(value);
+        yield return value;
     }
 
     // Upstream LOADV pushes the stored pointer without touching path state,
@@ -577,7 +578,10 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
     {
         JqEnvironment scope = closure.Environment;
         for (int position = 0; position < frame.ValuePositions.Count; position++)
-            scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, context.Runtime.Clone(frame.Values[position]));
+        {
+            context.Budget.ChargeTree(frame.Values[position]);
+            scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, frame.Values[position]);
+        }
         for (int index = 0; index < frame.Filters.Length; index++)
             if (frame.Filters[index] is not null)
                 scope = scope.ExtendFilter(definition.Parameters[index].Name, frame.Filters[index]!);
@@ -648,7 +652,10 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
     {
         JqEnvironment scope = closure.Environment;
         for (int position = 0; position < frame.ValuePositions.Count; position++)
-            scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, context.Runtime.Clone(frame.Values[position]));
+        {
+            context.Budget.ChargeTree(frame.Values[position]);
+            scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, frame.Values[position]);
+        }
         for (int index = 0; index < frame.Filters.Length; index++)
             if (frame.Filters[index] is not null)
                 scope = scope.ExtendFilter(definition.Parameters[index].Name, frame.Filters[index]!);

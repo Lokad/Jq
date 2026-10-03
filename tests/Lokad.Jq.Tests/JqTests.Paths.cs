@@ -107,6 +107,8 @@ public sealed partial class JqTests
     [InlineData("{\"a\":{\"b\":1}}", ". as $x | path($x.a.b)", "[\n  \"a\",\n  \"b\"\n]\n")]
     [InlineData("\"hi\"", ". as $x | path($x)", "[]\n")]
     [InlineData("[0,1,2]", ". as $x | path($x)", "[]\n")]
+    [InlineData("{\"a\":1}", "def f($x): path($x); . as $i | f($i)", "[]\n")]
+    [InlineData("{\"a\":{\"b\":1}}", "try (def f($x): path($x); .a as $i | f($i)) catch .", "\"Invalid path expression with result {\\\"b\\\":1}\"\n")]
     [InlineData("{\"a\":1}", "try path({\"a\":1} as $x | $x) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "try path(.a as $x | $x) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("1", "path(1 as $x | $x)", "[]\n")]
