@@ -177,6 +177,9 @@ public sealed partial class JqTests
     [InlineData("{}", 0, "{}\n")]
     [InlineData("false", 1, "false\n")]
     [InlineData("null", 1, "null\n")]
+    [InlineData("false, true", 0, "false\ntrue\n")]
+    [InlineData("true, false", 1, "true\nfalse\n")]
+    [InlineData("empty, false", 1, "false\n")]
     public async Task Jq_ExitStatusCategories(string filter, int expectedExit, string expectedOut)
     {
         var host = new MockFileSystem();
@@ -184,6 +187,43 @@ public sealed partial class JqTests
         Assert.Equal(expectedExit, exit);
         Assert.Equal(expectedOut, stdout);
         Assert.Equal("", stderr);
+    }
+
+    [Fact]
+    public async Task Jq_ExitStatusHaltCodesWin()
+    {
+        // Like the reference, halt codes take precedence over -e mapping:
+        // halt_error(3) exits 3 even when -e is set, and halt_error(0) exits 0.
+        var halted = new MockFileSystem();
+        var (exit3, stdout3, stderr3) = await RunOutputAsync(halted, "-e", "-n", "halt_error(3)");
+        Assert.Equal(3, exit3);
+        Assert.Equal("", stdout3);
+        Assert.Equal("", stderr3);
+
+        var zero = new MockFileSystem();
+        var (exit0, stdout0, stderr0) = await RunOutputAsync(zero, "-e", "-n", "halt_error(0)");
+        Assert.Equal(0, exit0);
+        Assert.Equal("", stdout0);
+        Assert.Equal("", stderr0);
+    }
+
+    [Fact]
+    public async Task Jq_NullInputIgnoresOperandsWithoutFilter()
+    {
+        // Like the reference, -n with no filter reads as dot over null,
+        // and file operands are ignored the same way.
+        var bare = new MockFileSystem();
+        var (exitBare, stdoutBare, stderrBare) = await RunOutputAsync(bare, "-n");
+        Assert.Equal(0, exitBare);
+        Assert.Equal("null\n", stdoutBare);
+        Assert.Equal("", stderrBare);
+
+        var filed = new MockFileSystem();
+        filed.AddFile("/d1", "{\"k\":1}\n");
+        var (exitFiled, stdoutFiled, stderrFiled) = await RunOutputAsync(filed, "-n", ".", "/d1");
+        Assert.Equal(0, exitFiled);
+        Assert.Equal("null\n", stdoutFiled);
+        Assert.Equal("", stderrFiled);
     }
 
     [Fact]

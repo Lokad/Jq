@@ -262,6 +262,7 @@ public sealed partial class JqTests
     [InlineData("0", "halt, 1", 0, "", "")]
     [InlineData("null", "halt_error(11)", 11, "", "")]
     [InlineData("null", "halt_error", 5, "", "")]
+    [InlineData("null", "halt_error(0)", 0, "", "")]
     [InlineData("null", "1, halt_error(3)", 3, "1\n", "")]
     [InlineData("\"xy\"", "halt_error(1)", 1, "", "xy")]
     [InlineData("{\"a\": \"xyz\"}", "halt_error(1)", 1, "", "{\"a\":\"xyz\"}\n")]

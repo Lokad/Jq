@@ -70,12 +70,12 @@ documented divergence alone never closes its row):
    Cannot-index shapes like the reference. Remaining: exotic-segment notes
    plus the shared unterminated-tail line-number and exponent-case
    policies. Done when those carry oracle vectors or permanent notes.
-2. Exit categories (partial): success, compile (3), input/quota (5),
-   missing operands (2), halt codes, and `-e` modes are covered, with the
-   unterminated-tail +1 line offset pinned as permanent policy (the
-   reference `fgets` loop only counts consumed newlines). Done when the
-   row flips to implemented with that policy note, or the artifact is
-   matched with cursor-accounting evidence.
+2. Exit categories (closed by oracle run: jq 1.8.2 win64, recorded hash;
+   48 scenarios covering success, compile, input, missing-file, halt,
+   `-e`, option-error, and depth cases): every exit code matches, with the
+   unterminated-tail +1 line offset kept as permanent policy and the
+   tool-switch rejection plus depth-64 limit standing as recorded policies.
+   Row flipped to implemented.
 3. Descriptor ownership and budgets (partial): borrowing, lazy opens,
    owned-only closes, backpressure, reuse snapshots, and cumulative
    budgets are covered. Done when an explicit execution-policy API lands
