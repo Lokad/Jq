@@ -4,8 +4,8 @@
 
 Embeddable jq 1.8.2 runtime with host-mediated IO. Compatibility is
 incomplete; see `docs/COMPATIBILITY_MATRIX.md` for the per-row inventory
-(91 implemented, 8 intentionally different, 3 partial, 2 unimplemented
-parser-support rows) and `docs/UPSTREAM_VECTOR_CAMPAIGN.md` for the
+(93 implemented, 8 intentionally different, 3 partial, no unimplemented
+rows) and `docs/UPSTREAM_VECTOR_CAMPAIGN.md` for the
 differential record (704 of 734 value vectors pass with every miss
 triaged).
 
@@ -36,6 +36,12 @@ Delivered since the scaffold baseline:
   C-builtin calls slowest-last, native operators, user arguments, range
   bounds, objects, interpolation, index, and slice slowest-first.
 - Math: managed Bessel functions verified within 1e-12 of the reference.
+- Parser-support internals: direct `_plus`/`_minus`/`_multiply`/`_divide`/
+  `_mod`/`_equal`/`_notequal`/`_less`/`_lesseq`/`_greater`/`_greatereq` calls
+  share the operator evaluation, `_assign` folds setpath over enumerated
+  paths per value, and `_modify` threads first-only updates like `|=`
+  (all oracle-confirmed; upstream likewise rejects `_repeat`, `_while`,
+  and `_until` as not-defined).
 - Performance: corrected benchmark families (13 workloads with UTF-8
   input-to-output coverage and allocation diagnosis) plus a measured
   clone-removal optimization (-8% to -15% allocations on input-heavy
