@@ -1202,6 +1202,11 @@ internal sealed class PickFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 // whose update yields nothing.
 internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) : JqFilter
 {
+    // Assignment results are rebuilt, so they travel untracked like any
+    // fresh container: upstream compiles `=` to _assign and updates to
+    // _modify, whose opaque results fail path tracking the same way.
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -1245,7 +1250,7 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
         return new BinaryFilter(new IdentityFilter(), symbol, literal);
     }
 
-    private static JsonNode? ModifyLoop(IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqFilter update, JsonNode? input, JqContext context, JqEnvironment environment)
+    internal static JsonNode? ModifyLoop(IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqFilter update, JsonNode? input, JqContext context, JqEnvironment environment)
     {
         JsonNode? state = input;
         var deleted = new List<IReadOnlyList<JqValueSegment>>();
@@ -1263,5 +1268,22 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
                 deleted.Add(segments);
         }
         return JqPathDeletes.DeletePaths(state, deleted, context);
+    }
+}
+
+// `_modify(paths; update)`: the parser-support helper behind `|=`, threading
+// an update filter through first-only state from the enumerated paths with
+// empty-update deletion, exactly like the reference builtin.jq definition.
+internal sealed class ModifyBuiltinFilter(JqFilter Paths, JqFilter Update) : JqFilter
+{
+    // Updates rebuild the root, so results travel untracked.
+    internal override bool PreservesPathIdentity => false;
+
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(environment);
+        List<IReadOnlyList<JqValueSegment>> paths = JqPaths.CollectPaths(Paths, input, context, environment);
+        yield return AssignFilter.ModifyLoop(paths, Update, input, context, environment);
     }
 }

@@ -189,6 +189,12 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "delpaths([[{\"start\": 1.5, \"end\": 3.5}]])", "[\n  0,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
     [InlineData("\"abcdef\"", "path(.[1:3]) as $p | getpath($p)", "\"bc\"\n")]
     [InlineData("[0, 1, 2, 3]", "setpath([{\"start\": 1, \"end\": 3}]; [9])", "[\n  0,\n  9,\n  3\n]\n")]
+    // Assignment results travel untracked, so path() rejects them like
+    // the reference _assign/_modify calls (upstream compiles `=` and
+    // updates to those calls; only the _modify def-internal wording differs).
+    [InlineData("{\"a\":1}", "try path(_assign(.a;1)) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
+    [InlineData("{\"a\":1}", "try path(.a = 1) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
+    [InlineData("{\"a\":1}", "try path(_modify(.a;.)) catch .", "\"Invalid path expression with result {\\\"a\\\":1}\"\n")]
     [InlineData("[0, 1, 2, 3]", "setpath(path(.[1:3]); [9])", "[\n  0,\n  9,\n  3\n]\n")]
     [InlineData("[0, 1, 2, 3]", "delpaths([path(.[1:3])])", "[\n  0,\n  3\n]\n")]
     [InlineData("[1,2,3]", ".[1:-10]", "[]\n")]

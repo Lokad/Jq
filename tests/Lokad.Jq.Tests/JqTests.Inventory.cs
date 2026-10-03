@@ -262,30 +262,19 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
     [Theory]
-    [InlineData("_assign")]
-    [InlineData("_modify")]
     [InlineData("_repeat")]
     [InlineData("_until")]
     [InlineData("_while")]
-    [InlineData("_plus(1; 2)")]
-    [InlineData("_minus(1; 2)")]
-    [InlineData("_multiply(1; 2)")]
-    [InlineData("_divide(1; 2)")]
-    [InlineData("_mod(1; 2)")]
-    [InlineData("_equal(1; 2)")]
-    [InlineData("_notequal(1; 2)")]
-    [InlineData("_less(1; 2)")]
-    [InlineData("_lesseq(1; 2)")]
-    [InlineData("_greater(1; 2)")]
-    [InlineData("_greatereq(1; 2)")]
     [InlineData("get_search_list")]
     [InlineData("get_prog_origin")]
     [InlineData("get_jq_origin")]
     public async Task Jq_InventoryInternalNamesAreRejected(string filter)
     {
-        // Parser-support helpers and host-identity queries stay outside the
-        // embeddable registry; direct calls fail at compile time like unknown
-        // names, and builtins/0 never advertises them.
+        // The remaining parser-support placeholders (_repeat, _until, _while)
+        // and host-identity queries stay outside the embeddable registry; direct
+        // calls fail at compile time like unknown names, and builtins/0 never
+        // advertises them. Operator internals, _assign, and _modify are real
+        // callables covered below.
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
         Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
@@ -320,5 +309,82 @@ public sealed partial class JqTests
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal("false\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+    [Theory]
+    // Direct operator calls share the operator evaluation (the input
+    // threads into both arguments; combinations stay second-outer).
+    // Every row below was confirmed byte-for-byte against jq 1.8.2.
+    [InlineData("0 | _plus(1;2)", "3\n")]
+    [InlineData("0 | _minus(7;2)", "5\n")]
+    [InlineData("0 | _multiply(3;4)", "12\n")]
+    [InlineData("0 | _divide(7;2)", "3.5\n")]
+    [InlineData("0 | _mod(7;3)", "1\n")]
+    [InlineData("0 | _equal(1;1)", "true\n")]
+    [InlineData("0 | _notequal(1;2)", "true\n")]
+    [InlineData("0 | _less(1;2)", "true\n")]
+    [InlineData("0 | _lesseq(2;2)", "true\n")]
+    [InlineData("0 | _greater(3;2)", "true\n")]
+    [InlineData("0 | _greatereq(2;2)", "true\n")]
+    [InlineData("0 | _plus((1,2);(10,20))", "11\n12\n21\n22\n")]
+    [InlineData("0 | _minus((1,2);(10,11))", "-9\n-8\n-10\n-9\n")]
+    [InlineData("0 | _multiply((1,2);(10,11))", "10\n20\n11\n22\n")]
+    [InlineData("0 | [(_equal((1,2);(1,2)))]", "[\n  true,\n  false,\n  false,\n  true\n]\n")]
+    [InlineData("5 | _plus(.+1;.+2)", "13\n")]
+    [InlineData("0 | _plus(empty;1)", "")]
+    [InlineData("empty | _plus(1;2)", "")]
+    [InlineData("try (0 | _plus(error(\"x\");1)) catch .", "\"x\"\n")]
+    [InlineData("try (0 | _plus(\"a\";1)) catch .", "\"string (\\\"a\\\") and number (1) cannot be added\"\n")]
+    [InlineData("try (0 | _divide(1;0)) catch .", "\"number (1) and number (0) cannot be divided because the divisor is zero\"\n")]
+    [InlineData("5 | _negate | _negate", "5\n")]
+    [InlineData("5 | _negate", "-5\n")]
+    [InlineData("try (\"a\" | _negate) catch .", "\"string (\\\"a\\\") cannot be negated\"\n")]
+    public async Task Jq_InventoryInternalBinops(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    // _assign folds setpath over enumerated paths per value and _modify
+    // threads first-only updates with empty-update deletion, exactly like
+    // the reference builtin.jq definitions (oracle-confirmed below).
+    [InlineData("[0,1] | _assign(.[]; 9)", "[\n  9,\n  9\n]\n")]
+    [InlineData("[0,1] | _assign(.[]; (9,8))", "[\n  9,\n  9\n]\n[\n  8,\n  8\n]\n")]
+    [InlineData("{} | _assign(empty; 1)", "{}\n")]
+    [InlineData("null | _assign(.a; 1)", "{\n  \"a\": 1\n}\n")]
+    [InlineData("try ([0,1] | _assign(1; 2)) catch .", "\"Invalid path expression with result 1\"\n")]
+    [InlineData("try ([0,1] | _assign(.[]; error(\"x\"))) catch .", "\"x\"\n")]
+    [InlineData("{\"a\":1} | _modify(.a; .+1)", "{\n  \"a\": 2\n}\n")]
+    [InlineData("{\"a\":1} | _modify((.a,.b); .+1)", "{\n  \"a\": 2,\n  \"b\": 1\n}\n")]
+    [InlineData("{\"a\":1} | _modify(.a; (10,20))", "{\n  \"a\": 10\n}\n")]
+    [InlineData("[3,1] | _modify(.[]; if . > 2 then empty else . end)", "[\n  1\n]\n")]
+    [InlineData("{\"a\":1} | _modify(.b; .+1)", "{\n  \"a\": 1,\n  \"b\": 1\n}\n")]
+    [InlineData("try ({\"a\":1} | _modify(.a; error(\"x\"))) catch .", "\"x\"\n")]
+    public async Task Jq_InventoryAssignModify(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("_plus(1)", "_plus expects 2 arguments")]
+    [InlineData("_assign([0])", "_assign expects 2 arguments")]
+    [InlineData("_modify(.a)", "_modify expects 2 arguments")]
+    public async Task Jq_InventoryInternalArity(string filter, string diagnostic)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 }

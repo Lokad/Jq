@@ -1517,6 +1517,77 @@ internal sealed class JqParser(
                 : new CombinationsFilter(args[0]);
         }
 
+        // Compiler-generated operator implementations: direct calls share
+        // the operator evaluation (second-operand-outer combinations) with
+        // the input threaded into both arguments like the reference prelude.
+        if (name == "_plus")
+        {
+            return new BinaryFilter(args[0], "+", args[1]);
+        }
+
+        if (name == "_minus")
+        {
+            return new BinaryFilter(args[0], "-", args[1]);
+        }
+
+        if (name == "_multiply")
+        {
+            return new BinaryFilter(args[0], "*", args[1]);
+        }
+
+        if (name == "_divide")
+        {
+            return new BinaryFilter(args[0], "/", args[1]);
+        }
+
+        if (name == "_mod")
+        {
+            return new BinaryFilter(args[0], "%", args[1]);
+        }
+
+        if (name == "_equal")
+        {
+            return new BinaryFilter(args[0], "==", args[1]);
+        }
+
+        if (name == "_notequal")
+        {
+            return new BinaryFilter(args[0], "!=", args[1]);
+        }
+
+        if (name == "_less")
+        {
+            return new BinaryFilter(args[0], "<", args[1]);
+        }
+
+        if (name == "_lesseq")
+        {
+            return new BinaryFilter(args[0], "<=", args[1]);
+        }
+
+        if (name == "_greater")
+        {
+            return new BinaryFilter(args[0], ">", args[1]);
+        }
+
+        if (name == "_greatereq")
+        {
+            return new BinaryFilter(args[0], ">=", args[1]);
+        }
+
+        // Parser-support assignment helpers: _assign folds setpath over the
+        // enumerated paths per value like `=`, while _modify threads the
+        // update through first-only state like `|=`.
+        if (name == "_assign")
+        {
+            return new AssignFilter("=", args[0], args[1]);
+        }
+
+        if (name == "_modify")
+        {
+            return new ModifyBuiltinFilter(args[0], args[1]);
+        }
+
         if (name == "in")
         {
             return new InFilter(args[0]);

@@ -81,12 +81,15 @@ documented divergence alone never closes its row):
    budgets are covered. Done when an explicit execution-policy API lands
    that distinguishes exhaustion/cancellation from catchable errors, or
    the cumulative policy is locked as the permanent contract.
-4. Parser-support internals (2 unimplemented rows): `_assign`, `_modify`,
-   `_repeat`, `_until`, `_while` and the `BINOPS` operator internals stay
-   unexposed locally with rejection/omission pins, but the matrix still
-   marks them unimplemented. Done when an opt-in oracle run confirms what
-   upstream direct calls do, then the rows flip (to intentionally
-   different if upstream also hides them, else to implemented).
+4. Parser-support internals (closed by oracle run: jq 1.8.2 win64,
+   recorded hash; 37 probes): every `BINOPS` direct call works upstream
+   and now works locally through the shared operator evaluation
+   (second-operand-outer, input threaded into both arguments); `_assign`
+   and `_modify` work upstream and now work locally as native equivalents
+   of the builtin.jq definitions; upstream likewise rejects `_repeat`,
+   `_until`, and `_while` as not-defined, matching the unknown-name path.
+   All stay hidden from `builtins/0` like every underscore name upstream.
+   Both rows flipped to implemented; no unimplemented row remains.
 5. Release externals: SourceLink validation from a real committed public
    checkout (no public remote exists yet) and hosted Windows/Linux CI
    passage. Done when both are observed, not before; no release,

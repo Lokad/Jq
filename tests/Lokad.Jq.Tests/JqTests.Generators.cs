@@ -206,7 +206,7 @@ public sealed partial class JqTests
     [InlineData("(12,20)/(4,5)", "3\n5\n2.4\n4\n")]
     public async Task Jq_BinaryOperatorsDistribute(string filter, string expected)
     {
-        // The left operand varies slowest (first-argument-slowest),
+        // The right operand varies slowest (second-argument-outer),
         // confirmed against the reference oracle alongside the operators
         // below.
         var host = new MockFileSystem();
