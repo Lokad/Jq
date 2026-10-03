@@ -28,7 +28,7 @@ public sealed partial class JqTests
     [InlineData("\"2026-09-29\" | capture(\"(?<y>\\\\d+)-(\\\\d+)-(?<d>\\\\d+)\")", "{\n  \"y\": \"2026\",\n  \"d\": \"29\"\n}\n")]
     [InlineData("\"a1 b2\" | [capture(\"(?<c>[a-z])(?<n>[0-9])\"; \"g\")]", "[\n  {\n    \"c\": \"a\",\n    \"n\": \"1\"\n  },\n  {\n    \"c\": \"b\",\n    \"n\": \"2\"\n  }\n]\n")]
     [InlineData("\"é🚀x\" | match(\"x\") | .offset", "2\n")]
-    [InlineData("\"é🚀\" | match(\"🚀\")", "{\n  \"offset\": 1,\n  \"length\": 1,\n  \"string\": \"\\uD83D\\uDE80\",\n  \"captures\": []\n}\n")]
+    [InlineData("\"é🚀\" | match(\"🚀\")", "{\n  \"offset\": 1,\n  \"length\": 1,\n  \"string\": \"\\ud83d\\ude80\",\n  \"captures\": []\n}\n")]
     [InlineData("\"ab\" | [match(\"b*\"; \"g\")] | map([.offset, .length])", "[\n  [\n    0,\n    0\n  ],\n  [\n    1,\n    1\n  ],\n  [\n    2,\n    0\n  ]\n]\n")]
     [InlineData("\"qux\" | [match(\"(?=u)\"; \"g\")] | map(.offset)", "[\n  1\n]\n")]
     // Empty global matches advance by scalar; the 1.8.1 byte-wise quirk is intentionally not kept.

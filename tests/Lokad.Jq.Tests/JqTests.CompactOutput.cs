@@ -26,7 +26,7 @@ public sealed partial class JqTests
     [InlineData("-ncr", "\"hello\", {a:1}", "hello\n{\"a\":1}\n")]
     [InlineData("-ncrc", "\"hello\", {a:1}", "hello\n{\"a\":1}\n")]
     [InlineData("-ncj", "{a:1}, {a:2}", "{\"a\":1}{\"a\":2}")]
-    [InlineData("-nca", "{text:\"é\"}", "{\"text\":\"\\u00E9\"}\n")]
+    [InlineData("-nca", "{text:\"é\"}", "{\"text\":\"\\u00e9\"}\n")]
     public async Task Jq_CompactOutputCombinesWithOtherFlags(string options, string filter, string expected)
     {
         var fileSystem = new MockFileSystem();

@@ -74,7 +74,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("\"ab\" * 3", "\"ababab\"\n")]
-    [InlineData("\"é\U0001f680\" * 2", "\"é\\uD83D\\uDE80é\\uD83D\\uDE80\"\n")]
+    [InlineData("\"é\U0001f680\" * 2", "\"é\\ud83d\\ude80é\\ud83d\\ude80\"\n")]
     [InlineData("\"same\" * 1", "\"same\"\n")]
     [InlineData("\"x\" * 0", "\"\"\n")]
     [InlineData("\"x\" * -2", "null\n")]
@@ -460,7 +460,7 @@ public sealed partial class JqTests
         var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal("\"\\u00E9\"\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("\"\\u00e9\"\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -481,17 +481,24 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_ControlCharactersRenderEscaped()
     {
-        // Like the reference, DEL renders as an escape (with the encoder's
-        // uppercase hex case) rather than raw.
-        var fileSystem = new MockFileSystem();
-        fileSystem.SetStandardInput("\" \u007f\"");
+        // Like the reference, DEL and other controls render as lowercase
+        // escapes rather than raw.
+        foreach (var (standardInput, expected) in new (string, string)[]
+        {
+            ("\" \u007f\"", "\" \\u007f\"\n"),
+            ("\"a\\u001f\"", "\"a\\u001f\"\n"),
+        })
+        {
+            var fileSystem = new MockFileSystem();
+            fileSystem.SetStandardInput(standardInput);
 
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".")));
-        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".")));
+            var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("\" \\u007F\"\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal(0, exitCode);
+            Assert.Equal(expected, fileSystem.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        }
     }
 
     [Fact]

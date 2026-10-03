@@ -128,14 +128,14 @@ public sealed partial class JqTests
     {
         // Like the reference callbacks, debug rendering follows compactness,
         // ascii escaping, and key sorting while stderr values stay raw JSON;
-        // tostring likewise ignores both modes. Hex case stays the recorded
-        // uppercase encoder divergence.
+        // tostring likewise ignores both modes. Hex escapes render lowercase
+        // like the reference.
         foreach (var (args, exit, stdout, stderr) in new (string[], int, string, string)[]
         {
-            (new string[] { "-n", "-a", "\"\u00E9\" | debug" }, 0, "\"\\u00E9\"\n", "[\"DEBUG:\",\"\\u00E9\"]\n"),
+            (new string[] { "-n", "-a", "\"\u00E9\" | debug" }, 0, "\"\\u00e9\"\n", "[\"DEBUG:\",\"\\u00e9\"]\n"),
             (new string[] { "-n", "-S", "{\"b\":1,\"a\":2} | debug" }, 0, "{\n  \"a\": 2,\n  \"b\": 1\n}\n", "[\"DEBUG:\",{\"a\":2,\"b\":1}]\n"),
             (new string[] { "-n", "-S", "{\"b\":1,\"a\":2} | tostring" }, 0, "\"{\\\"b\\\":1,\\\"a\\\":2}\"\n", ""),
-            (new string[] { "-n", "-a", "{\"x\":\"\u00E9\"} | stderr" }, 0, "{\n  \"x\": \"\\u00E9\"\n}\n", "{\"x\":\"\u00E9\"}"),
+            (new string[] { "-n", "-a", "{\"x\":\"\u00E9\"} | stderr" }, 0, "{\n  \"x\": \"\\u00e9\"\n}\n", "{\"x\":\"\u00e9\"}"),
             (new string[] { "-n", "-S", "{\"b\":1,\"a\":2} | stderr" }, 0, "{\n  \"a\": 2,\n  \"b\": 1\n}\n", "{\"b\":1,\"a\":2}"),
         })
         {

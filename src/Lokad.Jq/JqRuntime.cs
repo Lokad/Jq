@@ -46,10 +46,51 @@ internal sealed class JqRuntime(JqBudget budget)
             writer.Flush();
         }
         ReadOnlyMemory<byte> rendered = buffer.WrittenMemory;
+        rendered = LowercaseUnicodeEscapes(rendered);
         if (indent != null || tabs)
             rendered = NormalizeNewlines(rendered);
         budget.ChargeString(Encoding.UTF8.GetCharCount(rendered.Span));
         return rendered;
+    }
+
+    // System.Text.Json emits uppercase hex in \uXXXX escapes while the
+    // reference uses lowercase. Hex case is insignificant in JSON, and every
+    // backslash in writer output introduces an escape, so a copy carrying
+    // lowercase digits is value-identical. The input returns untouched when
+    // no uppercase escape digits are present (the common all-ASCII case).
+    private static ReadOnlyMemory<byte> LowercaseUnicodeEscapes(ReadOnlyMemory<byte> body)
+    {
+        ReadOnlySpan<byte> span = body.Span;
+        bool dirty = false;
+        for (int index = 0; index + 5 < span.Length && !dirty; index++)
+        {
+            if (span[index] != (byte)'\\' || span[index + 1] != (byte)'u')
+                continue;
+            for (int digit = index + 2; digit < index + 6; digit++)
+            {
+                if (span[digit] >= (byte)'A' && span[digit] <= (byte)'F')
+                {
+                    dirty = true;
+                    break;
+                }
+            }
+        }
+        if (!dirty)
+            return body;
+        var lowered = new byte[span.Length];
+        span.CopyTo(lowered);
+        for (int index = 0; index + 5 < lowered.Length; index++)
+        {
+            if (lowered[index] != (byte)'\\' || lowered[index + 1] != (byte)'u')
+                continue;
+            for (int digit = index + 2; digit < index + 6; digit++)
+            {
+                if (lowered[digit] >= (byte)'A' && lowered[digit] <= (byte)'F')
+                    lowered[digit] = (byte)(lowered[digit] + 32);
+            }
+            index += 5;
+        }
+        return lowered;
     }
 
     // Deep clone with object keys in ordinal order for `--sort-keys`.

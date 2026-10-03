@@ -31,7 +31,7 @@ public sealed partial class JqTests
     [InlineData("\"ab\" | [splits(\"c\")]", "[\n  \"ab\"\n]\n")]
     [InlineData("\"abAABBabA\" | [splits(\"a+\"; \"i\")]", "[\n  \"\",\n  \"b\",\n  \"BB\",\n  \"b\",\n  \"\"\n]\n")]
     [InlineData("\"abAABBabA\" | [splits(\"b+\"; \"i\")]", "[\n  \"a\",\n  \"AA\",\n  \"a\",\n  \"A\"\n]\n")]
-    [InlineData("\"a,é🚀,b\" | [splits(\",\")]", "[\n  \"a\",\n  \"é\\uD83D\\uDE80\",\n  \"b\"\n]\n")]
+    [InlineData("\"a,é🚀,b\" | [splits(\",\")]", "[\n  \"a\",\n  \"é\\ud83d\\ude80\",\n  \"b\"\n]\n")]
     [InlineData("\"a,b, c\" | split(\", *\"; \"\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     [InlineData("\"aXbXc\" | split(\"x\"; \"i\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]
     [InlineData("\"a,b,c\" | split(\",\")", "[\n  \"a\",\n  \"b\",\n  \"c\"\n]\n")]

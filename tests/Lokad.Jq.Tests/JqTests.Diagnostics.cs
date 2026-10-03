@@ -457,6 +457,27 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public void Jq_SourceSpanCountsAstralCharactersAsTwoUtf16Units()
+    {
+        // Columns count UTF-16 code units with LF line breaks: the rocket
+        // occupies columns 2 and 3, so the following quote sits at column 4.
+        JqSourceSpan astral = JqSourceSpan.FromOffset("a\U0001F680bc", 3);
+
+        Assert.Equal(new JqSourceSpan(3, 1, 4), astral);
+    }
+
+    [Fact]
+    public async Task Jq_DiagnosticColumnsCountUtf16UnitsAfterAstralText()
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "\"\U0001F680\" missing_function")));
+
+        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("jq: expected End, got missing_function at line 1 column 6 (filter)\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+    }
+
+    [Fact]
     public void Jq_RuntimeTypeErrorCarriesStructuredPayload()
     {
         var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
