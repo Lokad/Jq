@@ -19,14 +19,16 @@ not implied by their presence here.
 Tracked gaps to investigate and close (see the matrix for row status,
 tests, and evidence):
 
-- Cartesian argument-combination order splits by callee: C-builtin calls use
-  last-argument-outer matching the reference call prelude, while `range` and
-  user value arguments use first-argument-outer per the upstream range vectors
-  (pinned by the range-order and user-argument-order tests). Object,
-  interpolation, index, and slice orders are pinned first-key/piece/bound-major
-  per the reference fork structure (`gen_dictpair`, `_plus` chains, `gen_index`,
-  `gen_slice_index`); execution-oracle confirmation remains open, so do not
-  relabel those without oracle evidence.
+- Cartesian argument-combination order splits by callee, confirmed by an
+  opt-in oracle run (jq 1.8.2, official win64 binary, SHA256
+  a6fc67fedaf9128a3309a1e2ebb8b986aeccf70122ee46d2cb4849e423f0c627):
+  C-builtin calls enumerate with the last value argument slowest, matching
+  the reversed call-prelude evaluation order, while native operators, `range`
+  bounds, and user value arguments enumerate with the first slowest (pinned
+  by the range-order and user-argument-order tests). Object, interpolation,
+  index, and slice orders enumerate first-key/piece/key/bound slowest per
+  the reference fork structure (`gen_dictpair`, left-nested `gen_binop`
+  `+` chains, `gen_index`, `gen_slice_index`), likewise oracle-confirmed.
 - Numbers use doubles with integral storage for integers under the
   permanent double-domain policy in docs/NUMERIC_PROFILE.md; literal
   precision, ordering, and non-finite rendering each carry byte-exact

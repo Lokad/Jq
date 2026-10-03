@@ -201,10 +201,34 @@ public sealed partial class JqTests
     // Comma binds tighter than pipe (parser.y lists %left ',' above %right
     // '|'), so mixed collection items group as [A | ((B, C) | D)].
     [InlineData("[1 | ., 2 | .+10]", "[\n  11,\n  12\n]\n")]
+    [InlineData("(1,2)-(10,20)", "-9\n-8\n-19\n-18\n")]
+    [InlineData("(1,2)==(1,2)", "true\nfalse\nfalse\ntrue\n")]
+    [InlineData("(12,20)/(4,5)", "3\n5\n2.4\n4\n")]
     public async Task Jq_BinaryOperatorsDistribute(string filter, string expected)
     {
-        // The left operand is inner (fast), matching reversed call
-        // prelude order with backtracking.
+        // The left operand varies slowest (first-argument-slowest),
+        // confirmed against the reference oracle alongside the operators
+        // below.
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    // C-builtin calls enumerate cartesian combinations with the last value
+    // argument slowest, matching the reversed call-prelude evaluation order;
+    // every row below was confirmed byte-for-byte against the reference
+    // oracle (jq 1.8.2).
+    [InlineData("pow((1,2);(2,3))", "1\n4\n1\n8\n")]
+    [InlineData("copysign((1,2);(3,4))", "1\n2\n1\n2\n")]
+    [InlineData("remainder((5,6);(2,3))", "1\n0\n-1\n0\n")]
+    [InlineData("fmax((1,2);(3,4))", "3\n3\n4\n4\n")]
+    [InlineData("range((0,1);(2,3))", "0\n1\n0\n1\n2\n1\n1\n2\n")]
+    public async Task Jq_CBuiltinCallsCombineLastOuter(string filter, string expected)
+    {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
