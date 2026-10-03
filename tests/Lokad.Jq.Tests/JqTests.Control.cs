@@ -133,10 +133,16 @@ public sealed partial class JqTests
     {
         // The position tracks the failing input like the reference: earlier
         // outputs are kept with sticky exit 5, and explicit reads under -n
-        // resolve <stdin> instead of <unknown>.
+        // resolve <stdin> instead of <unknown>. Lines are 1-based end lines,
+        // so values on unterminated tails read one past the reference
+        // fgets-based count (which only sees consumed newlines); that
+        // residual is permanent policy.
         foreach (var (stdin, args, exit, stdout, stderr) in new (string, string[], int, string, string)[]
         {
             ("1\n2\n", new string[] { "if . == 2 then error(\"x\") else . end" }, 5, "1\n", "jq: error (at <stdin>:2): x\n"),
+            ("1\n2", new string[] { "if . == 2 then error(\"boom\") else . end" }, 5, "1\n", "jq: error (at <stdin>:2): boom\n"),
+            ("2", new string[] { "error(\"boom\")" }, 5, "", "jq: error (at <stdin>:1): boom\n"),
+            ("{\n\"a\": 1\n}", new string[] { "error(\"boom\")" }, 5, "", "jq: error (at <stdin>:3): boom\n"),
             ("5\n", new string[] { "-n", "[input] | error(\"x\")" }, 5, "", "jq: error (at <stdin>:1): x\n"),
         })
         {
