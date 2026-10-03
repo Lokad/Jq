@@ -950,8 +950,17 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                     // contiguous subsequence positions instead of indexing.
                     yield return context.Runtime.Indices(value, pattern);
                 }
-                else if (key is JsonObject && (value is JsonArray || TryGetString(value, out _)))
+                else if (key is JsonObject sliceKey && (value is JsonArray || TryGetString(value, out _)))
                 {
+                    // Like the reference parse_slice key lookup, both bounds
+                    // must be present: a missing key fails even though null
+                    // values default (suppressed under ? like other reads).
+                    if (!sliceKey.ContainsKey("start") || !sliceKey.ContainsKey("end"))
+                    {
+                        if (optional)
+                            yield break;
+                        throw new JqException("Array/string slice indices must be integers");
+                    }
                     // Like the reference object-key get, slice objects on
                     // arrays and strings read bounds from their fields.
                     JqFilter held = new LiteralFilter(value);
@@ -965,6 +974,14 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                     JsonNode? field = obj.TryGetPropertyValue(name, out var child) ? child : null;
                     context.Budget.ChargeTree(field);
                     yield return field;
+                }
+                else if (key is JsonObject objectKey && value is not null)
+                {
+                    // Like the reference get, an object key on a scalar
+                    // reports the container and key kinds; null roots read
+                    // null below.
+                    if (!optional)
+                        throw new JqRuntimeException("Cannot index " + TypeName(value) + " with object (" + context.Runtime.Serialize(objectKey.DeepClone(), false, null, false) + ")");
                 }
                 else if (value == null)
                 {
@@ -1025,10 +1042,13 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
     {
         // Bound-major order: each start combines with every end, then every
         // source value, matching key-object construction with backtracking.
-        foreach (double startBound in StartBounds())
+        // Raw starts keep nulls so scalar diagnostics can rebuild the
+        // reference key object; resolution defaults them exactly as before.
+        foreach (double? rawStart in RawStartBounds())
             foreach (double? endBound in EndBounds())
                 foreach (var value in source.Evaluate(input, context, environment))
                 {
+                    double startBound = rawStart ?? 0;
                     if (value is JsonArray arr)
                     {
                         JqPaths.ResolveSlice(arr.Count, startBound, endBound, out int from, out int to);
@@ -1060,30 +1080,36 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                     }
                     else if (!optional)
                     {
-                        throw new JqRuntimeException($"cannot slice {TypeName(value)}");
+                        // Like the reference get, a slice on a scalar reports
+                        // the container with the evaluated key object, where
+                        // omitted, null, and NaN bounds all render as null.
+                        var keyObject = new JsonObject();
+                        keyObject["start"] = rawStart.HasValue ? JqRuntime.CreateNumber(rawStart.Value) : null;
+                        keyObject["end"] = endBound.HasValue ? JqRuntime.CreateNumber(endBound.Value) : null;
+                        throw new JqRuntimeException("Cannot index " + TypeName(value) + " with object (" + context.Runtime.Serialize(keyObject, false, null, false) + ")");
                     }
                 }
 
-        IEnumerable<double> StartBounds()
+        IEnumerable<double?> RawStartBounds()
         {
             if (start == null)
             {
-                yield return 0;
+                yield return null;
                 yield break;
             }
             foreach (var bound in start.Evaluate(input, context, environment))
             {
                 if (bound == null)
                 {
-                    yield return 0;
+                    yield return null;
                     continue;
                 }
                 if (bound is JsonValue edge && edge.TryGetValue<double>(out double nan) && double.IsNaN(nan))
                 {
-                    yield return 0;
+                    yield return null;
                     continue;
                 }
-                if (!FlattenFilter.TryDepthLevel(bound, out double start))
+                if (!FlattenFilter.TryDepthLevel(bound, out double position))
                 {
                     // Like the reference postfix ?, a suppressed step yields
                     // nothing instead of failing on bad bounds.
@@ -1091,7 +1117,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                         yield break;
                     throw new JqException("Array/string slice indices must be integers");
                 }
-                yield return start;
+                yield return position;
             }
         }
 
@@ -1151,7 +1177,15 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                     else if (pair.Value == null)
                         yield return new JqValuePath(Extend(pair.Segments, segment), null, true);
                     else
-                        throw new JqRuntimeException($"cannot slice {TypeName(pair.Value)}");
+                    {
+                        // Like the reference path step, a slice on a scalar
+                        // fails with the container and key kinds rather than
+                        // an invalid-path message.
+                        var keyObject = new JsonObject();
+                        keyObject["start"] = lower.HasValue ? JqRuntime.CreateNumber(lower.Value) : null;
+                        keyObject["end"] = upper.HasValue ? JqRuntime.CreateNumber(upper.Value) : null;
+                        throw new JqRuntimeException("Cannot index " + TypeName(pair.Value) + " with object (" + context.Runtime.Serialize(keyObject, false, null, false) + ")");
+                    }
                 }
     }
 

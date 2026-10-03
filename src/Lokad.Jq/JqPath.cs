@@ -41,6 +41,17 @@ internal sealed record SliceSegment(double? Start, double? End) : JqValueSegment
     }
 }
 
+// A slice object carried verbatim from a path value or an index-form key
+// (getpath/setpath/delpaths arguments, .[{...}] reads). Unlike evaluated
+// syntax slices, its keys may be missing or non-numeric: the reference
+// parse_slice step rejects those only against arrays and strings, while
+// other containers report their own kind errors, so validation stays at
+// the use sites and rendering keeps the raw key set.
+internal sealed record SliceObjectSegment(JsonObject Raw) : JqValueSegment
+{
+    internal override JsonNode? ToJson() => Raw.DeepClone();
+}
+
 // A segment that can never address a container (booleans, arrays, and nulls
 // from path values). Traversal reports container-shaped type errors.
 internal sealed record InvalidSegment(JsonNode? Raw) : JqValueSegment
@@ -145,7 +156,7 @@ internal static class JqPaths
             else if (TryGetIndex(element, out long index, out bool isNaN))
                 segments.Add(new IndexSegment(index, isNaN));
             else if (element is JsonObject slice)
-                segments.Add(new SliceSegment(ParseBound(slice, "start"), ParseBound(slice, "end")));
+                segments.Add(new SliceObjectSegment(JqPaths.CloneSliceObject(slice)));
             else
                 segments.Add(new InvalidSegment(element?.DeepClone()));
         }
@@ -206,12 +217,12 @@ internal static class JqPaths
 
     // Path enumeration preserves exotic keys verbatim for rendering, while
     // the reference re-parses path values at every update boundary with
-    // objects reading as slices; normalize those segments where updates
-    // consume them so both spellings share one slice machinery.
+    // objects reading as slices; carry those segments raw so the use sites
+    // can apply the reference container-dependent dispatch.
     internal static JqValueSegment UpdateSegment(JqValueSegment segment)
     {
         if (segment is InvalidSegment invalid && invalid.Raw is JsonObject slice)
-            return new SliceSegment(ParseBound(slice, "start"), ParseBound(slice, "end"));
+            return new SliceObjectSegment(CloneSliceObject(slice));
         return segment;
     }
 
@@ -224,17 +235,87 @@ internal static class JqPaths
         return segment;
     }
 
-    private static double? ParseBound(JsonObject slice, string name)
+    // Clones a path-value slice object with NaN bounds normalized to null,
+    // matching how both the reference printer and the local serializer
+    // render NaN (resolution defaults NaN the same way, so grouping and
+    // rendering stay deterministic without changing any accepted read).
+    internal static JsonObject CloneSliceObject(JsonObject source)
     {
-        if (!slice.TryGetPropertyValue(name, out JsonNode? bound) || bound is null)
-            return null;
+        ArgumentNullException.ThrowIfNull(source);
+        var clone = (JsonObject)source.DeepClone();
+        NormalizeSliceNaN(clone);
+        return clone;
+    }
+
+    private static void NormalizeSliceNaN(JsonNode? node)
+    {
+        if (node is JsonObject obj)
+        {
+            var keys = new List<string>();
+            foreach (var property in obj)
+                keys.Add(property.Key);
+            foreach (string key in keys)
+            {
+                JsonNode? child = obj[key];
+                if (child is JsonValue real && real.TryGetValue<double>(out double candidate) && double.IsNaN(candidate))
+                    obj[key] = null;
+                else
+                    NormalizeSliceNaN(child);
+            }
+        }
+        else if (node is JsonArray arr)
+        {
+            for (int index = 0; index < arr.Count; index++)
+            {
+                JsonNode? child = arr[index];
+                if (child is JsonValue real && real.TryGetValue<double>(out double candidate) && double.IsNaN(candidate))
+                    arr[index] = null;
+                else
+                    NormalizeSliceNaN(child);
+            }
+        }
+    }
+
+    // Reads slice-object bounds like the reference parse_slice key lookup:
+    // both keys must be present (explicit nulls and NaN take the same
+    // container-dependent defaults as evaluated bounds); numbers keep their
+    // values and anything else fails the slice at the use site.
+    internal static bool TryGetSliceObjectBounds(JsonObject slice, out double? start, out double? end)
+    {
+        start = null;
+        end = null;
+        if (!slice.TryGetPropertyValue("start", out JsonNode? startNode) ||
+            !slice.TryGetPropertyValue("end", out JsonNode? endNode))
+            return false;
+        if (!TrySliceBoundValue(startNode, out start) || !TrySliceBoundValue(endNode, out end))
+            return false;
+        return true;
+    }
+
+    private static bool TrySliceBoundValue(JsonNode? bound, out double? value)
+    {
+        if (bound is null)
+        {
+            value = null;
+            return true;
+        }
         if (bound is JsonValue small && small.TryGetValue<int>(out int directInt))
-            return directInt;
+        {
+            value = directInt;
+            return true;
+        }
         if (bound is JsonValue whole && whole.TryGetValue<long>(out long direct))
-            return direct;
-        if (bound is JsonValue real && real.TryGetValue<double>(out double value))
-            return double.IsNaN(value) ? null : value;
-        throw new JqException("invalid slice bounds in path");
+        {
+            value = direct;
+            return true;
+        }
+        if (bound is JsonValue real && real.TryGetValue<double>(out double candidate))
+        {
+            value = double.IsNaN(candidate) ? null : candidate;
+            return true;
+        }
+        value = null;
+        return false;
     }
 
     // Resolves raw slice bounds against a live length with the reference
@@ -361,9 +442,38 @@ internal static class JqPathUpdates
                 }
                 if (current is JsonValue scalar && scalar.TryGetValue<string>(out _))
                     throw new JqException("Cannot update string slices");
-                // Like the reference jv_set fallthrough, a slice update outside
-                // arrays reports the component and container kinds.
-                throw new JqException("Cannot update field at object index of " + JqRuntime.TypeName(current));
+                // Like the reference setpath descent, a slice update on any
+                // other scalar fails first in the nested probe read with the
+                // container and key kinds (objects included: the jv_set
+                // fallthrough below is unreachable through jq programs).
+                throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.Serialize(slice.ToJson(), false, null, false) + ")");
+            case SliceObjectSegment raw:
+                if (current is null)
+                {
+                    if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? emptyStart, out double? emptyEnd))
+                        throw new JqException("Array/string slice indices must be integers");
+                    var freshRaw = new JsonArray();
+                    context.Budget.ChargeNode();
+                    frames.Push(new Frame(new SliceSegment(emptyStart, emptyEnd), freshRaw, 0, 0, 0));
+                    return SliceCopy(freshRaw, 0, 0, context);
+                }
+                if (current is JsonArray rawTarget)
+                {
+                    if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? rawStart, out double? rawEnd))
+                        throw new JqException("Array/string slice indices must be integers");
+                    JqPaths.ResolveSlice(rawTarget.Count, rawStart, rawEnd, out int rawFrom, out int rawTo);
+                    frames.Push(new Frame(new SliceSegment(rawStart, rawEnd), CloneArray(rawTarget, context), 0, rawFrom, rawTo));
+                    return SliceCopy(rawTarget, rawFrom, rawTo, context);
+                }
+                if (current is JsonValue rawScalar && rawScalar.TryGetValue<string>(out _))
+                {
+                    // The nested probe read runs before the string-slice
+                    // rejection, so partial objects fail on their bounds.
+                    if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? _, out double? _))
+                        throw new JqException("Array/string slice indices must be integers");
+                    throw new JqException("Cannot update string slices");
+                }
+                throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.Serialize(raw.Raw, false, null, false) + ")");
             default:
                 throw SegmentTypeError(current, segment, context);
         }
@@ -532,7 +642,36 @@ internal static class JqPathReads
                     else if (current is null)
                         current = null;
                     else
-                        throw new JqRuntimeException($"cannot slice {JqRuntime.TypeName(current)}");
+                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.Serialize(slice.ToJson(), false, null, false) + ")");
+                    break;
+                case SliceObjectSegment raw:
+                    if (current is JsonArray rawArray)
+                    {
+                        if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? rawStart, out double? rawEnd))
+                            throw new JqException("Array/string slice indices must be integers");
+                        JqPaths.ResolveSlice(rawArray.Count, rawStart, rawEnd, out int rawFrom, out int rawTo);
+                        var rawPart = new JsonArray();
+                        for (int position = rawFrom; position < rawTo; position++)
+                            rawPart.Add(rawArray[position]?.DeepClone());
+                        current = rawPart;
+                    }
+                    else if (current is JsonValue rawScalar && rawScalar.TryGetValue<string>(out string? rawText) && rawText is not null)
+                    {
+                        if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? rawStart, out double? rawEnd))
+                            throw new JqException("Array/string slice indices must be integers");
+                        var rawRunes = new List<System.Text.Rune>();
+                        foreach (var rune in rawText.EnumerateRunes())
+                            rawRunes.Add(rune);
+                        JqPaths.ResolveSlice(rawRunes.Count, rawStart, rawEnd, out int rawFrom, out int rawTo);
+                        var rawBuilder = new System.Text.StringBuilder();
+                        for (int position = rawFrom; position < rawTo; position++)
+                            rawBuilder.Append(rawRunes[position].ToString());
+                        current = JsonValue.Create(rawBuilder.ToString());
+                    }
+                    else if (current is null)
+                        current = null;
+                    else
+                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.Serialize(raw.Raw, false, null, false) + ")");
                     break;
                 default:
                     if (segment is InvalidSegment invalid && invalid.Raw is JsonArray pattern && current is JsonArray)
@@ -620,6 +759,8 @@ internal static class JqPathDeletes
             int start = Nullable.Compare(ls.Start, rs.Start);
             return start != 0 ? start : Nullable.Compare(ls.End, rs.End);
         }
+        if (left is SliceObjectSegment lraw && right is SliceObjectSegment rraw)
+            return string.Compare(lraw.Raw.ToJsonString(), rraw.Raw.ToJsonString(), StringComparison.Ordinal);
         return 0;
     }
 
@@ -629,6 +770,7 @@ internal static class JqPathDeletes
         FractionalSegment => 0,
         KeySegment => 1,
         SliceSegment => 2,
+        SliceObjectSegment => 2,
         _ => 3,
     };
 
@@ -690,6 +832,37 @@ internal static class JqPathDeletes
         throw new InvalidOperationException("Grouped deletion left no result.");
     }
 
+    // Expands one validated slice key over its array target like the
+    // reference dels array branch: with no deeper paths the range removes
+    // at once, otherwise deletion descends per element. Returns true when
+    // the frame should keep scanning its groups.
+    private static bool ExpandSliceDeletion(DeleteFrame frame, Stack<DeleteFrame> stack, int first, int last, int from, int to, JsonArray targets, JqContext context)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        ArgumentNullException.ThrowIfNull(stack);
+        ArgumentNullException.ThrowIfNull(targets);
+        ArgumentNullException.ThrowIfNull(context);
+        var deeper = new List<IReadOnlyList<JqValueSegment>>();
+        for (int index = first; index < last; index++)
+            if (frame.Paths[index].Count > frame.Depth + 1)
+                deeper.Add(frame.Paths[index]);
+        frame.First = last;
+        if (deeper.Count == 0)
+        {
+            for (int position = from; position < to; position++)
+                frame.Removals.Add(new IndexSegment(position, false));
+            return true;
+        }
+        if (from >= to)
+            return true;
+        frame.SliceArray = targets;
+        frame.SliceDeeper = deeper;
+        frame.SliceTo = to;
+        frame.SlicePos = from + 1;
+        stack.Push(new DeleteFrame(targets[from], deeper, frame.Depth + 1) { Slot = new IndexSegment(from, false) });
+        return false;
+    }
+
     // Runs one frame until it needs a child result or finishes. Returns true with
     // Result set when the frame is complete.
     private static bool AdvanceDeleteFrame(DeleteFrame frame, Stack<DeleteFrame> stack, JqContext context)
@@ -721,24 +894,17 @@ internal static class JqPathDeletes
             if (key is SliceSegment range && frame.Node is JsonArray targets)
             {
                 JqPaths.ResolveSlice(targets.Count, range.Start, range.End, out int from, out int to);
-                var deeper = new List<IReadOnlyList<JqValueSegment>>();
-                for (int index = first; index < last; index++)
-                    if (frame.Paths[index].Count > frame.Depth + 1)
-                        deeper.Add(frame.Paths[index]);
-                frame.First = last;
-                if (deeper.Count == 0)
-                {
-                    for (int position = from; position < to; position++)
-                        frame.Removals.Add(new IndexSegment(position, false));
+                if (ExpandSliceDeletion(frame, stack, first, last, from, to, targets, context))
                     continue;
-                }
-                if (from >= to)
+                return false;
+            }
+            if (key is SliceObjectSegment rawSlice && frame.Node is JsonArray rawTargets)
+            {
+                if (!JqPaths.TryGetSliceObjectBounds(rawSlice.Raw, out double? rawStart, out double? rawEnd))
+                    throw new JqException("Array/string slice indices must be integers");
+                JqPaths.ResolveSlice(rawTargets.Count, rawStart, rawEnd, out int rawFrom, out int rawTo);
+                if (ExpandSliceDeletion(frame, stack, first, last, rawFrom, rawTo, rawTargets, context))
                     continue;
-                frame.SliceArray = targets;
-                frame.SliceDeeper = deeper;
-                frame.SliceTo = to;
-                frame.SlicePos = from + 1;
-                stack.Push(new DeleteFrame(targets[from], deeper, frame.Depth + 1) { Slot = new IndexSegment(from, false) });
                 return false;
             }
             bool whole = false;
@@ -747,7 +913,7 @@ internal static class JqPathDeletes
                     whole = true;
             if (whole)
             {
-                if (key is not KeySegment and not IndexSegment and not SliceSegment and not FractionalSegment)
+                if (key is not KeySegment and not IndexSegment and not SliceSegment and not SliceObjectSegment and not FractionalSegment)
                 {
                     // Invalid segments (e.g. null) cannot delete: mirror
                     // TryGetChild, skipping under null nodes and failing
@@ -763,8 +929,12 @@ internal static class JqPathDeletes
                 }
                 if (frame.Node is JsonObject && key is not KeySegment)
                 {
+                    // Like the reference dels object branch, slice keys
+                    // report the container shape instead of the key shape.
+                    if (key is SliceSegment || key is SliceObjectSegment)
+                        throw new JqException("Cannot delete object field of object");
                     // Like the reference dels, only string keys delete from
-                    // objects; numbers, slices, and fractions fail staged.
+                    // objects; numbers and fractions fail staged.
                     // NaN renders as null like the reference printer, since
                     // raw NaN values cannot serialize to JSON.
                     string raw = key is IndexSegment nanIndex && nanIndex.IsNaN ? "null" : (key.ToJson()?.ToJsonString() ?? "null");

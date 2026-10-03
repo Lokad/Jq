@@ -25,17 +25,24 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3]", "path(.[1:2])", "[\n  {\n    \"start\": 1,\n    \"end\": 2\n  }\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[1:])", "[\n  {\n    \"start\": 1,\n    \"end\": null\n  }\n]\n")]
     [InlineData("[0, 1, 2, 3]", "path(.[:2])", "[\n  {\n    \"start\": null,\n    \"end\": 2\n  }\n]\n")]
-    [InlineData("[0, 1, 2, 3]", "path(.[:])", "[\n  {\n    \"start\": null,\n    \"end\": null\n  }\n]\n")]
     [InlineData("[1,2,3]", "path(.[[1]])", "[\n  [\n    1\n  ]\n]\n")]
     [InlineData("[1,2,3]", "path(.[[1,2]])", "[\n  [\n    1,\n    2\n  ]\n]\n")]
     [InlineData("[1,2,3]", "path(.[[9]])", "[\n  [\n    9\n  ]\n]\n")]
-    [InlineData("[1,2,3]", "path(.[{\"start\":1}])", "[\n  {\n    \"start\": 1\n  }\n]\n")]
+    [InlineData("[1,2,3]", "try path(.[{\"start\":1}]) catch .", "\"Array/string slice indices must be integers\"\n")]
     [InlineData("[1,2,3]", "path(.[[1]][0])", "[\n  [\n    1\n  ],\n  0\n]\n")]
-    [InlineData("[1,2,3]", "path(.[{\"start\":1}][0])", "[\n  {\n    \"start\": 1\n  },\n  0\n]\n")]
+    [InlineData("[1,2,3]", "try path(.[{\"start\":1}][0]) catch .", "\"Array/string slice indices must be integers\"\n")]
     [InlineData("5", "path(.[0]?)", "")]
     [InlineData("null", "path(.[null]?)", "")]
     [InlineData("[1,2]", "path(.[\"x\":]?)", "")]
     [InlineData("[0,1,2]", "path(.[0:infinite])", "[\n  {\n    \"start\": 0,\n    \"end\": 1.7976931348623157E+308\n  }\n]\n")]
+    [InlineData("[0, 1, 2, 3, 4, 5]", "path(.[1+1:8/2])", "[\n  {\n    \"start\": 2,\n    \"end\": 4\n  }\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "path(.[2:1])", "[\n  {\n    \"start\": 2,\n    \"end\": 1\n  }\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "path(.[0:nan])", "[\n  {\n    \"start\": 0,\n    \"end\": null\n  }\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "path(.[nan:2])", "[\n  {\n    \"start\": null,\n    \"end\": 2\n  }\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "path(.[null:2])", "[\n  {\n    \"start\": null,\n    \"end\": 2\n  }\n]\n")]
+    // A null root carries the raw partial key instead of failing.
+    [InlineData("null", "path(.[{\"start\":1}])", "[\n  {\n    \"start\": 1\n  }\n]\n")]
+    [InlineData("null", "path(getpath([{\"start\":1}]))", "[\n  {\n    \"start\": 1\n  }\n]\n")]
     [InlineData("[1,2,3]", "path(.[-0.5])", "[\n  -0.5\n]\n")]
     [InlineData("[1,2,3]", "path(.[1.5])", "[\n  1.5\n]\n")]
     [InlineData("[1,2]", "path(.[error(\"x\")]?)", "")]
@@ -182,14 +189,51 @@ public sealed partial class JqTests
     [InlineData("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "delpaths([[{\"start\": 1.5, \"end\": 3.5}]])", "[\n  0,\n  4,\n  5,\n  6,\n  7,\n  8,\n  9\n]\n")]
     [InlineData("\"abcdef\"", "path(.[1:3]) as $p | getpath($p)", "\"bc\"\n")]
     [InlineData("[0, 1, 2, 3]", "setpath([{\"start\": 1, \"end\": 3}]; [9])", "[\n  0,\n  9,\n  3\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "setpath(path(.[1:3]); [9])", "[\n  0,\n  9,\n  3\n]\n")]
+    [InlineData("[0, 1, 2, 3]", "delpaths([path(.[1:3])])", "[\n  0,\n  3\n]\n")]
+    [InlineData("[1,2,3]", ".[1:-10]", "[]\n")]
+    [InlineData("[1,2,3]", ".[2:1]", "[]\n")]
+    [InlineData("[1,2,3,4]", ".[0:2.5]", "[\n  1,\n  2,\n  3\n]\n")]
+    [InlineData("[1,2,3,4]", ".[1.9:3]", "[\n  2,\n  3\n]\n")]
+    // Partial slice objects fail on their bounds (reference parse_slice);
+    // scalars report the container with the evaluated key object.
+    [InlineData("[0,1,2,3]", "try .[{\"start\":1}] catch .", "\"Array/string slice indices must be integers\"\n")]
+    [InlineData("[0,1,2,3]", "try .[{}] catch .", "\"Array/string slice indices must be integers\"\n")]
+    [InlineData("\"abcdef\"", "try .[{}] catch .", "\"Array/string slice indices must be integers\"\n")]
+    [InlineData("[0,1,2,3]", "try path(.[{\"start\":1}]) catch .", "\"Array/string slice indices must be integers\"\n")]
+    [InlineData("[0,1,2,3]", "try getpath([{\"start\":1}]) catch .", "\"Array/string slice indices must be integers\"\n")]
+    [InlineData("null", "getpath([{\"start\":1}])", "null\n")]
+    [InlineData("{\"a\":1}", "try getpath([{\"start\":1}]) catch .", "\"Cannot index object with object ({\\\"start\\\":1})\"\n")]
+    [InlineData("{\"a\":1}", "try getpath([{start:0,end:1}]) catch .", "\"Cannot index object with object ({\\\"start\\\":0,\\\"end\\\":1})\"\n")]
+    [InlineData("5", "try getpath([{start:0,end:1}]) catch .", "\"Cannot index number with object ({\\\"start\\\":0,\\\"end\\\":1})\"\n")]
+    [InlineData("[0,1,2,3]", "try setpath([{\"start\":1}];[9]) catch .", "\"Array/string slice indices must be integers\"\n")]
+    [InlineData("[0,1,2,3]", "try delpaths([[{\"start\":1}]]) catch .", "\"Array/string slice indices must be integers\"\n")]
+    [InlineData("5", "try .[1:2] catch .", "\"Cannot index number with object ({\\\"start\\\":1,\\\"end\\\":2})\"\n")]
+    [InlineData("{\"a\":1}", "try .[1:2] catch .", "\"Cannot index object with object ({\\\"start\\\":1,\\\"end\\\":2})\"\n")]
+    [InlineData("true", "try .[1:2] catch .", "\"Cannot index boolean with object ({\\\"start\\\":1,\\\"end\\\":2})\"\n")]
+    [InlineData("null", "try .[1:2] catch .", "null\n")]
+    [InlineData("5", "try .[{\"start\":1}] catch .", "\"Cannot index number with object ({\\\"start\\\":1})\"\n")]
+    [InlineData("null", "try .[{\"start\":1}] catch .", "null\n")]
+    [InlineData("{\"a\":1}", "try .[{\"start\":1}] catch .", "\"Cannot index object with object ({\\\"start\\\":1})\"\n")]
+    [InlineData("5", "try .[1:] catch .", "\"Cannot index number with object ({\\\"start\\\":1,\\\"end\\\":null})\"\n")]
+    [InlineData("5", "try setpath([{start:1,end:2}];9) catch .", "\"Cannot index number with object ({\\\"start\\\":1,\\\"end\\\":2})\"\n")]
+    [InlineData("null", "setpath([{start:0,end:0}];[9])", "[\n  9\n]\n")]
+    [InlineData("[0,1,2,3]", "try .[{\"start\":1,\"end\":\"x\"}] catch .", "\"Array/string slice indices must be integers\"\n")]
+    [InlineData("[0,1,2,3]", "try getpath([{\"start\":0,\"end\":\"x\"}]) catch .", "\"Array/string slice indices must be integers\"\n")]
+    // The infinite bound renders with the pinned double-domain exponent;
+    // only the key shape is oracle-confirmed here.
+    [InlineData("5", "try .[0:infinite] catch .", "\"Cannot index number with object ({\\\"start\\\":0,\\\"end\\\":1.7976931348623157E+308})\"\n")]
+    // Suppressed slice failures yield nothing like other bad reads.
+    [InlineData("null", "(5 | .[1:2]?)", "")]
+    [InlineData("null", "([1,2] | .[{}]?)", "")]
     [InlineData("[0, 1, 2, 3]", "try setpath([{\"start\": 1, \"end\": 3}]; 9) catch .", "\"A slice of an array can only be assigned another array\"\n")]
     [InlineData("[0]", "setpath([-1]; 1)", "[\n  1\n]\n")]
     [InlineData("[0,1,2]", "getpath([infinite])", "null\n")]
     [InlineData("[1,2,3]", "setpath([-0.5]; 9)", "[\n  9,\n  2,\n  3\n]\n")]
     [InlineData("[1,2,3]", "getpath([-0.5])", "1\n")]
     [InlineData("[1,2,3]", "getpath(path(.[[1]]))", "[\n  0\n]\n")]
-    [InlineData("[1,2,3]", "getpath(path(.[{\"start\":1}]))", "[\n  2,\n  3\n]\n")]
-    [InlineData("[1,2,3]", "delpaths([path(.[{\"start\":1}])])", "[\n  1\n]\n")]
+    [InlineData("[1,2,3]", "try getpath(path(.[{\"start\":1}])) catch .", "\"Array/string slice indices must be integers\"\n")]
+    [InlineData("[1,2,3]", "try delpaths([path(.[{\"start\":1}])]) catch .", "\"Array/string slice indices must be integers\"\n")]
     [InlineData("[1,2,3]", "getpath([[1]])", "[\n  0\n]\n")]
     [InlineData("[1,2,3]", "getpath([[9]])", "[]\n")]
     [InlineData("[1,2,1]", "getpath([[1,2]])", "[\n  0\n]\n")]
@@ -239,14 +283,14 @@ public sealed partial class JqTests
     [InlineData("{\"a\":{\"b\":1,\"c\":2}}", "delpaths([[\"a\",\"b\"],[\"a\"]])", "{}\n")]
     // Slice updates outside arrays report component and container kinds like
     // the reference jv_set fallthrough; getpath reads slice components too.
-    [InlineData("5", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot update field at object index of number\"\n")]
-    [InlineData("true", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot update field at object index of boolean\"\n")]
-    [InlineData("{\"a\":1}", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot update field at object index of object\"\n")]
+    [InlineData("5", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot index number with object ({\\\"start\\\":0,\\\"end\\\":1})\"\n")]
+    [InlineData("true", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot index boolean with object ({\\\"start\\\":0,\\\"end\\\":1})\"\n")]
+    [InlineData("{\"a\":1}", "try setpath([{start:0,end:1}]; [9]) catch .", "\"Cannot index object with object ({\\\"start\\\":0,\\\"end\\\":1})\"\n")]
     [InlineData("[10,20,30]", "getpath([{start:1,end:2}])", "[\n  20\n]\n")]
     // Fractional path-value components resolve start-down/end-up through the shared resolution in every builtin.
     [InlineData("[10,20,30]", "getpath([{start:0.5,end:2}])", "[\n  10,\n  20\n]\n")]
     [InlineData("[10,20,30]", "setpath([{start:0.5,end:2}]; [9])", "[\n  9,\n  30\n]\n")]
-    [InlineData("null", "setpath([{start:0}]; [1])", "[\n  1\n]\n")]
+    [InlineData("null", "try setpath([{start:0}]; [1]) catch .", "\"Array/string slice indices must be integers\"\n")]
     [InlineData("null", "getpath([{start:0}])", "null\n")]
     [InlineData("\"abcdef\"", "getpath([{start:7,end:9}])", "\"\"\n")]
     [InlineData("[10,20,30]", "delpaths([[{start:0.5,end:2}]])", "[\n  30\n]\n")]
@@ -332,7 +376,7 @@ public sealed partial class JqTests
     [InlineData("{\"a\":[{\"b\":0}]}", "del(.a | .[])", "{\n  \"a\": []\n}\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "try pick(.a | map(.)) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("[{\"b\":0},{\"b\":1}]", "del(.[] | select(.b == 0))", "[\n  {\n    \"b\": 1\n  }\n]\n")]
-    [InlineData("[1,2,3]", "del(.[{\"start\":1}])", "[\n  1\n]\n")]
+    [InlineData("[1,2,3]", "try del(.[{\"start\":1}]) catch .", "\"Array/string slice indices must be integers\"\n")]
     [InlineData("[1,2,3]", "del(.[{\"start\":1,\"end\":2}])", "[\n  1,\n  3\n]\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "pick(.a)", "{\n  \"a\": [\n    {\n      \"b\": 0\n    }\n  ]\n}\n")]
     [InlineData("{\"a\":1}", "try del(.a as $x | $x) catch .", "\"Invalid path expression with result 1\"\n")]
@@ -429,9 +473,9 @@ public sealed partial class JqTests
     [InlineData("{\"a\":[{\"b\":0}]}", "(.a | .[0]) = 1", "{\n  \"a\": [\n    1\n  ]\n}\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "try ((.a | [.[]]) = 1) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("[{\"b\":0},{\"b\":1}]", "(.[] | select(.b == 0) | .b) |= . + 1", "[\n  {\n    \"b\": 1\n  },\n  {\n    \"b\": 1\n  }\n]\n")]
-    [InlineData("[1,2,3]", ".[{\"start\":1}] = [9]", "[\n  1,\n  9\n]\n")]
+    [InlineData("[1,2,3]", "try (.[{\"start\":1}] = [9]) catch .", "\"Array/string slice indices must be integers\"\n")]
     [InlineData("[1,2,3]", ".[{\"start\":1,\"end\":2}] = [9,8]", "[\n  1,\n  9,\n  8,\n  3\n]\n")]
-    [InlineData("[1,2,3]", ".[{\"start\":1}] |= . + [9]", "[\n  1,\n  2,\n  3,\n  9\n]\n")]
+    [InlineData("[1,2,3]", "try (.[{\"start\":1}] |= . + [9]) catch .", "\"Array/string slice indices must be integers\"\n")]
     [InlineData("{\"a\":1}", ".a |= empty", "{}\n")]
     [InlineData("{\"a\":1,\"b\":2}", ".b |= empty", "{\n  \"a\": 1\n}\n")]
     [InlineData("null", ".a.b.c |= 1", "{\n  \"a\": {\n    \"b\": {\n      \"c\": 1\n    }\n  }\n}\n")]
@@ -539,6 +583,22 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
+    [Fact]
+    public async Task Jq_BareSliceIsSyntaxError()
+    {
+        // Upstream has no [:] production (gen_slice_index always carries
+        // at least one bound), so a bare slice fails at compile time.
+        string[] filters = [".[:]", ".[:]?"];
+        foreach (string filter in filters)
+        {
+            var host = new MockFileSystem();
+            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
+
+            Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Contains("unexpected token ]", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        }
+    }
     [Fact]
     public async Task Jq_ChainedUpdatesAreCompileErrors()
     {

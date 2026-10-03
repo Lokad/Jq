@@ -832,7 +832,8 @@ internal sealed class JqParser(
             return new IteratorFilter(source, optional);
         }
         JqFilter? index = null;
-        if (!Match(":"))
+        bool sawColon = Match(":");
+        if (!sawColon)
         {
             index = ParsePipe();
             if (!Match(":"))
@@ -842,6 +843,11 @@ internal sealed class JqParser(
                 return new IndexFilter(source, index, opt);
             }
         }
+
+        // A bare [:] has no upstream production (gen_slice_index always
+        // carries at least one bound), so it fails like any unexpected token.
+        if (index is null && Peek().Text == "]")
+            throw Error($"unexpected token {Peek().Text}", Peek().Span);
 
         JqFilter? end = null;
         if (!Match("]"))
