@@ -194,10 +194,20 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
-    // Long operands render in full while the reference truncates them with "..."; the failure stays catchable.
+    // Operands dump truncated like jv_dump_string_trunc (29-byte switch with ... and closing delimiter); the failure stays catchable.
     [Theory]
-    [InlineData("\"very-long-long-long-long-string\" | try (.-.) catch .", "\"string (\\\"very-long-long-long-long-string\\\") and string (\\\"very-long-long-long-long-string\\\") cannot be subtracted\"\n")]
-    public async Task Jq_CaughtSubtractRendersFullOperands(string filter, string expected)
+    [InlineData("\"very-long-long-long-long-string\" | try -. catch .", "\"string (\\\"very-long-long-long-long...\\\") cannot be negated\"\n")]
+    [InlineData("\"very-long-long-long-long-string\" | try (.-.) catch .", "\"string (\\\"very-long-long-long-long...\\\") and string (\\\"very-long-long-long-long...\\\") cannot be subtracted\"\n")]
+    [InlineData("\"x\" * range(0;12;2) + \"\\u2606\" * 8 | try -. catch .", "\"string (\\\"☆☆☆☆☆☆☆☆\\\") cannot be negated\"\n\"string (\\\"xx☆☆☆☆☆☆☆☆\\\") cannot be negated\"\n\"string (\\\"xxxx☆☆☆☆☆☆...\\\") cannot be negated\"\n\"string (\\\"xxxxxx☆☆☆☆☆☆...\\\") cannot be negated\"\n\"string (\\\"xxxxxxxx☆☆☆☆☆...\\\") cannot be negated\"\n\"string (\\\"xxxxxxxxxx☆☆☆☆...\\\") cannot be negated\"\n")]
+    [InlineData("{a: (\"x\" * 100)} | try (. + 1) catch .", "\"object ({\\\"a\\\":\\\"xxxxxxxxxxxxxxxxxxx...}) and number (1) cannot be added\"\n")]
+    [InlineData("[range(0;100)] | try (. + 1) catch .", "\"array ([0,1,2,3,4,5,6,7,8,9,10,1...]) and number (1) cannot be added\"\n")]
+    [InlineData("123456789012345678901234567890 | try (. + \"x\") catch .", "\"number (1.2345678901234568E+29) and string (\\\"x\\\") cannot be added\"\n")]
+    [InlineData("try (123456789012345678901234567890 + \"x\") catch . == if have_decnum then \"number (12345678901234567890123456...) and string (\\\"x\\\") cannot be added\" else \"number (12345678901234568000000000...) and string (\\\"x\\\") cannot be added\" end", "false\n")]
+    [InlineData("\"ab\" | try -. catch .", "\"string (\\\"ab\\\") cannot be negated\"\n")]
+    [InlineData("{\"a\":1} | try -. catch .", "\"object ({\\\"a\\\":1}) cannot be negated\"\n")]
+    [InlineData("\"very-long-long-long-long-string\" | try (. / 1) catch .", "\"string (\\\"very-long-long-long-long...\\\") and number (1) cannot be divided\"\n")]
+    [InlineData("\"very-long-long-long-long-string\" | try (. % 1) catch .", "\"string (\\\"very-long-long-long-long...\\\") and number (1) cannot be divided (remainder)\"\n")]
+    public async Task Jq_CaughtErrorsTruncateLongOperands(string filter, string expected)
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));

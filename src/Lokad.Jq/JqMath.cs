@@ -193,7 +193,7 @@ internal static class JqMath
         {
             if (TypeName(input) == "number")
                 return JsonValue.Create(-Number(input));
-            throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") cannot be negated");
+            throw new JqRuntimeException(context.Runtime.UnaryTypeError(input, "cannot be negated"));
         }
         if (TypeName(input) == "number" && Number(input) == 0.0 && double.IsNegative(Number(input)))
             return JsonValue.Create(0.0);

@@ -534,9 +534,39 @@ internal sealed class JqRuntime(JqBudget budget)
 
     // Kind-shaped operand diagnostics shared by arithmetic operators,
     // matching the reference operand rendering (operands dump as JSON, so
-    // strings render quoted).
+    // strings render quoted, truncated like jv_dump_string_trunc with a
+    // 30-byte buffer).
     internal string TypeError(JsonNode? l, JsonNode? r, string verb) =>
-        $"{TypeName(l)} ({Serialize(l, false, null, false)}) and {TypeName(r)} ({Serialize(r, false, null, false)}) {verb}";
+        $"{TypeName(l)} ({TruncatedDump(l)}) and {TypeName(r)} ({TruncatedDump(r)}) {verb}";
+
+    // Reference-shaped operand dump for unary type errors (negation and its
+    // parser/math aliases share the message).
+    internal string UnaryTypeError(JsonNode? value, string verb) =>
+        $"{TypeName(value)} ({TruncatedDump(value)}) {verb}";
+
+    // Mirrors jv_dump_string_trunc with a 30-byte buffer: dumps longer than
+    // 29 bytes keep 25 bytes (26 without a closing delimiter for scalars
+    // other than strings) backed over the UTF-8 boundary, then take "..."
+    // with the closing delimiter. The string pre-slice is skipped: the
+    // truncation window dominates it in every case.
+    internal string TruncatedDump(JsonNode? node)
+    {
+        byte[] dumped = Encoding.UTF8.GetBytes(Serialize(node, false, null, false));
+        if (dumped.Length <= 29)
+            return Encoding.UTF8.GetString(dumped);
+        char delimiter = dumped[0] switch
+        {
+            (byte)'"' => '"',
+            (byte)'[' => ']',
+            (byte)'{' => '}',
+            _ => '\0',
+        };
+        int keep = 30 - (delimiter == '\0' ? 4 : 5);
+        while (keep > 0 && dumped[keep] >= 0x80 && dumped[keep] < 0xC0)
+            keep--;
+        string head = Encoding.UTF8.GetString(dumped, 0, keep);
+        return delimiter == '\0' ? head + "..." : head + "..." + delimiter;
+    }
 
     internal JsonNode? Add(JsonNode? l, JsonNode? r)
     {

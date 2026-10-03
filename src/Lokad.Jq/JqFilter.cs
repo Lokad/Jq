@@ -1570,7 +1570,7 @@ internal sealed class UnaryFilter(string op, JqFilter inner) : JqFilter
             if (op == "-")
             {
                 if (TypeName(value) != "number")
-                    throw new JqRuntimeException(TypeName(value) + " (" + context.Runtime.Serialize(value, false, null, false) + ") cannot be negated");
+                    throw new JqRuntimeException(context.Runtime.UnaryTypeError(value, "cannot be negated"));
                 yield return JsonValue.Create(-Number(value));
             }
             else if (op == "not")
@@ -1836,7 +1836,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "scalars": if (TypeName(input) is not ("array" or "object")) yield return context.Runtime.Clone(input); break;
                 case "finites": if (JqMath.Classify("isfinite", input)) yield return context.Runtime.Clone(input); break;
                 case "normals": if (JqMath.Classify("isnormal", input)) yield return context.Runtime.Clone(input); break;
-                case "_negate": if (TypeName(input) != "number") throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") cannot be negated"); yield return JsonValue.Create(-Number(input)); break;
+                case "_negate": if (TypeName(input) != "number") throw new JqRuntimeException(context.Runtime.UnaryTypeError(input, "cannot be negated")); yield return JsonValue.Create(-Number(input)); break;
                 case "_strindices":
                     if (!TryGetString(input, out string? strHaystack) || strHaystack is null)
                         throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") cannot be searched, as it is not a string");
