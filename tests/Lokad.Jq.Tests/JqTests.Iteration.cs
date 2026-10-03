@@ -9,6 +9,8 @@ public sealed partial class JqTests
     [InlineData("0", "[limit(0; error)]", "[]\n")]
     [InlineData("0", "[limit(1; 1, error)]", "[\n  1\n]\n")]
     [InlineData("0", "limit(2.5; (1, 2, 3, 4))", "1\n2\n3\n")]
+    [InlineData("0", "limit(0; error(\"x\"))", "")]
+    [InlineData("0", "try skip(2; (1, error(\"x\"), 2)) catch .", "\"x\"\n")]
     // Numeric-string counts coerce instead of following the reference order-branches, which would subtract and fail.
     [InlineData("[1,2,3]", "[limit(\"2\"; .[])]", "[\n  1,\n  2\n]\n")]
     [InlineData("0", "nth(\"1\"; (10, 20, 30))", "20\n")]
