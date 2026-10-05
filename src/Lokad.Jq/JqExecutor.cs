@@ -133,7 +133,7 @@ internal static class JqExecutor
                             sawOutput = true;
                             lastFalseNull = output is null
                                 || (output is JsonValue negative && negative.TryGetValue<bool>(out bool flag) && !flag);
-                            ReadOnlyMemory<byte> rendered = RenderOutput(invocation, outputRenderer, budget, output);
+                            ReadOnlyMemory<byte> rendered = outputRenderer.Render(output);
                             var appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken)).ConfigureAwait(false);
                             if (!appended.CanAcceptMore) return appended.ExitCode;
                             if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int stopped)
@@ -299,27 +299,6 @@ internal static class JqExecutor
             context.InputLineNumber = cursor.LastLine;
             yield return slurped;
         }
-    }
-
-    private static ReadOnlyMemory<byte> RenderOutput(
-        JqInvocation invocation,
-        JqRuntime.OutputRenderer outputRenderer,
-        JqBudget budget,
-        JsonNode? output)
-    {
-        if (invocation.RawOutput && JqRuntime.TryGetString(output, out var text))
-        {
-            if (invocation.RawOutput0 && text.Contains((char)0))
-                throw new JqException("Cannot dump a string containing NUL with --raw-output0 option");
-            if (invocation.RawOutput0)
-            {
-                budget.ChargeOutput(Encoding.UTF8.GetByteCount(text) + 1);
-                return ByteLines.AppendTerminator(Utf8Text.Encode(text), 0);
-            }
-            budget.ChargeOutput(Encoding.UTF8.GetByteCount(text) + (invocation.JoinOutput ? 0 : 1));
-            return invocation.JoinOutput ? Utf8Text.Encode(text) : Utf8Text.EncodeLine(text);
-        }
-        return outputRenderer.Render(output);
     }
 
     // Sequence-mode record failures are warnings, never fatal: the cursor

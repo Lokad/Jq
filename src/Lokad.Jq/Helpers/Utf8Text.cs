@@ -23,6 +23,9 @@ internal static class Utf8Text
         return string.IsNullOrEmpty(text) ? ReadOnlyMemory<byte>.Empty : StrictUtf8.GetBytes(text);
     }
 
+    public static int Encode(string text, Span<byte> destination) =>
+        StrictUtf8.GetBytes(text.AsSpan(), destination);
+
     public static ReadOnlyMemory<byte> EncodeLine(string text)
     {
         if (string.IsNullOrEmpty(text))

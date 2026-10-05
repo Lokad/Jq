@@ -80,22 +80,25 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Jq_OutputReuseWaitsForTheHostBeforeChangingRecordMemory(bool cancel)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Jq_OutputReuseWaitsForTheHostBeforeChangingRecordMemory(bool cancel, bool raw)
     {
         using var cancellation = new CancellationTokenSource();
         var inner = new MockFileSystem();
         string text = new('x', 20000);
         inner.AddFile("/data", "[\"" + text + "\",7]");
         var host = new DelayedOutputHost(inner);
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".[]", "/data")));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", raw ? "-r" : "-c", ".[]", "/data")));
+        string first = raw ? text + "\n" : "\"" + text + "\"\n";
 
         Task<int> execution = command.ExecuteAsync(host, cancellation.Token);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.False(execution.IsCompleted);
         Assert.Equal(1, host.AppendCalls);
-        Assert.Equal(Encoding.UTF8.GetBytes("\"" + text + "\"\n"), pending.ToArray());
+        Assert.Equal(Encoding.UTF8.GetBytes(first), pending.ToArray());
         if (cancel)
         {
             cancellation.Cancel();
@@ -106,12 +109,48 @@ public sealed partial class JqTests
         {
             host.Release.SetResult();
             Assert.Equal(0, await execution);
-            Assert.Equal("\"" + text + "\"\n7\n", inner.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(first + "7\n", inner.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal(2, host.AppendCalls);
         }
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(inner.ClosedDescriptors);
         Assert.Equal(0, inner.OpenFileCount);
+    }
+
+    [Theory]
+    [InlineData("-r", "\n")]
+    [InlineData("-j", "")]
+    [InlineData("--raw-output0", "\0")]
+    public async Task Jq_RawOutputReuseHandlesGrowthUnicodeAndEmptyRecords(string option, string ending)
+    {
+        var host = new MockFileSystem();
+        string longText = new('x', 20000);
+        host.SetStandardInput("[\"é🚀\",\"" + longText + "\",\"\",\"z\"]");
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", option, ".[]")));
+
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(Encoding.UTF8.GetBytes("é🚀" + ending + longText + ending + ending + "z" + ending),
+            host.GetOutputBytes(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
+        Assert.Equal(4, host.AppendCallCount);
+    }
+
+    [Fact]
+    public async Task Jq_RawOutputReusePreflightsTheNextRecordAndStopsOnClosure()
+    {
+        foreach (bool closed in new[] { false, true })
+        {
+            var host = new MockFileSystem { AppendRemainsOpen = !closed };
+            host.AddFile("/data", "[\"é\",\"too long\"]");
+            var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", ".[]", "/data")));
+
+            Assert.Equal(closed ? 0 : 5, await command.ExecuteAsync(host,
+                new JqExecutionPolicy { MaximumOutputBytes = 3 }, CancellationToken.None));
+            Assert.Equal("é\n", host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(closed ? "" : "jq: output exceeds the 3-byte limit\n", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Single(host.ClosedDescriptors);
+            Assert.Equal(0, host.OpenFileCount);
+        }
     }
 
     private sealed class DelayedOutputHost(MockFileSystem inner) : IJqHost
