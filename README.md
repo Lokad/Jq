@@ -1,14 +1,8 @@
 # Lokad.Jq
 
-Lokad.Jq is an embeddable jq runtime for .NET 10.
-It executes JSON filters through a caller-supplied `IJqHost`, which owns input,
-output, file access, and descriptor cleanup. The library does not install a real
-filesystem host or invoke an external jq executable.
-
-This implementation is incomplete. It is not yet a drop-in
-replacement for upstream jq.
-See [compatibility](docs/COMPATIBILITY.md) for the baseline and
-[architecture](docs/ARCHITECTURE.md) for the host contract.
+Lokad.Jq is an embeddable jq runtime for .NET 10 with host-controlled I/O and
+bounded execution. It executes JSON filters through a caller-supplied `IJqHost`,
+which owns input, output, file access, and descriptor cleanup.
 
 ## Use
 
@@ -48,25 +42,21 @@ dotnet pack src/Lokad.Jq/Lokad.Jq.csproj -c Release --no-build --no-restore
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --filter '*'
 ```
 
-The SDK policy is in `global.json`. Dependencies come from nuget.org, use central
-versions and committed lock files, and are checked against an explicit allowlist.
-Production dependencies remain `Lokad.Cli` and `PCRE.NET`. PCRE.NET contains native regex components; this is not
-yet a fully managed runtime. Benchmarks are opt-in.
+The SDK version is pinned in [global.json](global.json). Benchmarks are opt-in.
 
-GitHub Actions builds, tests, and packs on Windows and Linux. It does not publish
-packages. NuGet outputs live in `artifacts/nuget/`; only Release pack is accepted.
-Package metadata targets `https://github.com/lokad/Jq`; the repository is not
-published yet. Release builds normalize symbol paths and C# checkouts use LF
-to preserve SourceLink checksums. Validate the symbol package from a committed
-checkout, resolve its hosted sources after publication, and complete the release
-checklist in [PACKAGING.md](docs/PACKAGING.md). Hosted CI remains unverified.
+## Documentation
 
-`external/` contains optional local inspection repositories. It is ignored,
-never compiled, and never needed for restore, tests, packaging, or CI. Local
-handoff notes in `PLAN.md` are also ignored. Implement changes through small,
-validated incremental commits; see [AGENTS.md](AGENTS.md).
+Compatibility with upstream jq is incomplete; Lokad.Jq is not yet a drop-in
+replacement. The runtime currently uses PCRE.NET, which includes native regex
+components.
 
-## License
-
-MIT; see [LICENSE.txt](LICENSE.txt). See [PROVENANCE.md](docs/PROVENANCE.md)
-for extraction origins and dependency/reference distinctions.
+- [Compatibility](docs/COMPATIBILITY.md): supported scope and intentional differences.
+- [Compatibility matrix](docs/COMPATIBILITY_MATRIX.md): feature coverage, tests and known gaps.
+- [Reference comparisons](docs/UPSTREAM_VECTOR_CAMPAIGN.md): differential results and evidence limits.
+- [Architecture](docs/ARCHITECTURE.md): execution model, host contract and I/O ownership.
+- [Execution policy](docs/EXECUTION_POLICY.md): resource allowances and fixed limits.
+- [Numeric profile](docs/NUMERIC_PROFILE.md): number semantics, precision and rendering.
+- [Packaging](docs/PACKAGING.md): builds, CI, package verification and release checks.
+- [Changelog](CHANGELOG.md): changes and validation history.
+- [Provenance](docs/PROVENANCE.md): source origins and dependency/reference distinctions.
+- [License](LICENSE.txt): MIT.
