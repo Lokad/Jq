@@ -33,9 +33,11 @@ Closed structural gaps (delivered since the scaffold baseline; see the matrix ro
   ordering, and non-finite rendering each carry byte-exact pins, and
   decimal-literal fidelity is out of scope by design.
 - Regex uses PCRE.NET with duplicate capture names accepted and
-  reference-ordered folds; `l` (longest match) and `\C` stay permanently
-  excluded (no standard-API equivalent; the scalar-offset model forbids
-  single-unit matching). The onig/manonig sweep passes 66/66.
+  reference-ordered folds. The onig/manonig sweep passes 66/66, but six focused
+  jq 1.8.2 comparisons expose missing longest-match support, incorrect `m`/`s`/`p`
+  flag handling, and rejection of jq's literal `\C` escape. These are compatibility
+  gaps, not permanent scalar-model exclusions; jq uses Oniguruma Perl NG rather
+  than PCRE2. See the focused regex comparison in `UPSTREAM_VECTOR_CAMPAIGN.md`.
 - Rendering and diagnostics: lowercase `\uXXXX` escapes like the reference,
   `jv_dump_string_trunc` ports for long operands, reference Unknown-option
   wording with failing-flag cluster resolution, UTF-16 diagnostic columns
@@ -72,9 +74,9 @@ runs do not establish hosted CI passage.
 
 Compatibility evidence remains narrower than the full upstream suite. The
 filter-file NUL gap now has seven focused jq 1.8.2 comparisons and local
-regressions. Permanent numeric, regex, and diagnostic exclusions remain;
-closing inventory rows does not resolve those reference differences or prove
-all edge cases.
+regressions. Permanent numeric and diagnostic policies and identified regex gaps
+remain; closing inventory rows does not resolve those reference differences or
+prove all edge cases.
 
 Paths, exit categories, and parser-support internals have focused oracle
 coverage and are implemented. Their diagnostic and resource-policy caveats

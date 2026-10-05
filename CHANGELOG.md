@@ -4,7 +4,7 @@
 
 Embeddable jq 1.8.2 runtime with host-mediated IO. Compatibility is
 incomplete; see `docs/COMPATIBILITY_MATRIX.md` for the per-row inventory
-(96 implemented, 8 intentionally different, no partial or unimplemented
+(95 implemented, 8 intentionally different, 1 partial, no unimplemented
 rows) and `docs/UPSTREAM_VECTOR_CAMPAIGN.md` for the
 differential record (703 of 734 value vectors pass with every miss
 triaged).
@@ -26,8 +26,9 @@ Delivered since the scaffold baseline:
   policy, with literal precision, overflow clamping, and non-finite
   rendering pinned per `docs/NUMERIC_PROFILE.md`.
 - Regex: duplicate capture names accepted with reference-ordered folds;
-  longest-match and single-unit matching permanently excluded with engine
-  evidence; the onig/manonig sweep passes 66/66.
+  the onig/manonig sweep passes 66/66. Six additional reference comparisons
+  expose flag mapping, literal-escape and longest-match gaps; these are
+  documented as incomplete compatibility rather than permanent exclusions.
 - Paths: pointer-identity tracking plus byte-exact slice rendering and
   raw slice objects; exotic keys fail staged in every position on every
   container like the reference get/set/dels steps.

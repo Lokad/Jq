@@ -88,6 +88,35 @@ previously unconfirmed filter-file NUL case; broader compatibility remains
 unproven. The upstream change is recorded in the
 [jq 1.8.2 release notes](https://github.com/jqlang/jq/releases/tag/jq-1.8.2).
 
+## Focused regex comparison
+
+On 2026-10-05, the independently downloaded official jq 1.8.2 Windows amd64
+executable identified above ran six additional programs with `-n -c`.
+All returned status 0, empty stderr and the values below (CRLF normalized to LF).
+The same programs executed through the detached packaged library consumer:
+0 passed, 6 differed, 0 escaped or timed out; its ten package smoke checks passed.
+These six comparisons are additional evidence, not part of the saved 66-vector
+regex sweep. Runtime behavior was not changed by this audit.
+
+| Program or check | Reference values |
+| --- | --- |
+| `["C","a","é","😀"] \| map(test("\\C"))` | `[true,false,false,false]` |
+| `["C-a","\u0001"] \| map(test("\\C-a"))` | `[true,false]` |
+| On `"a\nb"`, collect `.string` from `match("^."; "g" + flags)` for flags `""`, `"m"`, `"s"`, `"p"` | `["a"]` for each flag set |
+| Same flag sets with `match("."; "g" + flags)` | Respectively `["a","b"]`, `["a","\n","b"]`, `["a","b"]`, `["a","\n","b"]` |
+| `"ab" \| [match("a\|ab";"l")]` | One match: offset 0, length 2, string `"ab"`, captures `[]` |
+| `"a bbbb" \| [match("a\|b+";"l")]` | One match: offset 2, length 4, string `"bbbb"`, captures `[]` |
+
+The [jq regex manual](https://jqlang.org/manual/v1.8/#regular-expressions)
+specifies Oniguruma Perl NG, `m` for dot matching newlines, `s` for whole-string
+anchors, and `p` for both. The current adapter instead uses PCRE's flag meanings.
+Its `m`/`p` line anchors and `m`/`s` dot behavior differ in these probes.
+It also rejects both `\C` programs and both `l` programs. In this jq profile,
+`\C` matches a literal C; PCRE2's single-byte escape is a different feature.
+The longest-match probe can select a later start, so a leftmost-longest algorithm
+alone would not satisfy the reference. The former permanent-exclusion rationale
+and claim of correct flag mapping are withdrawn.
+
 ## Registry reconciliation
 
 The upstream registry (C `function_list` plus `libm.h` capability names,
