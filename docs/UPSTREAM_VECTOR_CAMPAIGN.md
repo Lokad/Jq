@@ -69,6 +69,25 @@ Every current miss maps to an already-recorded profile or policy class:
   `...` (jq.test:1997, 2001, 2005, including both astral backtrack cases);
   corrected by the `jv_dump_string_trunc` port with the vectors pinned.
 
+## Focused filter-file comparison
+
+On 2026-10-05, an independently downloaded official jq 1.8.2 Windows amd64
+executable was run with `-n -c -f` over seven self-contained program files.
+Its SHA-256 was
+`a6fc67fedaf9128a3309a1e2ebb8b986aeccf70122ee46d2cb4849e423f0c627`;
+`--version` returned `jq-1.8.2`. No inspection checkout was executed.
+
+Literal NUL at the beginning, end, inside a comment, inside a quoted string,
+and after invalid syntax all returned status 2, empty stdout, and
+`jq: program file contains NUL bytes` on stderr. The positive controls
+`"\u0000"` and `1 # ordinary comment` returned status 0 with the expected
+values. Reference CRLF was normalized to LF for comparison. Seven local
+regressions now pin the same statuses, output bytes and diagnostics, plus owned
+filter-file closure and an unread borrowed stdin. This closes the matrix's
+previously unconfirmed filter-file NUL case; broader compatibility remains
+unproven. The upstream change is recorded in the
+[jq 1.8.2 release notes](https://github.com/jqlang/jq/releases/tag/jq-1.8.2).
+
 ## Registry reconciliation
 
 The upstream registry (C `function_list` plus `libm.h` capability names,

@@ -86,6 +86,8 @@ internal static class JqExecutor
             if (invocation.FilterFile is { } filterFile)
             {
                 var bytes = await ReadFileAsync(filterFile, host, budget, cancellationToken).ConfigureAwait(false);
+                if (bytes.Span.Contains((byte)0))
+                    throw new JqException("program file contains NUL bytes");
                 budget.ChargeString(Encoding.UTF8.GetCharCount(bytes.Span));
                 filterText = Utf8Text.Decode(bytes);
             }

@@ -175,6 +175,33 @@ public sealed partial class JqTests
         Assert.Empty(stderr);
     }
 
+    [Theory]
+    [InlineData("\0" + "1", 2, "", "jq: program file contains NUL bytes\n")]
+    [InlineData("1\0", 2, "", "jq: program file contains NUL bytes\n")]
+    [InlineData("1 # comment\0", 2, "", "jq: program file contains NUL bytes\n")]
+    [InlineData("\"a\0b\"", 2, "", "jq: program file contains NUL bytes\n")]
+    [InlineData("[\0", 2, "", "jq: program file contains NUL bytes\n")]
+    [InlineData("\"\\u0000\"", 0, "\"\\u0000\"\n", "")]
+    [InlineData("1 # ordinary comment", 0, "1\n", "")]
+    public async Task Jq_FromFileRejectsLiteralNulBeforeCompilation(string program, int expectedStatus, string expectedOutput, string expectedError)
+    {
+        // jq 1.8.2 -n -c -f: literal NULs fail anywhere in the file;
+        // an escaped NUL in a jq string remains a valid program.
+        var host = new MockFileSystem();
+        host.AddFile("/prog.jq", program);
+        host.SetStandardInput("invalid input must stay unread");
+        var (status, stdout, stderr) = await RunCliAsync(host, "-n", "-c", "-f", "/prog.jq");
+
+        Assert.Equal(expectedStatus, status);
+        Assert.Equal(expectedOutput, stdout);
+        Assert.Equal(expectedError, stderr);
+        Assert.Equal(System.Text.Encoding.UTF8.GetBytes(expectedOutput), host.GetOutputBytes(JqFileDescriptor.StdOut));
+        Assert.Equal(1, host.ReadBytesCallCount);
+        Assert.Single(host.ClosedDescriptors);
+        Assert.DoesNotContain(JqFileDescriptor.StdIn, host.ClosedDescriptors);
+        Assert.Equal(0, host.OpenFileCount);
+    }
+
     [Fact]
     public async Task Jq_FirstArgWins()
     {

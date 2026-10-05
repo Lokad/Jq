@@ -38,6 +38,8 @@ Delivered since the scaffold baseline:
   operands in type errors, reference Unknown-option wording with
   failing-flag cluster resolution, and UTF-16 diagnostic columns with
   JSON-reader wording kept as policy.
+- Filter files reject literal NUL bytes anywhere before compilation with the
+  reference status-2 diagnostic; escaped NUL string literals remain valid.
 - Combination orders confirmed against the reference executable:
   C-builtin calls slowest-last, native operators, user arguments, range
   bounds, objects, interpolation, index, and slice slowest-first.

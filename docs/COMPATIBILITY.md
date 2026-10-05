@@ -66,9 +66,10 @@ and observed Windows/Linux CI passage. No public remote exists yet;
 no release, publication, or availability is claimed.
 
 Compatibility evidence remains narrower than the full upstream suite. The
-matrix records unconfirmed cases such as NUL bytes in filter files alongside
-permanent numeric, regex, and diagnostic exclusions; closing inventory rows
-does not resolve those reference differences or prove all edge cases.
+filter-file NUL gap now has seven focused jq 1.8.2 comparisons and local
+regressions. Permanent numeric, regex, and diagnostic exclusions remain;
+closing inventory rows does not resolve those reference differences or prove
+all edge cases.
 
 Paths, exit categories, and parser-support internals have focused oracle
 coverage and are implemented. Their diagnostic and resource-policy caveats

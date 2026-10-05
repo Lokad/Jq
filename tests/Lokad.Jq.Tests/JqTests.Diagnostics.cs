@@ -365,15 +365,17 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_NulByteInProgramIsCompileError()
+    public async Task Jq_NulByteInProgramFileFailsBeforeCompilation()
     {
         var host = new MockFileSystem();
         host.AddFile("/filter.jq", ".\x00invalid");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-f", "/filter.jq")));
 
-        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("invalid character", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(2, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("jq: program file contains NUL bytes\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(0, host.OpenFileCount);
     }
 
     [Fact]
