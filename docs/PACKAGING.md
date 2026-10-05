@@ -87,16 +87,23 @@ the runtime remains independent of processes and repositories. It performs no
 network lookup of source URLs. Hosted source resolution and Windows/Linux CI
 passage remain separate release checks.
 
-## Local source-only proof
+## Local source and package evidence
 
-On 2026-10-05, a tracked-source archive containing neither `PLAN.md` nor
-`external/` passed locked restore, Release build, all 3,616 tests, and Release
-pack on Windows. The package from that archive also passed all ten standalone
-consumer checks with a verified lock hash and isolated cache. Dependencies and
-lock files were unchanged; no development fixture entered the package. This
-proves the local source/package path, while SourceLink requires a real Git
-checkout with the actual public remote.
+On 2026-10-05, isolated committed Git checkouts containing neither `PLAN.md` nor
+`external/` passed locked restore, Release build, all 3,643 tests, and Release
+pack on Windows and Ubuntu 24.04 x64 under WSL, using SDK 10.0.204. Each packed
+artifact passed ten detached consumer checks with a verified lock hash and
+isolated cache. Each symbol package passed assembly identity, normalized public
+commit mappings and SHA-256 checksums for 64 committed and four embedded generated
+source documents. Dependencies and lock files were unchanged; no development
+fixture entered the package.
 
-Local validation on Windows is evidence for that machine only. Merely adding a
-Linux workflow does not prove Linux execution has passed; verify the hosted CI
-results when a remote is configured.
+An earlier tracked-source archive without Git metadata also passed the local
+restore/build/test/pack and detached-consumer checks. The Linux run exposed a
+Windows-only cube-root test pin; the corrected test follows the platform
+variation confirmed in official jq binaries, as recorded in `NUMERIC_PROFILE.md`.
+
+These are local platform checks. Hosted Windows/Linux workflow runs and actual
+SourceLink downloads remain unverified. The public repository endpoint and a
+committed-source URL returned HTTP 404 on 2026-10-05, consistent with the supplied
+repository location being unpublished. Repeat hosted validation after it exists.

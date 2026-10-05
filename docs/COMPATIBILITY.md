@@ -66,6 +66,9 @@ and observed Windows/Linux CI passage. The configured future repository is
 `https://github.com/lokad/Jq`; it is not published yet. Local SourceLink mappings
 and checksum verification are available, while hosted resolution remains pending.
 No release, publication, or availability is claimed.
+Isolated committed checkouts pass all 3,643 tests, Release pack, detached consumers
+and local symbol checks on Windows and Ubuntu 24.04 x64 under WSL. These local
+runs do not establish hosted CI passage.
 
 Compatibility evidence remains narrower than the full upstream suite. The
 filter-file NUL gap now has seven focused jq 1.8.2 comparisons and local

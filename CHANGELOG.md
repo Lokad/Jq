@@ -62,6 +62,8 @@ Delivered since the scaffold baseline:
   Public repository metadata targets `https://github.com/lokad/Jq`; normalized
   Release symbols and LF C# source checkouts support opt-in PDB identity,
   committed-source checksum and SourceLink mapping verification.
+  Isolated committed checkouts pass 3,643 tests, Release pack, detached consumers
+  and local symbol checks on Windows and Ubuntu 24.04 x64 under WSL.
 - Execution policy: immutable stricter allowances for input/output, allocation,
   values, strings, and regex work/time, with fresh counters per execution.
   Regex limits and setup/file quota failures terminate outside jq handlers.
