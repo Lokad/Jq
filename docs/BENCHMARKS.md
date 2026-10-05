@@ -85,6 +85,29 @@ committed Release checkout; correctness verification can run on a busy machine.
 
 ## Timing qualification
 
+Actual managed allocations can also be collected without a reference process:
+
+```text
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --allocations
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --allocations --case wide-object --scale diagnostic
+```
+
+This records process-wide `GC.GetTotalAllocatedBytes(true)` deltas and generation
+collection counts in three warmed batches of eight executions, validating every
+status, stderr and complete output digest. Binding, compilation, execution, host
+consumption and a linked per-call deadline are included; input generation,
+preflight and artifact serialization are excluded. Run without other work in the
+benchmark process. These are actual managed bytes, separate from cumulative
+execution-policy allowances, native memory and qualified CPU timing. Small batch
+variation can include runtime bookkeeping. Source/build provenance, library and
+benchmark hashes, inputs, outputs and every batch stay in the ignored artifact.
+
+Six `diagnostic` workloads supplement the unchanged 38-case comparison catalog:
+eight-field objects, a small function/filter, long raw strings, sorted ASCII JSON,
+a scalar pipeline and buffered scalar inputs. They are bounded probes for
+allocation attribution; they do not expand the public jq comparison results.
+The command accepts `--case`, `--scale` and `--output artifacts/PATH`.
+
 Start with a targeted case on the dedicated machine, then select the full catalog:
 
 ```text

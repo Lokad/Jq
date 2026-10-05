@@ -11,6 +11,16 @@ if (args is ["--check-machine"])
     Environment.ExitCode = check.IsQuiet ? 0 : 3;
     return;
 }
+if (args.Length > 0 && args[0] == "--allocations")
+{
+    using var cancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, signal) => { signal.Cancel = true; cancellation.Cancel(); };
+    try { Environment.ExitCode = await AllocationRunner.RunAsync(args[1..], cancellation.Token); }
+    catch (OperationCanceledException) { Console.Error.WriteLine("Cancelled; completed allocation checkpoints remain in artifacts/."); Environment.ExitCode = 130; }
+    catch (Exception exception) when (exception is IOException or InvalidOperationException)
+    { Console.Error.WriteLine("Allocation tool failed: " + exception.Message); Environment.ExitCode = 1; }
+    return;
+}
 if (args is ["--render-report", var artifact])
 {
     await BenchmarkReport.RenderFileAsync(artifact, CancellationToken.None);
