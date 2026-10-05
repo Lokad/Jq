@@ -4,10 +4,10 @@ Scope: the value-output vectors in `tests/jq.test`, `tests/man.test`,
 `tests/onig.test`, and `tests/manonig.test` of
 the jq 1.8.2 inspection checkout (see `docs/PROVENANCE.md`). Each vector is
 a (program, single JSON input, expected JSON values) triple. This campaign
-executes every triple through the public library API and compares parsed
-values, mirroring the upstream runner: parsed-value equality, one pull per
-expected value, extra values fail, and trailing errors do not fail a vector
-whose expected values all matched.
+executes every triple through the public packaged library API and compares
+parsed values with JsonNode.DeepEquals, preserving decimal precision. It follows
+the upstream stream rules: exact expected value count, extra values fail, and
+trailing errors do not fail a vector whose expected values all matched.
 
 Out of scope: vectors needing host capabilities (modules, `input`/`inputs`,
 file/line metadata, environment, clock/timezone, `halt`, `debug`/`stderr`,
@@ -20,32 +20,34 @@ decoded value, so encoder escape-case differences cannot false-positive.
 - Triples: 734 (`jq.test` plus `man.test`); 28 host-dependent skips, 19 `%FAIL` blocks set aside.
 - Regex triples: 66 (`onig.test` plus `manonig.test`); no skips.
 - Encoding triples: 32 (`uri.test`, `base64.test`, `optional.test`); no skips.
-- Result: 704 pass, 30 miss, 0 escapes, 0 timeouts.
+- Result (2026-10-05): 703 pass, 31 miss, 0 escapes/timeouts.
+  The packaged-artifact runner preserves decimal precision; the earlier 704/30
+  sweep accepted one rounded decimal identity. The additional miss is the
+  existing decimal-profile difference at man.test:5, not a runtime change.
 - Regex result: 66 pass, 0 miss, 0 escapes, 0 timeouts, covering zero-width
   global matches, combining codepoints, named and non-participating
   captures, sub/gsub replacements, and the `g`/`gi`/`ig`/`gn`/`ix` flags.
 - Encoding result: 32 pass, 0 miss, 0 escapes, 0 timeouts, covering URI
   unreserved sets, NUL and multibyte roundtrips, base64 padding variants and
   rejection messages, the 2038 `fromdate` boundary, and `%e` formatting.
-- The value sweep was re-run after the truncation, identity-sharing,
-  duplicate-name, hex-case, Bessel, and accessor-sharing increments: 704
-  pass, 30 miss, 0 escapes. A worktree A/B at the pre-increment base
-  reproduced 701 pass and the same 30 misses plus exactly the three
-  truncation vectors, proving those increments changed values only where
-  intended. Regex/encoding tallies stand (no shared paths changed:
-  duplicate names accept only duplicate-name patterns, absent from those
-  vectors). A positive control with corrupted expectations proves mismatch
-  sensitivity.
+- The current rerun uses the saved corpus and packed artifact, without a live
+  reference executable or an inspection checkout. Regex and encoding were also
+  rerun against that artifact and retain 66/66 and 32/32. The historical 704/30
+  result and its 701/33 worktree comparison used the previous comparison rule;
+  they should not be compared directly with the current stricter decimal rule.
+  Corrupted value, output order, extra-output and decimal-precision controls
+  prove mismatch sensitivity.
 - 5 additional vectors produce byte-identical values with a trailing error
   (binding-alternation all-fail and error-after-output cases); the upstream
   runner ignores trailing errors the same way, so these match.
 
-## Triage of the 30 misses
+## Triage of the 31 misses
 
 Every miss maps to an already-recorded class or a fixed bug; none is an
 unexplained semantic gap:
 
-- Decimal-build numeric rendering (`docs/NUMERIC_PROFILE.md`): `.0`
+- Decimal-build numeric fidelity (`docs/NUMERIC_PROFILE.md`): the decimal
+  identity rounding at man.test:5, `.0`
   suffixes (for example `1+1` rendering `2.0`), lowercase exponent `e`,
   exponent-form preservation (for example `1e-1` versus `0.1`), and
   `have_decnum` else-branches encoding double rounding and overflow
@@ -88,9 +90,16 @@ compile diagnostics, no escapes). Re-run this comparison when the target profile
 
 ## Regeneration
 
-The triple parser and the throwaway sweep probe are local scratch only:
-they read the ignored inspection checkout, are deleted before committing,
-and never run in ordinary builds or tests. Committed evidence takes the
-form of focused regression pins derived from sweep findings, as with the
-`abs` correction above. Rerun the sweep after semantic changes to the
-value, ordering, rendering, or budget paths.
+The committed `tools/VerifyPackage.ps1` command copies a standalone package
+consumer outside the repository and restores the exact packed artifact into a
+fresh isolated cache. Its optional vector mode reads caller-supplied JSONL triples
+with `prog` (filter text), `input` (JSON text), and `expected` (array of JSON texts).
+The expected miss count gates the recorded total; every reported miss still needs
+triage. A matching total is not a conformance certificate. See `PACKAGING.md`.
+
+The extracted corpus remains ignored local evidence, not a build dependency or a
+bulk fixture committed to this repository. No vector mode runs in ordinary tests
+or CI, and the command never reads an upstream checkout. Supply a separately
+prepared corpus to reproduce a campaign; regeneration must respect the upstream
+harness exclusions. Rerun after semantic changes to value, ordering, rendering,
+or budget paths and record the comparison rule as well as the reference profile.

@@ -48,16 +48,16 @@ Closed structural gaps (delivered since the scaffold baseline; see the matrix ro
   measured clone-removal optimization (-8% to -15% allocations on
   input-heavy workloads, zero semantic delta).
 - Packaging: out-of-tree consumer proof re-verified against the packed
-  artifact with locked restore. Value sweep 704/734 re-run after every
-  semantic increment with all 30 misses triaged
+  artifact with locked restore. Value sweep 703/734 in the latest packaged-artifact rerun after
+  the policy increment, with all 31 misses classified
   (`docs/UPSTREAM_VECTOR_CAMPAIGN.md`).
 
 Value-model contract (binding before further expansion): UTF-8 bytes at
 the IO boundary, scalar-based string semantics, the `JsonNode` model with
 C# null as JSON null, insertion-ordered objects with last-wins duplicates,
-storage-agnostic numeric projections, and cumulative budgets. Structural
-gaps (identity, numerics, regex) were fixed before byte-parity items, and
-no new builtins, flags, or options land until the open rows below close.
+storage-agnostic numeric projections, and cumulative budgets. Delivered identity
+fixes and explicitly scoped numeric/regex policies preceded byte-parity work.
+Further compatibility changes require focused evidence against the reference.
 
 Remaining work:
 
@@ -68,7 +68,7 @@ Remaining work:
 Paths, exit categories, and parser-support internals have focused oracle
 coverage and are implemented. Their diagnostic and resource-policy caveats
 remain explicit in the matrix. Inventory labels do not establish full
-conformance: the recorded value campaign still has 30 classified misses,
+conformance: the recorded value campaign still has 31 classified misses,
 and its registry section describes the current helper dispositions.
 
 Also intentionally different by design (not gaps): `--unbuffered` (inert),

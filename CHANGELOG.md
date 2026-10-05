@@ -1,12 +1,12 @@
 # Changelog
 
-## 0.1.0-preview.1 — unreleased
+## 0.1.0-preview.1 â€” unreleased
 
 Embeddable jq 1.8.2 runtime with host-mediated IO. Compatibility is
 incomplete; see `docs/COMPATIBILITY_MATRIX.md` for the per-row inventory
 (96 implemented, 8 intentionally different, no partial or unimplemented
 rows) and `docs/UPSTREAM_VECTOR_CAMPAIGN.md` for the
-differential record (704 of 734 value vectors pass with every miss
+differential record (703 of 734 value vectors pass with every miss
 triaged).
 
 Delivered since the scaffold baseline:
@@ -53,7 +53,8 @@ Delivered since the scaffold baseline:
   clone-removal optimization (-8% to -15% allocations on input-heavy
   workloads, no semantic delta).
 - Packaging: out-of-tree consumer proof re-verified against the packed
-  artifact with locked restore.
+  artifact with locked restore; committed opt-in verification covers ten
+  consumer checks and optional caller-supplied value corpora.
 - Execution policy: immutable stricter allowances for input/output, allocation,
   values, strings, and regex work/time, with fresh counters per execution.
   Regex limits and setup/file quota failures terminate outside jq handlers.

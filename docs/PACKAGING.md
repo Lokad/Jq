@@ -30,14 +30,37 @@ Before any public release:
 6. Finalize public API/version/changelog, confirm repository metadata, and select
    the desired publication mechanism. Publishing is separate from CI validation.
 
-Local out-of-tree proof (re-run after any packaging change): an ignored
-probe under `tmp/consumer` references only the packed `Lokad.Jq` package
-by exact version through the `artifacts/nuget` feed, with repository
-build props detached, an isolated packages folder, and a regenerated lock
-whose content hash matches the packed artifact. It executes JSON, regex,
-hosted file IO, cancellation, and non-finite parsing checks; all five
-report ok with exit code 0. The probe stays out of version control and
-never references the library source project. Copy the probe sources outside the repository directory tree before restoring: restoring inside the tree applies the repository build props, whose package allowlist rejects the under-test reference. Always restore into a fresh isolated packages folder: reusing the shared global cache across repacks of the same version has been observed to serve stale bits (a check failing shared that passes isolated, with lock hash mismatches), so regenerate the lock per pack and compare its content hash against the packed artifact before running.
+## Reproducible package consumer
+
+After Release pack, run the opt-in PowerShell verification command:
+
+```powershell
+./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0-preview.1.nupkg
+```
+
+The command inspects package contents and dependencies, copies the committed
+smoke fixture outside the repository tree, creates a fresh isolated package
+cache, restores the exact artifact version, checks its SHA-512 content hash
+against the consumer lock, and repeats locked restore before executing. It
+verifies JSON, regex, owned file cleanup, modules, explicit environment/time,
+non-finite parsing, output/regex policy, cancellation, and borrowed descriptors.
+All ten checks passed locally on Windows after the execution-policy increment.
+The isolated workspace is retained for inspection. The project template is not
+part of the solution and never references the production source project.
+
+Supply separately prepared JSONL corpora to rerun a value campaign:
+
+```powershell
+./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0-preview.1.nupkg `
+    -VectorPath /path/to/values.jsonl -ExpectedMisses 31
+```
+
+`VectorPath` and `ExpectedMisses` accept matching arrays for multiple corpora.
+The schema and comparison rules are in `UPSTREAM_VECTOR_CAMPAIGN.md`; vectors
+are caller-supplied and no inspection checkout is consulted. This mode gates
+the expected mismatch count and rejects escapes/timeouts; it does not certify
+compatibility. Value and decimal comparison controls detect corrupted expectations.
+Neither the package proof nor vector mode runs in ordinary tests or CI.
 
 Local validation on Windows is evidence for that machine only. Merely adding a
 Linux workflow does not prove Linux execution has passed; verify the hosted CI
