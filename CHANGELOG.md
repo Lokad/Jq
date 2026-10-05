@@ -58,8 +58,12 @@ Delivered since the scaffold baseline:
   catalog. Ordinary JSON preserves parsing progress across host reads;
   JSON output reuses bounded storage while awaiting each host append;
   `select` shares surviving inputs and preserves aliases. Limits and
-  cancellation remain enforced. Qualified measurements and their embedding
-  versus CLI boundary are recorded in `docs/BENCHMARKS.md`.
+  cancellation remain enforced. Completed objects avoid repeated prefix clones;
+  identity/literal/variable leaves use one lazy iterator; main filter tokens are
+  reused within an execution; raw output reuses strict UTF-8 storage. The opt-in
+  `--allocations` command measures managed GC bytes and collection counts across
+  the comparison catalog and six separate diagnostics. Qualified measurements
+  and their embedding versus CLI boundary are recorded in `docs/BENCHMARKS.md`.
 - Packaging: out-of-tree consumer proof re-verified against the packed
   artifact with locked restore; committed opt-in verification covers ten
   consumer checks and optional caller-supplied value corpora.
@@ -67,9 +71,9 @@ Delivered since the scaffold baseline:
   Release symbols and LF C# source checkouts support opt-in PDB identity,
   committed-source checksum and SourceLink mapping verification, with an explicit
   option to download and verify every hosted source. CI-built packages at
-  `974365d` pass detached consumers, saved corpora, symbol identity and all
+  `9f223bf` pass detached consumers, saved corpora, symbol identity and all
   hosted source checks on Windows and Ubuntu 24.04 x64. Both hosted jobs pass
-  all 3,715 tests and Release pack; see `docs/PACKAGING.md`.
+  all 3,727 tests and Release pack; see `docs/PACKAGING.md`.
 - Execution policy: immutable stricter allowances for input/output, allocation,
   values, strings, and regex work/time, with fresh counters per execution.
   Regex limits and setup/file quota failures terminate outside jq handlers.

@@ -109,9 +109,9 @@ restore/build/test/pack and detached-consumer checks. The Linux run exposed a
 Windows-only cube-root test pin; the corrected test follows the platform
 variation confirmed in official jq binaries, as recorded in `NUMERIC_PROFILE.md`.
 
-The latest package audit uses artifacts from GitHub Actions run `37332686053`
-for committed revision `974365d` on 2026-10-05. Both Windows and Ubuntu jobs
-passed locked restore, Release build, all 3,715 tests, Release pack and artifact
+The latest package audit uses artifacts from GitHub Actions run `37348034783`
+for committed revision `9f223bf` on 2026-10-05. Both Windows and Ubuntu jobs
+passed locked restore, Release build, all 3,727 tests, Release pack and artifact
 uploads. Their respective packages passed ten detached consumer checks on
 Windows and Ubuntu 24.04 x64, with fresh package caches, exact SHA-512 lock
 hashes and locked restore.

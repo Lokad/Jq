@@ -49,9 +49,11 @@ Closed structural gaps (delivered since the scaffold baseline; see the matrix ro
   per-iteration status, stderr and output-checksum validation, and allocation
   diagnosis. The opt-in non-regex catalog agrees with jq 1.8.2 in 38 bounded
   comparisons on Windows and Linux. The latest AMD Linux campaign qualifies 36
-  workload measurements after incremental input, output storage and select
-  sharing improvements; two startup/latency controls remain unqualified. See
-  BENCHMARKS.md for results and the embedded-runtime versus CLI timing boundary. An earlier
+  workload measurements, all favoring Lokad.Jq within the declared comparison,
+  after input/output, object construction, token reuse and iterator improvements;
+  two startup/latency controls remain unqualified. Actual managed allocations
+  fall about 13% for large projection and 11% for foreach in the latest campaign.
+  See BENCHMARKS.md for results and the embedded-runtime versus CLI timing boundary. An earlier
   clone-removal optimization measured -8% to -15% allocations on
   input-heavy workloads, zero semantic delta).
 - Packaging: out-of-tree consumer proof re-verified against the packed
@@ -68,8 +70,8 @@ Further compatibility changes require focused evidence against the reference.
 
 Remaining work:
 
-GitHub Actions passed on Windows and Ubuntu for commit `974365d` on 2026-10-05
-(run `37332686053`), including locked restore, Release build, all 3,715 tests,
+GitHub Actions passed on Windows and Ubuntu for commit `9f223bf` on 2026-10-05
+(run `37348034783`), including locked restore, Release build, all 3,727 tests,
 pack and artifact uploads. Both CI-built packages passed detached consumers,
 saved value/regex/encoding corpora and symbol verification on Windows and
 Ubuntu 24.04 x64. Every hosted SourceLink source resolves with exact bytes and

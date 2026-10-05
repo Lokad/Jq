@@ -6,7 +6,9 @@ arguments. `Jq.ExecuteAsync` drives the existing command evaluator:
 1. `JqCommandLineParser` separates variables, positional values, format options,
    filter files, and input file operands. `JqArgs` uses Lokad.Cli generation.
 2. `Lexer` and `JqParser` construct `JqFilter` nodes. Filter compilation currently
-   occurs during execution, not during command-name recognition.
+   occurs during execution, not during command-name recognition. Main-program
+   tokens are reused between import scanning and parsing within that execution;
+   scopes, module inputs and budgets remain fresh on every call.
 3. `JqExecutor` loads input and filter files through `IJqHost`, creates a fresh
    `JqBudget`/`JqContext`, enumerates filter results, and writes UTF-8 output.
 4. `JqRuntime` manipulates `JsonNode` values. C# null represents JSON null;
@@ -50,10 +52,11 @@ completion and may remain incomplete to apply backpressure. It distinguishes
 success, downstream closure, and failure; the evaluator stops producing output
 when the descriptor cannot accept more.
 
-JSON output reuses a writer and bounded byte buffer within each execution. Record
-framing is written into the same buffer after output quota checks. The executor
-awaits each host append before reusing its memory, preserving per-record
-backpressure and closure. Filter/diagnostic serialization uses separate storage.
+JSON output reuses a writer and bounded byte buffer within each execution; raw
+strings reuse separate UTF-8 storage. Record framing follows output quota checks.
+The executor awaits each host append before reusing its memory, preserving
+per-record backpressure and closure. Filter/diagnostic serialization uses
+separate storage.
 
 Input flows through a shared pull cursor (`JqInputCursor`) using chunked 8 KiB
 requests with a one-byte overflow probe. Implicit outer iteration and explicit
