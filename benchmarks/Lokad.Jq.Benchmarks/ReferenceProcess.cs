@@ -8,8 +8,12 @@ internal static class ReferenceProcess
     // entering reference execution. Nothing is created at this sentinel path.
     private static readonly string ReferenceHome = Path.Combine(Path.GetTempPath(), "lokad-jq-no-home-" + Guid.NewGuid().ToString("N"));
 
+    public static Task<ExecutionResult> RunAsync(string executable, IReadOnlyList<string> arguments,
+        byte[] input, bool capture, TimeSpan timeout, CancellationToken cancellationToken) =>
+        RunAsync(executable, arguments, input, capture, timeout, false, cancellationToken);
+
     public static async Task<ExecutionResult> RunAsync(string executable, IReadOnlyList<string> arguments,
-        byte[] input, bool capture, TimeSpan timeout, CancellationToken cancellationToken)
+        byte[] input, bool capture, TimeSpan timeout, bool isolateHome, CancellationToken cancellationToken)
     {
         using var deadline = new CancellationTokenSource(timeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
@@ -18,8 +22,11 @@ internal static class ReferenceProcess
             UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true
         };
-        start.Environment["HOME"] = ReferenceHome;
-        start.Environment.Remove("JQ_LIBRARY_PATH");
+        if (isolateHome)
+        {
+            start.Environment["HOME"] = ReferenceHome;
+            start.Environment.Remove("JQ_LIBRARY_PATH");
+        }
         foreach (string argument in arguments) start.ArgumentList.Add(argument);
         using var process = new Process { StartInfo = start };
         cancellationToken.ThrowIfCancellationRequested();

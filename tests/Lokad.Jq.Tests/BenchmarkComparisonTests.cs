@@ -71,6 +71,13 @@ public sealed class BenchmarkComparisonTests
             FixtureAsync("wait", [], TimeSpan.FromSeconds(30), cancellation.Token));
     }
 
+    [Fact]
+    public async Task OutputBoundFailureStopsPumpsAndReapsTheChild()
+    {
+        await Assert.ThrowsAsync<IOException>(() =>
+            FixtureAsync("overflow", [], TimeSpan.FromSeconds(30), CancellationToken.None));
+    }
+
     private static Task<ExecutionResult> FixtureAsync(string mode, byte[] input, TimeSpan timeout, CancellationToken cancellationToken)
     {
         string executable = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(),

@@ -3,15 +3,39 @@ using BenchmarkDotNet.Running;
 using Lokad.Jq;
 using Lokad.Jq.Benchmarking;
 
+if (args is ["--check-machine"])
+{
+    var check = await MachineQuietProbe.CheckAsync(5, TimeSpan.FromSeconds(1), CancellationToken.None);
+    Console.WriteLine(check.Reason);
+    Console.WriteLine("Background CPU samples: " + string.Join(", ", check.BusyPercent.Select(value => value.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))) + "%");
+    Environment.ExitCode = check.IsQuiet ? 0 : 3;
+    return;
+}
+if (args is ["--render-report", var artifact])
+{
+    await BenchmarkReport.RenderFileAsync(artifact, CancellationToken.None);
+    return;
+}
 if (args.Length > 0 && args[0] == "--compare")
 {
-    Environment.ExitCode = await ComparisonRunner.RunAsync(args[1..], CancellationToken.None);
+    using var cancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, signal) => { signal.Cancel = true; cancellation.Cancel(); };
+    try { Environment.ExitCode = await ComparisonRunner.RunAsync(args[1..], cancellation.Token); }
+    catch (OperationCanceledException) { Console.Error.WriteLine("Cancelled; completed case checkpoints remain in artifacts/."); Environment.ExitCode = 130; }
+    catch (Exception exception) when (exception is IOException or TimeoutException or InvalidOperationException or System.ComponentModel.Win32Exception)
+    { Console.Error.WriteLine("Benchmark tool failed: " + exception.Message); Environment.ExitCode = 1; }
     return;
 }
 if (args is ["--process-fixture", var fixture])
 {
     // Development fixture for portable subprocess lifecycle tests; never jq.
     if (fixture == "wait") await Task.Delay(TimeSpan.FromMinutes(5));
+    else if (fixture == "overflow")
+    {
+        var output = Console.OpenStandardOutput();
+        byte[] buffer = new byte[8192];
+        for (int i = 0; i < 6000; i++) await output.WriteAsync(buffer);
+    }
     else if (fixture == "pipes")
     {
         byte[] input;
@@ -44,6 +68,13 @@ if (args is ["--smoke"])
     await benchmarks.Utf8InputTransform();
     await benchmarks.Utf8UnicodeTransform();
     Console.WriteLine("12 non-regex benchmark checks passed; no timings collected.");
+    return;
+}
+
+if (args is ["--stress"])
+{
+    await StressChecks.RunAsync(CancellationToken.None);
+    Console.WriteLine("Bounded non-regex stress checks passed; no timings collected.");
     return;
 }
 
