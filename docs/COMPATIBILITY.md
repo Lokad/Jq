@@ -63,14 +63,15 @@ Further compatibility changes require focused evidence against the reference.
 
 Remaining work:
 
-Release validation needs SourceLink from a real committed public checkout
-and observed Windows/Linux CI passage. The repository is now public. Local
-SourceLink mappings and checksum verification are available, while hosted
-resolution and workflow validation remain pending.
+Release validation still needs hosted SourceLink downloads from a committed
+public checkout. The repository is public, and GitHub Actions passed on Windows
+and Ubuntu for commit `fe11f53` on 2026-10-05 (run `37295605680`), including locked
+restore, Release build/test/pack and artifact uploads. Local SourceLink mappings
+and checksum verification are available; hosted source resolution remains pending.
 No package release or availability is claimed.
 Isolated committed checkouts pass all 3,643 tests, Release pack, detached consumers
 and local symbol checks on Windows and Ubuntu 24.04 x64 under WSL. These local
-runs do not establish hosted CI passage.
+runs are separate from the hosted workflow evidence above.
 
 Compatibility evidence remains narrower than the full upstream suite. The
 filter-file NUL gap now has seven focused jq 1.8.2 comparisons and local

@@ -102,6 +102,9 @@ restore/build/test/pack and detached-consumer checks. The Linux run exposed a
 Windows-only cube-root test pin; the corrected test follows the platform
 variation confirmed in official jq binaries, as recorded in `NUMERIC_PROFILE.md`.
 
-These are local platform checks. Hosted Windows/Linux workflow runs and actual
-SourceLink downloads remain unverified. The repository has since been published;
-hosted validation must now be checked against the pushed commit.
+The repository has since been published. GitHub Actions run `37295605680`
+passed for commit `fe11f53` on 2026-10-05: both `validate (windows-latest)` and
+`validate (ubuntu-latest)` completed locked restore, Release build, Release tests,
+Release pack and artifact uploads successfully. This establishes hosted passage
+for that commit; later changes require their own workflow checks. Hosted
+SourceLink downloads remain a separate, unverified release check.
