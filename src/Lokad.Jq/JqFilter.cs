@@ -1736,7 +1736,13 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             // Predicates can yield multiple results; consume them without buffering.
             foreach (var value in args[0].Evaluate(input, context, environment))
                 if (Truthy(value))
-                    yield return context.Runtime.Clone(input);
+                {
+                    // Selection passes the input through like path-mode select
+                    // and upstream DUP. Downstream updates clone their spines;
+                    // keep the existing cumulative charge without cloning here.
+                    context.Budget.ChargeTree(input);
+                    yield return input;
+                }
             yield break;
         }
 

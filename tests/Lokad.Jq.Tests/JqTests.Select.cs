@@ -5,6 +5,22 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("{a:[1,2]} | select(true) as $x | path($x)", "[]\n")]
+    [InlineData("[{a:1},{a:2}] | select(true) as $kept | path($kept)", "[]\n")]
+    [InlineData("{a:[1,2]} | [select(true,true) | .a[0] += 10]", "[{\"a\":[11,2]},{\"a\":[11,2]}]\n")]
+    [InlineData("{a:[1,2]} as $original | [(select(true) | .a = [9,2]), $original]", "[{\"a\":[9,2]},{\"a\":[1,2]}]\n")]
+    [InlineData("[1,2] | [select((true,false,true))]", "[[1,2],[1,2]]\n")]
+    public async Task Jq_SelectBorrowsInputWithoutMutatingRetainedValues(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-c", filter)));
+
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
     [InlineData("[1,2,3] | .[] | select(. > 1)", "2\n3\n")]
     [InlineData("[null,false,0,\"\",[],{},true] | .[] | select(.)", "0\n\"\"\n[]\n{}\ntrue\n")]
     [InlineData("{id:7,keep:true} | select(.keep)", "{\n  \"id\": 7,\n  \"keep\": true\n}\n")]
