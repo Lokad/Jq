@@ -84,12 +84,17 @@ and its registry section describes the current helper dispositions.
 
 Also intentionally different by design (not gaps): `--unbuffered` (inert),
 `-V`/`--build-configuration` (assembly identity, never upstream identity),
-`-C`/`-M` (terminal-profile capability), `-b` (binary-safe no-op),
+`-C`/`-M` (color output intentionally unsupported: `-C` rejected, `-M` inert),
+`-b` (binary-safe no-op),
 tool switches (`--run-tests`, `--debug-*`, rejected), host-identity
 queries (`get_search_list`, `get_prog_origin`, `get_jq_origin`), plus
 `~`/home and `$ORIGIN` module lookups, native OS filename support, and
 strict lone-surrogate rejection. Each carries pins or policy notes in its
 matrix row.
+
+ANSI color output is an intentional scope exclusion for this embedding library,
+not an unfinished compatibility feature. It is not planned as a required host
+capability.
 
 ## Current resource policy
 
