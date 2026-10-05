@@ -33,7 +33,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("4 | sqrt", "2\n")]
-    [InlineData("27 | cbrt", "3\n")]
+    [InlineData("[-8,-1,1,8] | map(cbrt)", "[\n  -2,\n  -1,\n  1,\n  2\n]\n")]
     [InlineData("0 | sqrt", "0\n")]
     [InlineData("(-1) | sqrt", "null\n")]
     [InlineData("0 | exp", "1\n")]
@@ -95,6 +95,10 @@ public sealed partial class JqTests
 
     [Theory]
     // Spot values below use a 1e-12 bound: transcendentals vary by ulps across C libraries.
+    // Official jq 1.8.2 emits 3 for cbrt(27) on Windows and
+    // 3.0000000000000004 on Linux; use the same accuracy bound on both.
+    [InlineData("27 | cbrt | . - 3 | abs < 1e-12", "true\n")]
+    [InlineData("(-27) | cbrt | . + 3 | abs < 1e-12", "true\n")]
     [InlineData("1 | exp | . - 2.718281828459045 | abs < 1e-12", "true\n")]
     [InlineData("10 | log | . - 2.302585092994046 | abs < 1e-12", "true\n")]
     [InlineData("1 | sin | . - 0.8414709848078965 | abs < 1e-12", "true\n")]

@@ -51,6 +51,22 @@ decimal-sensitive conditionals; the capability queries are pinned false in
 `JqTests.Math`, and input-side decoding is pinned through the
 large-integral ingress vectors.
 
+## Platform math
+
+Math builtins use the .NET math implementation or the documented managed
+approximation. Final floating-point bits may vary across platform C libraries,
+as they do in upstream jq. On 2026-10-05, independently downloaded official jq
+1.8.2 binaries returned `3` for `27 | cbrt` on Windows amd64 and
+`3.0000000000000004` on Linux amd64; Lokad.Jq matched each platform. Their
+SHA-256 hashes were
+`a6fc67fedaf9128a3309a1e2ebb8b986aeccf70122ee46d2cb4849e423f0c627` and
+`b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f`,
+respectively. Negative 27 showed the corresponding signed result; unit and
+eight cube roots agreed exactly. The existing transcendental spot tests use
+a 1e-12 accuracy bound for these platform-sensitive results, with exact output
+and status checks for the boolean assertion. The runtime does not round these
+results to impose cross-platform byte identity.
+
 ## Division and remainder
 
 - Dividing two numbers by a zero divisor fails: `1/0` reports

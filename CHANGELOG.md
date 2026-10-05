@@ -44,6 +44,8 @@ Delivered since the scaffold baseline:
   C-builtin calls slowest-last, native operators, user arguments, range
   bounds, objects, interpolation, index, and slice slowest-first.
 - Math: managed Bessel functions verified within 1e-12 of the reference.
+  Cube-root tests account for the final-bit platform difference confirmed in
+  official Windows/Linux jq 1.8.2 binaries.
 - Parser-support internals: direct `_plus`/`_minus`/`_multiply`/`_divide`/
   `_mod`/`_equal`/`_notequal`/`_less`/`_lesseq`/`_greater`/`_greatereq` calls
   share the operator evaluation, `_assign` folds setpath over enumerated
