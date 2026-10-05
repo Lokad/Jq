@@ -13,7 +13,7 @@ namespace Lokad.Jq;
 
 internal abstract class JqFilter
 {
-    public IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment)
+    public virtual IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         context.Budget.EnterEvaluation();
         try
@@ -80,12 +80,40 @@ internal abstract class JqFilter
     }
 }
 
-internal sealed class IdentityFilter : JqFilter
+// Scalar producers retain the same lazy budget lifetime without allocating
+// a second iterator just to return one value. JSON null is still one result.
+internal abstract class SingleValueFilter : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    public sealed override IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        context.Budget.EnterEvaluation();
+        try
+        {
+            JsonNode? value = EvaluateValue(input, context, environment);
+            context.Budget.ChargeNode();
+            if (TryGetString(value, out var text)) context.Budget.ChargeString(text.Length);
+            yield return value;
+        }
+        finally
+        {
+            context.Budget.LeaveEvaluation();
+        }
+    }
+
+    protected sealed override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        yield return EvaluateValue(input, context, environment);
+    }
+
+    protected abstract JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment);
+}
+
+internal sealed class IdentityFilter : SingleValueFilter
+{
+    protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         context.Budget.ChargeTree(input);
-        yield return input;
+        return input;
     }
 
     // Upstream DUP shares the input pointer, and path-mode values are
@@ -99,7 +127,7 @@ internal sealed class IdentityFilter : JqFilter
     }
 }
 
-internal sealed class LiteralFilter(JsonNode? value) : JqFilter
+internal sealed class LiteralFilter(JsonNode? value) : SingleValueFilter
 {
     internal JsonNode? Value => value;
 
@@ -109,20 +137,20 @@ internal sealed class LiteralFilter(JsonNode? value) : JqFilter
     internal override bool PreservesPathIdentity =>
         value is null || (value is JsonValue scalar && !TryGetString(scalar, out _));
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        yield return context.Runtime.Clone(value);
+        return context.Runtime.Clone(value);
     }
 }
 
-internal sealed class VariableFilter(string name) : JqFilter
+internal sealed class VariableFilter(string name) : SingleValueFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         if (!environment.TryGetValue(name, out JsonNode? value))
             throw new JqException($"undefined variable ${name}");
         context.Budget.ChargeTree(value);
-        yield return value;
+        return value;
     }
 
     // Upstream LOADV pushes the stored pointer without touching path state,
