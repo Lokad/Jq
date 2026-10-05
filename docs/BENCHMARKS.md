@@ -91,11 +91,12 @@ Commit changes and rebuild before qualification. Assembly build revisions must
 match HEAD, and the checkout must be clean apart from the generated benchmark
 documentation. Qualification pauses before timing if five one-second CPU samples
 exceed 3% median or 5% maximum background load. It checks again during idle gaps
-between pairs and stops if the machine becomes busy. This gate uses Windows system
+between pairs, using a one-second accounting window after 500 ms of settling,
+and stops if the machine becomes busy. This gate uses Windows system
 CPU accounting or Linux `/proc/stat`; other systems cannot currently qualify.
 CPU quietness is a necessary check, not proof that IO or virtualization is noise-free.
 
-Each lane warms for at least 32 invocations and 300 ms, then independently
+Each lane warms for at least 32 invocations and one second, then independently
 calibrates sample batches toward at least 40 ms. The default is eleven alternating
 pairs; `--pairs` accepts 9 through 31. Samples include complete output consumption,
 SHA-256 and successful status/stderr validation against each lane's preflight.

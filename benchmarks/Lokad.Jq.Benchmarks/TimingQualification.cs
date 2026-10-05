@@ -23,9 +23,10 @@ internal static class TimingQualification
             int referenceIterations = await CalibrateAsync(false).ConfigureAwait(false);
             for (int i = 0; i < pairs; i++)
             {
-                // Let this process become idle before checking background CPU.
-                await Task.Delay(100, deadline.Token).ConfigureAwait(false);
-                var quiet = await MachineQuietProbe.CheckAsync(1, TimeSpan.FromMilliseconds(200), deadline.Token).ConfigureAwait(false);
+                // Allow tiered compilation/GC to settle. A one-second window
+                // avoids coarse tick rounding on small Linux VMs.
+                await Task.Delay(500, deadline.Token).ConfigureAwait(false);
+                var quiet = await MachineQuietProbe.CheckAsync(1, TimeSpan.FromSeconds(1), deadline.Token).ConfigureAwait(false);
                 quietChecks.Add(quiet);
                 if (!quiet.IsQuiet) return Finish("Paused", quiet.Reason);
                 bool libraryFirst = i % 2 == 0;
@@ -74,7 +75,7 @@ internal static class TimingQualification
         {
             var watch = Stopwatch.StartNew();
             int calls = 0;
-            while (calls < 32 || watch.ElapsedMilliseconds < 300)
+            while (calls < 32 || watch.ElapsedMilliseconds < 1000)
             {
                 await ExecuteAsync(library).ConfigureAwait(false);
                 calls++;
