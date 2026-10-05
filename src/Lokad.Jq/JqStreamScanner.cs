@@ -463,14 +463,14 @@ internal sealed class JqStreamScanner
     private void PushIndex(long index)
     {
         if (_path.Count >= MaxPathDepth)
-            throw new JqInputException("value nesting limit exceeded", 5);
+            throw new JqQuotaException("value nesting limit exceeded");
         _path.Add(Segment.AtIndex(index));
     }
 
     private void PushPending()
     {
         if (_path.Count >= MaxPathDepth)
-            throw new JqInputException("value nesting limit exceeded", 5);
+            throw new JqQuotaException("value nesting limit exceeded");
         _path.Add(Segment.Pending());
     }
 
@@ -597,7 +597,7 @@ internal sealed class JqStreamScanner
             }
             return false;
         }
-        catch (Exception ex) when (ex is JqException
+        catch (Exception ex) when (ex is JqException and not JqQuotaException
             or System.Text.Json.JsonException
             or InvalidOperationException)
         {
@@ -626,7 +626,7 @@ internal sealed class JqStreamScanner
                 scalar = _runtime.ReadJsonValue(_token.AsSpan(0, _tokenLength), out int used);
                 decoded = used == _tokenLength;
             }
-            catch (Exception ex) when (ex is JqException
+            catch (Exception ex) when (ex is JqException and not JqQuotaException
                 or System.Text.Json.JsonException
                 or InvalidOperationException)
             {

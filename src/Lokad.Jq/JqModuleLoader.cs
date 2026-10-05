@@ -64,7 +64,7 @@ internal sealed class JqModuleLoader(
         CancellationToken cancellationToken)
     {
         if (depth > JqBudget.MaximumDepth)
-            throw new JqException("module nesting limit exceeded");
+            throw new JqQuotaException("module nesting limit exceeded");
         string? validation = JqModulePathValidation.Validate(import.RelPath);
         if (validation is not null)
             throw new JqException(validation);
@@ -193,7 +193,7 @@ internal sealed class JqModuleLoader(
             }
             return array;
         }
-        catch (JqException ex)
+        catch (JqException ex) when (ex is not JqQuotaException)
         {
             if (import.IsOptional)
                 return null;

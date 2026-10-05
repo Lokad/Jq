@@ -58,6 +58,8 @@ value is bounded to 32 MiB with a 64 MiB buffer ceiling. Native regex patterns
 remain bounded to 16,384 characters, 64 KiB compiled storage, 256 KiB match heap,
 100,000 per-match steps, and native depth 256. These limits are not raised by an
 execution policy. Increasing them requires separate stack and allocation evidence.
+Reference path-length validation remains a catchable language error, as in
+upstream jv_aux.c; it is separate from execution quota exhaustion.
 
 ## Failure and cleanup
 
@@ -67,6 +69,8 @@ input records and files are abandoned. Cancellation propagates as
 `OperationCanceledException`, including cancellation before setup. Host contract
 failures propagate separately. Catchable language failures, such as invalid
 regex syntax, retain their jq handler behavior.
+Data imports and streaming numeric decoding propagate quotas unchanged; input
+depth exhaustion also remains terminal under `--seq` and `--stream-errors`.
 
 Only opened, owned descriptors are closed. Borrowed descriptors stay with the
 caller. Cleanup uses an uncancelled token and preserves the original failure.

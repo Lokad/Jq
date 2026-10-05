@@ -234,7 +234,9 @@ internal sealed class JqRuntime(JqBudget budget)
             {
                 AllowTrailingCommas = false,
                 AllowMultipleValues = true,
-                MaxDepth = JqBudget.MaximumDepth
+                // Allow the next opening token so ReadValue rejects it as a
+                // terminal quota before allocating, rather than a reader syntax error.
+                MaxDepth = JqBudget.MaximumDepth + 1
             });
             int firstContent = SkipJsonWhitespace(text, 0);
             if (TryMatchNonFinite(text, firstContent, out double topValue, out int topEnd))
@@ -415,7 +417,7 @@ internal sealed class JqRuntime(JqBudget budget)
             {
                 case JsonTokenType.StartObject:
                     if (depth >= JqBudget.MaximumDepth)
-                        throw new JqException("value nesting limit exceeded");
+                        throw new JqQuotaException("value nesting limit exceeded");
                     budget.ChargeNode();
                     var obj = new JsonObject();
                     bool expectsObjectValue = true;
@@ -449,7 +451,7 @@ internal sealed class JqRuntime(JqBudget budget)
                     throw new JqException("truncated JSON value");
                 case JsonTokenType.StartArray:
                     if (depth >= JqBudget.MaximumDepth)
-                        throw new JqException("value nesting limit exceeded");
+                        throw new JqQuotaException("value nesting limit exceeded");
                     budget.ChargeNode();
                     var array = new JsonArray();
                     bool expectsValue = true;
@@ -660,7 +662,7 @@ internal sealed class JqRuntime(JqBudget budget)
     internal JsonNode MergeRecursive(JsonObject left, JsonObject right, int depth)
     {
         if (depth > JqBudget.MaximumDepth)
-            throw new JqException("value nesting limit exceeded");
+            throw new JqQuotaException("value nesting limit exceeded");
         if (Clone(left) is not JsonObject merged)
             throw new InvalidOperationException("Expected object clone.");
         foreach (var property in right)

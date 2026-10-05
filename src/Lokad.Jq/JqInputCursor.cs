@@ -182,7 +182,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             {
                 value = _runtime.ReadJsonValue(_buffer.AsSpan(_start, _count), out consumed);
             }
-            catch (JqException)
+            catch (JqException exception) when (exception is not JqQuotaException)
             {
                 if (_eof)
                 {

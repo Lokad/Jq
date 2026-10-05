@@ -267,6 +267,74 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jq_DataImportQuotasKeepTheirTerminalCategory(bool optional)
+    {
+        var host = new MockFileSystem();
+        host.AddFile("/data.json", "[" + string.Join(',', Enumerable.Repeat("0", 200)) + "]");
+        string metadata = optional ? " {\"optional\":true}" : "";
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-L", "/",
+            "import \"data\" as $data" + metadata + "; empty")));
+
+        Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { MaximumValueNodes = 128 }, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: value budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(0, host.OpenFileCount);
+    }
+
+    [Fact]
+    public async Task Jq_InputQuotaAbandonsWithoutRetryingDecode()
+    {
+        var host = new MockFileSystem();
+        host.AddFile("/data", "[" + string.Join(',', Enumerable.Repeat("0", 200)) + "]" + new string(' ', 9000));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "/data")));
+
+        Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { MaximumValueNodes = 128 }, CancellationToken.None));
+        Assert.Equal("jq: value budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(1, host.ReadBytesCallCount);
+        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(0, host.OpenFileCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Jq_StreamNumericDecodeCannotConvertAllocationQuotaToParseError(bool finish)
+    {
+        var budget = new JqBudget(new JqExecutionPolicy { MaximumAllocationBytes = 1024 }, CancellationToken.None);
+        var scanner = new JqStreamScanner(budget, new JqRuntime(budget), false, false);
+        scanner.Consume("1"u8, false); // The token buffer reserves 256 bytes.
+        budget.ChargeBytes(768);
+
+        Assert.Equal("memory budget exceeded", Assert.Throws<JqQuotaException>(() =>
+        {
+            if (finish) scanner.FinishFinal();
+            else scanner.Consume(" "u8, false);
+        }).Message);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("--seq")]
+    [InlineData("--stream")]
+    [InlineData("--stream-errors")]
+    public async Task Jq_InputDepthQuotaBypassesExplicitInputHandlers(string mode)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput((mode == "--seq" ? "\u001e" : "") + new string('[', 65) + "0" + new string(']', 65));
+        var invocation = mode.Length == 0
+            ? BuildInvocation("jq", "-n", "try inputs catch \"caught\"")
+            : BuildInvocation("jq", "-n", mode, "try inputs catch \"caught\"");
+        var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
+
+        Assert.Equal(5, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: value nesting limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(int.MaxValue)]
