@@ -89,7 +89,12 @@ internal static class TimingQualification
             while (true)
             {
                 double elapsed = await TimeAsync(library, iterations).ConfigureAwait(false);
-                if (elapsed >= 40 || iterations >= 4096) return iterations;
+                // A cold allocation/GC or continuing tiered compilation can
+                // make one calibration batch slower than the measured pairs.
+                // Confirm the duration so an isolated slow batch cannot select
+                // an iteration count that falls below the eligibility floor.
+                double confirmed = await TimeAsync(library, iterations).ConfigureAwait(false);
+                if (Math.Min(elapsed, confirmed) >= 40 || iterations >= 4096) return iterations;
                 iterations = Math.Min(iterations * 2, 4096);
             }
         }

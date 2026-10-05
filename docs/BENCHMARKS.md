@@ -190,6 +190,11 @@ Ratio is jq time divided by Lokad.Jq time; above 1 favors Lokad.Jq. CI is a pair
 
 <!-- END GENERATED COMPARISON -->
 
+Calibration confirms the 40 ms target with two consecutive batches at the
+selected iteration count. The minimum eligible sample duration remains 20 ms;
+an unqualified checkpoint cannot publish a ratio. The baseline above predates
+this confirmation and retains its original protocol and provenance.
+
 ## Workload direction
 
 The family selection is informed by the public
