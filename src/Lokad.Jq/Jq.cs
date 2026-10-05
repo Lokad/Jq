@@ -25,7 +25,15 @@ public sealed class Jq
 
     /// <summary>Executes with host-mediated IO; cancellation propagates to the caller.</summary>
     public Task<int> ExecuteAsync(IJqHost host, CancellationToken cancellationToken) =>
-        JqExecutor.ExecuteAsync(host, _invocation, cancellationToken);
+        ExecuteAsync(host, JqExecutionPolicy.Default, cancellationToken);
+
+    /// <summary>Executes with an immutable resource policy and fresh counters; exhaustion reports status 5.</summary>
+    public Task<int> ExecuteAsync(IJqHost host, JqExecutionPolicy policy, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(policy);
+        return JqExecutor.ExecuteAsync(host, _invocation, policy, cancellationToken);
+    }
 
     private static bool IsJqName(string name) => name is "jq" || name.EndsWith("/jq");
 }

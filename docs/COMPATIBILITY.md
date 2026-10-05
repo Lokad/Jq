@@ -61,11 +61,7 @@ no new builtins, flags, or options land until the open rows below close.
 
 Remaining work:
 
-1. Descriptor ownership and budgets (partial): borrowing, lazy opens,
-   owned-only closes, backpressure, reuse snapshots, and cumulative
-   budgets are covered. Regex policy exhaustion must consistently remain
-   terminal, and callers need an explicit immutable execution-policy API.
-2. Release validation: SourceLink from a real committed public checkout
+1. Release validation: SourceLink from a real committed public checkout
    and observed Windows/Linux CI passage. No public remote exists yet;
    no release, publication, or availability is claimed.
 
@@ -93,9 +89,13 @@ allowance, 262,144 value nodes, JSON/parser depth 64, filter length 1 Mi charact
 and 4,096 tokens/command arguments.
 Regex patterns and native work have additional limits in `JqRegexCache`.
 
-These limits remain useful for embedding. A complete implementation should expose
-an explicit execution policy and distinguish exhaustion/cancellation from
-catchable jq errors; finite policy limits must not excuse missing language features.
+`JqExecutionPolicy` exposes stricter positive execution allowances with fresh
+counters per call; the default overload preserves these limits. Execution
+exhaustion reports status 5 and cannot be caught by jq handlers. Cancellation and
+host failures propagate separately. Command binding keeps its independent default
+allowance; structural and native ceilings remain fixed. See
+[EXECUTION_POLICY.md](EXECUTION_POLICY.md) for configured versus fixed limits.
+Finite limits do not establish upstream conformance or excuse missing semantics.
 
 ## Conformance work
 

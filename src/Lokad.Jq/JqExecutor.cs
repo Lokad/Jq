@@ -12,30 +12,31 @@ namespace Lokad.Jq;
 
 internal static class JqExecutor
 {
-    public static async Task<int> ExecuteAsync(IJqHost host, JqInvocation invocation, CancellationToken cancellationToken)
+    public static async Task<int> ExecuteAsync(IJqHost host, JqInvocation invocation, JqExecutionPolicy policy, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (invocation.Error != null)
         {
             await WriteErrorAsync(host, invocation, invocation.Error, cancellationToken).ConfigureAwait(false);
             return 2;
         }
-        if (invocation.Help)
+        var budget = new JqBudget(policy, cancellationToken);
+        string? information = invocation.Help ? JqHelp.Text
+            : invocation.Version ? "Lokad jq\n"
+            : invocation.BuildConfiguration ? JqBuildConfiguration.Text + "\n" : null;
+        if (information is not null)
         {
-            await host.AppendAsync(invocation.StdOut, Utf8Text.Encode(JqHelp.Text), cancellationToken).ConfigureAwait(false);
-            return 0;
+            try
+            {
+                budget.ChargeOutput(Encoding.UTF8.GetByteCount(information));
+            }
+            catch (JqQuotaException exception)
+            {
+                await WriteErrorAsync(host, invocation, "jq: " + exception.Message, cancellationToken).ConfigureAwait(false);
+                return 5;
+            }
+            return await host.AppendAsync(invocation.StdOut, Utf8Text.Encode(information), cancellationToken).ConfigureAwait(false);
         }
-        if (invocation.Version)
-        {
-            await host.AppendAsync(invocation.StdOut, Utf8Text.Encode("Lokad jq\n"), cancellationToken).ConfigureAwait(false);
-            return 0;
-        }
-        if (invocation.BuildConfiguration)
-        {
-            await host.AppendAsync(invocation.StdOut, Utf8Text.Encode(JqBuildConfiguration.Text + "\n"), cancellationToken).ConfigureAwait(false);
-            return 0;
-        }
-
-        var budget = new JqBudget(cancellationToken);
         JqProgramSource programSource = invocation.FilterFile is { } programPath
             ? JqProgramSource.File(Utf8Text.Decode(programPath.Display))
             : JqProgramSource.Inline;
@@ -446,12 +447,12 @@ internal static class JqExecutor
         IJqHost host, JqFileDescriptor descriptor, JqBudget budget, CancellationToken cancellationToken)
     {
         var result = await host.TryReadAllBytesAsync(
-            descriptor, JqBudget.MaximumInputBytes, budget.ChargeInput, cancellationToken).ConfigureAwait(false);
+            descriptor, budget.RemainingInput, budget.ChargeInput, cancellationToken).ConfigureAwait(false);
         return result switch
         {
             BoundedReadResult.Complete complete => complete.Content,
             BoundedReadResult.Failed => throw new JqException("input read failed"),
-            BoundedReadResult.TooLarge => throw new JqQuotaException("input exceeds the 16 MiB limit"),
+            BoundedReadResult.TooLarge => throw new JqQuotaException(budget.InputLimitMessage),
             _ => throw new InvalidOperationException("Unknown bounded read result.")
         };
     }

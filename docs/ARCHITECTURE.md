@@ -26,6 +26,11 @@ terminate execution with status 5; `try` and optional suppression cannot catch
 them. Invalid regex syntax remains a catchable language error. Variable snapshot
 allocation and bounded file reads use the same terminal quota path.
 
+`ExecuteAsync` accepts an immutable `JqExecutionPolicy` for stricter cumulative
+allowances. Every execution creates an independent budget; command binding keeps
+its separate default allowance. Structural and native safety ceilings stay fixed.
+See [EXECUTION_POLICY.md](EXECUTION_POLICY.md) for the exact accounting contract.
+
 ## IO ownership
 
 The caller owns stdin/stdout/stderr handles. The runtime borrows them and never

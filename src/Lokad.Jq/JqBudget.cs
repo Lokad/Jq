@@ -10,24 +10,44 @@ namespace Lokad.Jq;
 /// values, clones and discarded results consume the same budget as retained values.
 /// These limits bound jq work, not the process's total managed heap.
 /// </summary>
-internal sealed class JqBudget(CancellationToken cancellationToken)
+internal sealed class JqBudget
 {
     internal const int MaximumStringLength = 8 * 1024 * 1024;
     internal const int MaximumInputBytes = 16 * 1024 * 1024;
     internal const int MaximumJsonBytes = 32 * 1024 * 1024;
     internal const int MaximumJsonBufferBytes = 64 * 1024 * 1024;
     internal const int MaximumDepth = 64;
-    private long _remainingBytes = 256 * 1024 * 1024;
-    private int _remainingNodes = 262144;
-    private int _remainingInput = MaximumInputBytes;
-    private int _remainingOutput = MaximumJsonBytes;
+    private readonly CancellationToken _cancellationToken;
+    private long _remainingBytes;
+    private int _remainingNodes;
+    private int _remainingInput;
+    private int _remainingOutput;
     private int _evaluationDepth;
 
-    internal CancellationToken CancellationToken => cancellationToken;
+    internal JqBudget(CancellationToken cancellationToken)
+        : this(JqExecutionPolicy.Default, cancellationToken) { }
+
+    internal JqBudget(JqExecutionPolicy policy, CancellationToken cancellationToken)
+    {
+        Policy = policy;
+        _cancellationToken = cancellationToken;
+        _remainingBytes = policy.MaximumAllocationBytes;
+        _remainingNodes = policy.MaximumValueNodes;
+        _remainingInput = policy.MaximumInputBytes;
+        _remainingOutput = policy.MaximumOutputBytes;
+    }
+
+    internal JqExecutionPolicy Policy { get; }
+
+    internal CancellationToken CancellationToken => _cancellationToken;
 
     internal int RemainingInput => _remainingInput;
 
-    internal void CheckCancellation() => cancellationToken.ThrowIfCancellationRequested();
+    internal void CheckCancellation() => _cancellationToken.ThrowIfCancellationRequested();
+
+    internal string InputLimitMessage => Policy.MaximumInputBytes == MaximumInputBytes
+        ? "input exceeds the 16 MiB limit"
+        : $"input exceeds the {Policy.MaximumInputBytes}-byte limit";
 
     internal void ChargeBytes(long count)
     {
@@ -40,31 +60,39 @@ internal sealed class JqBudget(CancellationToken cancellationToken)
     internal void ChargeNode()
     {
         CheckCancellation();
-        if (_remainingNodes-- <= 0)
+        if (_remainingNodes <= 0)
             throw new JqQuotaException("value budget exceeded");
+        _remainingNodes--;
     }
 
     internal void ChargeInput(int bytes)
     {
-        if (bytes > _remainingInput)
-            throw new JqQuotaException("input exceeds the 16 MiB limit");
-        _remainingInput -= bytes;
+        CheckCancellation();
+        if (bytes < 0 || bytes > _remainingInput)
+            throw new JqQuotaException(InputLimitMessage);
         // Allow for the old and new backing arrays while the bounded input buffer grows.
         ChargeBytes(4L * bytes);
+        _remainingInput -= bytes;
     }
 
     internal void ChargeOutput(int bytes)
     {
-        if (bytes > _remainingOutput)
-            throw new JqQuotaException("output exceeds the 32 MiB limit");
-        _remainingOutput -= bytes;
+        CheckCancellation();
+        if (bytes < 0 || bytes > _remainingOutput)
+            throw new JqQuotaException(Policy.MaximumOutputBytes == MaximumJsonBytes
+                ? "output exceeds the 32 MiB limit"
+                : $"output exceeds the {Policy.MaximumOutputBytes}-byte limit");
         ChargeBytes(bytes);
+        _remainingOutput -= bytes;
     }
 
-    internal static void CheckStringLength(long length)
+    internal void CheckStringLength(long length)
     {
-        if (length > MaximumStringLength)
-            throw new JqQuotaException("string result exceeds the 16 MiB UTF-16 limit");
+        CheckCancellation();
+        if (length < 0 || length > Policy.MaximumStringLength)
+            throw new JqQuotaException(Policy.MaximumStringLength == MaximumStringLength
+                ? "string result exceeds the 16 MiB UTF-16 limit"
+                : $"string result exceeds the {Policy.MaximumStringLength} UTF-16 code unit limit");
     }
 
     internal void ChargeString(long length)

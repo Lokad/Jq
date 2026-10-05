@@ -4,7 +4,7 @@
 
 Embeddable jq 1.8.2 runtime with host-mediated IO. Compatibility is
 incomplete; see `docs/COMPATIBILITY_MATRIX.md` for the per-row inventory
-(95 implemented, 8 intentionally different, 1 partial, no unimplemented
+(96 implemented, 8 intentionally different, no partial or unimplemented
 rows) and `docs/UPSTREAM_VECTOR_CAMPAIGN.md` for the
 differential record (704 of 734 value vectors pass with every miss
 triaged).
@@ -54,7 +54,10 @@ Delivered since the scaffold baseline:
   workloads, no semantic delta).
 - Packaging: out-of-tree consumer proof re-verified against the packed
   artifact with locked restore.
+- Execution policy: immutable stricter allowances for input/output, allocation,
+  values, strings, and regex work/time, with fresh counters per execution.
+  Regex limits and setup/file quota failures terminate outside jq handlers.
 
 Still open before any release claim: SourceLink validation from a public
-checkout, hosted CI passage, and the remaining partial rows above. No
+checkout and hosted CI passage. Full upstream compatibility remains unproven. No
 release, publication, or package availability is claimed.

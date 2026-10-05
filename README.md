@@ -34,6 +34,10 @@ name and are already tokenized. No shell quoting or expansion happens here.
 `TryParse` returns null for another executable name; jq argument/filter errors
 are reported when executing. Cancellation propagates as cancellation.
 
+Pass a `JqExecutionPolicy` to `ExecuteAsync(host, policy, cancellationToken)`
+to reduce per-execution resource allowances. Existing calls retain the defaults;
+see [execution policy](docs/EXECUTION_POLICY.md) for accounting and fixed ceilings.
+
 ## Develop
 
 ```text

@@ -12,10 +12,8 @@ internal sealed class JqRegexCache : IDisposable
     private const uint MaximumPatternLength = 16 * 1024;
     private const uint MaximumCompiledBytes = 64 * 1024;
     private const uint MaximumMatchHeapKiB = 256;
-    private const int MaximumWork = 10_000_000;
     // Callout positions do not expose every internal scan. Bound cumulative matching time as well,
     // excluding replacement evaluation and time spent waiting for input/output.
-    private static readonly TimeSpan MaximumMatchTime = TimeSpan.FromSeconds(5);
     private static readonly PcreMatchSettings MatchSettings = new()
     {
         MatchLimit = 100_000, // Same per-match work limit as sed and grep.
@@ -28,7 +26,7 @@ internal sealed class JqRegexCache : IDisposable
     private readonly Dictionary<(string Pattern, PcreOptions Options), Pattern> _patterns = new();
     private readonly PcreRefCalloutFunc _callout;
     // Shared across patterns and input values, including unsuccessful searches.
-    private int _remainingWork = MaximumWork;
+    private int _remainingWork;
     private long _remainingTicks;
     private long _matchDeadline;
     private int _lastOffset;
@@ -37,7 +35,8 @@ internal sealed class JqRegexCache : IDisposable
     {
         _budget = budget;
         _clock = clock;
-        _remainingTicks = (long)(MaximumMatchTime.TotalSeconds * clock.TimestampFrequency);
+        _remainingWork = budget.Policy.MaximumRegexWork;
+        _remainingTicks = (long)(budget.Policy.MaximumRegexTime.TotalSeconds * clock.TimestampFrequency);
         _callout = callout =>
         {
             budget.CheckCancellation();

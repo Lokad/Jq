@@ -294,11 +294,11 @@ internal sealed class JqModuleLoader(
                 try
                 {
                     var result = await host.TryReadAllBytesAsync(
-                        opened.FileDescriptor.Value, JqBudget.MaximumInputBytes, budget.ChargeInput, cancellationToken).ConfigureAwait(false);
+                        opened.FileDescriptor.Value, budget.RemainingInput, budget.ChargeInput, cancellationToken).ConfigureAwait(false);
                     if (result is BoundedReadResult.Complete complete)
                         return (path.Path, complete.Content);
                     if (result is BoundedReadResult.TooLarge)
-                        throw new JqQuotaException("input exceeds the 16 MiB limit");
+                        throw new JqQuotaException(budget.InputLimitMessage);
                     continue;
                 }
                 catch (Exception ex)
