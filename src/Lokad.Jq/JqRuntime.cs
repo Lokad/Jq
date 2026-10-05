@@ -10,7 +10,7 @@ using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
-internal sealed class JqRuntime(JqBudget budget)
+internal sealed partial class JqRuntime(JqBudget budget)
 {
     private static readonly JsonSerializerOptions CompactJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private static readonly JsonSerializerOptions AsciiJson = new() { Encoder = JavaScriptEncoder.Default };
@@ -468,31 +468,39 @@ internal sealed class JqRuntime(JqBudget budget)
                         array.Add(ReadValue(ref reader, source, ref consumedBase, depth + 1));
                         expectsValue = false;
                     }
-                case JsonTokenType.String:
-                    budget.ChargeNode();
-                    return JsonValue.Create(ReadBoundedString(ref reader));
-                case JsonTokenType.Number:
-                    budget.ChargeNode();
-                    if (reader.TryGetInt64(out long whole))
-                    {
-                        if (whole == 0 && reader.ValueSpan.Length > 0 && reader.ValueSpan[0] == (byte)'-' )
-                            return JsonValue.Create(reader.GetDouble());
-                        return JsonValue.Create(whole);
-                    }
-                    return JsonValue.Create(reader.GetDouble());
-                case JsonTokenType.True:
-                    budget.ChargeNode();
-                    return JsonValue.Create(true);
-                case JsonTokenType.False:
-                    budget.ChargeNode();
-                    return JsonValue.Create(false);
-                case JsonTokenType.Null:
-                    budget.ChargeNode();
-                    return null;
                 default:
-                    throw new JqException("expected a JSON value");
+                    return ReadScalar(ref reader);
             }
         }
+
+    private JsonNode? ReadScalar(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType is not (JsonTokenType.String or JsonTokenType.Number
+            or JsonTokenType.True or JsonTokenType.False or JsonTokenType.Null))
+            throw new JqException("expected a JSON value");
+        budget.ChargeNode();
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.String:
+                return JsonValue.Create(ReadBoundedString(ref reader));
+            case JsonTokenType.Number:
+                if (reader.TryGetInt64(out long whole))
+                {
+                    if (whole == 0 && reader.ValueSpan.Length > 0 && reader.ValueSpan[0] == (byte)'-')
+                        return JsonValue.Create(reader.GetDouble());
+                    return JsonValue.Create(whole);
+                }
+                return JsonValue.Create(reader.GetDouble());
+            case JsonTokenType.True:
+                return JsonValue.Create(true);
+            case JsonTokenType.False:
+                return JsonValue.Create(false);
+            case JsonTokenType.Null:
+                return null;
+            default:
+                throw new JqException("expected a JSON value");
+        }
+    }
 
     private string ReadBoundedString(ref Utf8JsonReader reader)
     {

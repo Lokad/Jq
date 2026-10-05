@@ -23,9 +23,9 @@ namespace Lokad.Jq;
 //
 // Reads are chunked (8 KiB): JSON values and raw lines may span chunk
 // boundaries and very long scalars accumulate within the input limit. JSON
-// decoding reuses the whole-buffer value reader; a decode failure with more
-// bytes available retries after another chunk, while the same failure at
-// end-of-source surfaces as the input error. Slurp stays an explicit
+// decoding retains reader state and completed DOM nodes across reads. Extended
+// literals and invalid input reuse the whole-buffer reader for compatibility.
+// Failures at end-of-source surface as input errors. Slurp stays an explicit
 // aggregating loop over this cursor in the executor.
 internal sealed class JqInputCursor : IAsyncDisposable
 {
@@ -40,6 +40,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private readonly bool _seq;
     private readonly bool _stream;
     private readonly JqStreamScanner? _scanner;
+    private readonly JqRuntime.InputReader? _jsonReader;
     private bool _streamEofDone;
     private readonly List<Source> _sources;
     private readonly CancellationToken _cancellationToken;
@@ -86,6 +87,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _seq = invocation.Seq;
         _stream = invocation.Stream;
         _scanner = invocation.Stream ? new JqStreamScanner(context.Budget, context.Runtime, invocation.Seq, invocation.StreamErrors) : null;
+        _jsonReader = !_raw && !_seq && !_stream ? new JqRuntime.InputReader(_runtime, _budget) : null;
         _cancellationToken = cancellationToken;
         _sources = [];
         if (invocation.InputFiles.Count == 0)
@@ -180,7 +182,13 @@ internal sealed class JqInputCursor : IAsyncDisposable
             int consumed;
             try
             {
-                value = _runtime.ReadJsonValue(_buffer.AsSpan(_start, _count), out consumed);
+                if (_jsonReader is not { } reader)
+                    throw new InvalidOperationException("JSON input reader is unavailable.");
+                if (!reader.TryRead(_buffer.AsSpan(_start, _count), _eof, out value, out consumed))
+                {
+                    await FillAsync().ConfigureAwait(false);
+                    continue;
+                }
             }
             catch (JqException exception) when (exception is not JqQuotaException)
             {
@@ -345,6 +353,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     private async Task CloseAndAdvanceAsync(Exception? earlier)
     {
+        _jsonReader?.Reset();
         if (_owned is { } owned)
         {
             _owned = null;
@@ -1000,6 +1009,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         if (_disposed)
             return;
         _disposed = true;
+        _jsonReader?.Reset();
         if (_owned is { } owned)
         {
             _owned = null;

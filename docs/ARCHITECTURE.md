@@ -56,7 +56,11 @@ requests with a one-byte overflow probe. Implicit outer iteration and explicit
 operands reuse borrowed stdin at its current position and are never closed,
 while file operands open lazily and close when exhausted, abandoned, or
 disposed. JSON values and raw lines may span chunk boundaries; slurp
-aggregates the cursor. With --stream, a byte-level scanner emits path and
+aggregates the cursor. Ordinary JSON preserves reader state and completed DOM
+nodes across reads, so incomplete containers are not repeatedly allocated.
+Numeric tokens wait for a delimiter or end of source. Extended non-finite
+literals and malformed-input diagnostics use the existing whole-value reader.
+With --stream, a byte-level scanner emits path and
 leaf events without a document DOM; with --seq, records split at RS
 separators with resync recovery. No real filesystem implementation, shell
 parser, subprocess launcher, or reference-jq binary belongs in this library.
