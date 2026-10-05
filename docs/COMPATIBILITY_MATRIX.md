@@ -5,6 +5,11 @@ regex support). This matrix is the committed inventory for language, builtins,
 and command behavior. Statuses are explicit; skipped or missing behavior is
 never counted as supported.
 
+Modules supplied through `IJqHost` are supported. Automatic `~/.jq` import,
+home-directory lookup and expansion, and `$ORIGIN`/executable-origin lookup are
+intentional scope exclusions. The module and `-L` rows below describe hosted
+search behavior and remaining semantic caveats.
+
 Normative public references use the jq 1.8.2 manual sections, the
 `jqlang/jq` command parser and builtin registries (`src/main.c`,
 `src/builtin.c`, `src/builtin.jq`, `src/libm.h`, `src/parser.y`), and the

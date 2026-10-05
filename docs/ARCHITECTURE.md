@@ -20,6 +20,11 @@ embedding boundary. Environment variables are invocation snapshots exposed throu
 `$ENV` and `env`; `PWD` also selects the current directory. An optional `JqClock`
 supplies the clock and timezone for time builtins, without ambient host state.
 
+Modules are supplied by the application through `IJqHost`. `import`, `include`
+and `modulemeta` use hosted paths; `-L` and import metadata control search
+directories. Automatic `~/.jq` import, home-directory lookup and expansion, and
+`$ORIGIN`/executable-origin lookup are intentionally unsupported.
+
 Catchable jq errors are separate from cancellation, host contract failures, and
 resource exhaustion. Regex work/time and native compilation/matching limits
 terminate execution with status 5; `try` and optional suppression cannot catch

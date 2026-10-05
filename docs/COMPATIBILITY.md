@@ -8,7 +8,7 @@ See `COMPATIBILITY_MATRIX.md` for the per-row inventory, status, tests,
 and evidence; that file is authoritative when this overview differs.
 
 Current scope covers the jq language, documented builtins and arities,
-the module system, byte-level JSON input and rendering, and jq command
+host-supplied modules, byte-level JSON input and rendering, and jq command
 options through the hosted API, with deterministic execution where inputs
 are fixed. Pretty-printed JSON with LF bytes is the default output;
 duplicate object keys resolve last-wins; `ascii_upcase`/`ascii_downcase`
@@ -90,13 +90,20 @@ Also intentionally different by design (not gaps): `--unbuffered` (inert),
 `-b` (binary-safe no-op),
 tool switches (`--run-tests`, `--debug-*`, rejected), host-identity
 queries (`get_search_list`, `get_prog_origin`, `get_jq_origin`), plus
-`~`/home and `$ORIGIN` module lookups, native OS filename support, and
+automatic `~/.jq` import, home-directory module lookup and expansion,
+`$ORIGIN`/executable-origin module lookup, native OS filename support, and
 strict lone-surrogate rejection. Each carries pins or policy notes in its
 matrix row.
 
 ANSI color output is an intentional scope exclusion for this embedding library,
 not an unfinished compatibility feature. It is not planned as a required host
 capability.
+
+Host-supplied modules are supported. `import`, `include` and `modulemeta` read
+application-provided content through `IJqHost`, using hosted paths and search
+directories. Automatic `~/.jq` import, home-directory lookup and expansion, and
+`$ORIGIN`/executable-origin lookup are intentional scope exclusions, not future
+compatibility work. Remaining module semantics and caveats are listed in the matrix.
 
 ## Current resource policy
 
