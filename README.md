@@ -55,6 +55,7 @@ components.
 - [Reference comparisons](docs/UPSTREAM_VECTOR_CAMPAIGN.md): differential results and evidence limits.
 - [Architecture](docs/ARCHITECTURE.md): execution model, host contract and I/O ownership.
 - [Execution policy](docs/EXECUTION_POLICY.md): resource allowances and fixed limits.
+- [Benchmarks](docs/BENCHMARKS.md): non-regex workloads and opt-in upstream comparisons.
 - [Numeric profile](docs/NUMERIC_PROFILE.md): number semantics, precision and rendering.
 - [Packaging](docs/PACKAGING.md): builds, CI, package verification and release checks.
 - [Changelog](CHANGELOG.md): changes and validation history.

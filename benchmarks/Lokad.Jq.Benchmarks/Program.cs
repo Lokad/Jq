@@ -3,6 +3,31 @@ using BenchmarkDotNet.Running;
 using Lokad.Jq;
 using Lokad.Jq.Benchmarking;
 
+if (args.Length > 0 && args[0] == "--compare")
+{
+    Environment.ExitCode = await ComparisonRunner.RunAsync(args[1..], CancellationToken.None);
+    return;
+}
+if (args is ["--process-fixture", var fixture])
+{
+    // Development fixture for portable subprocess lifecycle tests; never jq.
+    if (fixture == "wait") await Task.Delay(TimeSpan.FromMinutes(5));
+    else if (fixture == "pipes")
+    {
+        byte[] input;
+        using (var stream = new MemoryStream())
+        {
+            await Console.OpenStandardInput().CopyToAsync(stream);
+            input = stream.ToArray();
+        }
+        await Task.WhenAll(Console.OpenStandardOutput().WriteAsync(input).AsTask(),
+            Console.OpenStandardError().WriteAsync("diagnostic"u8.ToArray()).AsTask());
+        Environment.ExitCode = 7;
+    }
+    else Environment.ExitCode = 2;
+    return;
+}
+
 if (args is ["--smoke"])
 {
     var benchmarks = new CommandBenchmarks();
