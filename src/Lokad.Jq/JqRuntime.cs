@@ -23,6 +23,14 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal ReadOnlyMemory<byte> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted)
     {
+        JsonNode? clean = PrepareJson(node, sorted);
+        var buffer = new JqJsonBuffer(budget);
+        using var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs));
+        return WriteJson(clean, ascii, indent, tabs, buffer, writer);
+    }
+
+    private JsonNode? PrepareJson(JsonNode? node, bool sorted)
+    {
         budget.ChargeTree(node);
         JsonNode? shaped = sorted ? SortedClone(node) : node;
         if (sorted)
@@ -30,21 +38,24 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // The JSON writer rejects non-finite doubles while the reference
         // renders NaN as null and clamps infinities to the finite
         // extremes. Sanitize a charged clone only when needed.
-        JsonNode? clean = ContainsNonFinite(shaped) ? SanitizeNonFinite(shaped) : shaped;
-        var buffer = new JqJsonBuffer(budget);
-        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
+        return ContainsNonFinite(shaped) ? SanitizeNonFinite(shaped) : shaped;
+    }
+
+    private static JsonWriterOptions CreateWriterOptions(bool ascii, int? indent, bool tabs) => new()
         {
             Encoder = ascii ? JavaScriptEncoder.Default : JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             Indented = indent != null || tabs,
             IndentCharacter = tabs ? '\t' : ' ',
             IndentSize = tabs ? 1 : indent ?? 2,
             MaxDepth = JqBudget.MaximumDepth
-        }))
-        {
-            if (clean == null) writer.WriteNullValue();
-            else clean.WriteTo(writer, ascii ? AsciiJson : CompactJson);
-            writer.Flush();
-        }
+        };
+
+    private ReadOnlyMemory<byte> WriteJson(JsonNode? clean, bool ascii, int? indent, bool tabs,
+        JqJsonBuffer buffer, Utf8JsonWriter writer)
+    {
+        if (clean == null) writer.WriteNullValue();
+        else clean.WriteTo(writer, ascii ? AsciiJson : CompactJson);
+        writer.Flush();
         ReadOnlyMemory<byte> rendered = buffer.WrittenMemory;
         rendered = LowercaseUnicodeEscapes(rendered);
         if (indent != null || tabs)

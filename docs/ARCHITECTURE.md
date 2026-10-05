@@ -50,6 +50,11 @@ completion and may remain incomplete to apply backpressure. It distinguishes
 success, downstream closure, and failure; the evaluator stops producing output
 when the descriptor cannot accept more.
 
+JSON output reuses a writer and bounded byte buffer within each execution. Record
+framing is written into the same buffer after output quota checks. The executor
+awaits each host append before reusing its memory, preserving per-record
+backpressure and closure. Filter/diagnostic serialization uses separate storage.
+
 Input flows through a shared pull cursor (`JqInputCursor`) using chunked 8 KiB
 requests with a one-byte overflow probe. Implicit outer iteration and explicit
 `input`/`inputs` calls draw from the same cursor, so values interleave; `-`

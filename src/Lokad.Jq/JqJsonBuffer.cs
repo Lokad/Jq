@@ -13,6 +13,10 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>
 
     internal ReadOnlyMemory<byte> WrittenMemory => _buffer.WrittenMemory;
 
+    // The host may retain output memory only until its append completes. The
+    // executor waits for that completion before resetting this storage.
+    internal void Reset() => _buffer.ResetWrittenCount();
+
     public void Advance(int count)
     {
         if (count > JqBudget.MaximumJsonBytes - _buffer.WrittenCount)

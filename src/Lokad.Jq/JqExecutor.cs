@@ -50,6 +50,7 @@ internal static class JqExecutor
             SortKeys = invocation.SortKeys,
             AsciiOutput = invocation.AsciiOutput,
         };
+        using var outputRenderer = new JqRuntime.OutputRenderer(context.Runtime, budget, invocation);
         // Uncaught evaluation failures render with the failing input's position
         // like the reference process loop: string payloads print raw while other
         // payloads and error shapes print rendered with a not-a-string marker.
@@ -127,7 +128,7 @@ internal static class JqExecutor
                             sawOutput = true;
                             lastFalseNull = output is null
                                 || (output is JsonValue negative && negative.TryGetValue<bool>(out bool flag) && !flag);
-                            ReadOnlyMemory<byte> rendered = RenderOutput(invocation, context, budget, output);
+                            ReadOnlyMemory<byte> rendered = RenderOutput(invocation, outputRenderer, budget, output);
                             var appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken)).ConfigureAwait(false);
                             if (!appended.CanAcceptMore) return appended.ExitCode;
                             if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int stopped)
@@ -297,7 +298,7 @@ internal static class JqExecutor
 
     private static ReadOnlyMemory<byte> RenderOutput(
         JqInvocation invocation,
-        JqContext context,
+        JqRuntime.OutputRenderer outputRenderer,
         JqBudget budget,
         JsonNode? output)
     {
@@ -313,22 +314,7 @@ internal static class JqExecutor
             budget.ChargeOutput(Encoding.UTF8.GetByteCount(text) + (invocation.JoinOutput ? 0 : 1));
             return invocation.JoinOutput ? Utf8Text.Encode(text) : Utf8Text.EncodeLine(text);
         }
-        var body = context.Runtime.SerializeUtf8(
-            output, invocation.AsciiOutput, invocation.Indent, invocation.UseTabs, invocation.SortKeys);
-        int framing = (invocation.Seq ? 1 : 0) + (invocation.RawOutput0 ? 1 : invocation.JoinOutput ? 0 : 1);
-        budget.ChargeOutput(body.Length + framing);
-        ReadOnlyMemory<byte> framed = invocation.Seq ? PrefixRecordSeparator(body) : body;
-        if (invocation.RawOutput0)
-            return ByteLines.AppendTerminator(framed, 0);
-        return invocation.JoinOutput ? framed : ByteLines.AppendNewline(framed);
-    }
-
-    private static ReadOnlyMemory<byte> PrefixRecordSeparator(ReadOnlyMemory<byte> body)
-    {
-        var framed = new byte[body.Length + 1];
-        framed[0] = 30;
-        body.Span.CopyTo(framed.AsSpan(1));
-        return framed;
+        return outputRenderer.Render(output);
     }
 
     // Sequence-mode record failures are warnings, never fatal: the cursor
