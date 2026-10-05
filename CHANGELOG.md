@@ -58,6 +58,8 @@ Delivered since the scaffold baseline:
 - Execution policy: immutable stricter allowances for input/output, allocation,
   values, strings, and regex work/time, with fresh counters per execution.
   Regex limits and setup/file quota failures terminate outside jq handlers.
+  JSON strings and object keys preflight decoded length and allocation before
+  creating their managed strings.
 
 Still open before any release claim: SourceLink validation from a public
 checkout and hosted CI passage. Full upstream compatibility remains unproven. No

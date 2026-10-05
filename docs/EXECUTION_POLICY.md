@@ -43,6 +43,8 @@ Input reads use bounded requests and a one-byte overflow probe. Filter/module
 and variable-file reads use the remaining cumulative allowance. A rejected
 output is not appended: complete records already emitted remain visible.
 Downstream closure ends production before subsequent outputs or charges.
+JSON strings and object keys preflight their decoded UTF-16 length and string
+allocation before materialization, including Unicode and other JSON escapes.
 
 Command recognition and argument binding happen in `Jq.TryParse`, before an
 execution policy is selected. That phase retains its separate default allowance

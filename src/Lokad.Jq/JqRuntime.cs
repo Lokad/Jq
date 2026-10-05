@@ -430,10 +430,7 @@ internal sealed class JqRuntime(JqBudget budget)
                             return obj;
                         if (reader.TokenType != JsonTokenType.PropertyName)
                             throw new JqException("expected object key");
-                        string? name = reader.GetString();
-                        if (name is null)
-                            throw new JqException("expected object key");
-                        budget.ChargeString(name.Length);
+                        string name = ReadBoundedString(ref reader);
                         ReadToken(ref reader, source, ref consumedBase, headState, expectsObjectValue, out bool hasValue, out JsonNode? valueFallback);
                         if (!hasValue)
                             throw new JqException("truncated JSON value");
@@ -473,11 +470,7 @@ internal sealed class JqRuntime(JqBudget budget)
                     }
                 case JsonTokenType.String:
                     budget.ChargeNode();
-                    string? textValue = reader.GetString();
-                    if (textValue is null)
-                        throw new JqException("expected a JSON string");
-                    budget.ChargeString(textValue.Length);
-                    return JsonValue.Create(textValue);
+                    return JsonValue.Create(ReadBoundedString(ref reader));
                 case JsonTokenType.Number:
                     budget.ChargeNode();
                     if (reader.TryGetInt64(out long whole))
@@ -500,6 +493,30 @@ internal sealed class JqRuntime(JqBudget budget)
                     throw new JqException("expected a JSON value");
             }
         }
+
+    private string ReadBoundedString(ref Utf8JsonReader reader)
+    {
+        // The reader validates the token's escape syntax. Count decoded UTF-16
+        // units without creating the string, then preflight its allocation.
+        ReadOnlySpan<byte> remaining = reader.ValueSpan;
+        int length = 0;
+        if (reader.ValueIsEscaped)
+        {
+            int escape;
+            while ((escape = remaining.IndexOf((byte)'\\')) >= 0)
+            {
+                length += Encoding.UTF8.GetCharCount(remaining[..escape]) + 1;
+                budget.CheckStringLength(length);
+                // Each escape contributes one code unit, including each half
+                // of a surrogate pair encoded with two Unicode escapes.
+                int width = remaining[escape + 1] == (byte)'u' ? 6 : 2;
+                remaining = remaining[(escape + width)..];
+            }
+        }
+        length += Encoding.UTF8.GetCharCount(remaining);
+        budget.ChargeString(length);
+        return reader.GetString() ?? throw new JqException("expected a JSON string");
+    }
 
     // Like the reference fromjson, only strings parse; other inputs fail
     // with the upstream diagnostic before any decoding.

@@ -348,4 +348,70 @@ public sealed partial class JqTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumRegexWork = value });
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumRegexTime = TimeSpan.FromSeconds(value) });
     }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public void Jq_PolicyRejectsLargeJsonStringsBeforeDecoding(bool objectKey, bool escaped, bool allocationLimit)
+    {
+        string token = "\"" + (escaped ? string.Concat(Enumerable.Repeat("\\u0061", 262144)) : new string('a', 262144)) + "\"";
+        byte[] input = System.Text.Encoding.UTF8.GetBytes(objectKey ? "{" + token + ":0}" : token);
+        var policy = allocationLimit
+            ? new JqExecutionPolicy { MaximumAllocationBytes = 1024 }
+            : new JqExecutionPolicy { MaximumStringLength = 32 };
+        Assert.Throws<JqQuotaException>(() => new JqRuntime(new JqBudget(policy, CancellationToken.None)).ReadJsonValue(input, out _));
+
+        var runtime = new JqRuntime(new JqBudget(policy, CancellationToken.None));
+        JqQuotaException? failure = null;
+        long started = GC.GetAllocatedBytesForCurrentThread();
+        try
+        {
+            runtime.ReadJsonValue(input, out _);
+        }
+        catch (JqQuotaException quota)
+        {
+            failure = quota;
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - started;
+
+        Assert.Equal(allocationLimit ? "memory budget exceeded" : "string result exceeds the 32 UTF-16 code unit limit",
+            Assert.IsType<JqQuotaException>(failure).Message);
+        Assert.True(allocated < 65536, $"Rejected JSON must not allocate its decoded string; allocated {allocated} bytes.");
+    }
+
+    [Theory]
+    [InlineData("\"éx\"", "éx", false)]
+    [InlineData("\"éx\"", "éx", true)]
+    [InlineData("\"😀\"", "😀", false)]
+    [InlineData("\"😀\"", "😀", true)]
+    [InlineData("\"\\uD83D\\uDE00\"", "😀", false)]
+    [InlineData("\"\\uD83D\\uDE00\"", "😀", true)]
+    [InlineData("\"\\n\\t\"", "\n\t", false)]
+    [InlineData("\"\\n\\t\"", "\n\t", true)]
+    [InlineData("\"\\\\u0061\"", "\\u0061", false)]
+    [InlineData("\"\\\\u0061\"", "\\u0061", true)]
+    public void Jq_JsonStringPreflightCountsDecodedCodeUnitsOnce(string token, string expected, bool objectKey)
+    {
+        byte[] input = System.Text.Encoding.UTF8.GetBytes(objectKey ? "{" + token + ":0}" : token);
+        var policy = new JqExecutionPolicy { MaximumStringLength = expected.Length, MaximumAllocationBytes = input.Length + 2 * expected.Length };
+        var budget = new JqBudget(policy, CancellationToken.None);
+        var runtime = new JqRuntime(budget);
+
+        var value = runtime.ReadJsonValue(input, out int consumed);
+        Assert.Equal(input.Length, consumed);
+        if (objectKey)
+            Assert.Equal(expected, Assert.Single(Assert.IsType<System.Text.Json.Nodes.JsonObject>(value)).Key);
+        else
+            Assert.Equal(expected, Assert.IsAssignableFrom<System.Text.Json.Nodes.JsonValue>(value).GetValue<string>());
+        Assert.Equal("memory budget exceeded", Assert.Throws<JqQuotaException>(() => budget.ChargeBytes(1)).Message);
+
+        var smaller = new JqExecutionPolicy { MaximumStringLength = expected.Length - 1 };
+        Assert.Throws<JqQuotaException>(() => new JqRuntime(new JqBudget(smaller, CancellationToken.None)).ReadJsonValue(input, out _));
+    }
 }
