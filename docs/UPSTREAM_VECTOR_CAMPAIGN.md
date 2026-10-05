@@ -43,8 +43,7 @@ decoded value, so encoder escape-case differences cannot false-positive.
 
 ## Triage of the 31 misses
 
-Every miss maps to an already-recorded class or a fixed bug; none is an
-unexplained semantic gap:
+Every current miss maps to an already-recorded profile or policy class:
 
 - Decimal-build numeric fidelity (`docs/NUMERIC_PROFILE.md`): the decimal
   identity rounding at man.test:5, `.0`
@@ -62,9 +61,11 @@ unexplained semantic gap:
   `Exceeds depth limit for parsing`), and the cumulative value-budget
   vectors. The budget vectors are additionally pinned as staged exit-5
   cases in `JqTests.Memory`.
-- Fixed: `map(abs)` over negative zero diverged (`-0` kept instead of
+## Corrections from earlier campaigns
+
+- `map(abs)` over negative zero diverged (`-0` kept instead of
   `+0`); corrected with the upstream vector pinned.
-- Fixed: long operands rendered in full where the reference truncates with
+- Long operands rendered in full where the reference truncates with
   `...` (jq.test:1997, 2001, 2005, including both astral backtrack cases);
   corrected by the `jv_dump_string_trunc` port with the vectors pinned.
 

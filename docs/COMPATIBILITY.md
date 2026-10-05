@@ -48,8 +48,8 @@ Closed structural gaps (delivered since the scaffold baseline; see the matrix ro
   measured clone-removal optimization (-8% to -15% allocations on
   input-heavy workloads, zero semantic delta).
 - Packaging: out-of-tree consumer proof re-verified against the packed
-  artifact with locked restore. Value sweep 703/734 in the latest packaged-artifact rerun after
-  the policy increment, with all 31 misses classified
+  artifact with locked restore. The latest packaged-artifact value sweep
+  passes 703/734 after the policy increment, with all 31 misses classified
   (`docs/UPSTREAM_VECTOR_CAMPAIGN.md`).
 
 Value-model contract (binding before further expansion): UTF-8 bytes at
@@ -61,9 +61,14 @@ Further compatibility changes require focused evidence against the reference.
 
 Remaining work:
 
-1. Release validation: SourceLink from a real committed public checkout
-   and observed Windows/Linux CI passage. No public remote exists yet;
-   no release, publication, or availability is claimed.
+Release validation needs SourceLink from a real committed public checkout
+and observed Windows/Linux CI passage. No public remote exists yet;
+no release, publication, or availability is claimed.
+
+Compatibility evidence remains narrower than the full upstream suite. The
+matrix records unconfirmed cases such as NUL bytes in filter files alongside
+permanent numeric, regex, and diagnostic exclusions; closing inventory rows
+does not resolve those reference differences or prove all edge cases.
 
 Paths, exit categories, and parser-support internals have focused oracle
 coverage and are implemented. Their diagnostic and resource-policy caveats

@@ -62,6 +62,16 @@ the expected mismatch count and rejects escapes/timeouts; it does not certify
 compatibility. Value and decimal comparison controls detect corrupted expectations.
 Neither the package proof nor vector mode runs in ordinary tests or CI.
 
+## Local source-only proof
+
+On 2026-10-05, a tracked-source archive containing neither `PLAN.md` nor
+`external/` passed locked restore, Release build, all 3,616 tests, and Release
+pack on Windows. The package from that archive also passed all ten standalone
+consumer checks with a verified lock hash and isolated cache. Dependencies and
+lock files were unchanged; no development fixture entered the package. This
+proves the local source/package path, while SourceLink requires a real Git
+checkout with the actual public remote.
+
 Local validation on Windows is evidence for that machine only. Merely adding a
 Linux workflow does not prove Linux execution has passed; verify the hosted CI
 results when a remote is configured.
