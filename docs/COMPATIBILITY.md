@@ -59,38 +59,21 @@ storage-agnostic numeric projections, and cumulative budgets. Structural
 gaps (identity, numerics, regex) were fixed before byte-parity items, and
 no new builtins, flags, or options land until the open rows below close.
 
-Remaining finite gaps, ranked, each with its completion criterion (a
-documented divergence alone never closes its row):
+Remaining work:
 
-1. Paths row (closed by oracle run: jq 1.8.2 win64, recorded hash;
-   108 vectors over exotic keys in every position on every container):
-   every failure stages catchably on both sides with matching exits; only
-   caught-error wording differs, kept as local diagnostic policy
-   (jq-shaped, no CLR leakage). Row flipped to implemented.
-2. Exit categories (closed by oracle run: jq 1.8.2 win64, recorded hash;
-   48 scenarios covering success, compile, input, missing-file, halt,
-   `-e`, option-error, and depth cases): every exit code matches, with the
-   unterminated-tail +1 line offset kept as permanent policy and the
-   tool-switch rejection plus depth-64 limit standing as recorded policies.
-   Row flipped to implemented.
-3. Descriptor ownership and budgets (partial): borrowing, lazy opens,
+1. Descriptor ownership and budgets (partial): borrowing, lazy opens,
    owned-only closes, backpressure, reuse snapshots, and cumulative
-   budgets are covered. Done when an explicit execution-policy API lands
-   that distinguishes exhaustion/cancellation from catchable errors, or
-   the cumulative policy is locked as the permanent contract.
-4. Parser-support internals (closed by oracle run: jq 1.8.2 win64,
-   recorded hash; 37 probes): every `BINOPS` direct call works upstream
-   and now works locally through the shared operator evaluation
-   (second-operand-outer, input threaded into both arguments); `_assign`
-   and `_modify` work upstream and now work locally as native equivalents
-   of the builtin.jq definitions; upstream likewise rejects `_repeat`,
-   `_until`, and `_while` as not-defined, matching the unknown-name path.
-   All stay hidden from `builtins/0` like every underscore name upstream.
-   Both rows flipped to implemented; no unimplemented row remains.
-5. Release externals: SourceLink validation from a real committed public
-   checkout (no public remote exists yet) and hosted Windows/Linux CI
-   passage. Done when both are observed, not before; no release,
-   publication, or availability is claimed until then.
+   budgets are covered. Regex policy exhaustion must consistently remain
+   terminal, and callers need an explicit immutable execution-policy API.
+2. Release validation: SourceLink from a real committed public checkout
+   and observed Windows/Linux CI passage. No public remote exists yet;
+   no release, publication, or availability is claimed.
+
+Paths, exit categories, and parser-support internals have focused oracle
+coverage and are implemented. Their diagnostic and resource-policy caveats
+remain explicit in the matrix. Inventory labels do not establish full
+conformance: the recorded value campaign still has 30 classified misses,
+and its registry section describes the current helper dispositions.
 
 Also intentionally different by design (not gaps): `--unbuffered` (inert),
 `-V`/`--build-configuration` (assembly identity, never upstream identity),

@@ -16,8 +16,9 @@ arguments. `Jq.ExecuteAsync` drives the existing command evaluator:
 
 The interpreter is the initial engine. Parser/runtime types stay internal.
 Paths, invocations, descriptor handles, IO results, and `IJqHost` form the public
-embedding boundary. Environment variables are invocation snapshots; only PWD
-currently affects execution by selecting the current directory.
+embedding boundary. Environment variables are invocation snapshots exposed through
+`$ENV` and `env`; `PWD` also selects the current directory. An optional `JqClock`
+supplies the clock and timezone for time builtins, without ambient host state.
 
 ## IO ownership
 

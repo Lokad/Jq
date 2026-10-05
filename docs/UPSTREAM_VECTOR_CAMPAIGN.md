@@ -72,14 +72,15 @@ The upstream registry (C `function_list` plus `libm.h` capability names,
 bytecoded `empty`/`not`/`path`/`last`/`range`/`builtins`, and every `def`
 in `builtin.jq`) was compared name-by-name against `JqBuiltinRegistry`
 (upstream C arities count the input; local arities count filter arguments
-only). Coverage is complete: every upstream name is implemented locally
-except eight already-recorded gaps — the parser-support internals
-`_assign`, `_modify`, `_repeat`, `_until`, `_while` and the intentionally
-unexposed host-identity queries `get_search_list`, `get_prog_origin`,
-`get_jq_origin` (compatibility matrix, inventory rows). Direct calls to all
-eight fail at compile time and `builtins/0` never advertises them, locked
-by the inventory rejection and omission cases plus the exact `builtins`
-count pin. Local extras are legitimate: `_negate` is the parser-internal
+only). `_assign` and `_modify` now execute locally like their upstream
+definitions, and the direct binary-operator helpers share the operator
+evaluation. Upstream also rejects `_repeat`, `_until`, and `_while` as
+undefined; the local rejection agrees. The host-identity queries
+`get_search_list`, `get_prog_origin`, and `get_jq_origin` remain intentionally
+unexposed (compatibility matrix, inventory rows). All underscore helpers
+are omitted from `builtins/0`, including those callable directly, like
+upstream. Behavior, rejection, and omission tests cover these dispositions.
+Local extras are legitimate: `_negate` is the parser-internal
 unary-minus step (likewise unadvertised) and `lgamma_r` exists on both
 sides. Arity parity was checked executably: all 202 registry names accept and
 reject at boundary arities exactly per the upstream ranges (544 checks, exit-3
