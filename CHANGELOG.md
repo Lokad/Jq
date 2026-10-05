@@ -65,16 +65,17 @@ Delivered since the scaffold baseline:
   consumer checks and optional caller-supplied value corpora.
   Public repository metadata targets `https://github.com/lokad/Jq`; normalized
   Release symbols and LF C# source checkouts support opt-in PDB identity,
-  committed-source checksum and SourceLink mapping verification.
-  Isolated committed checkouts pass 3,643 tests, Release pack, detached consumers
-  and local symbol checks on Windows and Ubuntu 24.04 x64 under WSL.
+  committed-source checksum and SourceLink mapping verification, with an explicit
+  option to download and verify every hosted source. CI-built packages at
+  `974365d` pass detached consumers, saved corpora, symbol identity and all
+  hosted source checks on Windows and Ubuntu 24.04 x64. Both hosted jobs pass
+  all 3,715 tests and Release pack; see `docs/PACKAGING.md`.
 - Execution policy: immutable stricter allowances for input/output, allocation,
   values, strings, and regex work/time, with fresh counters per execution.
   Regex limits and setup/file quota failures terminate outside jq handlers.
   JSON strings and object keys preflight decoded length and allocation before
   creating their managed strings.
 
-Still open before any release claim: hosted SourceLink downloads from a committed
-public checkout. Hosted CI passes on Windows and Ubuntu for `38fc923`.
-Full upstream compatibility remains unproven. No
+Before a release, finalize its API, version, supported scope and publication
+mechanism. Full upstream compatibility remains unproven. No
 release, publication, or package availability is claimed.

@@ -31,7 +31,10 @@ decoded value, so encoder escape-case differences cannot false-positive.
   unreserved sets, NUL and multibyte roundtrips, base64 padding variants and
   rejection messages, the 2038 `fromdate` boundary, and `%e` formatting.
 - The current rerun uses the saved corpus and packed artifact, without a live
-  reference executable or an inspection checkout. Regex and encoding were also
+  reference executable or an inspection checkout. Packages from Windows and
+  Ubuntu CI run `37332686053` at commit `974365d` were verified in detached
+  consumers on their respective platforms after the runtime performance changes.
+  Both retain the same 703/734 value result. Regex and encoding were also
   rerun against that artifact and retain 66/66 and 32/32. The historical 704/30
   result and its 701/33 worktree comparison used the previous comparison rule;
   they should not be compared directly with the current stricter decimal rule.

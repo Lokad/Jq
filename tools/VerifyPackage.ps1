@@ -4,7 +4,8 @@ param(
     [int[]]$ExpectedMisses,
     [string]$SymbolPackagePath,
     [string]$SourceRoot,
-    [string]$ExpectedCommit
+    [string]$ExpectedCommit,
+    [switch]$VerifyHostedSources
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,7 +16,7 @@ if ($VectorPath -and ($null -eq $ExpectedMisses -or $VectorPath.Count -ne $Expec
 if ($SymbolPackagePath -and (!$SourceRoot -or $ExpectedCommit -notmatch '^[0-9a-fA-F]{40}$')) {
     throw 'Symbol verification requires a source Git checkout and its full expected commit.'
 }
-if (!$SymbolPackagePath -and ($SourceRoot -or $ExpectedCommit)) {
+if (!$SymbolPackagePath -and ($SourceRoot -or $ExpectedCommit -or $VerifyHostedSources)) {
     throw 'Supply SymbolPackagePath for source and revision verification.'
 }
 
@@ -90,7 +91,8 @@ Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-restore') 
 if ($SymbolPackagePath) {
     $symbols = (Resolve-Path -LiteralPath $SymbolPackagePath).Path
     $sources = (Resolve-Path -LiteralPath $SourceRoot).Path
-    Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-build', '--no-restore') + $isolation + @('--', '--symbols', $symbols, $sources, $ExpectedCommit.ToLowerInvariant()))
+    $symbolMode = if ($VerifyHostedSources) { '--symbols-hosted' } else { '--symbols' }
+    Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-build', '--no-restore') + $isolation + @('--', $symbolMode, $symbols, $sources, $ExpectedCommit.ToLowerInvariant()))
 }
 if ($VectorPath) {
     for ($index = 0; $index -lt $VectorPath.Count; $index++) {

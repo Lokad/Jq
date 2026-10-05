@@ -48,7 +48,7 @@ cache, restores the exact artifact version, checks its SHA-512 content hash
 against the consumer lock, and repeats locked restore before executing. It
 verifies JSON, regex, owned file cleanup, modules, explicit environment/time,
 non-finite parsing, output/regex policy, cancellation, and borrowed descriptors.
-All ten checks passed locally on Windows after the execution-policy increment.
+All ten checks passed against the current CI-built packages on Windows and Linux.
 The isolated workspace is retained for inspection. The project template is not
 part of the solution and never references the production source project.
 
@@ -66,7 +66,7 @@ the expected mismatch count and rejects escapes/timeouts; it does not certify
 compatibility. Value and decimal comparison controls detect corrupted expectations.
 Neither the package proof nor vector mode runs in ordinary tests or CI.
 
-## Local symbol verification
+## Symbol and hosted source verification
 
 From a committed Git checkout with its public remote configured, build and pack
 Release, then include the symbol package and expected revision:
@@ -80,11 +80,18 @@ $revision = git rev-parse HEAD
 
 This checks package repository metadata, the PDB's assembly identity, normalized
 source paths, the public commit mapping, and every document's SHA-256 checksum
-against committed Git blobs or embedded generated source. Dirty source files and
-CRLF/LF differences are rejected. Git is invoked only by this development fixture;
-the runtime remains independent of processes and repositories. It performs no
-network lookup of source URLs. Hosted source resolution and Windows/Linux CI
-passage remain separate release checks.
+against committed Git blobs or embedded generated source. Comparisons use the
+committed bytes rather than worktree contents or line endings. Git is invoked
+only by this development fixture; the runtime remains independent of processes
+and repositories. The default mode
+performs no network lookup of source URLs.
+
+Add `-VerifyHostedSources` to the same command to download every non-embedded
+document using its SourceLink URL at the expected commit. Each response must
+contain exactly the committed bytes and match the PDB checksum. Downloads have
+a per-document deadline and their buffers are bounded by the committed file
+size. Generated documents are checked against their embedded bytes. This mode
+is explicit, opt-in development tooling and does not run in ordinary tests or CI.
 
 ## Local source and package evidence
 
@@ -102,9 +109,19 @@ restore/build/test/pack and detached-consumer checks. The Linux run exposed a
 Windows-only cube-root test pin; the corrected test follows the platform
 variation confirmed in official jq binaries, as recorded in `NUMERIC_PROFILE.md`.
 
-The repository has since been published. GitHub Actions run `37295605680`
-passed for commit `fe11f53` on 2026-10-05: both `validate (windows-latest)` and
-`validate (ubuntu-latest)` completed locked restore, Release build, Release tests,
-Release pack and artifact uploads successfully. This establishes hosted passage
-for that commit; later changes require their own workflow checks. Hosted
-SourceLink downloads remain a separate, unverified release check.
+The latest package audit uses artifacts from GitHub Actions run `37332686053`
+for committed revision `974365d` on 2026-10-05. Both Windows and Ubuntu jobs
+passed locked restore, Release build, all 3,715 tests, Release pack and artifact
+uploads. Their respective packages passed ten detached consumer checks on
+Windows and Ubuntu 24.04 x64, with fresh package caches, exact SHA-512 lock
+hashes and locked restore.
+
+Both symbol packages match their assemblies and verify 66 committed and four
+embedded generated source documents. All 66 hosted SourceLink URLs resolve at
+that revision with exact committed bytes and matching SHA-256 checksums. The
+saved corpora retain 703/734 value matches (31 classified misses), 66/66 regex
+matches and 32/32 encoding matches, with no escapes/timeouts on either platform.
+Corrupted SourceLink mappings and source checksums are rejected. This rerun uses
+saved vectors, rather than a new live oracle campaign. No dependencies changed
+and no development fixture entered the packages. This evidence applies to that
+commit; later release candidates require their own checks.

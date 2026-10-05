@@ -56,8 +56,8 @@ Closed structural gaps (delivered since the scaffold baseline; see the matrix ro
   input-heavy workloads, zero semantic delta).
 - Packaging: out-of-tree consumer proof re-verified against the packed
   artifact with locked restore. The latest packaged-artifact value sweep
-  passes 703/734 after the policy increment, with all 31 misses classified
-  (`docs/UPSTREAM_VECTOR_CAMPAIGN.md`).
+  passes 703/734 after the runtime performance increments, with all 31 misses
+  classified (`docs/UPSTREAM_VECTOR_CAMPAIGN.md`).
 
 Value-model contract (binding before further expansion): UTF-8 bytes at
 the IO boundary, scalar-based string semantics, the `JsonNode` model with
@@ -68,15 +68,14 @@ Further compatibility changes require focused evidence against the reference.
 
 Remaining work:
 
-Release validation still needs hosted SourceLink downloads from a committed
-public checkout. The repository is public, and GitHub Actions passed on Windows
-and Ubuntu for commit `fe11f53` on 2026-10-05 (run `37295605680`), including locked
-restore, Release build/test/pack and artifact uploads. Local SourceLink mappings
-and checksum verification are available; hosted source resolution remains pending.
+GitHub Actions passed on Windows and Ubuntu for commit `974365d` on 2026-10-05
+(run `37332686053`), including locked restore, Release build, all 3,715 tests,
+pack and artifact uploads. Both CI-built packages passed detached consumers,
+saved value/regex/encoding corpora and symbol verification on Windows and
+Ubuntu 24.04 x64. Every hosted SourceLink source resolves with exact bytes and
+matching PDB checksums; see `PACKAGING.md`. An actual release still requires
+finalizing its API, version, supported scope and publication mechanism.
 No package release or availability is claimed.
-Isolated committed checkouts pass all 3,643 tests, Release pack, detached consumers
-and local symbol checks on Windows and Ubuntu 24.04 x64 under WSL. These local
-runs are separate from the hosted workflow evidence above.
 
 Compatibility evidence remains narrower than the full upstream suite. The
 filter-file NUL gap now has seven focused jq 1.8.2 comparisons and local
