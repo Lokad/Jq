@@ -55,10 +55,11 @@ yet a fully managed runtime. Benchmarks are opt-in.
 
 GitHub Actions builds, tests, and packs on Windows and Linux. It does not publish
 packages. NuGet outputs live in `artifacts/nuget/`; only Release pack is accepted.
-An uncommitted checkout without a remote produces SourceLink warnings. Before
-publication, configure the real public Git remote and package project/repository
-URLs, validate SourceLink from a committed checkout, and complete the release
-checklist in [PACKAGING.md](docs/PACKAGING.md).
+Package metadata targets `https://github.com/lokad/Jq`; the repository is not
+published yet. Release builds normalize symbol paths and C# checkouts use LF
+to preserve SourceLink checksums. Validate the symbol package from a committed
+checkout, resolve its hosted sources after publication, and complete the release
+checklist in [PACKAGING.md](docs/PACKAGING.md). Hosted CI remains unverified.
 
 `external/` contains optional local inspection repositories. It is ignored,
 never compiled, and never needed for restore, tests, packaging, or CI. Local

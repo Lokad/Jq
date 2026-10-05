@@ -1,13 +1,22 @@
 param(
     [Parameter(Mandatory = $true)][string]$PackagePath,
     [string[]]$VectorPath,
-    [int[]]$ExpectedMisses
+    [int[]]$ExpectedMisses,
+    [string]$SymbolPackagePath,
+    [string]$SourceRoot,
+    [string]$ExpectedCommit
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($VectorPath -and ($null -eq $ExpectedMisses -or $VectorPath.Count -ne $ExpectedMisses.Count)) {
     throw 'Supply an expected miss count for each corpus.'
+}
+if ($SymbolPackagePath -and (!$SourceRoot -or $ExpectedCommit -notmatch '^[0-9a-fA-F]{40}$')) {
+    throw 'Symbol verification requires a source Git checkout and its full expected commit.'
+}
+if (!$SymbolPackagePath -and ($SourceRoot -or $ExpectedCommit)) {
+    throw 'Supply SymbolPackagePath for source and revision verification.'
 }
 
 function Invoke-DotNet([string[]]$Arguments) {
@@ -23,6 +32,13 @@ try {
     $reader = [IO.StreamReader]::new($metadataEntries[0].Open())
     try { [xml]$manifest = $reader.ReadToEnd() } finally { $reader.Dispose() }
     if ($manifest.package.metadata.id -ne 'Lokad.Jq') { throw 'Expected the Lokad.Jq package.' }
+    if ($manifest.package.metadata.projectUrl -ne 'https://github.com/lokad/Jq' -or
+        $manifest.package.metadata.repository.url -ne 'https://github.com/lokad/Jq') {
+        throw 'Unexpected public repository metadata.'
+    }
+    if ($SymbolPackagePath -and $manifest.package.metadata.repository.commit -ne $ExpectedCommit.ToLowerInvariant()) {
+        throw 'The package repository revision does not match the expected commit.'
+    }
     $version = [string]$manifest.package.metadata.version
     if ($version -notmatch '^[0-9A-Za-z.+-]+$') { throw 'Invalid package version.' }
     $entries = @($archive.Entries | ForEach-Object { $_.FullName })
@@ -49,6 +65,7 @@ $configuration = Join-Path $verificationRoot 'NuGet.Config'
 $template = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/PackageSmoke.csproj.template') -Raw
 $template.Replace('__PACKAGE_VERSION__', $version) | Set-Content -LiteralPath $project -Encoding utf8
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Program.cs') -Destination (Join-Path $verificationRoot 'Program.cs')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Symbols.cs') -Destination (Join-Path $verificationRoot 'Symbols.cs')
 $feed = [Security.SecurityElement]::Escape([IO.Path]::GetDirectoryName($packageFile))
 @"
 <configuration><packageSources><clear />
@@ -70,6 +87,11 @@ if ($lockedPackage.resolved -ne $version -or $lockedPackage.contentHash -ne $con
 }
 Invoke-DotNet (@('restore', $project, '--locked-mode', '--configfile', $configuration) + $isolation)
 Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-restore') + $isolation)
+if ($SymbolPackagePath) {
+    $symbols = (Resolve-Path -LiteralPath $SymbolPackagePath).Path
+    $sources = (Resolve-Path -LiteralPath $SourceRoot).Path
+    Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-build', '--no-restore') + $isolation + @('--', '--symbols', $symbols, $sources, $ExpectedCommit.ToLowerInvariant()))
+}
 if ($VectorPath) {
     for ($index = 0; $index -lt $VectorPath.Count; $index++) {
         $vectors = (Resolve-Path -LiteralPath $VectorPath[$index]).Path

@@ -5,8 +5,13 @@ using System.Text.Json;
 
 if (args.Length != 0)
 {
+    if (args.Length == 4 && args[0] == "--symbols")
+    {
+        PackageSymbols.Verify(args[1], args[2], args[3]);
+        return 0;
+    }
     if (args.Length != 3 || args[0] != "--vectors" || !int.TryParse(args[2], out int expectedMisses) || expectedMisses < 0)
-        throw new ArgumentException("Use --vectors <JSONL file> <expected misses>.");
+        throw new ArgumentException("Use --vectors <JSONL file> <expected misses> or --symbols <snupkg> <source checkout> <commit>.");
 
     // This mode consumes caller-supplied triples; it never reads an inspection checkout.
     int passed = 0, missed = 0, escapes = 0;

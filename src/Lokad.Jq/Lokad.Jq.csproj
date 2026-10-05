@@ -11,10 +11,13 @@
     <PackageIcon>icon.png</PackageIcon>
     <PackageReleaseNotes>See CHANGELOG.md for release details.</PackageReleaseNotes>
     <PackageTags>jq;json;scripting;embedding</PackageTags>
+    <PackageProjectUrl>https://github.com/lokad/Jq</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/lokad/Jq</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
+    <ContinuousIntegrationBuild Condition="'$(Configuration)' == 'Release'">true</ContinuousIntegrationBuild>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageOutputPath>../../artifacts/nuget/</PackageOutputPath>
@@ -27,7 +30,6 @@
     <PackageReference Include="PCRE.NET" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
-  <!-- Set the actual public remote before publication; do not invent a repository URL. -->
   <Target Name="EnforceReleasePackageConfiguration" BeforeTargets="GenerateNuspec"
           Condition="'$(Configuration)' != 'Release' and '$(AllowNonReleasePackage)' != 'true'">
     <Error Text="NuGet packages must be produced with -c Release. Pass /p:AllowNonReleasePackage=true only for troubleshooting." />

@@ -57,6 +57,9 @@ Delivered since the scaffold baseline:
 - Packaging: out-of-tree consumer proof re-verified against the packed
   artifact with locked restore; committed opt-in verification covers ten
   consumer checks and optional caller-supplied value corpora.
+  Public repository metadata targets `https://github.com/lokad/Jq`; normalized
+  Release symbols and LF C# source checkouts support opt-in PDB identity,
+  committed-source checksum and SourceLink mapping verification.
 - Execution policy: immutable stricter allowances for input/output, allocation,
   values, strings, and regex work/time, with fresh counters per execution.
   Regex limits and setup/file quota failures terminate outside jq handlers.

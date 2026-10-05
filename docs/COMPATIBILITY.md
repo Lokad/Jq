@@ -62,8 +62,10 @@ Further compatibility changes require focused evidence against the reference.
 Remaining work:
 
 Release validation needs SourceLink from a real committed public checkout
-and observed Windows/Linux CI passage. No public remote exists yet;
-no release, publication, or availability is claimed.
+and observed Windows/Linux CI passage. The configured future repository is
+`https://github.com/lokad/Jq`; it is not published yet. Local SourceLink mappings
+and checksum verification are available, while hosted resolution remains pending.
+No release, publication, or availability is claimed.
 
 Compatibility evidence remains narrower than the full upstream suite. The
 filter-file NUL gap now has seven focused jq 1.8.2 comparisons and local

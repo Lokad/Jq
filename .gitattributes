@@ -1,0 +1,2 @@
+# SourceLink downloads Git blobs; C# source checksums must use the same bytes.
+*.cs text eol=lf

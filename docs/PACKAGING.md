@@ -5,6 +5,10 @@ unreleased prerelease version. A Release pack produces `.nupkg` and `.snupkg`
 under `artifacts/nuget/`, with README, changelog, MIT license, icon, assembly,
 and XML API documentation. SourceLink is enabled as a private build dependency.
 Build/test do not implicitly pack. Debug pack is rejected by a project target.
+Project and repository metadata use `https://github.com/lokad/Jq`, the supplied
+future public location. The repository is not published yet. Release builds
+normalize PDB source paths; `.gitattributes` keeps C# source bytes at LF so GitHub
+downloads can match their checksums.
 
 GitHub Actions restores in locked mode, builds the full solution (including
 benchmarks), tests Release, and packs on Windows/Linux. Test results and packages
@@ -13,9 +17,10 @@ No reference repositories or sibling projects are checked out by CI.
 
 Before any public release:
 
-1. Set the actual Git remote and `PackageProjectUrl`/`RepositoryUrl`; none is
-   invented during scaffolding. Build from a committed checkout and verify that
-   SourceLink resolves every published source path to that commit.
+1. Use the configured public repository URL as the Git remote. Build from a
+   committed checkout, verify the symbol package locally, and after the repository
+   exists verify that SourceLink downloads every published source path at that
+   commit. Local mappings and checksums alone do not prove hosted resolution.
 2. Complete the intended compatibility scope and document supported hosts,
    operating systems, architectures, and native PCRE.NET runtime constraints.
 3. Run locked restore/build/test/pack from a fresh checkout without `external/`,
@@ -61,6 +66,26 @@ are caller-supplied and no inspection checkout is consulted. This mode gates
 the expected mismatch count and rejects escapes/timeouts; it does not certify
 compatibility. Value and decimal comparison controls detect corrupted expectations.
 Neither the package proof nor vector mode runs in ordinary tests or CI.
+
+## Local symbol verification
+
+From a committed Git checkout with its public remote configured, build and pack
+Release, then include the symbol package and expected revision:
+
+```powershell
+$revision = git rev-parse HEAD
+./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0-preview.1.nupkg `
+    -SymbolPackagePath ./artifacts/nuget/Lokad.Jq.0.1.0-preview.1.snupkg `
+    -SourceRoot . -ExpectedCommit $revision
+```
+
+This checks package repository metadata, the PDB's assembly identity, normalized
+source paths, the public commit mapping, and every document's SHA-256 checksum
+against committed Git blobs or embedded generated source. Dirty source files and
+CRLF/LF differences are rejected. Git is invoked only by this development fixture;
+the runtime remains independent of processes and repositories. It performs no
+network lookup of source URLs. Hosted source resolution and Windows/Linux CI
+passage remain separate release checks.
 
 ## Local source-only proof
 
