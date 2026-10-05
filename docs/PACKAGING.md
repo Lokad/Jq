@@ -5,8 +5,7 @@ unreleased prerelease version. A Release pack produces `.nupkg` and `.snupkg`
 under `artifacts/nuget/`, with README, changelog, MIT license, icon, assembly,
 and XML API documentation. SourceLink is enabled as a private build dependency.
 Build/test do not implicitly pack. Debug pack is rejected by a project target.
-Project and repository metadata use `https://github.com/lokad/Jq`, the supplied
-future public location. The repository is not published yet. Release builds
+Project and repository metadata point to the public repository. Release builds
 normalize PDB source paths; `.gitattributes` keeps C# source bytes at LF so GitHub
 downloads can match their checksums.
 
@@ -104,6 +103,5 @@ Windows-only cube-root test pin; the corrected test follows the platform
 variation confirmed in official jq binaries, as recorded in `NUMERIC_PROFILE.md`.
 
 These are local platform checks. Hosted Windows/Linux workflow runs and actual
-SourceLink downloads remain unverified. The public repository endpoint and a
-committed-source URL returned HTTP 404 on 2026-10-05, consistent with the supplied
-repository location being unpublished. Repeat hosted validation after it exists.
+SourceLink downloads remain unverified. The repository has since been published;
+hosted validation must now be checked against the pushed commit.
