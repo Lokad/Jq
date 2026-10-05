@@ -94,7 +94,8 @@ internal static class JqExecutor
             }
             await LoadFileVariablesAsync(host, invocation, context, cancellationToken).ConfigureAwait(false);
             stage = 3;
-            var preParser = new JqParser(filterText, programSource, context.RootEnvironment, budget);
+            var tokens = Lexer.Tokenize(filterText, programSource, budget);
+            var preParser = new JqParser(tokens, programSource, context.RootEnvironment, budget);
             (_, IReadOnlyList<JqModuleImport> mainImports) = preParser.ParseImportsOnly();
             string mainImporterDir = invocation.FilterFile is { } mainProgramPath
                 ? ParentDir(mainProgramPath.Absolute.Path)
@@ -105,7 +106,11 @@ internal static class JqExecutor
             var loader = new JqModuleLoader(host, budget, context.Runtime, context.RootEnvironment, libraryDirs, invocation.WorkingDirectory.Path);
             context.ModuleLoader = loader;
             JqEnvironment moduleEnv = await loader.LoadMainImportsAsync(mainImports, mainImporterDir, cancellationToken).ConfigureAwait(false);
-            var filter = new JqParser(filterText, programSource, moduleEnv, budget).Parse();
+            // Reuse the immutable token sequence with the newly linked scope.
+            // Keep the previous second-lexing allowance, so policy boundaries
+            // remain conservative while the actual token allocation disappears.
+            budget.ChargeBytes(2L * filterText.Length);
+            var filter = new JqParser(tokens, programSource, moduleEnv, budget).Parse();
             stage = 4;
             await using var cursor = new JqInputCursor(host, invocation, context, cancellationToken);
             context.InputCursor = cursor;

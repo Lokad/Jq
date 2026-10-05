@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 namespace Lokad.Jq;
 
 internal sealed class JqParser(
-    string source,
+    IReadOnlyList<Token> tokens,
     JqProgramSource programSource,
     JqEnvironment environment,
     JqBudget budget)
@@ -15,9 +15,12 @@ internal sealed class JqParser(
     private readonly JqEnvironment _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly Stack<ParserScope> _scopes = new();
     private readonly JqBudget _budget = budget ?? throw new ArgumentNullException(nameof(budget));
-    private readonly List<Token> _tokens = Lexer.Tokenize(source, programSource, budget);
+    private readonly IReadOnlyList<Token> _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
     private int _index;
     private int _depth;
+
+    public JqParser(string source, JqProgramSource programSource, JqEnvironment environment, JqBudget budget)
+        : this(Lexer.Tokenize(source, programSource, budget), programSource, environment, budget) { }
 
     internal IReadOnlyList<JqModuleImport> ParsedImports { get; private set; } = [];
 
