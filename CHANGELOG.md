@@ -53,10 +53,13 @@ Delivered since the scaffold baseline:
   paths per value, and `_modify` threads first-only updates like `|=`
   (all oracle-confirmed; upstream likewise rejects `_repeat`, `_while`,
   and `_until` as not-defined).
-- Performance: corrected benchmark families (13 workloads with UTF-8
-  input-to-output coverage and allocation diagnosis) plus a measured
-  clone-removal optimization (-8% to -15% allocations on input-heavy
-  workloads, no semantic delta).
+- Performance: 12 non-regex local benchmarks with UTF-8 input-to-output
+  coverage and allocation diagnosis, plus an opt-in 38-case jq comparison
+  catalog. Ordinary JSON preserves parsing progress across host reads;
+  JSON output reuses bounded storage while awaiting each host append;
+  `select` shares surviving inputs and preserves aliases. Limits and
+  cancellation remain enforced. Qualified measurements and their embedding
+  versus CLI boundary are recorded in `docs/BENCHMARKS.md`.
 - Packaging: out-of-tree consumer proof re-verified against the packed
   artifact with locked restore; committed opt-in verification covers ten
   consumer checks and optional caller-supplied value corpora.
@@ -71,6 +74,7 @@ Delivered since the scaffold baseline:
   JSON strings and object keys preflight decoded length and allocation before
   creating their managed strings.
 
-Still open before any release claim: SourceLink validation from a public
-checkout and hosted CI passage. Full upstream compatibility remains unproven. No
+Still open before any release claim: hosted SourceLink downloads from a committed
+public checkout. Hosted CI passes on Windows and Ubuntu for `38fc923`.
+Full upstream compatibility remains unproven. No
 release, publication, or package availability is claimed.

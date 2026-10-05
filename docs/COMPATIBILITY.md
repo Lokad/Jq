@@ -48,8 +48,9 @@ Closed structural gaps (delivered since the scaffold baseline; see the matrix ro
 - Performance: 12 non-regex benchmark cases with UTF-8 input-to-output coverage,
   per-iteration status, stderr and output-checksum validation, and allocation
   diagnosis. The opt-in non-regex catalog agrees with jq 1.8.2 in 38 bounded
-  comparisons on Windows and Linux. The first AMD Linux campaign qualifies 36
-  workload measurements; two startup/latency controls remain unqualified. See
+  comparisons on Windows and Linux. The latest AMD Linux campaign qualifies 36
+  workload measurements after incremental input, output storage and select
+  sharing improvements; two startup/latency controls remain unqualified. See
   BENCHMARKS.md for results and the embedded-runtime versus CLI timing boundary. An earlier
   clone-removal optimization measured -8% to -15% allocations on
   input-heavy workloads, zero semantic delta).
