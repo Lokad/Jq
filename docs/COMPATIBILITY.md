@@ -45,8 +45,8 @@ Closed structural gaps (delivered since the scaffold baseline; see the matrix ro
 - Bessel math (`j0`/`j1`/`y0`/`y1`/`jn`/`yn`) implemented in managed code
   and verified against jq 1.8.2 within 1e-12; extreme orders and
   non-finite inputs take documented boundary values.
-- Performance: 13 benchmark families with UTF-8 input-to-output coverage,
-  per-iteration exit/output validation, and allocation diagnosis, plus one
+- Performance: 12 non-regex benchmark cases with UTF-8 input-to-output coverage,
+  per-iteration status, stderr and output-checksum validation, and allocation diagnosis, plus one
   measured clone-removal optimization (-8% to -15% allocations on
   input-heavy workloads, zero semantic delta).
 - Packaging: out-of-tree consumer proof re-verified against the packed
