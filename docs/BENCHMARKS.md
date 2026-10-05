@@ -2,10 +2,15 @@
 
 The development harness covers non-regex workloads only. Regex performance
 belongs to the regex engine layer; semantic and resource tests remain in Jq.
-No qualified performance comparison is published yet. The harness passes build,
-tests and reference correctness checks on a dedicated AMD Ubuntu VM. Full-catalog
-timing qualification remains incomplete; the development machine failed the
-background CPU gate, and interrupted VM checkpoints cannot publish ratios.
+The first complete reference campaign matches jq in all 38 cases and qualifies
+all 36 workload measurements. The two startup/latency controls remain unqualified:
+their managed batches are shorter than the 20 ms acceptance floor at the iteration
+ceiling, so no ratios are published for them. See the generated comparison below.
+
+The machine is an Azure `Standard_F4as_v7` with four full AMD cores, 16 GiB RAM and
+Ubuntu 24.04.4 LTS. Small-input ratios include jq CLI launch costs and must not be
+read as pure evaluator speedups. Results apply to this bounded catalog and measured
+revision; no overall speedup is calculated.
 
 ## Local measurements and correctness
 
@@ -43,7 +48,7 @@ has twelve families at three bounded sizes, plus `startup-empty` and
 `small-request` controls: identity (compact/pretty), NDJSON projection/selection,
 construction, reduction, foreach, sort/group, entries/updates, walk/paths,
 Unicode strings and JSON round trips. All inputs are generated deterministically.
-The initial Windows comparison agrees with jq in all 38 cases under default
+Windows and the AMD Linux VM agree with jq in all 38 cases under default
 execution limits. This is a bounded catalog, not a full compatibility claim.
 
 Small cases use 16 records/elements and medium cases use 256. Large identity,
@@ -132,8 +137,57 @@ cancellation, downstream closure and owned-descriptor cleanup.
 <!-- BEGIN GENERATED COMPARISON -->
 ## Recorded comparison
 
-Full-catalog timing qualification is incomplete. No performance ratios are
-published by this campaign.
+Mode: qualify. Measured revision: `ccf2dd317538dda12ea3d0b952667c495e857bac`. jq: `jq-1.8.2`, SHA-256 `b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f`.
+
+Recorded UTC: 2026-10-05T13:44:26.2153994+00:00. Completed 38/38 requested cases.
+
+.NET 10.0.8; SDK 10.0.204; Ubuntu 24.04.4 LTS; AMD EPYC 9V45 96-Core Processor; 4 logical processors.
+
+Warm embedded Lokad.Jq versus jq CLI; includes binding/compilation, parsing, evaluation, rendering and SHA-256 consumption; jq includes launch and pipes. No startup subtraction.
+
+Ratio is jq time divided by Lokad.Jq time; above 1 favors Lokad.Jq. CI is a paired-bootstrap 95% interval.
+
+| Case / scale | Size | Status | Lokad.Jq ms | jq ms | Ratio / 95% CI | Interpretation |
+| --- | ---: | --- | ---: | ---: | --- | --- |
+| identity-compact/small | 16 | Qualified | 0.012 | 1.289 | 108.95 [108.40, 110.33] | Lokad.Jq faster |
+| identity-pretty/small | 16 | Qualified | 0.013 | 1.324 | 102.74 [101.67, 103.78] | Lokad.Jq faster |
+| ndjson-project/small | 16 | Qualified | 0.031 | 1.328 | 42.49 [42.24, 43.42] | Lokad.Jq faster |
+| ndjson-select/small | 16 | Qualified | 0.027 | 1.326 | 49.31 [48.39, 49.48] | Lokad.Jq faster |
+| map-construct/small | 16 | Qualified | 0.033 | 1.346 | 40.84 [40.53, 41.52] | Lokad.Jq faster |
+| reduce/small | 16 | Qualified | 0.013 | 1.303 | 105.19 [103.78, 106.10] | Lokad.Jq faster |
+| foreach/small | 16 | Qualified | 0.018 | 1.331 | 74.30 [72.80, 74.78] | Lokad.Jq faster |
+| sort-group/small | 16 | Qualified | 0.065 | 1.392 | 21.38 [21.30, 21.74] | Lokad.Jq faster |
+| entries-update/small | 16 | Qualified | 0.061 | 1.595 | 26.09 [25.83, 26.37] | Lokad.Jq faster |
+| walk-paths/small | 16 | Qualified | 0.091 | 1.601 | 17.56 [17.40, 17.69] | Lokad.Jq faster |
+| unicode-strings/small | 16 | Qualified | 0.044 | 1.364 | 30.84 [30.47, 31.48] | Lokad.Jq faster |
+| json-roundtrip/small | 16 | Qualified | 0.037 | 1.316 | 35.66 [35.35, 35.80] | Lokad.Jq faster |
+| identity-compact/medium | 256 | Qualified | 0.195 | 1.473 | 7.74 [7.41, 7.90] | Lokad.Jq faster |
+| identity-pretty/medium | 256 | Qualified | 0.207 | 1.492 | 7.35 [7.07, 7.49] | Lokad.Jq faster |
+| ndjson-project/medium | 256 | Qualified | 0.417 | 1.584 | 3.80 [3.77, 3.83] | Lokad.Jq faster |
+| ndjson-select/medium | 256 | Qualified | 0.336 | 1.472 | 4.39 [4.35, 4.42] | Lokad.Jq faster |
+| map-construct/medium | 256 | Qualified | 0.517 | 1.694 | 3.30 [3.26, 3.33] | Lokad.Jq faster |
+| reduce/medium | 256 | Qualified | 0.114 | 1.382 | 12.17 [11.97, 12.32] | Lokad.Jq faster |
+| foreach/medium | 256 | Qualified | 0.198 | 1.345 | 6.76 [6.70, 6.85] | Lokad.Jq faster |
+| sort-group/medium | 256 | Qualified | 0.930 | 1.775 | 1.96 [1.91, 1.98] | Lokad.Jq faster |
+| entries-update/medium | 256 | Qualified | 0.927 | 3.202 | 3.36 [3.33, 3.46] | Lokad.Jq faster |
+| walk-paths/medium | 256 | Qualified | 1.401 | 3.863 | 2.73 [2.71, 2.79] | Lokad.Jq faster |
+| unicode-strings/medium | 256 | Qualified | 0.614 | 1.936 | 3.16 [3.14, 3.18] | Lokad.Jq faster |
+| json-roundtrip/medium | 256 | Qualified | 0.579 | 1.770 | 3.05 [3.03, 3.07] | Lokad.Jq faster |
+| identity-compact/large | 4096 | Qualified | 13.674 | 5.721 | 0.42 [0.41, 0.44] | jq faster |
+| identity-pretty/large | 4096 | Qualified | 13.753 | 6.415 | 0.47 [0.45, 0.49] | jq faster |
+| ndjson-project/large | 4096 | Qualified | 6.761 | 6.696 | 0.99 [0.97, 0.99] | jq faster |
+| ndjson-select/large | 4096 | Qualified | 5.451 | 4.827 | 0.88 [0.86, 0.89] | jq faster |
+| map-construct/large | 512 | Qualified | 1.085 | 2.008 | 1.85 [1.79, 1.87] | Lokad.Jq faster |
+| reduce/large | 4096 | Qualified | 1.875 | 2.260 | 1.21 [1.20, 1.23] | Lokad.Jq faster |
+| foreach/large | 4096 | Qualified | 3.520 | 2.961 | 0.86 [0.85, 0.87] | jq faster |
+| sort-group/large | 512 | Qualified | 2.063 | 2.353 | 1.14 [1.13, 1.16] | Lokad.Jq faster |
+| entries-update/large | 512 | Qualified | 2.026 | 5.074 | 2.51 [2.47, 2.53] | Lokad.Jq faster |
+| walk-paths/large | 512 | Qualified | 3.085 | 6.746 | 2.20 [2.19, 2.22] | Lokad.Jq faster |
+| unicode-strings/large | 1024 | Qualified | 2.532 | 3.842 | 1.53 [1.52, 1.53] | Lokad.Jq faster |
+| json-roundtrip/large | 512 | Qualified | 1.225 | 2.335 | 1.91 [1.89, 1.95] | Lokad.Jq faster |
+| startup-empty/control | 0 | Unqualified | — | — | — | Need at least nine valid pairs with both samples at least 20 ms. |
+| small-request/control | 1 | Unqualified | — | — | — | Need at least nine valid pairs with both samples at least 20 ms. |
+
 <!-- END GENERATED COMPARISON -->
 
 ## Workload direction
