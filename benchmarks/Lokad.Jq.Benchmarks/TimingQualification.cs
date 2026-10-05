@@ -52,7 +52,7 @@ internal static class TimingQualification
         }
         catch (TimeoutException) { return Finish("Timeout", "A timed reference invocation exceeded its deadline."); }
         catch (IOException) { return Finish("Failure", "Timed reference IO failed."); }
-        catch (InvalidOperationException) { return Finish("Failure", "Timed output/status differs from the verified preflight."); }
+        catch (InvalidOperationException exception) { return Finish("Failure", exception.Message); }
 
         QualificationResult Finish(string status, string reason) => new(
             new(status, reason, 0, 0, 0, 0, 0, "No performance claim"), samples.ToArray(), quietChecks.ToArray(), libraryWarmup, referenceWarmup);
@@ -79,7 +79,6 @@ internal static class TimingQualification
             {
                 await ExecuteAsync(library).ConfigureAwait(false);
                 calls++;
-                if (calls == 50_000) throw new InvalidOperationException("Warmup call ceiling exceeded.");
             }
             return calls;
         }

@@ -2,8 +2,10 @@
 
 The development harness covers non-regex workloads only. Regex performance
 belongs to the regex engine layer; semantic and resource tests remain in Jq.
-No qualified performance comparison is published yet. Qualification is pending
-a dedicated quiet machine; the development machine failed the background CPU gate.
+No qualified performance comparison is published yet. The harness passes build,
+tests and reference correctness checks on a dedicated AMD Ubuntu VM. Full-catalog
+timing qualification remains incomplete; the development machine failed the
+background CPU gate, and interrupted VM checkpoints cannot publish ratios.
 
 ## Local measurements and correctness
 
@@ -130,8 +132,8 @@ cancellation, downstream closure and owned-descriptor cleanup.
 <!-- BEGIN GENERATED COMPARISON -->
 ## Recorded comparison
 
-Timing qualification is pending a dedicated quiet machine. No performance ratios
-have been collected or published by this campaign.
+Full-catalog timing qualification is incomplete. No performance ratios are
+published by this campaign.
 <!-- END GENERATED COMPARISON -->
 
 ## Workload direction
