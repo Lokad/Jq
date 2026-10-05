@@ -1372,14 +1372,26 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
 
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        foreach (var obj in Build(0, new JsonObject()))
+        if (properties.Count == 0)
+        {
+            yield return new JsonObject();
+            yield break;
+        }
+        var fields = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+        foreach (var obj in Build(0))
             yield return obj;
 
-        IEnumerable<JsonObject> Build(int index, JsonObject current)
+        IEnumerable<JsonObject> Build(int index)
         {
             if (index == properties.Count)
             {
-                yield return current;
+                // The logical prefix/value copies were charged before each
+                // field. Allocate only the finished object; never attach the
+                // borrowed inputs or expose the backtracking field table.
+                var result = new JsonObject();
+                foreach (var field in fields)
+                    result.Add(field.Key, field.Value?.DeepClone());
+                yield return result;
                 yield break;
             }
 
@@ -1389,11 +1401,13 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
                 // Lazy cartesian: an empty value stream yields no objects.
                 foreach (var value in property.Value.Evaluate(input, context, environment))
                 {
-                    if (context.Runtime.Clone(current) is not JsonObject next)
-                        throw new InvalidOperationException("Expected object clone.");
-                    next[key] = context.Runtime.Clone(value);
-                    foreach (var obj in Build(index + 1, next))
-                        yield return obj;
+                    var previous = SetField(key, value);
+                    try
+                    {
+                        foreach (var obj in Build(index + 1))
+                            yield return obj;
+                    }
+                    finally { RestoreField(key, previous); }
                 }
             }
             else if (property.KeyFilter is JqFilter keyFilter)
@@ -1404,14 +1418,31 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
                         throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
                     foreach (var value in property.Value.Evaluate(input, context, environment))
                     {
-                        if (context.Runtime.Clone(current) is not JsonObject next)
-                            throw new InvalidOperationException("Expected object clone.");
-                        next[keyName] = context.Runtime.Clone(value);
-                        foreach (var obj in Build(index + 1, next))
-                            yield return obj;
+                        var previous = SetField(keyName, value);
+                        try
+                        {
+                            foreach (var obj in Build(index + 1))
+                                yield return obj;
+                        }
+                        finally { RestoreField(keyName, previous); }
                     }
                 }
             }
+        }
+
+        (bool Exists, JsonNode? Value) SetField(string key, JsonNode? value)
+        {
+            context.Budget.ChargeObjectPrefix(fields);
+            context.Budget.ChargeTree(value);
+            bool existed = fields.TryGetValue(key, out JsonNode? previous);
+            fields[key] = value;
+            return (existed, previous);
+        }
+
+        void RestoreField(string key, (bool Exists, JsonNode? Value) previous)
+        {
+            if (previous.Exists) fields[key] = previous.Value;
+            else fields.Remove(key);
         }
     }
 }

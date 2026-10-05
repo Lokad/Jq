@@ -117,28 +117,40 @@ internal sealed class JqBudget
     internal void ChargeTree(JsonNode? node)
     {
         Visit(node, 0);
+    }
 
-        void Visit(JsonNode? value, int depth)
+    // Object construction keeps borrowed fields until a completed result is
+    // copied. Account for the old prefix copy at the same depth and stage.
+    internal void ChargeObjectPrefix(Dictionary<string, JsonNode?> fields)
+    {
+        ChargeNode();
+        foreach (var field in fields)
         {
-            if (depth > MaximumDepth || depth == MaximumDepth && value is JsonArray or JsonObject)
-                throw new JqQuotaException("value nesting limit exceeded");
-            ChargeNode();
-            switch (value)
-            {
-                case JsonArray array:
-                    foreach (var item in array) Visit(item, depth + 1);
-                    break;
-                case JsonObject obj:
-                    foreach (var property in obj)
-                    {
-                        ChargeString(property.Key.Length);
-                        Visit(property.Value, depth + 1);
-                    }
-                    break;
-                case JsonValue scalar when scalar.TryGetValue<string>(out var text):
-                    ChargeString(text.Length);
-                    break;
-            }
+            ChargeString(field.Key.Length);
+            Visit(field.Value, 1);
+        }
+    }
+
+    private void Visit(JsonNode? value, int depth)
+    {
+        if (depth > MaximumDepth || depth == MaximumDepth && value is JsonArray or JsonObject)
+            throw new JqQuotaException("value nesting limit exceeded");
+        ChargeNode();
+        switch (value)
+        {
+            case JsonArray array:
+                foreach (var item in array) Visit(item, depth + 1);
+                break;
+            case JsonObject obj:
+                foreach (var property in obj)
+                {
+                    ChargeString(property.Key.Length);
+                    Visit(property.Value, depth + 1);
+                }
+                break;
+            case JsonValue scalar when scalar.TryGetValue<string>(out var text):
+                ChargeString(text.Length);
+                break;
         }
     }
 
