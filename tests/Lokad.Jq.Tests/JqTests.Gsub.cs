@@ -140,7 +140,7 @@ public sealed partial class JqTests
         Assert.True(regexes.Match(pattern, "x", 0, PcreMatchOptions.None).Success);
 
         clock.ReadAdvance = TimeSpan.FromSeconds(1).Ticks;
-        var error = Assert.Throws<JqException>(() =>
+        var error = Assert.Throws<JqQuotaException>(() =>
         {
             for (var i = 0; i < 10; i++)
                 regexes.Match(pattern, "x", 0, PcreMatchOptions.None);

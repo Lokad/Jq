@@ -43,11 +43,6 @@ internal static class JqExecutor
         // ARGS.named entries are recorded while running, so a reused command
         // must not leak them into later executions.
         var executionVariables = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
-        foreach (var entry in invocation.Variables)
-        {
-            budget.ChargeTree(entry.Value);
-            executionVariables[entry.Key] = entry.Value?.DeepClone();
-        }
         using var context = new JqContext(executionVariables, programSource, budget)
         {
             Clock = invocation.Clock,
@@ -81,6 +76,11 @@ internal static class JqExecutor
         var stage = 2;
         try
         {
+            foreach (var entry in invocation.Variables)
+            {
+                budget.ChargeTree(entry.Value);
+                executionVariables[entry.Key] = entry.Value?.DeepClone();
+            }
             var filterText = invocation.Filter ?? ".";
             if (invocation.FilterFile is { } filterFile)
             {
@@ -451,7 +451,7 @@ internal static class JqExecutor
         {
             BoundedReadResult.Complete complete => complete.Content,
             BoundedReadResult.Failed => throw new JqException("input read failed"),
-            BoundedReadResult.TooLarge => throw new JqException("input exceeds the 16 MiB limit"),
+            BoundedReadResult.TooLarge => throw new JqQuotaException("input exceeds the 16 MiB limit"),
             _ => throw new InvalidOperationException("Unknown bounded read result.")
         };
     }

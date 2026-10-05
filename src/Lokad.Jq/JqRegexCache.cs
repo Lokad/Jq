@@ -46,7 +46,7 @@ internal sealed class JqRegexCache : IDisposable
             _remainingWork -= 1 + Math.Abs(callout.CurrentOffset - _lastOffset);
             _lastOffset = callout.CurrentOffset;
             if (_remainingWork < 0)
-                throw new JqException("regex work limit exceeded");
+                throw new JqQuotaException("regex work limit exceeded");
             CheckTime();
             return PcreCalloutResult.Pass;
         };
@@ -58,7 +58,7 @@ internal sealed class JqRegexCache : IDisposable
         if (_patterns.TryGetValue((pattern, options), out var cached))
             return cached;
         if (pattern.Length > MaximumPatternLength)
-            throw new JqException("regex pattern exceeds the 16384-character limit");
+            throw new JqQuotaException("regex pattern exceeds the 16384-character limit");
 
         _budget.ChargeBytes(MaximumCompiledBytes);
         PcreRegex regex;
@@ -72,6 +72,13 @@ internal sealed class JqRegexCache : IDisposable
                 MaxPatternLength = MaximumPatternLength,
                 MaxPatternCompiledLength = MaximumCompiledBytes
             });
+        }
+        catch (PcreException ex) when (ex.ErrorCode is PcreErrorCode.ParenthesesNestTooDeep
+                                     or PcreErrorCode.PatternTooLarge
+                                     or PcreErrorCode.PatternTooComplicated
+                                     or PcreErrorCode.PatternStringTooLong)
+        {
+            throw new JqQuotaException($"invalid regex: {ex.Message}");
         }
         catch (PcreException ex)
         {
@@ -103,6 +110,13 @@ internal sealed class JqRegexCache : IDisposable
             ExceptionDispatchInfo.Capture(inner).Throw();
             throw;
         }
+        catch (PcreException ex) when (ex.ErrorCode is PcreErrorCode.MatchLimit
+                                     or PcreErrorCode.DepthLimit
+                                     or PcreErrorCode.HeapLimit
+                                     or PcreErrorCode.JitStackLimit)
+        {
+            throw new JqQuotaException($"regex matching failed: {ex.Message}");
+        }
         catch (PcreException ex)
         {
             throw new JqException($"regex matching failed: {ex.Message}");
@@ -116,7 +130,7 @@ internal sealed class JqRegexCache : IDisposable
     private void CheckTime()
     {
         if (_clock.GetTimestamp() >= _matchDeadline)
-            throw new JqException("regex time limit exceeded");
+            throw new JqQuotaException("regex time limit exceeded");
     }
 
     public void Dispose()

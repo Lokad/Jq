@@ -298,7 +298,7 @@ internal sealed class JqModuleLoader(
                     if (result is BoundedReadResult.Complete complete)
                         return (path.Path, complete.Content);
                     if (result is BoundedReadResult.TooLarge)
-                        throw new JqException("input exceeds the 16 MiB limit");
+                        throw new JqQuotaException("input exceeds the 16 MiB limit");
                     continue;
                 }
                 catch (Exception ex)

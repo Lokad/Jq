@@ -20,6 +20,12 @@ embedding boundary. Environment variables are invocation snapshots exposed throu
 `$ENV` and `env`; `PWD` also selects the current directory. An optional `JqClock`
 supplies the clock and timezone for time builtins, without ambient host state.
 
+Catchable jq errors are separate from cancellation, host contract failures, and
+resource exhaustion. Regex work/time and native compilation/matching limits
+terminate execution with status 5; `try` and optional suppression cannot catch
+them. Invalid regex syntax remains a catchable language error. Variable snapshot
+allocation and bounded file reads use the same terminal quota path.
+
 ## IO ownership
 
 The caller owns stdin/stdout/stderr handles. The runtime borrows them and never
