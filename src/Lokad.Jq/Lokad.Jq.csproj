@@ -26,7 +26,7 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="../../LICENSE.txt;../../README.md;../../CHANGELOG.md;../../icon.png" Pack="true" PackagePath="/" Visible="false" />
-    <PackageReference Include="PCRE.NET" />
+    <PackageReference Include="Lokad.Utf8Regex.Pcre2" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
   <Target Name="EnforceReleasePackageConfiguration" BeforeTargets="GenerateNuspec"

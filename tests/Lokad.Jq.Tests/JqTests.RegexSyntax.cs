@@ -42,8 +42,20 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData("\"ab\" | capture(\"(?<1>a)\")", "{}\n")]
+    [InlineData("\"ab\" | match(\"(?<1>a)\") | [.captures[] | [.name, .string]]", "[\n  [\n    null,\n    \"a\"\n  ]\n]\n")]
+    [InlineData("\"x\" | gsub(\"(\" * 65 + \"x\" + \")\" * 65; \"y\")", "y\n")]
+    public async Task Jq_RegexEngineAdmissionVectors(string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", filter)));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
     [InlineData("\"x\" | match(\"[\")", "invalid regex")]
-    [InlineData("(\"a\" * 6000) | match(\"(*NO_START_OPT)(*NO_AUTO_POSSESS)a.*b\")", "regex work limit exceeded")]
     [InlineData("\"aaa\" | match(\"a+\"; \"l\")", "unsupported regex flag")]
     [InlineData("\"aaa\" | test(\"a\"; \"l\")", "unsupported regex flag")]
     [InlineData("\"aaa\" | sub(\"a\"; \"X\"; \"l\")", "unsupported regex flag")]

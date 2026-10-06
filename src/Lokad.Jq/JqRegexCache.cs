@@ -1,146 +1,104 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.ExceptionServices;
-using PCRE;
+using System.Text;
+using Lokad.Jq.Helpers;
+using Lokad.Utf8Regex.Pcre2;
 
 namespace Lokad.Jq;
 
-/// <summary>Compiles each pattern once per jq execution and bounds native regex work and storage.</summary>
+/// <summary>Caches managed PCRE2 patterns within one jq execution.</summary>
 internal sealed class JqRegexCache : IDisposable
 {
-    // Small expressions suffice for text cleanup. Bound native compilation separately from JSON strings.
-    private const uint MaximumPatternLength = 16 * 1024;
-    private const uint MaximumCompiledBytes = 64 * 1024;
-    private const uint MaximumMatchHeapKiB = 256;
-    // Callout positions do not expose every internal scan. Bound cumulative matching time as well,
-    // excluding replacement evaluation and time spent waiting for input/output.
-    private static readonly PcreMatchSettings MatchSettings = new()
-    {
-        MatchLimit = 100_000, // Same per-match work limit as sed and grep.
-        DepthLimit = 256,
-        HeapLimit = MaximumMatchHeapKiB
-    };
-
+    private const int MaximumPatternLength = 16 * 1024;
+    private const int MaximumWorkingBytes = 256 * 1024;
     private readonly JqBudget _budget;
-    private readonly TimeProvider _clock;
-    private readonly Dictionary<(string Pattern, PcreOptions Options), Pattern> _patterns = new();
-    private readonly PcreRefCalloutFunc _callout;
-    // Shared across patterns and input values, including unsuccessful searches.
-    private int _remainingWork;
-    private long _remainingTicks;
-    private long _matchDeadline;
-    private int _lastOffset;
+    private readonly Dictionary<(string Pattern, Pcre2CompileOptions Options), Pattern> _patterns = new();
 
-    internal JqRegexCache(JqBudget budget, TimeProvider clock)
-    {
-        _budget = budget;
-        _clock = clock;
-        _remainingWork = budget.Policy.MaximumRegexWork;
-        _remainingTicks = (long)(budget.Policy.MaximumRegexTime.TotalSeconds * clock.TimestampFrequency);
-        _callout = callout =>
-        {
-            budget.CheckCancellation();
-            // Possessive repeats can scan a long suffix between just two callouts. Charge forward
-            // movement and backtracking as well as the callback itself; do not count callbacks alone.
-            _remainingWork -= 1 + Math.Abs(callout.CurrentOffset - _lastOffset);
-            _lastOffset = callout.CurrentOffset;
-            if (_remainingWork < 0)
-                throw new JqQuotaException("regex work limit exceeded");
-            CheckTime();
-            return PcreCalloutResult.Pass;
-        };
-    }
+    internal JqRegexCache(JqBudget budget) => _budget = budget;
 
-    internal Pattern Get(string pattern, PcreOptions options)
+    internal Pattern Get(string pattern, Pcre2CompileOptions options)
     {
         _budget.CheckCancellation();
-        if (_patterns.TryGetValue((pattern, options), out var cached))
-            return cached;
+        if (_patterns.TryGetValue((pattern, options), out Pattern? cached)) return cached;
         if (pattern.Length > MaximumPatternLength)
             throw new JqQuotaException("regex pattern exceeds the 16384-character limit");
-
-        _budget.ChargeBytes(MaximumCompiledBytes);
-        PcreRegex regex;
+        // Conservative compilation and pooled workspace reservations. These are jq
+        // allocation charges, not a claim about the engine's compiled representation size.
+        _budget.ChargeBytes(64 * 1024L + MaximumWorkingBytes + 64L * pattern.Length);
         try
         {
-            regex = new PcreRegex(pattern, new PcreRegexSettings
-            {
-                Options = options | PcreOptions.Utf | PcreOptions.Ucp | PcreOptions.AutoCallout | PcreOptions.NeverBackslashC | PcreOptions.DupNames,
-                NewLine = PcreNewLine.Lf,
-                ParensLimit = JqBudget.MaximumDepth,
-                MaxPatternLength = MaximumPatternLength,
-                MaxPatternCompiledLength = MaximumCompiledBytes
-            });
+            var regex = new Utf8Pcre2Regex(pattern, options | Pcre2CompileOptions.Ucp,
+                new Utf8Pcre2CompileSettings
+                {
+                    Newline = Pcre2NewlineConvention.Lf,
+                    AllowDuplicateNames = true,
+                    BackslashC = Pcre2BackslashCPolicy.Forbid
+                },
+                new Utf8Pcre2ExecutionLimits
+                {
+                    MatchLimit = (uint)_budget.Policy.MaximumRegexWork,
+                    DepthLimit = 256,
+                    HeapLimitInBytes = MaximumWorkingBytes
+                }, _budget.Policy.MaximumRegexTime);
+            _budget.CheckCancellation();
+            _budget.ChargeBytes(64L * regex.NameEntryCount);
+            var entries = new Pcre2NameEntry[regex.NameEntryCount];
+            regex.CopyNameEntries(entries, out _);
+            var names = new Dictionary<int, string>();
+            foreach (Pcre2NameEntry entry in entries) names[entry.Number] = entry.Name;
+            cached = new Pattern(regex, names, pattern.Length + 1);
+            _patterns.Add((pattern, options), cached);
+            return cached;
         }
-        catch (PcreException ex) when (ex.ErrorCode is PcreErrorCode.ParenthesesNestTooDeep
-                                     or PcreErrorCode.PatternTooLarge
-                                     or PcreErrorCode.PatternTooComplicated
-                                     or PcreErrorCode.PatternStringTooLong)
-        {
-            throw new JqQuotaException($"invalid regex: {ex.Message}");
-        }
-        catch (PcreException ex)
+        catch (Pcre2CompileException ex)
         {
             throw new JqException($"invalid regex: {ex.Message}");
         }
-        // Charge native capacity once per cached pattern, not once per input record.
-        _budget.ChargeBytes(MaximumMatchHeapKiB * 1024L + 32L * (regex.PatternInfo.CaptureCount + 1));
-        cached = new Pattern(regex);
-        _patterns.Add((pattern, options), cached);
-        return cached;
+        catch (NotSupportedException ex)
+        {
+            throw new JqException($"unsupported regex: {ex.Message}");
+        }
+        finally { _budget.CheckCancellation(); }
     }
 
-    /// <summary>The returned match borrows the cached buffer; copy its data before evaluating more filters.</summary>
-    internal PcreRefMatch Match(Pattern pattern, string input, int start, PcreMatchOptions options)
+    internal ReadOnlyMemory<byte> EncodeSubject(string text)
+    {
+        _budget.ChargeBytes(64L + Encoding.UTF8.GetByteCount(text));
+        try { return Utf8Text.Encode(text); }
+        catch (EncoderFallbackException ex) { throw new JqException($"invalid regex input: {ex.Message}"); }
+    }
+
+    internal Utf8Pcre2MatchContext Match(Pattern pattern, ReadOnlyMemory<byte> input,
+        int start, Pcre2MatchOptions options)
+    {
+        // A numeric capture slot needs at least one pattern character. Reserve the
+        // upper bound before the engine materializes detailed results; do not parse
+        // its grammar here or treat its reserved MaxResultBytes as an enforced limit.
+        _budget.ChargeBytes(128L + 64L * pattern.MaximumCaptureSlots);
+        try { return pattern.Regex.MatchDetailed(input.Span, start, options); }
+        catch (Pcre2MatchException ex) { throw MapMatchFailure(ex); }
+        catch (NotSupportedException ex) { throw new JqException($"unsupported regex: {ex.Message}"); }
+        finally { _budget.CheckCancellation(); }
+    }
+
+    internal bool IsMatch(Pattern pattern, ReadOnlyMemory<byte> input, Pcre2MatchOptions options)
     {
         _budget.CheckCancellation();
-        var started = _clock.GetTimestamp();
-        _matchDeadline = started + _remainingTicks;
-        _lastOffset = start;
-        try
-        {
-            var match = pattern.Buffer.Match(input.AsSpan(), start, options, _callout);
-            CheckTime(); // Optimized unsuccessful searches may not invoke any callouts.
-            return match;
-        }
-        catch (PcreCalloutException ex) when (ex.InnerException is Exception inner
-                                            && inner is JqException or OperationCanceledException)
-        {
-            ExceptionDispatchInfo.Capture(inner).Throw();
-            throw;
-        }
-        catch (PcreException ex) when (ex.ErrorCode is PcreErrorCode.MatchLimit
-                                     or PcreErrorCode.DepthLimit
-                                     or PcreErrorCode.HeapLimit
-                                     or PcreErrorCode.JitStackLimit)
-        {
-            throw new JqQuotaException($"regex matching failed: {ex.Message}");
-        }
-        catch (PcreException ex)
-        {
-            throw new JqException($"regex matching failed: {ex.Message}");
-        }
-        finally
-        {
-            _remainingTicks -= _clock.GetTimestamp() - started;
-        }
+        try { return pattern.Regex.IsMatch(input.Span, 0, options); }
+        catch (Pcre2MatchException ex) { throw MapMatchFailure(ex); }
+        catch (NotSupportedException ex) { throw new JqException($"unsupported regex: {ex.Message}"); }
+        finally { _budget.CheckCancellation(); }
     }
 
-    private void CheckTime()
+    private static JqException MapMatchFailure(Pcre2MatchException exception) => exception.ErrorKind switch
     {
-        if (_clock.GetTimestamp() >= _matchDeadline)
-            throw new JqQuotaException("regex time limit exceeded");
-    }
+        Pcre2ErrorKind.MatchLimit => new JqQuotaException("regex work limit exceeded"),
+        Pcre2ErrorKind.Timeout => new JqQuotaException("regex time limit exceeded"),
+        Pcre2ErrorKind.DepthLimit or Pcre2ErrorKind.HeapLimit => new JqQuotaException($"regex matching failed: {exception.Message}"),
+        _ => new JqException($"regex matching failed: {exception.Message}")
+    };
 
-    public void Dispose()
-    {
-        foreach (var pattern in _patterns.Values) pattern.Buffer.Dispose();
-        _patterns.Clear();
-    }
+    public void Dispose() => _patterns.Clear();
 
-    internal sealed class Pattern(PcreRegex regex)
-    {
-        internal PcreRegex Regex { get; } = regex;
-        internal PcreMatchBuffer Buffer { get; } = regex.CreateMatchBuffer(MatchSettings);
-    }
+    internal sealed record Pattern(Utf8Pcre2Regex Regex, Dictionary<int, string> Names, int MaximumCaptureSlots);
 }

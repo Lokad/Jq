@@ -1,5 +1,5 @@
 using Lokad.Jq;
-using PCRE;
+using Lokad.Utf8Regex.Pcre2;
 
 namespace Lokad.Jq.Tests;
 
@@ -99,12 +99,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" | gsub(\"x\";\"y\";\"l\")", "unsupported regex flag")]
     [InlineData("\"x\" | gsub(\"x\";\"y\";\"z\")", "z is not a valid modifier string")]
     [InlineData("\"x\" | gsub(\"x\" * 16385;\"y\")", "regex pattern exceeds")]
-    [InlineData("\"x\" | gsub(\"(\" * 65 + \"x\" + \")\" * 65;\"y\")", "invalid regex")]
     [InlineData("\"🚀\" | gsub(\"\\\\C\";\"y\")", "invalid regex")]
-    [InlineData("(\"a\" * 1000 + \"!\") | gsub(\"(*NO_START_OPT)(*NO_AUTO_POSSESS)(a+)+$\";\"x\")", "regex matching failed")]
-    [InlineData("(\"a\" * 6000) | gsub(\"(*NO_START_OPT)(*NO_AUTO_POSSESS)a.*b\";\"x\")", "regex work limit exceeded")]
-    [InlineData("(\"a\" * 80000) | gsub(\"a++(?=b)\";\"x\") | length", "regex work limit exceeded")]
-    [InlineData("(\"a\" * 20000) | gsub(\"(*NO_START_OPT)a*b\";\"x\") | length", "regex work limit exceeded")]
     public async Task Jq_GsubReportsInvalidInputsAndRegexLimits(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
@@ -129,41 +124,25 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_RegexTimeBudgetAccumulatesMatchingButNotIdleTime()
+    public void Jq_RegexWorkAllowanceResetsForEachSearch()
     {
-        var clock = new RegexTestClock();
-        using var regexes = new JqRegexCache(new JqBudget(CancellationToken.None), clock);
-        var pattern = regexes.Get("x", PcreOptions.None);
-        Assert.True(regexes.Match(pattern, "x", 0, PcreMatchOptions.None).Success);
-
-        clock.Timestamp += TimeSpan.FromHours(1).Ticks;
-        Assert.True(regexes.Match(pattern, "x", 0, PcreMatchOptions.None).Success);
-
-        clock.ReadAdvance = TimeSpan.FromSeconds(1).Ticks;
-        var error = Assert.Throws<JqQuotaException>(() =>
+        using var regexes = new JqRegexCache(new JqBudget(new JqExecutionPolicy { MaximumRegexWork = 32 }, CancellationToken.None));
+        var pattern = regexes.Get("x", Pcre2CompileOptions.None);
+        for (int i = 0; i < 100; i++)
         {
-            for (var i = 0; i < 10; i++)
-                regexes.Match(pattern, "x", 0, PcreMatchOptions.None);
-        });
-        Assert.Contains("regex time limit exceeded", error.Message);
-    }
-
-    private sealed class RegexTestClock : TimeProvider
-    {
-        public long Timestamp { get; set; }
-        public long ReadAdvance { get; set; }
-        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
-        public override long GetTimestamp() => Timestamp += ReadAdvance;
+            Assert.True(regexes.Match(pattern, "x"u8.ToArray(), 0, Pcre2MatchOptions.None).Success);
+            Assert.True(regexes.IsMatch(pattern, "x"u8.ToArray(), Pcre2MatchOptions.None));
+        }
     }
 
     [Fact]
-    public void Jq_GsubValidatesTheWholeInputBeforeSkippingRepeatedUtfChecks()
+    public void Jq_GsubRejectsInvalidUtf16BeforeMatching()
     {
         using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), JqProgramSource.Inline, new JqBudget(CancellationToken.None));
         var filter = new JqParser("gsub(\"a\";\"x\")", JqProgramSource.Inline, context.RootEnvironment, context.Budget).Parse();
         var input = System.Text.Json.Nodes.JsonValue.Create("a\ud800");
 
         var error = Assert.Throws<JqException>(() => filter.Evaluate(input, context, context.RootEnvironment).ToList());
-        Assert.Contains("regex matching failed", error.Message);
+        Assert.Contains("invalid regex input", error.Message);
     }
 }

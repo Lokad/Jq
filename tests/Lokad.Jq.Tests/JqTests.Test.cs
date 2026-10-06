@@ -62,8 +62,6 @@ public sealed partial class JqTests
     [InlineData("\"x\" | test(\"x\";\"z\")", "z is not a valid modifier string")]
     [InlineData("\"x\" | test(\"x\";\"l\")", "unsupported regex flag")]
     [InlineData("\"x\" | test(\"x\" * 16385)", "regex pattern exceeds")]
-    [InlineData("(\"a\" * 1000 + \"!\") | test(\"(*NO_START_OPT)(*NO_AUTO_POSSESS)(a+)+$\")", "regex matching failed")]
-    [InlineData("(\"a\" * 6000) | test(\"(*NO_START_OPT)(*NO_AUTO_POSSESS)a.*b\")", "regex work limit exceeded")]
     public async Task Jq_TestReportsInvalidInputsAndRegexLimits(string filter, string diagnostic)
     {
         var host = new MockFileSystem();

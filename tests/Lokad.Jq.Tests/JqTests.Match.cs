@@ -70,7 +70,6 @@ public sealed partial class JqTests
 
 
 
-    [InlineData("\"ab\" | capture(\"(?<1>a)\")", "invalid regex")]
     public async Task Jq_MatchCaptureFailures(string filter, string diagnostic)
     {
         var host = new MockFileSystem();

@@ -50,7 +50,7 @@ try {
         throw 'Unexpected development files in the package.'
     }
     $dependencies = @($manifest.package.metadata.dependencies.group.dependency | ForEach-Object { [string]$_.id })
-    if ((($dependencies | Sort-Object) -join ',') -ne 'PCRE.NET') {
+    if ((($dependencies | Sort-Object) -join ',') -ne 'Lokad.Utf8Regex.Pcre2') {
         throw 'Unexpected production dependencies or leaked build tooling.'
     }
 } finally {
@@ -86,6 +86,22 @@ $lockedPackage = $lock.dependencies.'net10.0'.'Lokad.Jq'
 if ($lockedPackage.resolved -ne $version -or $lockedPackage.contentHash -ne $contentHash) {
     throw 'The consumer lock does not identify the packed artifact.'
 }
+$runtimePackages = @($lock.dependencies.'net10.0'.PSObject.Properties.Name | Sort-Object)
+if (($runtimePackages -join ',') -ne 'Lokad.Jq,Lokad.Utf8Regex,Lokad.Utf8Regex.Pcre2') {
+    throw 'Unexpected transitive runtime packages.'
+}
+foreach ($regexId in @('Lokad.Utf8Regex', 'Lokad.Utf8Regex.Pcre2')) {
+    $regexPackage = $lock.dependencies.'net10.0'.$regexId
+    if ($regexPackage.resolved -ne '0.3.0') { throw "Unexpected regex version: $regexId" }
+    $archivePath = Join-Path $packages ($regexId.ToLowerInvariant() + '/0.3.0/' + $regexId.ToLowerInvariant() + '.0.3.0.nupkg')
+    $regexArchive = [IO.Compression.ZipFile]::OpenRead($archivePath)
+    try {
+        if (@($regexArchive.Entries | Where-Object { $_.FullName -match '(^|/)(runtimes|native)(/|$)|\.(so|dylib|exe)$' }).Count -ne 0) {
+            throw "Unexpected native assets: $regexId"
+        }
+    } finally { $regexArchive.Dispose() }
+}
+Write-Host 'Runtime graph: Lokad.Jq -> Lokad.Utf8Regex.Pcre2 0.3.0 -> Lokad.Utf8Regex 0.3.0; no native assets.'
 Invoke-DotNet (@('restore', $project, '--locked-mode', '--configfile', $configuration) + $isolation)
 Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-restore') + $isolation)
 if ($SymbolPackagePath) {

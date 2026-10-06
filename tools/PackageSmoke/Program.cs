@@ -103,8 +103,8 @@ int checks = 0;
 }
 {
     var host = new SmokeHost();
-    var policy = new JqExecutionPolicy { MaximumRegexWork = 1 };
-    Check("terminal regex policy", await Command(["-n", "\"x\" | try test(\"x\") catch \"caught\""], [])
+    var policy = new JqExecutionPolicy { MaximumRegexWork = 32 };
+    Check("terminal regex policy", await Command(["-n", "(\"a\" * 32 + \"b\") | try test(\"(a+)+$\") catch \"caught\""], [])
         .ExecuteAsync(host, policy, CancellationToken.None) == 5
         && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr) == "jq: regex work limit exceeded\n");
 }

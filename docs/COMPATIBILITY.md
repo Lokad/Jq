@@ -32,12 +32,13 @@ Closed structural gaps (delivered since the scaffold baseline; see the matrix ro
   double-domain policy in `docs/NUMERIC_PROFILE.md`; literal precision,
   ordering, and non-finite rendering each carry byte-exact pins, and
   decimal-literal fidelity is out of scope by design.
-- Regex uses PCRE.NET with duplicate capture names accepted and
-  reference-ordered folds. The onig/manonig sweep passes 66/66, but six focused
-  jq 1.8.2 comparisons expose missing longest-match support, incorrect `m`/`s`/`p`
-  flag handling, and rejection of jq's literal `\C` escape. These are compatibility
-  gaps, not permanent scalar-model exclusions; jq uses Oniguruma Perl NG rather
-  than PCRE2. See the focused regex comparison in `UPSTREAM_VECTOR_CAMPAIGN.md`.
+- Regex uses managed `Lokad.Utf8Regex.Pcre2` 0.3.0 with duplicate capture names
+  accepted and reference-ordered folds. Pattern admission and flag meanings
+  follow the engine's selected PCRE2 profile. Oniguruma parity, longest matching
+  and translation of jq's literal `\C` escape are intentionally outside this
+  profile. This preserves documented differences from jq, rather than promising
+  a compatibility shim; see [REGEX.md](REGEX.md). The historical 66-vector sweep
+  and six focused jq comparisons are recorded in `UPSTREAM_VECTOR_CAMPAIGN.md`.
 - Rendering and diagnostics: lowercase `\uXXXX` escapes like the reference,
   `jv_dump_string_trunc` ports for long operands, reference Unknown-option
   wording with failing-flag cluster resolution, UTF-16 diagnostic columns
@@ -114,18 +115,19 @@ compatibility work. Remaining module semantics and caveats are listed in the mat
 
 ## Current resource policy
 
-Budgets are cumulative per execution, not a measurement of total managed memory.
+Input/output/allocation/value budgets are cumulative per execution, not a
+measurement of total managed memory. Regex work/time limits apply per search.
 Current constants include 16 MiB input, 32 MiB output (plus a 64 MiB JSON buffer
 allowance), 8 Mi UTF-16 code units per string, 256 MiB cumulative allocation
 allowance, 262,144 value nodes, JSON/parser depth 64, filter length 1 Mi characters,
 and 4,096 tokens/command arguments.
-Regex patterns and native work have additional limits in `JqRegexCache`.
+Regex patterns and per-search engine work have additional limits in `JqRegexCache`.
 
 `JqExecutionPolicy` exposes stricter positive execution allowances with fresh
 counters per call; the default overload preserves these limits. Execution
 exhaustion reports status 5 and cannot be caught by jq handlers. Cancellation and
 host failures propagate separately. Command binding keeps its independent default
-allowance; structural and native ceilings remain fixed. See
+allowance; structural and regex workspace ceilings remain fixed. See
 [EXECUTION_POLICY.md](EXECUTION_POLICY.md) for configured versus fixed limits.
 Finite limits do not establish upstream conformance or excuse missing semantics.
 

@@ -332,7 +332,7 @@ public sealed partial class JqTests
         var (exitC, outC, errC) = await RunOutputAsync(config, "--build-configuration");
         Assert.Equal(0, exitC);
         Assert.Contains("Lokad jq", outC);
-        Assert.Contains("PCRE.NET", outC);
+        Assert.Contains("managed Utf8Regex PCRE2", outC);
         Assert.Equal("", errC);
         Assert.Equal(0, config.ReadBytesCallCount);
     }

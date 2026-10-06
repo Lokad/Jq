@@ -4,8 +4,10 @@ Lokad.Jq is a standalone C# implementation maintained by Lokad and licensed unde
 MIT. Product sources are under `src/`; tests and benchmarks have separate
 projects. No source files or project references point outside this repository.
 
-The runtime depends on the public NuGet package PCRE.NET, which supplies the
-current regex engine and native runtime assets. Command argument parsing is
+The runtime depends on the public NuGet package `Lokad.Utf8Regex.Pcre2` 0.3.0,
+which brings `Lokad.Utf8Regex` 0.3.0 transitively. Both are managed packages;
+there are no native PCRE runtime assets or dependencies on sibling checkouts.
+Command argument parsing is
 implemented in this repository. SourceLink is a private build dependency.
 Package versions and resolved dependency graphs are recorded in
 `Directory.Packages.props` and each project's `packages.lock.json`.

@@ -4,9 +4,10 @@ namespace Lokad.Jq;
 
 /// <summary>Immutable resource allowances for a single execution of a jq command.</summary>
 /// <remarks>
-/// Counters are cumulative, including discarded values, and reset for every execution.
+/// Input, output, allocation and value counters are cumulative, including discarded values,
+/// and reset for every execution. Regex work and time allowances apply to each engine search.
 /// Positive limits may be reduced from the tested defaults. Parser, depth, JSON-buffer,
-/// and native regex safety ceilings remain fixed. Command binding uses its own default allowance.
+/// and regex workspace safety ceilings remain fixed. Command binding uses its own default allowance.
 /// </remarks>
 public sealed record JqExecutionPolicy
 {
@@ -59,14 +60,14 @@ public sealed record JqExecutionPolicy
         init => _maximumStringLength = (int)Validate(value, JqBudget.MaximumStringLength, nameof(MaximumStringLength));
     }
 
-    /// <summary>Gets or initializes cumulative regex callout and movement charges; default 10,000,000.</summary>
+    /// <summary>Gets or initializes engine work steps per regex search; default 10,000,000.</summary>
     public int MaximumRegexWork
     {
         get => _maximumRegexWork;
         init => _maximumRegexWork = (int)Validate(value, RegexWorkCeiling, nameof(MaximumRegexWork));
     }
 
-    /// <summary>Gets or initializes cumulative regex matching time, excluding host waits; default five seconds.</summary>
+    /// <summary>Gets or initializes time per regex search, excluding compilation and replacement evaluation; default five seconds.</summary>
     public TimeSpan MaximumRegexTime
     {
         get => _maximumRegexTime;

@@ -14,8 +14,10 @@ arguments. `Jq.ExecuteAsync` drives the existing command evaluator:
    `JqBudget`/`JqContext`, enumerates filter results, and writes UTF-8 output.
 4. `JqRuntime` manipulates `JsonNode` values. C# null represents JSON null;
    zero emitted values represents an empty jq stream. Do not conflate the two.
-5. `JqRegexCache`, `TestFilter`, and `GsubFilter` use PCRE.NET with bounded work,
-   native memory allowances, cancellation callbacks, and a time allowance.
+5. `JqRegexCache`, `TestFilter`, and `GsubFilter` use managed `Lokad.Utf8Regex.Pcre2`
+   patterns with per-search work, depth, workspace and time limits. Subjects are
+   encoded as UTF-8; engine byte/UTF-16 positions become scalar-based jq results.
+   `test` uses `IsMatch`; capture-producing operations use `MatchDetailed`.
 
 The interpreter is the initial engine. Parser/runtime types stay internal.
 Paths, invocations, descriptor handles, IO results, and `IJqHost` form the public
@@ -29,14 +31,18 @@ directories. Automatic `~/.jq` import, home-directory lookup and expansion, and
 `$ORIGIN`/executable-origin lookup are intentionally unsupported.
 
 Catchable jq errors are separate from cancellation, host contract failures, and
-resource exhaustion. Regex work/time and native compilation/matching limits
+resource exhaustion. Regex work/time, pattern length and matching resource limits
 terminate execution with status 5; `try` and optional suppression cannot catch
 them. Invalid regex syntax remains a catchable language error. Variable snapshot
 allocation and bounded file reads use the same terminal quota path.
 
-`ExecuteAsync` accepts an immutable `JqExecutionPolicy` for stricter cumulative
-allowances. Every execution creates an independent budget; command binding keeps
-its separate default allowance. Structural and native safety ceilings stay fixed.
+`ExecuteAsync` accepts an immutable `JqExecutionPolicy` for stricter allowances.
+Input/output/allocation/value counters are cumulative; regex work/time limits
+apply to each engine search. Every execution creates an independent budget;
+command binding keeps its separate default allowance. Structural and regex
+workspace ceilings stay fixed. Utf8Regex 0.3.0 lacks cancellation-token overloads;
+cancellation is checked before and after bounded synchronous regex calls.
+See [REGEX.md](REGEX.md) for the engine profile and cancellation limits.
 See [EXECUTION_POLICY.md](EXECUTION_POLICY.md) for the exact accounting contract.
 
 ## IO ownership

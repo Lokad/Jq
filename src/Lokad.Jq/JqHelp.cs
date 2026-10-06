@@ -83,7 +83,7 @@ internal static class JqBuildConfiguration
             string version = typeof(Jq).Assembly
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
                 ?.InformationalVersion ?? "0.0.0";
-            return $"Lokad jq {version} ({RuntimeInformation.FrameworkDescription}; PCRE.NET regex; hosted IO)";
+            return $"Lokad jq {version} ({RuntimeInformation.FrameworkDescription}; managed Utf8Regex PCRE2; hosted IO)";
         }
     }
 }

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json.Nodes;
-using PCRE;
 using static Lokad.Jq.JqRuntime;
 
 namespace Lokad.Jq;
@@ -26,28 +25,26 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
             // sub without an explicit g flag stops after the first match.
             bool stopFirst = firstOnly && !flagText.Contains('g');
             var regex = context.Regexes.Get(JqMatch.RequirePattern(context, pattern), options.Pattern);
+            ReadOnlyMemory<byte> subject = context.Regexes.EncodeSubject(text);
             var matchOptions = options.Match;
             // jq aligns replacement streams by their result index across successive matches.
             var results = new List<StringBuilder>();
             var previous = 0;
             var start = 0;
-            while (start <= text.Length)
+            while (start <= subject.Length)
             {
-                var match = context.Regexes.Match(regex, text, start, matchOptions);
+                var match = context.Regexes.Match(regex, subject, start, matchOptions);
                 if (!match.Success) break;
-                // The first search validates the whole immutable string. Rechecking every suffix
-                // would make dense replacements quadratic; \C is forbidden so offsets stay scalar-aligned.
-                matchOptions |= PcreMatchOptions.NoUtfCheck;
                 context.Budget.ChargeNode();
-                var end = match.EndIndex;
-                var isEmpty = match.Length == 0;
-                if (match.Index < previous || end < match.Index)
+                var end = match.Value.EndOffsetInUtf16;
+                var isEmpty = match.Value.EndOffsetInBytes == match.Value.StartOffsetInBytes;
+                if (match.Value.StartOffsetInUtf16 < previous || end < match.Value.StartOffsetInUtf16)
                     throw new JqException("gsub requires non-overlapping forward matches");
                 var gapStart = previous;
-                var gapLength = match.Index - previous;
-                JsonObject captures = JqMatch.FoldNamedCaptures(context, match, JqMatch.GroupNameMap(regex), regex.Regex.PatternInfo.CaptureCount);
+                var gapLength = match.Value.StartOffsetInUtf16 - previous;
+                JsonObject captures = JqMatch.FoldNamedCaptures(context, match, JqMatch.GroupNameMap(regex), match.CaptureSlotCount - 1);
 
-                // All match positions and captures are now copied. A nested gsub may reuse the buffer.
+                // Copy match positions and captures before evaluating a nested replacement filter.
                 var index = 0;
                 foreach (var replacement in args[1].Evaluate(captures, context, environment))
                 {
@@ -62,12 +59,13 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                     if (replacement != null) context.Budget.Append(result, String(replacement));
                 }
                 previous = end;
-                start = end;
+                start = match.Value.EndOffsetInBytes;
                 if (isEmpty)
                 {
-                    if (start == text.Length) break;
-                    start += char.IsHighSurrogate(text[start]) && start + 1 < text.Length
-                             && char.IsLowSurrogate(text[start + 1]) ? 2 : 1;
+                    if (end == text.Length) break;
+                    int width = char.IsHighSurrogate(text[end]) && end + 1 < text.Length
+                                && char.IsLowSurrogate(text[end + 1]) ? 2 : 1;
+                    start += Encoding.UTF8.GetByteCount(text.AsSpan(end, width));
                 }
                 if (stopFirst) break;
             }

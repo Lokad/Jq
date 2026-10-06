@@ -21,7 +21,7 @@ Before any public release:
    exists verify that SourceLink downloads every published source path at that
    commit. Local mappings and checksums alone do not prove hosted resolution.
 2. Complete the intended compatibility scope and document supported hosts,
-   operating systems, architectures, and native PCRE.NET runtime constraints.
+   operating systems, architectures, and the managed Utf8Regex regex profile.
 3. Run locked restore/build/test/pack from a fresh checkout without `external/`,
    `PLAN.md`, or access to any other checkout.
 4. Inspect package contents, transitive dependencies, licensing and native assets.
@@ -45,10 +45,12 @@ After Release pack, run the opt-in PowerShell verification command:
 The command inspects package contents and dependencies, copies the committed
 smoke fixture outside the repository tree, creates a fresh isolated package
 cache, restores the exact artifact version, checks its SHA-512 content hash
-against the consumer lock, and repeats locked restore before executing. It
+against the consumer lock, audits both managed regex dependency packages for
+native assets, and repeats locked restore before executing. It
 verifies JSON, regex, owned file cleanup, modules, explicit environment/time,
 non-finite parsing, output/regex policy, cancellation, and borrowed descriptors.
-All ten checks passed against the current CI-built packages on Windows and Linux.
+All ten checks passed against the CI-built packages at `9f223bf` on Windows and
+Linux; later dependency changes require a new consumer receipt.
 The isolated workspace is retained for inspection. The project template is not
 part of the solution and never references the production source project.
 

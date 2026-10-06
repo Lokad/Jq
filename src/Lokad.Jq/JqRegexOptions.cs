@@ -1,25 +1,25 @@
-using PCRE;
+using Lokad.Utf8Regex.Pcre2;
 
 namespace Lokad.Jq;
 
 /// <summary>jq flags shared by regex predicates and substitutions.</summary>
-internal readonly record struct JqRegexOptions(PcreOptions Pattern, PcreMatchOptions Match)
+internal readonly record struct JqRegexOptions(Pcre2CompileOptions Pattern, Pcre2MatchOptions Match)
 {
     internal static bool TryParse(string flags, out JqRegexOptions options, out char unsupportedFlag)
     {
-        var pattern = PcreOptions.None;
-        var match = PcreMatchOptions.None;
+        var pattern = Pcre2CompileOptions.None;
+        var match = Pcre2MatchOptions.None;
         foreach (var flag in flags)
         {
             switch (flag)
             {
                 case 'g': break; // Match iteration belongs to the caller.
-                case 'i': pattern |= PcreOptions.IgnoreCase; break;
-                case 'm': pattern |= PcreOptions.MultiLine; break;
-                case 's': pattern |= PcreOptions.Singleline; break;
-                case 'p': pattern |= PcreOptions.MultiLine | PcreOptions.Singleline; break;
-                case 'x': pattern |= PcreOptions.Extended; break;
-                case 'n': match |= PcreMatchOptions.NotEmpty; break;
+                case 'i': pattern |= Pcre2CompileOptions.Caseless; break;
+                case 'm': pattern |= Pcre2CompileOptions.Multiline; break;
+                case 's': pattern |= Pcre2CompileOptions.DotAll; break;
+                case 'p': pattern |= Pcre2CompileOptions.Multiline | Pcre2CompileOptions.DotAll; break;
+                case 'x': pattern |= Pcre2CompileOptions.Extended; break;
+                case 'n': match |= Pcre2MatchOptions.NotEmpty; break;
                 default:
                     options = default;
                     unsupportedFlag = flag;

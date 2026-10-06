@@ -47,13 +47,14 @@ The SDK version is pinned in [global.json](global.json). Benchmarks are opt-in.
 ## Documentation
 
 Compatibility with upstream jq is incomplete; Lokad.Jq is not yet a drop-in
-replacement. The runtime currently uses PCRE.NET, which includes native regex
-components.
+replacement. Regex uses the managed `Lokad.Utf8Regex.Pcre2` package and follows
+its supported PCRE2 profile; see [regex behavior](docs/REGEX.md).
 
 - [Compatibility](docs/COMPATIBILITY.md): supported scope and intentional differences.
 - [Compatibility matrix](docs/COMPATIBILITY_MATRIX.md): feature coverage, tests and known gaps.
 - [Reference comparisons](docs/UPSTREAM_VECTOR_CAMPAIGN.md): differential results and evidence limits.
 - [Architecture](docs/ARCHITECTURE.md): execution model, host contract and I/O ownership.
+- [Regex behavior](docs/REGEX.md): engine syntax, flags, captures and cancellation boundaries.
 - [Execution policy](docs/EXECUTION_POLICY.md): resource allowances and fixed limits.
 - [Benchmarks](docs/BENCHMARKS.md): non-regex workloads and opt-in upstream comparisons.
 - [Numeric profile](docs/NUMERIC_PROFILE.md): number semantics, precision and rendering.

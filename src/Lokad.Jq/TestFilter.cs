@@ -32,7 +32,7 @@ internal sealed class TestFilter(IReadOnlyList<JqFilter> args) : JqFilter
             string patternText = JqMatch.RequirePattern(context, pattern);
             JqRegexOptions options = JqRegexOptions.ParseOrThrow(JqMatch.RequireModifiers(context, flags));
             var regex = context.Regexes.Get(patternText, options.Pattern);
-            return JsonValue.Create(context.Regexes.Match(regex, text, 0, options.Match).Success);
+            return JsonValue.Create(context.Regexes.IsMatch(regex, context.Regexes.EncodeSubject(text), options.Match));
         }
     }
 }

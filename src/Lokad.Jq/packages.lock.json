@@ -2,6 +2,15 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
+      "Lokad.Utf8Regex.Pcre2": {
+        "type": "Direct",
+        "requested": "[0.3.0, )",
+        "resolved": "0.3.0",
+        "contentHash": "DmRXa7Rkb9PTwRrfSVuMQ4vXgFKR9wbFjARGSn6XR/P/waElfJFzTSybRw7tdVmG9TFTnMlz9XhMKFEND0evMg==",
+        "dependencies": {
+          "Lokad.Utf8Regex": "0.3.0"
+        }
+      },
       "Microsoft.SourceLink.GitHub": {
         "type": "Direct",
         "requested": "[10.0.401, )",
@@ -13,11 +22,10 @@
           "System.IO.Hashing": "10.0.12"
         }
       },
-      "PCRE.NET": {
-        "type": "Direct",
-        "requested": "[1.4.0, )",
-        "resolved": "1.4.0",
-        "contentHash": "kARDpcFJm63cnrlwJqhP87yr4lLt/U/AvugRq+Wh5yXo0NrFWN5cR5+O5o3veL77ia/Ma32BkJ2Gown/eNWIkg=="
+      "Lokad.Utf8Regex": {
+        "type": "Transitive",
+        "resolved": "0.3.0",
+        "contentHash": "qu+dtgH4zwtqUTCRL0/m5IvrxKWQxNB4EJNMjywPtVhaC8Okq+yLr/grsS2lWrMjpXBAw+ESejpQ/+00NltAmw=="
       },
       "Microsoft.Build.Tasks.Git": {
         "type": "Transitive",

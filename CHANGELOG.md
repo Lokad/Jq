@@ -11,6 +11,9 @@ triaged).
 
 Delivered since the scaffold baseline:
 
+- Replace PCRE.NET with managed `Lokad.Utf8Regex.Pcre2` 0.3.0. Use its PCRE2
+  syntax and flag primitives directly, retain jq capture/replacement values, and
+  document per-search regex work/time limits and cancellation boundaries.
 - Remove the Lokad.Cli dependency and source generator; bind command options
   locally while preserving the existing option and diagnostic behavior.
 - Establish the jq parser, runtime, formatter, regex support, resource
@@ -30,7 +33,8 @@ Delivered since the scaffold baseline:
 - Regex: duplicate capture names accepted with reference-ordered folds;
   the onig/manonig sweep passes 66/66. Six additional reference comparisons
   expose flag mapping, literal-escape and longest-match gaps; these are
-  documented as incomplete compatibility rather than permanent exclusions.
+  retained as intentional differences under the selected Utf8Regex profile;
+  see `docs/REGEX.md`.
 - Paths: pointer-identity tracking plus byte-exact slice rendering and
   raw slice objects; exotic keys fail staged in every position on every
   container like the reference get/set/dels steps.

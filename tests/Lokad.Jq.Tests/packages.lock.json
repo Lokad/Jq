@@ -49,6 +49,11 @@
         "resolved": "1.21.0",
         "contentHash": "dv5+81Q1TBQvVMSOOOmRcjJmvWcX3BZPZsIq31+RLc5cNft0IHAyNlkdb7ZarOWG913PyBoFDsDXoCIlKmLclg=="
       },
+      "Lokad.Utf8Regex": {
+        "type": "Transitive",
+        "resolved": "0.3.0",
+        "contentHash": "qu+dtgH4zwtqUTCRL0/m5IvrxKWQxNB4EJNMjywPtVhaC8Okq+yLr/grsS2lWrMjpXBAw+ESejpQ/+00NltAmw=="
+      },
       "Microsoft.CodeAnalysis.Analyzers": {
         "type": "Transitive",
         "resolved": "3.11.0",
@@ -242,7 +247,7 @@
       "lokad.jq": {
         "type": "Project",
         "dependencies": {
-          "PCRE.NET": "[1.4.0, )"
+          "Lokad.Utf8Regex.Pcre2": "[0.3.0, )"
         }
       },
       "lokad.jq.benchmarks": {
@@ -270,11 +275,14 @@
           "System.Management": "9.0.5"
         }
       },
-      "PCRE.NET": {
+      "Lokad.Utf8Regex.Pcre2": {
         "type": "CentralTransitive",
-        "requested": "[1.4.0, )",
-        "resolved": "1.4.0",
-        "contentHash": "kARDpcFJm63cnrlwJqhP87yr4lLt/U/AvugRq+Wh5yXo0NrFWN5cR5+O5o3veL77ia/Ma32BkJ2Gown/eNWIkg=="
+        "requested": "[0.3.0, )",
+        "resolved": "0.3.0",
+        "contentHash": "DmRXa7Rkb9PTwRrfSVuMQ4vXgFKR9wbFjARGSn6XR/P/waElfJFzTSybRw7tdVmG9TFTnMlz9XhMKFEND0evMg==",
+        "dependencies": {
+          "Lokad.Utf8Regex": "0.3.0"
+        }
       }
     }
   }

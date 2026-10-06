@@ -120,6 +120,28 @@ The longest-match probe can select a later start, so a leftmost-longest algorith
 alone would not satisfy the reference. The former permanent-exclusion rationale
 and claim of correct flag mapping are withdrawn.
 
+The subsequent Utf8Regex migration deliberately adopts its selected PCRE2
+profile, with these flag/escape/longest differences retained and documented in
+[REGEX.md](REGEX.md). The six probes above are historical reference evidence,
+not a claim of Oniguruma parity for the new engine.
+
+## Managed regex migration verification
+
+On 2026-10-06, an isolated Windows package consumer restored the packed
+Lokad.Jq artifact with the published `Lokad.Utf8Regex.Pcre2` 0.3.0 and core
+0.3.0 packages. All ten smoke checks pass; the unchanged caller-supplied corpora
+retain 703/734 value vectors (the same 31 classified misses), 66/66 regex
+vectors and 32/32 encoding vectors, with zero escapes/timeouts. Locked restore
+and the full 3,733-test Release suite pass. Both regex packages were inspected
+for native/RID assets; none were present. No sibling checkout or reference
+executable is needed by the consumer.
+
+This result does not establish full PCRE2/Oniguruma parity. The selected engine
+profile, intentional flag/escape/longest differences, per-search limits and
+cancellation boundaries are documented in [REGEX.md](REGEX.md). Sparse numeric
+capture definitions expose an engine limitation in 0.3.0 and are not covered
+by the saved reference corpus; no consumer workaround was added.
+
 ## Registry reconciliation
 
 The upstream registry (C `function_list` plus `libm.h` capability names,
