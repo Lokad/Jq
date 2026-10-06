@@ -1,8 +1,8 @@
 # Packaging and CI
 
-The library targets .NET 10 and packages as `Lokad.Jq` with an
-unreleased prerelease version. A Release pack produces `.nupkg` and `.snupkg`
-under `artifacts/nuget/`, with README, changelog, MIT license, icon, assembly,
+The library targets .NET 10 and packages as `Lokad.Jq`. Version `0.1.0` is
+prepared for manual publication to NuGet.org. A Release pack produces `.nupkg`
+and `.snupkg` under `artifacts/nuget/`, with README, changelog, MIT license, icon, assembly,
 and XML API documentation. SourceLink is enabled as a private build dependency.
 Build/test do not implicitly pack. Debug pack is rejected by a project target.
 Project and repository metadata point to the public repository. Release builds
@@ -39,7 +39,7 @@ Before any public release:
 After Release pack, run the opt-in PowerShell verification command:
 
 ```powershell
-./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0-preview.1.nupkg
+./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0.nupkg
 ```
 
 The command inspects package contents and dependencies, copies the committed
@@ -57,7 +57,7 @@ part of the solution and never references the production source project.
 Supply separately prepared JSONL corpora to rerun a value campaign:
 
 ```powershell
-./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0-preview.1.nupkg `
+./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0.nupkg `
     -VectorPath /path/to/values.jsonl -ExpectedMisses 31
 ```
 
@@ -75,8 +75,8 @@ Release, then include the symbol package and expected revision:
 
 ```powershell
 $revision = git rev-parse HEAD
-./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0-preview.1.nupkg `
-    -SymbolPackagePath ./artifacts/nuget/Lokad.Jq.0.1.0-preview.1.snupkg `
+./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0.nupkg `
+    -SymbolPackagePath ./artifacts/nuget/Lokad.Jq.0.1.0.snupkg `
     -SourceRoot . -ExpectedCommit $revision
 ```
 

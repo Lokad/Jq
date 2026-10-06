@@ -76,9 +76,9 @@ GitHub Actions passed on Windows and Ubuntu for commit `9f223bf` on 2026-10-05
 pack and artifact uploads. Both CI-built packages passed detached consumers,
 saved value/regex/encoding corpora and symbol verification on Windows and
 Ubuntu 24.04 x64. Every hosted SourceLink source resolves with exact bytes and
-matching PDB checksums; see `PACKAGING.md`. An actual release still requires
-finalizing its API, version, supported scope and publication mechanism.
-No package release or availability is claimed.
+matching PDB checksums; see `PACKAGING.md`. Version `0.1.0` is prepared for
+manual NuGet publication with the documented scope and intentional differences.
+Publication and package availability remain pending.
 
 Compatibility evidence remains narrower than the full upstream suite. The
 filter-file NUL gap now has seven focused jq 1.8.2 comparisons and local

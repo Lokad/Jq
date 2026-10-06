@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-preview.1 â€” unreleased
+## 0.1.0 — pending NuGet publication
 
 Embeddable jq 1.8.2 runtime with host-mediated IO. Compatibility is
 incomplete; see `docs/COMPATIBILITY_MATRIX.md` for the per-row inventory
@@ -86,6 +86,6 @@ Delivered since the scaffold baseline:
   JSON strings and object keys preflight decoded length and allocation before
   creating their managed strings.
 
-Before a release, finalize its API, version, supported scope and publication
-mechanism. Full upstream compatibility remains unproven. No
-release, publication, or package availability is claimed.
+Version 0.1.0 is prepared for manual publication to NuGet.org. Full upstream
+compatibility remains unproven; the supported scope and intentional differences
+are documented above. Package publication is pending.

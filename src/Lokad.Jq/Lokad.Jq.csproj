@@ -5,7 +5,7 @@
     <Description>Embeddable jq runtime for .NET with host-mediated IO. See docs/COMPATIBILITY_MATRIX.md for the jq 1.8.2 conformance inventory; compatibility is incomplete.</Description>
     <Authors>Lokad</Authors>
     <Company>Lokad</Company>
-    <Version>0.1.0-preview.1</Version>
+    <Version>0.1.0</Version>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
     <PackageIcon>icon.png</PackageIcon>
