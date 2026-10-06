@@ -4,7 +4,8 @@
 arguments. `Jq.ExecuteAsync` drives the existing command evaluator:
 
 1. `JqCommandLineParser` separates variables, positional values, format options,
-   filter files, and input file operands. `JqArgs` uses Lokad.Cli generation.
+   filter files, and input file operands. Option binding is implemented locally
+   without a command-line parsing dependency or source generator.
 2. `Lexer` and `JqParser` construct `JqFilter` nodes. Filter compilation currently
    occurs during execution, not during command-name recognition. Main-program
    tokens are reused between import scanning and parsing within that execution;

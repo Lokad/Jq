@@ -11,6 +11,8 @@ triaged).
 
 Delivered since the scaffold baseline:
 
+- Remove the Lokad.Cli dependency and source generator; bind command options
+  locally while preserving the existing option and diagnostic behavior.
 - Establish the jq parser, runtime, formatter, regex support, resource
   limits, and command regression tests in an independent library.
 - Supply a small `IJqHost` API and standalone invocation/path/descriptor

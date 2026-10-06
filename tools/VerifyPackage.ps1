@@ -50,7 +50,7 @@ try {
         throw 'Unexpected development files in the package.'
     }
     $dependencies = @($manifest.package.metadata.dependencies.group.dependency | ForEach-Object { [string]$_.id })
-    if ((($dependencies | Sort-Object) -join ',') -ne 'Lokad.Cli,PCRE.NET') {
+    if ((($dependencies | Sort-Object) -join ',') -ne 'PCRE.NET') {
         throw 'Unexpected production dependencies or leaked build tooling.'
     }
 } finally {

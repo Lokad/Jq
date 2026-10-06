@@ -242,7 +242,6 @@
       "lokad.jq": {
         "type": "Project",
         "dependencies": {
-          "Lokad.Cli": "[1.0.0, )",
           "PCRE.NET": "[1.4.0, )"
         }
       },
@@ -270,12 +269,6 @@
           "Perfolizer": "[0.6.1]",
           "System.Management": "9.0.5"
         }
-      },
-      "Lokad.Cli": {
-        "type": "CentralTransitive",
-        "requested": "[1.0.0, )",
-        "resolved": "1.0.0",
-        "contentHash": "wkQJqAwAaqLXe8T4ZWpWCJeXZmAii6r/q6lxyYz6Pe2vhm0UHNbsI++n6AqNKfJ40S1naUDyzdQi2LEZMkvncQ=="
       },
       "PCRE.NET": {
         "type": "CentralTransitive",

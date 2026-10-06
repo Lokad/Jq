@@ -1,56 +1,27 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading;
-using Lokad.Cli;
 using Lokad.Jq.Helpers;
 
 namespace Lokad.Jq;
 
 internal static class JqCommandLineParser
 {
-    private static readonly char[] ShortOptions;
-    private static readonly string[] LongOptions;
-    private static readonly HashSet<string> BoolLongOptions = new(StringComparer.Ordinal);
-    private static readonly HashSet<char> BoolShortOptions = new();
-    private static readonly HashSet<char> ValueShortOptions = new();
-
-    static JqCommandLineParser()
+    private static bool TryExpandShortOption(char option, out string name)
     {
-        // Lokad.Cli exposes tokenization but not the generated option names.
-        // Derive them once from the same annotations instead of maintaining another list.
-        var properties = typeof(JqArgs).GetProperties();
-        var options = properties
-            .Select(property => property.GetCustomAttribute<ArgumentAttribute>())
-            .OfType<ArgumentAttribute>()
-            .ToArray();
-        ShortOptions = options.Select(option => option.Short).Where(name => name != '\0').ToArray();
-        LongOptions = options.Select(option => option.Long).OfType<string>().ToArray();
-        foreach (var property in properties)
+        name = option switch
         {
-            var annotation = property.GetCustomAttribute<ArgumentAttribute>();
-            if (annotation is null || annotation.Short == (char)0)
-                continue;
-            if (property.PropertyType == typeof(bool))
-            {
-                BoolShortOptions.Add(annotation.Short);
-                continue;
-            }
-            ValueShortOptions.Add(annotation.Short);
-        }
-        foreach (var property in properties)
-        {
-            if (property.PropertyType != typeof(bool))
-                continue;
-            var annotation = property.GetCustomAttribute<ArgumentAttribute>();
-            if (annotation is null)
-                continue;
-            if (annotation.Long is string longName)
-                BoolLongOptions.Add(longName);
-        }
+            'V' => "version", 'b' => "binary", 'n' => "null-input",
+            'R' => "raw-input", 's' => "slurp", 'c' => "compact-output",
+            'r' => "raw-output", 'j' => "join-output", 'a' => "ascii-output",
+            'S' => "sort-keys", 'C' => "color-output", 'M' => "monochrome-output",
+            'e' => "exit-status", 'h' => "help", 'f' => "from-file",
+            'L' => "library-path", _ => string.Empty
+        };
+        return name.Length != 0;
     }
 
     // Range check for strict `--indent` values without integer overflow:
@@ -119,17 +90,9 @@ internal static class JqCommandLineParser
             if (special.Error != null)
                 return Error(special.Error);
 
-            JqArgs parsed;
-            OutputFormat format;
-            bool helpFirst;
-            try
-            {
-                parsed = ParseArguments(special.Options, out format, out helpFirst);
-            }
-            catch (ParseException ex)
-            {
-                return Error(FormatParseError(ex.Message, special.Options));
-            }
+            if (!TryParseArguments(special.Options, out JqArgs parsed, out OutputFormat format,
+                    out bool helpFirst, out string parseError))
+                return Error(parseError);
 
             if (parsed.Indent is < -1 or > 7)
                 return Error("jq: --indent takes a number between -1 and 7");
@@ -239,128 +202,182 @@ internal static class JqCommandLineParser
             budget.ChargeBytes(128 + 64 * maximumLength);
         }
 
-        static JqArgs ParseArguments(IReadOnlyList<string> arguments, out OutputFormat format, out bool helpFirst)
+        static bool TryParseArguments(IReadOnlyList<string> arguments, out JqArgs parsed,
+            out OutputFormat format, out bool helpFirst, out string error)
         {
-            var tokens = ArgumentTokenizer.Tokenize(arguments, ShortOptions, LongOptions, false);
-            var normalized = new List<ITokenizedArguments>();
-            var seenBools = new HashSet<string>(StringComparer.Ordinal);
-            // Like the reference, help and version resolve first-seen: -Vh
-            // prints the version while -hV prints help. Order runs over every
-            // flag occurrence (dedup only drops repeats), so clusters record
-            // each letter left to right.
+            var result = new JqArgs();
+            parsed = result;
+            format = OutputFormat.Default;
+            helpFirst = true;
+            error = string.Empty;
+            var selectedFormat = OutputFormat.Default;
+            var seenBools = new Dictionary<string, string>(StringComparer.Ordinal);
             int order = 0;
             int helpAt = int.MaxValue;
             int versionAt = int.MaxValue;
-            format = OutputFormat.Default;
-            while (tokens.Shift() is { } token)
+            bool optionsDone = false;
+
+            // Numeric short options fail during classification, before binding.
+            // Negative operands outside this option list were already extracted.
+            foreach (string argument in arguments)
             {
-                // Retain token kinds: removing 'c' from a short group must not create
-                // a single-dash long option such as '-version'.
-                switch (token)
+                if (argument == "--") break;
+                if (argument.Length > 1 && argument[0] == '-' && char.IsAsciiDigit(argument[1]))
                 {
-                    case LongArg { Name: "compact-output" }:
-                        format = OutputFormat.Compact;
-                        continue;
-                    case LongArg { Name: "tab" }:
-                        format = OutputFormat.Tabs;
-                        continue;
-                    case LongArg { Name: "indent" }:
-                        format = OutputFormat.Spaces;
-                        break;
-                    case LongArgWithValue withValue:
-                        if (withValue.Name == "indent")
-                        {
-                            format = OutputFormat.Spaces;
-                            if (!IsStrictIndentValue(withValue.Value) || !IsIndentInRange(withValue.Value))
-                                throw new ParseException("--indent takes a number between -1 and 7");
-                        }
-                        break;
-                    case ShortArgSet group when group.Options.Contains('c'):
-                        format = OutputFormat.Compact;
-                        var remaining = group.Options.Replace("c", string.Empty, StringComparison.Ordinal);
-                        if (remaining.Length == 0) continue;
-                        token = new ShortArgSet(remaining);
-                        break;
+                    error = "jq: Unknown option -" + argument[1];
+                    return false;
                 }
-
-                if (token is LongArg seenLong)
-                {
-                    if (seenLong.Name == "help")
-                    {
-                        helpAt = Math.Min(helpAt, order);
-                        order++;
-                    }
-                    else if (seenLong.Name == "version")
-                    {
-                        versionAt = Math.Min(versionAt, order);
-                        order++;
-                    }
-                }
-                else if (token is ShortArgSet seenCluster)
-                {
-                    foreach (char name in seenCluster.Options)
-                    {
-                        if (name == 'h')
-                        {
-                            helpAt = Math.Min(helpAt, order);
-                            order++;
-                        }
-                        else if (name == 'V')
-                        {
-                            versionAt = Math.Min(versionAt, order);
-                            order++;
-                        }
-                    }
-                }
-                if (token is LongArg longOption && BoolLongOptions.Contains(longOption.Name))
-                {
-                    if (!seenBools.Add("L:" + longOption.Name))
-                        continue;
-                }
-                else if (token is ShortArgSet cluster)
-                {
-                    var kept = new StringBuilder();
-                    foreach (var name in cluster.Options)
-                    {
-                        if (BoolShortOptions.Contains(name) && !seenBools.Add("S:" + name))
-                            continue;
-                        kept.Append(name);
-                    }
-                    if (kept.Length == 0)
-                        continue;
-                    if (kept.Length != cluster.Options.Length)
-                        token = new ShortArgSet(kept.ToString());
-                }
-
-                normalized.Add(token);
-                if (token is LongArg { Name: "indent" } indentOption)
-                    PreserveOperand("--" + indentOption.Name, validateIndent: true);
-                else if (token is LongArg { Name: "from-file" } fileOption)
-                    PreserveOperand("--" + fileOption.Name, validateIndent: false);
-                else if (token is ShortArgSet flagged)
-                    foreach (var name in flagged.Options)
-                        if (name == 'f') PreserveOperand("-f", validateIndent: false);
             }
 
-            // The binder rejects duplicate booleans and loses cross-option order.
-            // All operands remain for validation; emit only the final formatting flag.
-            if (format == OutputFormat.Compact) normalized.Add(new LongArg("compact-output"));
-            else if (format == OutputFormat.Tabs) normalized.Add(new LongArg("tab"));
+            for (int i = 0; i < arguments.Count; i++)
+            {
+                string argument = arguments[i];
+                if (optionsDone || argument == "--") break;
+                if (argument.Length < 2 || argument[0] != '-')
+                    continue;
+                bool doubleDash = argument[1] == '-';
+                int nameStart = doubleDash ? 2 : 1;
+                int equals = argument.IndexOf('=', nameStart);
+                string name = equals < 0 ? argument[nameStart..] : argument[nameStart..equals];
+                string? inlineValue = equals < 0 ? null : argument[(equals + 1)..];
+                // Retain the existing accepted single-dash long aliases. A short
+                // cluster stays a cluster even when removing c would spell one.
+                if (doubleDash || IsKnownLongOption(name))
+                {
+                    if (!TryApplyOption(name, "--" + name,
+                            inlineValue, ref i, out error))
+                        return false;
+                    continue;
+                }
+
+                bool validCluster = equals < 0 && name.Length > 0;
+                foreach (char flag in name)
+                    validCluster &= TryExpandShortOption(flag, out _);
+                if (!validCluster)
+                {
+                    // A leading value-taking short may own its attached operand.
+                    // Mixed clusters with an unknown flag keep their existing diagnostic.
+                    if (name.Length > 0 && name[0] is 'f' or 'L')
+                    {
+                        TryExpandShortOption(name[0], out string valueOption);
+                        string value = inlineValue ?? name[1..];
+                        if (!TryApplyOption(valueOption, "-" + name[0], value, ref i, out error))
+                            return false;
+                        continue;
+                    }
+                    string head = name.Length == 0 ? argument : "-" + name[0];
+                    error = "jq: Unknown option " + ResolveClusterFlag(head, arguments);
+                    return false;
+                }
+                foreach (char flag in name)
+                {
+                    TryExpandShortOption(flag, out string option);
+                    if (!TryApplyOption(option, "-" + flag, null, ref i, out error))
+                        return false;
+                }
+            }
+            format = selectedFormat;
             helpFirst = helpAt <= versionAt;
-            return Parser.ParseTokenized<JqArgs>(new TokenizedArguments(normalized));
+            return true;
 
-            void PreserveOperand(string option, bool validateIndent)
+            bool TryApplyOption(string name, string label, string? inlineValue,
+                ref int position, out string diagnostic)
             {
-                if (tokens.Shift() is not ValueArg value)
-                    throw new ParseException($"option `{option}` expects a value");
-                string text = value.Value;
-                if (text.StartsWith((char)0))
-                    text = text[1..];
-                if (validateIndent && !IsStrictIndentValue(text))
-                    throw new ParseException("--indent takes a number between -1 and 7");
-                normalized.Add(value.Value == text ? value : new ValueArg(text));
+                diagnostic = string.Empty;
+                if (name is "indent" or "from-file" or "library-path")
+                {
+                    string value;
+                    if (inlineValue is not null)
+                        value = inlineValue;
+                    else if (position + 2 < arguments.Count && arguments[position + 1] == "--")
+                    {
+                        position += 2;
+                        value = arguments[position];
+                        optionsDone = true;
+                    }
+                    else if (position + 1 < arguments.Count
+                             && (arguments[position + 1].Length == 0
+                                 || arguments[position + 1][0] != '-'
+                                 || arguments[position + 1] == "-"))
+                        value = arguments[++position];
+                    else
+                    {
+                        diagnostic = "jq: Unknown option " + ResolveClusterFlag(label, arguments);
+                        return false;
+                    }
+                    if (value.StartsWith((char)0)) value = value[1..];
+                    if (name == "indent")
+                    {
+                        if (!IsStrictIndentValue(value) || !IsIndentInRange(value))
+                        {
+                            diagnostic = "jq: --indent takes a number between -1 and 7";
+                            return false;
+                        }
+                        // Range was checked without conversion, even for arbitrarily
+                        // many leading zeros. Only the final digit and sign matter.
+                        result.Indent = value[^1] - '0';
+                        if (value[0] == '-') result.Indent = -result.Indent;
+                        selectedFormat = OutputFormat.Spaces;
+                    }
+                    else if (name == "from-file") result.FilterFile = value;
+                    else result.LibraryPath.Add(value);
+                    return true;
+                }
+                if (inlineValue is not null || !IsKnownLongOption(name))
+                {
+                    diagnostic = "jq: Unknown option " + ResolveClusterFlag(label, arguments);
+                    return false;
+                }
+                if (name == "compact-output")
+                {
+                    selectedFormat = OutputFormat.Compact;
+                    return true;
+                }
+                if (name == "tab")
+                {
+                    selectedFormat = OutputFormat.Tabs;
+                    return true;
+                }
+                if (name == "help") helpAt = Math.Min(helpAt, order++);
+                if (name == "version") versionAt = Math.Min(versionAt, order++);
+                // Preserve the existing binder's disposition for mixed aliases;
+                // repeated occurrences of the same spelling remain idempotent.
+                if (seenBools.TryGetValue(name, out string? previous) && previous != label)
+                {
+                    diagnostic = "jq: Unknown option " + ResolveClusterFlag(label, arguments);
+                    return false;
+                }
+                seenBools[name] = label;
+                switch (name)
+                {
+                    case "version": result.Version = true; break;
+                    case "build-configuration": result.BuildConfiguration = true; break;
+                    case "null-input": result.NullInput = true; break;
+                    case "raw-input": result.RawInput = true; break;
+                    case "slurp": result.Slurp = true; break;
+                    case "seq": result.Seq = true; break;
+                    case "stream": result.Stream = true; break;
+                    case "stream-errors": result.StreamErrors = true; break;
+                    case "raw-output": result.RawOutput = true; break;
+                    case "join-output": result.JoinOutput = true; break;
+                    case "raw-output0": result.RawOutput0 = true; break;
+                    case "ascii-output": result.AsciiOutput = true; break;
+                    case "sort-keys": result.SortKeys = true; break;
+                    case "color-output": result.ColorOutput = true; break;
+                    case "exit-status": result.ExitStatus = true; break;
+                    case "help": result.Help = true; break;
+                    // The accepted binary, monochrome and unbuffered flags are inert.
+                }
+                return true;
             }
 
+            static bool IsKnownLongOption(string name) => name is
+                "version" or "build-configuration" or "unbuffered" or "binary"
+                or "null-input" or "raw-input" or "slurp" or "seq" or "stream"
+                or "stream-errors" or "compact-output" or "raw-output" or "join-output"
+                or "raw-output0" or "ascii-output" or "sort-keys" or "color-output"
+                or "monochrome-output" or "exit-status" or "help" or "tab" or "indent"
+                or "from-file" or "library-path";
         }
     }
 
@@ -594,14 +611,6 @@ internal static class JqCommandLineParser
         return new SpecialArguments(options, operands, variables, positional, fromFile, fileVariables, libraryDirs, null);
     }
 
-    private static string FormatParseError(string message, IReadOnlyList<string> options)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        if (TryExtractQuotedOption(message, out var option))
-            return $"jq: Unknown option {ResolveClusterFlag(option, options)}";
-        return $"jq: {message}";
-    }
-
     // Upstream names the failing flag inside dash clusters (`-cZ` reports
     // `-Z`) while the binder quotes the cluster head. Walk the letters of
     // the failing cluster like getopt: known boolean shorts combine, and
@@ -626,10 +635,11 @@ internal static class JqCommandLineParser
             return option;
         foreach (char flag in cluster.AsSpan(1))
         {
-            if (BoolShortOptions.Contains(flag))
+            if (TryExpandShortOption(flag, out string name))
+            {
+                if (name is "from-file" or "library-path") return option;
                 continue;
-            if (ValueShortOptions.Contains(flag))
-                return option;
+            }
             return "-" + flag;
         }
         return option;
@@ -645,27 +655,6 @@ internal static class JqCommandLineParser
                 return false;
         }
         return true;
-    }
-
-    private static bool TryExtractQuotedOption(string message, out string option)
-    {
-        const char quote = '`';
-        var start = message.IndexOf(quote);
-        if (start < 0)
-        {
-            option = string.Empty;
-            return false;
-        }
-
-        var end = message.IndexOf(quote, start + 1);
-        if (end < 0)
-        {
-            option = string.Empty;
-            return false;
-        }
-
-        option = message[(start + 1)..end];
-        return option.StartsWith("-", StringComparison.Ordinal);
     }
 
     private enum OutputFormat { Compact, Spaces, Tabs, Default }

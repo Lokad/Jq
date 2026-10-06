@@ -28,6 +28,9 @@ public sealed partial class JqTests
             (["-Zc", "."], "jq: Unknown option -Z\n"),
             (["-c", "-cZ", "."], "jq: Unknown option -Z\n"),
             (["-cfZ", "."], "jq: Unknown option -c\n"),
+            (["-c1", "."], "jq: Unknown option -c\n"),
+            (["--null-input=false", "."], "jq: Unknown option --null-input\n"),
+            (["-cf", "-1", "."], "jq: Unknown option -1\n"),
         })
         {
             var host = new MockFileSystem();
