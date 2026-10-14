@@ -74,7 +74,7 @@ disposes the root. Existing execution overloads borrow its associated budget;
 explicit execution budgets must share that allowance. Legacy constructors do
 not perform shared admission for their caller-owned snapshots.
 
-## Cooperative memory admission (in progress)
+## Cooperative memory admission
 
 `ExecuteAsync(host, memoryBudget, cancellationToken)` and
 `ExecuteAsync(host, policy, memoryBudget, cancellationToken)` accept a borrowed
@@ -145,11 +145,20 @@ remain conservatively charged until that evaluation finishes. TODO: use narrower
 existing generator/aggregate boundaries where profiling shows a material gap,
 without introducing per-object reservations or alias-graph tracking.
 
-Remaining allocation-site audits and package qualification are still required.
-This is partial admission coverage, not a
-live-memory or process-memory guarantee.
-The cumulative work policy above remains independent. Estimated reserved bytes are separate from actual
-managed allocation measurements.
+Admission estimates major storage capacity rather than measuring the whole heap.
+Small objects, metadata and minor temporaries can remain uninstrumented; roughly
+20% unaccounted storage is an intentional design allowance, without a coverage
+percentage guarantee for each workload. The host needs separate headroom for
+runtime/native memory and delayed collection. The cumulative work policy above
+remains independent. Estimated reserved bytes are separate from actual managed
+allocation measurements and do not establish a hard process-memory cap.
+
+There is no returned public value stream or command-dispatch callback in the
+current host API. Execution consumes its deferred evaluator internally and awaits
+all host borrows. An embedding host starting cooperating commands must pass the
+same budget, keep parent storage charged, and await child completion/cleanup
+before disposing any scope it creates. No charge is transferred to GC or
+automatically reparented.
 
 ## Fixed safety ceilings
 

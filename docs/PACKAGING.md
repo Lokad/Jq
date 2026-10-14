@@ -49,8 +49,12 @@ against the consumer lock, audits both managed regex dependency packages for
 native assets, and repeats locked restore before executing. It
 verifies JSON, regex, owned file cleanup, modules, explicit environment/time,
 non-finite parsing, output/regex policy, cancellation, and borrowed descriptors.
-All ten checks passed against the CI-built packages at `9f223bf` on Windows and
-Linux; later dependency changes require a new consumer receipt.
+Six additional checks exercise governed invocation snapshots, sequential reuse,
+refusal preserving caller charges, overlapping shared demand, pending cleanup,
+cancellation/refunds and the independent allocation-work API. The fixture reuses
+the test-only deterministic host budget; no governor is included in the package.
+The original ten checks passed against the CI-built packages at `9f223bf` on
+Windows and Linux. Later changes require a new consumer receipt.
 The isolated workspace is retained for inspection. The project template is not
 part of the solution and never references the production source project.
 
@@ -96,6 +100,14 @@ size. Generated documents are checked against their embedded bytes. This mode
 is explicit, opt-in development tooling and does not run in ordinary tests or CI.
 
 ## Local source and package evidence
+
+The governed-memory integration was checked locally on Windows on 2026-10-14:
+warning-free Release build, all 3,825 tests and all 16 detached consumer checks.
+The consumer verified the exact packed-artifact hash, locked restore and the
+unchanged managed dependency graph in an isolated cache. Shared admission,
+reuse, refusal, pending cleanup and canceled borrows are exercised through the
+public package API. This local result adds no hosted SourceLink, cross-platform
+CI, publication or performance claim; those require their own receipts.
 
 On 2026-10-05, isolated committed Git checkouts containing neither `PLAN.md` nor
 `external/` passed locked restore, Release build, all 3,643 tests, and Release

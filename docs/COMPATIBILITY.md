@@ -65,7 +65,8 @@ Closed structural gaps (delivered since the scaffold baseline; see the matrix ro
 Value-model contract (binding before further expansion): UTF-8 bytes at
 the IO boundary, scalar-based string semantics, the `JsonNode` model with
 C# null as JSON null, insertion-ordered objects with last-wins duplicates,
-storage-agnostic numeric projections, and cumulative budgets. Delivered identity
+storage-agnostic numeric projections, independent cumulative work/I/O guards,
+and shared live-storage admission when supplied by the host. Delivered identity
 fixes and explicitly scoped numeric/regex policies preceded byte-parity work.
 Further compatibility changes require focused evidence against the reference.
 
@@ -133,10 +134,14 @@ structural and regex workspace ceilings remain fixed. See
 Finite limits do not establish upstream conformance or excuse missing semantics.
 
 Explicit memory admission borrows one host allowance and refunds coarse owners
-at their storage lifetime boundaries. Its estimates and partial integration
-scope are documented in EXECUTION_POLICY.md. The public cumulative work guard is
+at their storage lifetime boundaries. Its estimates, coverage and conservative
+retention are documented in EXECUTION_POLICY.md. The public cumulative work guard is
 `MaximumAllocationWorkBytes`; `MaximumAllocationBytes` remains only as a
 deprecated alias scheduled for removal at the next breaking API release.
+Local Windows validation of this integration passes all 3,825 tests, including
+89 governed-memory boundary cases, and 16 detached package-consumer checks.
+These resource/lifetime checks add no new upstream conformance claim; earlier
+cross-platform CI and differential evidence remains scoped to its revision.
 
 ## Conformance work
 

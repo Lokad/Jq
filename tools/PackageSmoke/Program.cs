@@ -1,4 +1,5 @@
 using Lokad.Jq;
+using Lokad.Jq.Tests;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.Json;
@@ -129,6 +130,100 @@ int checks = 0;
     Check("borrowed descriptors", await Command(["."], []).ExecuteAsync(host, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "7\n" && host.ClosedDescriptors.Count == 0);
 }
+{
+    var memory = new TestMemoryBudget(64 * 1024);
+    if (!JqCommandInvocation.TryCreateWithStandardDescriptors("jq",
+        ["-n", "-r", "--arg", "name", "sample", "$name"], [], memory, out var invocation))
+        throw new InvalidOperationException("Expected governed snapshot admission.");
+    using (invocation)
+    {
+        long retained = memory.ReservedBytes;
+        var command = Jq.TryParse(invocation) ?? throw new InvalidOperationException("Expected a jq command.");
+        bool reused = retained > 0;
+        for (int run = 0; run < 3; run++)
+        {
+            var host = new SmokeHost();
+            reused &= await command.ExecuteAsync(host, CancellationToken.None) == 0
+                && host.Output(JqFileDescriptor.StdOut) == "sample\n"
+                && host.Output(JqFileDescriptor.StdErr) == ""
+                && memory.ReservedBytes == retained;
+        }
+        invocation.Dispose();
+        Check("governed snapshot and sequential reuse", reused && memory.ReservedBytes == 0);
+    }
+}
+{
+    var memory = new TestMemoryBudget(8);
+    if (!memory.TryReserve(4, out var retained))
+        throw new InvalidOperationException("Expected caller admission.");
+    using (retained)
+    {
+        Check("snapshot refusal preserves caller", !JqCommandInvocation.TryCreateWithStandardDescriptors(
+            "jq", ["."], [], memory, out var invocation) && invocation is null
+            && retained.Bytes == 4 && memory.ReservedBytes == 4);
+    }
+}
+{
+    const long limit = 128 * 1024;
+    var memory = new TestMemoryBudget(limit);
+    using var caller = memory.CreateScope();
+    if (!JqCommandInvocation.TryCreateWithStandardDescriptors("jq", [".", "/data"], [], caller, out var invocation))
+        throw new InvalidOperationException("Expected governed snapshot admission.");
+    using (invocation)
+    using (var cancellation = new CancellationTokenSource())
+    {
+        long snapshot = memory.ReservedBytes;
+        var command = Jq.TryParse(invocation) ?? throw new InvalidOperationException("Expected a jq command.");
+        var firstInner = new SmokeHost();
+        var secondInner = new SmokeHost();
+        firstInner.AddFile("/data", "1\n");
+        secondInner.AddFile("/data", "1\n");
+        var first = new SmokeBorrowHost(firstInner);
+        var second = new SmokeBorrowHost(secondInner);
+        Task<int> firstCall = command.ExecuteAsync(first, cancellation.Token);
+        Task<int> secondCall = command.ExecuteAsync(second, CancellationToken.None);
+        var pending = await Task.WhenAll(first.Ready.Task, second.Ready.Task).WaitAsync(TimeSpan.FromSeconds(10));
+        if (!memory.TryReserve(limit - memory.ReservedBytes, out var pressure))
+            throw new InvalidOperationException("Expected competing caller admission.");
+        using (pressure)
+        {
+            var refused = new SmokeHost();
+            Check("overlapping commands share root", await command.ExecuteAsync(refused, CancellationToken.None) == 5
+                && refused.Output(JqFileDescriptor.StdOut) == ""
+                && refused.Output(JqFileDescriptor.StdErr) == "jq: memory budget exceeded\n"
+                && memory.ReservedBytes == limit && pending.All(bytes => bytes.Span.SequenceEqual("1\n"u8)));
+            cancellation.Cancel();
+            first.Release.SetResult();
+            second.Release.SetResult();
+            await Task.WhenAll(first.Closing.Task, second.Closing.Task).WaitAsync(TimeSpan.FromSeconds(10));
+            Check("governed cleanup retains pending storage", !firstCall.IsCompleted && !secondCall.IsCompleted
+                && memory.ReservedBytes >= pressure.Bytes + snapshot + pending.Sum(bytes => bytes.Length)
+                && memory.ReservedBytes <= limit);
+            first.CloseRelease.SetResult();
+            second.CloseRelease.SetResult();
+            bool cancelled = false;
+            try { await firstCall; }
+            catch (OperationCanceledException) { cancelled = true; }
+            Check("governed cancellation and refunds", cancelled && await secondCall == 0
+                && firstInner.Output(JqFileDescriptor.StdOut) == ""
+                && secondInner.Output(JqFileDescriptor.StdOut) == "1\n"
+                && firstInner.ClosedDescriptors.Count == 1 && firstInner.OpenFileCount == 0
+                && secondInner.ClosedDescriptors.Count == 1 && secondInner.OpenFileCount == 0
+                && memory.ReservedBytes == pressure.Bytes + snapshot);
+        }
+        invocation.Dispose();
+        if (memory.ReservedBytes != 0 || !caller.TryReserve(limit, out var available))
+            throw new InvalidOperationException("The borrowed root was not reusable.");
+        available.Dispose();
+    }
+}
+{
+    var host = new SmokeHost();
+    var policy = new JqExecutionPolicy { MaximumAllocationWorkBytes = 3 };
+    Check("allocation work is independent", await Command(["-n", "1"], []).ExecuteAsync(host, policy, CancellationToken.None) == 5
+        && host.Output(JqFileDescriptor.StdOut) == ""
+        && host.Output(JqFileDescriptor.StdErr) == "jq: allocation work allowance exceeded\n");
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 
@@ -205,5 +300,39 @@ sealed class SmokeHost : IJqHost
         ClosedDescriptors.Add(descriptor);
         _inputs.Remove(descriptor.Id);
         return Task.FromResult(0);
+    }
+}
+
+// Cancellation cannot end a borrow before the host completes its operation.
+sealed class SmokeBorrowHost(SmokeHost inner) : IJqHost
+{
+    internal TaskCompletionSource<ReadOnlyMemory<byte>> Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    internal TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    internal TaskCompletionSource Closing { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    internal TaskCompletionSource CloseRelease { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public ValueTask<JqByteReadResult> ReadBytesAsync(JqFileDescriptor descriptor,
+        Memory<byte> buffer, CancellationToken cancellationToken) =>
+        inner.ReadBytesAsync(descriptor, buffer, cancellationToken);
+
+    public async Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor,
+        ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
+    {
+        if (descriptor == JqFileDescriptor.StdOut && !Ready.Task.IsCompleted)
+        {
+            Ready.SetResult(content);
+            await Release.Task.ConfigureAwait(false);
+        }
+        return await inner.AppendWhileOpenAsync(descriptor, content, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) =>
+        inner.OpenReadAsync(path, cancellationToken);
+
+    public async Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+    {
+        Closing.TrySetResult();
+        await CloseRelease.Task.ConfigureAwait(false);
+        return await inner.CloseDescriptorAsync(descriptor, cancellationToken).ConfigureAwait(false);
     }
 }

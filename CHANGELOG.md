@@ -8,8 +8,8 @@
   and stay charged through awaited writes and descriptor cleanup. Cursor buffers,
   streaming token capacity and hosted file reads also reserve before allocation;
   successful read results retain their charge until decoding finishes. Coverage
-  is partial; the remaining allocation-site audit and package qualification are
-  pending. Existing overloads enforce the independent work/I/O/structural policy
+  uses coarse estimates and conservative record lifetimes, with small metadata
+  deliberately uninstrumented. Existing overloads enforce the independent work/I/O/structural policy
   and forward a governed invocation's associated budget.
 - Govern retained regex pattern/workspace estimates and operation-owned UTF-8
   subjects and detailed captures. Failed compilation/matching refunds admission;
@@ -43,6 +43,11 @@
   wrappers, arithmetic/entry copies and affix substrings. Remove unused legacy
   line-buffer/encoding helpers, a dead newline counter and an unnecessary clone
   in index-error rendering. Keep useful semantic regressions and work guards.
+- Validation on Windows: warning-free Release build and all 3,825 tests pass,
+  including 89 governed-memory cases. The packed artifact passes 16 detached
+  consumer checks with isolated cache, exact package hash and locked restore.
+  Dependencies and lock files are unchanged. Earlier cross-platform CI,
+  differential and performance receipts apply to their recorded revisions.
 
 ## 0.1.0 — pending NuGet publication
 

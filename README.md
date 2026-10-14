@@ -46,8 +46,9 @@ to reduce per-execution resource allowances. Existing calls retain the defaults;
 see [execution policy](docs/EXECUTION_POLICY.md) for accounting and fixed ceilings.
 
 The cumulative `MaximumAllocationWorkBytes` guard limits charged work. Shared
-storage admission uses the explicit `IMemoryBudget` execution overloads; its
-current coverage is described in the execution policy. The old
+storage admission uses a governed invocation or an explicit `IMemoryBudget`
+execution overload; its estimates and lifetime boundaries are described in the
+execution policy. The old
 `MaximumAllocationBytes` spelling is a deprecated work-policy alias.
 
 ## Develop

@@ -38,7 +38,7 @@ allocation and bounded file reads use the same terminal quota path.
 
 `ExecuteAsync` accepts an immutable `JqExecutionPolicy` for stricter allowances.
 Input/output/allocation-work/value-work counters are cumulative; regex work/time limits
-apply to each engine search. Every execution creates an independent budget;
+apply to each engine search. Every execution creates independent work counters;
 command binding keeps its separate default work allowance within the same
 execution memory scope. Structural and regex
 workspace ceilings stay fixed. Utf8Regex 0.3.0 lacks cancellation-token overloads;
