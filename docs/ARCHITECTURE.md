@@ -1,7 +1,7 @@
 # Architecture
 
-`Jq.TryParse(JqCommandInvocation)` recognizes jq names and binds command
-arguments. `Jq.ExecuteAsync` drives the existing command evaluator:
+`Jq.TryParse(JqCommandInvocation)` recognizes jq names and borrows an immutable
+invocation. `Jq.ExecuteAsync` binds options/JSON arguments and drives the evaluator:
 
 1. `JqCommandLineParser` separates variables, positional values, format options,
    filter files, and input file operands. Option binding is implemented locally
@@ -39,7 +39,8 @@ allocation and bounded file reads use the same terminal quota path.
 `ExecuteAsync` accepts an immutable `JqExecutionPolicy` for stricter allowances.
 Input/output/allocation-work/value-work counters are cumulative; regex work/time limits
 apply to each engine search. Every execution creates an independent budget;
-command binding keeps its separate default allowance. Structural and regex
+command binding keeps its separate default work allowance within the same
+execution memory scope. Structural and regex
 workspace ceilings stay fixed. Utf8Regex 0.3.0 lacks cancellation-token overloads;
 cancellation is checked before and after bounded synchronous regex calls.
 See [REGEX.md](REGEX.md) for the engine profile and cancellation limits.
@@ -52,6 +53,14 @@ per-invocation caps. Current coverage and conservative retention caveats are
 listed in EXECUTION_POLICY.md. `MaximumAllocationWorkBytes` is an independent
 cumulative work guard; its deprecated `MaximumAllocationBytes` alias is retained
 until the next breaking API release.
+
+Try-style invocation factories admit copied argument/environment vectors and
+derived directory storage before allocation. The invocation owns a scope and
+borrows the supplied budget; default execution overloads forward that budget.
+Dispose only after all borrowing commands finish. Binding JSON values and path
+work allocate during execution, so their admission survives the parsed result,
+evaluation and cleanup. Legacy constructors create caller-owned snapshots without
+admission; their execution can still receive an explicit shared budget.
 
 ## IO ownership
 

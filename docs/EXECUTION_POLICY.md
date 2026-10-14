@@ -56,11 +56,23 @@ Downstream closure ends production before subsequent outputs or charges.
 JSON strings and object keys preflight their decoded UTF-16 length and string
 allocation before materialization, including Unicode and other JSON escapes.
 
-Command recognition and argument binding happen in `Jq.TryParse`, before an
-execution policy is selected. That phase retains its separate default allowance
-and exit-2 argument-error contract, including JSON-valued arguments. Execution
-snapshots, compilation and IO then use the supplied policy. This separation
-keeps command reuse independent of host and execution state.
+`Jq.TryParse` recognizes a command name and borrows the immutable invocation.
+Binding options/JSON arguments happens afresh during execution, with a separate
+default work allowance and the existing exit-2 argument-error contract. Its
+storage admission uses the same execution scope as evaluation and remains live
+through parsed-variable use and cleanup. Admission refusal reports status 5,
+including `--argjson` and `--jsonargs`, rather than becoming a JSON argument error.
+Execution snapshots, compilation and IO then use the supplied work policy.
+
+`JqCommandInvocation.TryCreateWithStandardDescriptors` and `TryCreate` reserve
+copied argument/environment vectors and derived-directory estimates before
+allocation. Refusal returns false with a null invocation. The returned invocation
+owns its scope; the supplied budget and immutable input strings remain borrowed.
+Keep input owners and the invocation live through every borrowing command's
+completion, then dispose it. Disposal is idempotent and neither cancels work nor
+disposes the root. Existing execution overloads borrow its associated budget;
+explicit execution budgets must share that allowance. Legacy constructors do
+not perform shared admission for their caller-owned snapshots.
 
 ## Cooperative memory admission (in progress)
 
@@ -116,8 +128,8 @@ remain conservatively charged until that evaluation finishes. TODO: use narrower
 existing generator/aggregate boundaries where profiling shows a material gap,
 without introducing per-object reservations or alias-graph tracking.
 
-Command-binding admission and remaining allocation-site audits are still
-required. This is partial admission coverage, not a
+Remaining allocation-site audits and package qualification are still required.
+This is partial admission coverage, not a
 live-memory or process-memory guarantee.
 The cumulative work policy above remains independent. Estimated reserved bytes are separate from actual
 managed allocation measurements.

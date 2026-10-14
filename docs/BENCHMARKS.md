@@ -28,8 +28,10 @@ SHA-256 on every execution. A correctness-only smoke command avoids timing:
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --smoke
 ```
 
-Command binding is measured separately. Reusing a command still compiles its
-filter on every execution. Output consumption and checksum costs are included.
+Command recognition has a separate local benchmark. Reusing a command binds
+options/JSON arguments and compiles its filter on every execution. Output
+consumption and checksum costs are included. Historical reports below identify
+their measured revisions; they do not qualify the governed-memory changes.
 The verified-consumption host replaces earlier discard/capture hosts, so older
 timings are not directly comparable to measurements with this harness.
 

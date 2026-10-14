@@ -18,7 +18,7 @@ internal sealed class LocalWorkload
     private LocalWorkload(string[] arguments, byte[] input, string output)
     {
         Arguments = arguments;
-        _command = BenchmarkExecution.Bind(arguments);
+        _command = BenchmarkExecution.Recognize(arguments);
         _input = input;
         _expected = OutputDigest.FromBytes(Encoding.UTF8.GetBytes(output));
     }
@@ -28,7 +28,7 @@ internal sealed class LocalWorkload
     public async Task<long> ExecuteAsync(bool bind)
     {
         using var host = new BenchmarkHost(_input, false);
-        int exit = await (bind ? BenchmarkExecution.Bind(Arguments) : _command)
+        int exit = await (bind ? BenchmarkExecution.Recognize(Arguments) : _command)
             .ExecuteAsync(host, CancellationToken.None).ConfigureAwait(false);
         var result = host.Finish(exit);
         BenchmarkExecution.Verify(result, _expected);

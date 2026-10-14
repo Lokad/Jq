@@ -65,7 +65,7 @@ if (args is ["--process-fixture", var fixture])
 if (args is ["--smoke"])
 {
     var benchmarks = new CommandBenchmarks();
-    benchmarks.BindCommand();
+    benchmarks.RecognizeCommand();
     await benchmarks.ParseAndExecute();
     await benchmarks.ReusedCommandRange();
     await benchmarks.ScalarExtraction();
@@ -90,7 +90,7 @@ if (args is ["--stress"])
 
 BenchmarkSwitcher.FromAssembly(typeof(CommandBenchmarks).Assembly).Run(args);
 
-// Binding alone is measured separately. Reused commands still compile their
+// Recognition is measured separately. Every execution binds options/JSON and compiles its
 // filters on every ExecuteAsync. All execution cases check complete output,
 // status and separate stderr against independently constructed expectations.
 [MemoryDiagnoser]
@@ -109,7 +109,7 @@ public class CommandBenchmarks
     private readonly LocalWorkload _parse = LocalWorkload.ParseAndExecute();
 
     [Benchmark]
-    public Jq BindCommand() => BenchmarkExecution.Bind(_parse.Arguments);
+    public Jq RecognizeCommand() => BenchmarkExecution.Recognize(_parse.Arguments);
 
     [Benchmark]
     public Task<long> ParseAndExecute() => _parse.ExecuteAsync(true);

@@ -1,0 +1,191 @@
+namespace Lokad.Jq.Tests;
+
+public sealed partial class JqTests
+{
+    [Fact]
+    public void Jq_GovernedInvocationFailureRefundsUnusedSnapshotAdmission()
+    {
+        var memory = new TestMemoryBudget(1024);
+        Assert.Throws<OutOfMemoryException>(() => JqCommandInvocation.TryCreateWithStandardDescriptors(
+            "jq", new FailingSnapshotArguments(), [], memory, out _));
+        Assert.Equal(0, memory.ReservedBytes);
+        Assert.True(memory.PeakBytes > 0);
+        Assert.True(JqCommandInvocation.TryCreateWithStandardDescriptors("jq", ["."], [],
+            memory, out JqCommandInvocation? invocation));
+        invocation.Dispose();
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jq_GovernedInvocationFactoriesPreserveExplicitClock(bool explicitDescriptors)
+    {
+        var memory = new TestMemoryBudget(128 * 1024);
+        var clock = new JqClock(new FixedClock(FixedInstant), TimeZoneInfo.Utc);
+        JqCommandInvocation? invocation;
+        bool admitted = explicitDescriptors
+            ? JqCommandInvocation.TryCreate("jq", ["-n", "now"], [], JqPath.Root,
+                JqFileDescriptor.StdIn, JqFileDescriptor.StdOut, JqFileDescriptor.StdErr, clock, memory, out invocation)
+            : JqCommandInvocation.TryCreateWithStandardDescriptors("jq", ["-n", "now"], [], clock, memory, out invocation);
+        Assert.True(admitted);
+        Assert.NotNull(invocation);
+        using (invocation)
+        {
+            Assert.Same(clock, invocation.Clock);
+            var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
+            var host = new MockFileSystem();
+            Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(FixedInstant.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n",
+                host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        }
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jq_GovernedBindingRefusalKeepsTerminalCategoryForJsonArguments(bool positional)
+    {
+        var memory = new TestMemoryBudget(32 * 1024);
+        string json = "[" + string.Join(',', Enumerable.Repeat("0", 10000)) + "]";
+        string[] arguments = positional
+            ? ["-n", "$ARGS.positional[0] | length", "--jsonargs", json]
+            : ["-n", "--argjson", "data", json, "$data | length"];
+        var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", arguments, []);
+        var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
+        Assert.Equal(0, memory.ReservedBytes);
+        var host = new MockFileSystem();
+
+        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(0, host.ReadBytesCallCount);
+        Assert.Empty(host.ClosedDescriptors);
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedInvocationRefusalPreservesCallerAdmission()
+    {
+        var memory = new TestMemoryBudget(64);
+        using var caller = memory.CreateScope();
+        Assert.True(caller.TryReserve(8, out IMemoryReservation? retained));
+        using (retained)
+        {
+            Assert.False(JqCommandInvocation.TryCreateWithStandardDescriptors("jq",
+                ["."], [], caller, out JqCommandInvocation? invocation));
+            Assert.Null(invocation);
+            Assert.Equal(8, memory.ReservedBytes);
+            Assert.Equal(8, retained.Bytes);
+            Assert.True(caller.TryReserve(56, out IMemoryReservation? available));
+            available.Dispose();
+        }
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_GovernedInvocationSnapshotsStayChargedAcrossReuseAndBorrowTheirRoot()
+    {
+        var memory = new TestMemoryBudget(128 * 1024);
+        string[] arguments = ["-n", "-r", "--arg", "name", "original", "$name"];
+        JqEnvironmentVariable[] environment = [new("PWD", "/work")];
+        Assert.True(JqCommandInvocation.TryCreateWithStandardDescriptors("jq", arguments,
+            environment, memory, out JqCommandInvocation? invocation));
+        using (invocation)
+        {
+            long retained = memory.ReservedBytes;
+            Assert.True(retained > 0);
+            arguments[4] = "changed";
+            environment[0] = new JqEnvironmentVariable("PWD", "/different");
+            Assert.Equal("/work", invocation.CurrentDirectory.Path);
+            var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
+            Assert.Equal(retained, memory.ReservedBytes);
+            for (int repeat = 0; repeat < 3; repeat++)
+            {
+                var host = new MockFileSystem();
+                Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+                Assert.Equal("original\n", host.GetOutput(JqFileDescriptor.StdOut));
+                Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+                Assert.Equal(retained, memory.ReservedBytes);
+            }
+            invocation.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => invocation.Arguments);
+            Assert.Throws<ObjectDisposedException>(() => invocation.Environment);
+            Assert.Throws<ObjectDisposedException>(() => invocation.CurrentDirectory);
+            Assert.Throws<ObjectDisposedException>(() => Jq.TryParse(invocation));
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => command.ExecuteAsync(new MockFileSystem(), CancellationToken.None));
+            Assert.Equal(0, memory.ReservedBytes);
+            Assert.True(memory.TryReserve(128 * 1024, out IMemoryReservation? reused));
+            reused.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Jq_GovernedInvocationUsesExplicitDescriptorsAndPreservesArgumentErrors()
+    {
+        var memory = new TestMemoryBudget(128 * 1024);
+        var output = new JqFileDescriptor(10);
+        var error = new JqFileDescriptor(11);
+        Assert.True(JqCommandInvocation.TryCreate("jq", ["--argjson", "data", "invalid", "$data"],
+            [], JqPath.Root, JqFileDescriptor.StdIn, output, error, memory, out JqCommandInvocation? invocation));
+        using (invocation)
+        {
+            long retained = memory.ReservedBytes;
+            var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
+            var host = new MockFileSystem();
+            Assert.Equal(2, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.StartsWith("jq: invalid JSON for --argjson data:", host.GetOutput(error), StringComparison.Ordinal);
+            Assert.Empty(host.GetOutput(output));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Empty(host.ClosedDescriptors);
+            Assert.Equal(retained, memory.ReservedBytes);
+        }
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_GovernedInvocationAndBindingStayLiveThroughOverlappingWritesAndCleanup()
+    {
+        var memory = new TestMemoryBudget(128 * 1024);
+        Assert.True(JqCommandInvocation.TryCreateWithStandardDescriptors("jq", [".", "/input"],
+            [], memory, out JqCommandInvocation? invocation));
+        using (invocation)
+        {
+            long retained = memory.ReservedBytes;
+            var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
+            var firstInner = new MockFileSystem();
+            var secondInner = new MockFileSystem();
+            firstInner.AddFile("/input", "1\n");
+            secondInner.AddFile("/input", "2\n");
+            var first = new MemoryBorrowHost(firstInner) { DelayCleanup = true };
+            var second = new MemoryBorrowHost(secondInner) { DelayCleanup = true };
+            Task<int> left = command.ExecuteAsync(first, CancellationToken.None);
+            await first.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            long firstDemand = memory.ReservedBytes;
+            Task<int> right = command.ExecuteAsync(second, CancellationToken.None);
+            await second.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(memory.ReservedBytes > firstDemand);
+            first.Release.SetResult();
+            second.Release.SetResult();
+            await Task.WhenAll(first.Closing.Task, second.Closing.Task).WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(memory.ReservedBytes > retained);
+            first.CloseRelease.SetResult();
+            second.CloseRelease.SetResult();
+            Assert.Equal(new[] { 0, 0 }, await Task.WhenAll(left, right));
+            Assert.Equal("1\n", firstInner.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal("2\n", secondInner.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(retained, memory.ReservedBytes);
+        }
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    private sealed class FailingSnapshotArguments : IReadOnlyList<string>
+    {
+        public int Count => 1;
+        public string this[int index] => throw new OutOfMemoryException("Simulated snapshot failure.");
+        public IEnumerator<string> GetEnumerator() => throw new NotSupportedException();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+}

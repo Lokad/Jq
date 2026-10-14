@@ -22,7 +22,7 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
                     ? reservation.TryResize(bytes)
                     : memoryBudget.TryReserve(bytes, out _reservation);
                 if (!admitted)
-                    throw new JqQuotaException("memory budget exceeded");
+                    throw new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
             }
             catch (Exception exception) when (exception is ArgumentException or OverflowException)
             {

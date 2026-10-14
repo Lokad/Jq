@@ -75,10 +75,10 @@ internal static class JqCommandLineParser
         JqFileDescriptor stdOut,
         JqFileDescriptor stdErr,
         IReadOnlyList<JqEnvironmentVariable> environment,
-        JqClock? clock)
+        JqClock? clock,
+        JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(environment);
-        var budget = new JqBudget(CancellationToken.None);
         var runtime = new JqRuntime(budget);
         try
         {
@@ -86,6 +86,7 @@ internal static class JqCommandLineParser
                 throw new JqException("argument count exceeds the 4096 limit");
             foreach (var argument in args)
                 budget.ChargeInput(Encoding.UTF8.GetByteCount(argument));
+            budget.ReserveBytes(128 + 160L * args.Count + 160L * environment.Count);
             var special = ExtractSpecialArguments(args, runtime);
             if (special.Error != null)
                 return Error(special.Error);
@@ -148,7 +149,7 @@ internal static class JqCommandLineParser
                 foreach (JqEnvironmentVariable variable in environment)
                 {
                     budget.ChargeNode();
-                    budget.ChargeString(variable.Name.Length + variable.Value.Length);
+                    budget.ChargeStringWork(variable.Name.Length + variable.Value.Length);
                     environmentObject[variable.Name] = JsonValue.Create(variable.Value);
                 }
                 special.Variables["ENV"] = environmentObject;
@@ -187,7 +188,8 @@ internal static class JqCommandLineParser
                 Clock = clock
             };
         }
-        catch (Exception ex) when (ex is JqException or FormatException or JqPathException)
+        catch (Exception ex) when (ex is not JqQuotaException { IsMemoryAdmission: true }
+            && ex is JqException or FormatException or JqPathException)
         {
             return Error($"jq: {ex.Message}");
         }
@@ -199,7 +201,7 @@ internal static class JqCommandLineParser
             var maximumLength = (long)path.Length + (path.StartsWith('/') ? 0L : currentDirectory.Path.Length + 1L);
             // Reserve fixed path objects, combined/normalized strings, segment tables and
             // validation copies, including per-segment allocations for many short segments.
-            budget.ChargeAllocationWork(128 + 64 * maximumLength);
+            budget.ChargeAllocation(128 + 64 * maximumLength);
         }
 
         static bool TryParseArguments(IReadOnlyList<string> arguments, out JqArgs parsed,
@@ -437,7 +439,8 @@ internal static class JqCommandLineParser
                     continue;
                 }
                 try { variables[name] = runtime.ParseJson(args[++i]); }
-                catch (JqException ex) { return SpecialArguments.Failure($"jq: invalid JSON for --argjson {name}: {ex.Message}"); }
+                catch (JqException ex) when (ex is not JqQuotaException { IsMemoryAdmission: true })
+                { return SpecialArguments.Failure($"jq: invalid JSON for --argjson {name}: {ex.Message}"); }
                 continue;
             }
 
@@ -605,7 +608,8 @@ internal static class JqCommandLineParser
             }
 
             try { positional.Add(runtime.ParseJson(entry.Text)); }
-            catch (JqException ex) { return SpecialArguments.Failure($"jq: invalid JSON argument: {ex.Message}"); }
+            catch (JqException ex) when (ex is not JqQuotaException { IsMemoryAdmission: true })
+            { return SpecialArguments.Failure($"jq: invalid JSON argument: {ex.Message}"); }
         }
 
         return new SpecialArguments(options, operands, variables, positional, fromFile, fileVariables, libraryDirs, null);

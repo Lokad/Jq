@@ -7,9 +7,9 @@ namespace Lokad.Jq;
 /// <summary>An embeddable jq command whose IO is supplied by the caller.</summary>
 public sealed class Jq
 {
-    private readonly JqInvocation _invocation;
+    private readonly JqCommandInvocation _invocation;
 
-    private Jq(JqInvocation invocation)
+    private Jq(JqCommandInvocation invocation)
     {
         _invocation = invocation;
     }
@@ -17,10 +17,12 @@ public sealed class Jq
     /// <summary>Returns null for another command name; jq argument errors are reported on execution.</summary>
     public static Jq? TryParse(JqCommandInvocation invocation)
     {
+        ArgumentNullException.ThrowIfNull(invocation);
+        invocation.CheckLive();
         if (!IsJqName(invocation.CommandName))
             return null;
 
-        return new Jq(JqCommandLineParser.Parse(invocation.Arguments, invocation.CurrentDirectory, invocation.StdIn, invocation.StdOut, invocation.StdErr, invocation.Environment, invocation.Clock));
+        return new Jq(invocation);
     }
 
     /// <summary>Executes with host-mediated IO; cancellation propagates to the caller.</summary>
@@ -32,7 +34,8 @@ public sealed class Jq
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(policy);
-        return JqExecutor.ExecuteAsync(host, _invocation, policy, null, cancellationToken);
+        _invocation.CheckLive();
+        return JqExecutor.ExecuteAsync(host, _invocation, policy, _invocation.MemoryBudget, cancellationToken);
     }
 
     /// <summary>Executes using a borrowed host memory allowance and the default work policy.</summary>
@@ -47,6 +50,7 @@ public sealed class Jq
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(memoryBudget);
+        _invocation.CheckLive();
         return JqExecutor.ExecuteAsync(host, _invocation, policy, memoryBudget, cancellationToken);
     }
 

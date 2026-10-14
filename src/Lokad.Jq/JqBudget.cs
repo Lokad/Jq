@@ -97,7 +97,7 @@ internal sealed class JqBudget : IDisposable
     {
         CheckCancellation();
         if (bytes < 0 || bytes > long.MaxValue - _storage.Bytes)
-            throw new JqQuotaException("memory budget exceeded");
+            throw new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
         if (bytes != 0) _storage.Resize(_storage.Bytes + bytes);
     }
 

@@ -12,11 +12,25 @@ namespace Lokad.Jq;
 
 internal static class JqExecutor
 {
-    public static async Task<int> ExecuteAsync(IJqHost host, JqInvocation invocation,
+    public static async Task<int> ExecuteAsync(IJqHost host, JqCommandInvocation commandInvocation,
         JqExecutionPolicy policy, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var memoryScope = memoryBudget?.CreateScope();
+        using var bindingBudget = new JqBudget(JqExecutionPolicy.Default, memoryScope, cancellationToken);
+        JqInvocation invocation;
+        try
+        {
+            invocation = JqCommandLineParser.Parse(commandInvocation.Arguments,
+                commandInvocation.CurrentDirectory, commandInvocation.StdIn, commandInvocation.StdOut,
+                commandInvocation.StdErr, commandInvocation.Environment, commandInvocation.Clock, bindingBudget);
+        }
+        catch (JqQuotaException exception) when (exception.IsMemoryAdmission)
+        {
+            await host.AppendAsync(commandInvocation.StdErr,
+                "jq: memory budget exceeded\n"u8.ToArray(), cancellationToken).ConfigureAwait(false);
+            return 5;
+        }
         if (invocation.Error != null)
         {
             await WriteErrorAsync(host, invocation, invocation.Error, cancellationToken).ConfigureAwait(false);

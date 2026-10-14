@@ -127,7 +127,8 @@ Regex patterns and per-search engine work have additional limits in `JqRegexCach
 counters per call; the default overload preserves these limits. Execution
 exhaustion reports status 5 and cannot be caught by jq handlers. Cancellation and
 host failures propagate separately. Command binding keeps its independent default
-allowance; structural and regex workspace ceilings remain fixed. See
+work allowance during execution and shares storage admission with evaluation;
+structural and regex workspace ceilings remain fixed. See
 [EXECUTION_POLICY.md](EXECUTION_POLICY.md) for configured versus fixed limits.
 Finite limits do not establish upstream conformance or excuse missing semantics.
 

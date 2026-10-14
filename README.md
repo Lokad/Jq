@@ -11,13 +11,17 @@ Implement `IJqHost` for your application's byte streams and virtual files, then:
 ```csharp
 using Lokad.Jq;
 
-static async Task<int> SelectNamesAsync(IJqHost host, CancellationToken cancellationToken)
+static async Task<int> SelectNamesAsync(IJqHost host, IMemoryBudget memoryBudget, CancellationToken cancellationToken)
 {
-    var invocation = JqCommandInvocation.CreateWithStandardDescriptors(
-        "jq", ["-r", ".items[].name"], []);
-    var command = Jq.TryParse(invocation)
-        ?? throw new InvalidOperationException("Expected a jq command.");
-    return await command.ExecuteAsync(host, cancellationToken);
+    if (!JqCommandInvocation.TryCreateWithStandardDescriptors(
+        "jq", ["-r", ".items[].name"], [], memoryBudget, out var invocation))
+        return 5;
+    using (invocation)
+    {
+        var command = Jq.TryParse(invocation)
+            ?? throw new InvalidOperationException("Expected a jq command.");
+        return await command.ExecuteAsync(host, cancellationToken);
+    }
 }
 ```
 
@@ -26,7 +30,16 @@ Supply UTF-8 JSON on `JqFileDescriptor.StdIn`; output and diagnostics go to
 passed to the `JqCommandInvocation` constructor. Arguments exclude the command
 name and are already tokenized. No shell quoting or expansion happens here.
 `TryParse` returns null for another executable name; jq argument/filter errors
-are reported when executing. Cancellation propagates as cancellation.
+are reported when executing. Option/JSON argument binding and filter compilation
+happen during each execution. Cancellation propagates as cancellation.
+
+The host implements `IMemoryBudget` and shares one allowance across cooperating
+consumers. A governed invocation owns admission for its copied argument/environment
+vectors and derived directory; argument strings and explicit host inputs stay
+borrowed from the caller. Keep their owners and the invocation alive through all
+reused/concurrent commands, then dispose the invocation. Existing execution
+overloads automatically borrow its budget. Explicit execution hooks also work
+with caller-owned invocations constructed by the legacy APIs.
 
 Pass a `JqExecutionPolicy` to `ExecuteAsync(host, policy, cancellationToken)`
 to reduce per-execution resource allowances. Existing calls retain the defaults;

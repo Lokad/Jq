@@ -22,7 +22,7 @@ internal static class StressChecks
         async Task CheckAsync(string[] arguments, byte[] bytes, JqExecutionPolicy policy, int status, string output)
         {
             using var host = new BenchmarkHost(bytes, true);
-            int exit = await BenchmarkExecution.Bind(arguments).ExecuteAsync(host, policy, cancellationToken).ConfigureAwait(false);
+            int exit = await BenchmarkExecution.Recognize(arguments).ExecuteAsync(host, policy, cancellationToken).ConfigureAwait(false);
             var result = host.Finish(exit);
             if (result.ExitCode != status || !result.Output.AsSpan().SequenceEqual(Encoding.UTF8.GetBytes(output))
                 || (status == 0 ? result.Error.Length != 0 : result.Error.Length == 0))

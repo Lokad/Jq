@@ -89,7 +89,7 @@ internal sealed class BenchmarkHost : IJqHost, IDisposable
 
 internal static class BenchmarkExecution
 {
-    public static Jq Bind(string[] arguments) =>
+    public static Jq Recognize(string[] arguments) =>
         Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", arguments, []))
         ?? throw new InvalidOperationException("Expected jq command.");
 
@@ -97,7 +97,7 @@ internal static class BenchmarkExecution
         string[] arguments, byte[] input, bool capture, CancellationToken cancellationToken)
     {
         using var host = new BenchmarkHost(input, capture);
-        var command = Bind(arguments);
+        var command = Recognize(arguments);
         int exit = await command.ExecuteAsync(host, cancellationToken).ConfigureAwait(false);
         return host.Finish(exit);
     }

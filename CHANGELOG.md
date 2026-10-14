@@ -8,8 +8,9 @@
   and stay charged through awaited writes and descriptor cleanup. Cursor buffers,
   streaming token capacity and hosted file reads also reserve before allocation;
   successful read results retain their charge until decoding finishes. Coverage
-  is partial; command ownership and the remaining allocation-site audit are still
-  pending. Existing overloads enforce the independent work/I/O/structural policy.
+  is partial; the remaining allocation-site audit and package qualification are
+  pending. Existing overloads enforce the independent work/I/O/structural policy
+  and forward a governed invocation's associated budget.
 - Govern retained regex pattern/workspace estimates and operation-owned UTF-8
   subjects and detailed captures. Failed compilation/matching refunds admission;
   nested replacements retain parent charges. This preserves the existing engine
@@ -24,6 +25,11 @@
   `MaximumAllocationBytes` only as a deprecated alias until the next breaking API
   release. Remove obsolete partial-object copy accounting; reserve completed
   objects and update work-policy fixtures and benchmark policy provenance.
+- Govern invocation snapshots with Try-style factories and owned disposal, while
+  borrowing the caller's root and immutable inputs. Command recognition borrows
+  that invocation; allocating option/JSON binding now runs within each execution's
+  shared scope. Keep ordinary argument errors at status 2 and admission refusal
+  at terminal status 5, including JSON arguments and positional JSON.
 
 ## 0.1.0 — pending NuGet publication
 
