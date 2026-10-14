@@ -38,6 +38,11 @@
   through pending host writes, and avoid large intermediate message copies. A
   refused payload reports terminal status 5 using a small immutable diagnostic,
   preserving earlier output and the caller's existing reservations.
+- Complete the allocation-site audit with admission for generated paths/stream
+  events, walk/flatten state, constant module metadata copies, scalar array
+  wrappers, arithmetic/entry copies and affix substrings. Remove unused legacy
+  line-buffer/encoding helpers, a dead newline counter and an unnecessary clone
+  in index-error rendering. Keep useful semantic regressions and work guards.
 
 ## 0.1.0 — pending NuGet publication
 

@@ -136,6 +136,9 @@ coarse record estimates, including stored scalar wrappers. Unicode matching,
 path slices and trimming reserve large scratch lists/builders before allocation.
 Module metadata copies use record storage; newly compiled cache keys and
 definitions keep persistent admission across later records.
+Constant module metadata copies, generated JSON paths/stream events, walk and
+flatten scratch state, entry/arithmetic copies, string-to-array wrappers and
+affix substrings also reserve their substantial backing storage before creation.
 
 Within a single outer evaluation, discarded value and builder temporaries may
 remain conservatively charged until that evaluation finishes. TODO: use narrower

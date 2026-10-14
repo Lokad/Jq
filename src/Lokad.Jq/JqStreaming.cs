@@ -1,5 +1,4 @@
 using System;
-using System;
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
 
@@ -19,6 +18,7 @@ internal sealed class TostreamFilter : JqFilter
             if (input is not JsonObject obj || obj.Count == 0)
             {
                 context.Budget.ChargeNode();
+                context.Budget.ReserveBytes(176);
                 yield return new JsonArray { new JsonArray(), context.Runtime.Clone(input) };
                 yield break;
             }
@@ -37,6 +37,7 @@ internal sealed class TostreamFilter : JqFilter
             }
             if (node is JsonObject props && props.Count > 0)
             {
+                context.Budget.ReserveBytes(24L * props.Count);
                 var keys = new List<string>();
                 foreach (var property in props)
                     keys.Add(property.Key);
@@ -46,7 +47,7 @@ internal sealed class TostreamFilter : JqFilter
                 continue;
             }
             context.Budget.ChargeNode();
-            yield return StreamLeaf(segments, context.Runtime.Clone(node));
+            yield return StreamLeaf(segments, context.Runtime.Clone(node), context.Budget);
             while (true)
             {
                 if (frames.Count == 0)
@@ -65,7 +66,7 @@ internal sealed class TostreamFilter : JqFilter
                     }
                     frames.Pop();
                     context.Budget.ChargeNode();
-                    yield return StreamClose(segments);
+                    yield return StreamClose(segments, context.Budget);
                     segments.RemoveAt(segments.Count - 1);
                     node = parent;
                     continue;
@@ -85,7 +86,7 @@ internal sealed class TostreamFilter : JqFilter
                     }
                     frames.Pop();
                     context.Budget.ChargeNode();
-                    yield return StreamClose(segments);
+                    yield return StreamClose(segments, context.Budget);
                     segments.RemoveAt(segments.Count - 1);
                     node = objParent;
                     continue;
@@ -94,16 +95,18 @@ internal sealed class TostreamFilter : JqFilter
         }
     }
 
-    private static JsonArray StreamLeaf(List<JsonNode?> segments, JsonNode? leaf)
+    private static JsonArray StreamLeaf(List<JsonNode?> segments, JsonNode? leaf, JqBudget budget)
     {
+        budget.ReserveBytes(176 + 88L * segments.Count);
         var path = new JsonArray();
         foreach (JsonNode? segment in segments)
             path.Add(segment?.DeepClone());
         return new JsonArray { path, leaf };
     }
 
-    private static JsonArray StreamClose(List<JsonNode?> segments)
+    private static JsonArray StreamClose(List<JsonNode?> segments, JqBudget budget)
     {
+        budget.ReserveBytes(152 + 88L * segments.Count);
         var path = new JsonArray();
         foreach (JsonNode? segment in segments)
             path.Add(segment?.DeepClone());
@@ -197,13 +200,22 @@ internal sealed class TruncateStreamFilter(JqFilter Stream) : JqFilter
             if (depth >= 0 && pathLength <= depth)
                 continue;
             int start = depth < 0 ? Math.Max(0, pathLength + depth) : Math.Min(depth, pathLength);
+            context.Budget.ReserveBytes(128 + 24L * pair.Count);
             var truncated = new JsonArray();
             for (int i = start; i < pathLength; i++)
-                truncated.Add(path![i]?.DeepClone());
+            {
+                JsonNode? segment = path is { } actualPath ? actualPath[i] : null;
+                context.Budget.ReserveArrayItem(segment);
+                context.Budget.ReserveCloneStorage(segment);
+                truncated.Add(segment?.DeepClone());
+            }
             context.Budget.ChargeNode();
             var reshaped = new JsonArray { truncated };
             for (int i = 1; i < pair.Count; i++)
+            {
+                context.Budget.ReserveArrayItem(pair[i]);
                 reshaped.Add(context.Runtime.Clone(pair[i]));
+            }
             yield return reshaped;
         }
     }

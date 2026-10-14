@@ -359,16 +359,18 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
 
     private sealed record Walklevel(string? Key, int Index, List<JsonNode?> Outputs);
 
-    private static void FillWalkChildren(WalkFrame frame)
+    private static void FillWalkChildren(WalkFrame frame, JqBudget budget)
     {
         if (frame.Node is JsonArray array)
         {
+            budget.ReserveBytes(144L * array.Count);
             for (int index = 0; index < array.Count; index++)
                 frame.Children.Add(new WalkChild(null, index, array[index]));
             return;
         }
         if (frame.Node is JsonObject obj)
         {
+            budget.ReserveBytes(144L * obj.Count);
             foreach (var property in obj)
                 frame.Children.Add(new WalkChild(property.Key, -1, property.Value));
         }
@@ -382,7 +384,10 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
             var walked = new JsonArray();
             foreach (Walklevel part in frame.Parts)
                 foreach (JsonNode? output in part.Outputs)
+                {
+                    context.Budget.ReserveArrayItem(output);
                     walked.Add(context.Runtime.Detach(output));
+                }
             return walked;
         }
         if (frame.Node is JsonObject)
@@ -391,7 +396,10 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
             var walked = new JsonObject();
             foreach (Walklevel part in frame.Parts)
                 if (part.Key is string name && part.Outputs.Count > 0)
+                {
+                    context.Budget.ReserveObjectItem(part.Outputs[0]);
                     walked.Add(name, context.Runtime.Detach(part.Outputs[0]));
+                }
             return walked;
         }
         return frame.Node;
@@ -421,6 +429,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
         {
             context.Budget.CheckCancellation();
             context.Budget.ChargeNode();
+            context.Budget.ReserveBytes(24);
             outputs.Add(value);
         }
         return outputs;
@@ -432,7 +441,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         var stack = new Stack<WalkFrame>();
         var root = new WalkFrame(node, null, -1);
-        FillWalkChildren(root);
+        FillWalkChildren(root, context.Budget);
         stack.Push(root);
         while (stack.Count > 0)
         {
@@ -443,7 +452,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
                 WalkChild child = frame.Children[frame.NextChild];
                 frame.NextChild++;
                 WalkFrame childFrame = new WalkFrame(child.Node, child.Key, child.Index);
-                FillWalkChildren(childFrame);
+                FillWalkChildren(childFrame, context.Budget);
                 stack.Push(childFrame);
                 continue;
             }
@@ -482,7 +491,7 @@ internal sealed class PathsFilter(JqFilter? Condition) : JqFilter
                 continue;
             if (Condition is null)
             {
-                yield return JqPaths.PathToJson(pair.Segments);
+                yield return JqPaths.PathToJson(pair.Segments, context.Budget);
                 continue;
             }
             // Like select, every condition output counts: each truthy probe keeps
@@ -490,7 +499,7 @@ internal sealed class PathsFilter(JqFilter? Condition) : JqFilter
             foreach (JsonNode? probe in Condition.Evaluate(pair.Value, context, environment))
             {
                 if (Truthy(probe))
-                    yield return JqPaths.PathToJson(pair.Segments);
+                    yield return JqPaths.PathToJson(pair.Segments, context.Budget);
             }
         }
     }

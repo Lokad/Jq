@@ -376,6 +376,8 @@ internal static class JqExecutor
             string which = raw ? "rawfile" : "slurpfile";
             try
             {
+                long pathLength = (long)path.Length + invocation.WorkingDirectory.Path.Length + 1;
+                context.Budget.ChargeAllocation(128 + 64 * pathLength);
                 var resolved = JqPathResolution.ResolveArgument(path, invocation.WorkingDirectory);
                 using var content = await ReadFileAsync(resolved, host, context.Budget, cancellationToken).ConfigureAwait(false);
                 ReadOnlyMemory<byte> bytes = content.Content;
@@ -430,18 +432,6 @@ internal static class JqExecutor
         if (slash <= 0)
             return "/";
         return canonicalPath[..slash];
-    }
-
-    private static int CountNewlines(ReadOnlyMemory<byte> bytes, int start, int end)
-    {
-        int count = 0;
-        ReadOnlySpan<byte> span = bytes.Span;
-        for (int index = start; index < end; index++)
-        {
-            if (span[index] == (byte)10)
-                count++;
-        }
-        return count;
     }
 
     private static async Task<BoundedReadResult.Complete> ReadFileAsync(

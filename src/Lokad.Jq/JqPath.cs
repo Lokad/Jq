@@ -101,15 +101,18 @@ internal static class JqPaths
         {
             if (!pair.Tracked)
                 throw new JqException(InvalidResult(pair.Value, context));
+            context.Budget.ReserveBytes(24);
             collected.Add(pair.Segments);
         }
         return collected;
     }
 
-    internal static IReadOnlyList<JqValueSegment> Extend(IReadOnlyList<JqValueSegment> segments, JqValueSegment segment)
+    internal static IReadOnlyList<JqValueSegment> Extend(IReadOnlyList<JqValueSegment> segments,
+        JqValueSegment segment, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(segments);
         ArgumentNullException.ThrowIfNull(segment);
+        budget.ReserveBytes(128 + 16L * (segments.Count + 1));
         var extended = new List<JqValueSegment>(segments.Count + 1);
         foreach (JqValueSegment existing in segments)
             extended.Add(existing);
@@ -128,12 +131,18 @@ internal static class JqPaths
             throw new JqException(InvalidAccess(segment.ToJson(), pair.Value, context));
     }
 
-    internal static JsonNode PathToJson(IReadOnlyList<JqValueSegment> segments)
+    internal static JsonNode PathToJson(IReadOnlyList<JqValueSegment> segments, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(segments);
+        budget.ReserveBytes(64 + 88L * segments.Count);
         var path = new JsonArray();
         foreach (JqValueSegment segment in segments)
+        {
+            if (segment is SliceObjectSegment slice) budget.ReserveCloneStorage(slice.Raw);
+            else if (segment is InvalidSegment invalid) budget.ReserveCloneStorage(invalid.Raw);
+            else if (segment is SliceSegment) budget.ReserveBytes(384);
             path.Add(segment.ToJson());
+        }
         return path;
     }
 
@@ -1120,7 +1129,7 @@ internal sealed class PathBuiltinFilter(JqFilter Paths) : JqFilter
         {
             if (!pair.Tracked)
                 throw new JqException(JqPaths.InvalidResult(pair.Value, context));
-            yield return JqPaths.PathToJson(pair.Segments);
+            yield return JqPaths.PathToJson(pair.Segments, context.Budget);
         }
     }
 }
@@ -1171,6 +1180,7 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
                 yield return new JqValuePath(pair.Segments, value, false);
                 continue;
             }
+            context.Budget.ReserveBytes(24L * (pair.Segments.Count + segments.Count));
             var extended = new List<JqValueSegment>(pair.Segments);
             extended.AddRange(segments);
             yield return new JqValuePath(extended, value, true);

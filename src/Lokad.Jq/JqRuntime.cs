@@ -1,5 +1,4 @@
 using System;
-using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -645,14 +644,22 @@ internal sealed partial class JqRuntime(JqBudget budget)
         if (l is JsonArray la && r is JsonArray ra)
         {
             var arr = new JsonArray();
-            foreach (var v in la.Concat(ra)) arr.Add(Clone(v));
+            foreach (var value in la.Concat(ra))
+            {
+                budget.ReserveArrayItem(value);
+                arr.Add(Clone(value));
+            }
             return arr;
         }
         if (l is JsonObject lo && r is JsonObject ro)
         {
             if (Clone(lo) is not JsonObject obj)
                 throw new InvalidOperationException("Expected object clone.");
-            foreach (var kv in ro) obj[kv.Key] = Clone(kv.Value);
+            foreach (var entry in ro)
+            {
+                budget.ReserveObjectItem(entry.Value);
+                obj[entry.Key] = Clone(entry.Value);
+            }
             return obj;
         }
         throw new JqRuntimeException(TypeError(l, r, "cannot be added"));
@@ -731,6 +738,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             throw new InvalidOperationException("Expected object clone.");
         foreach (var property in right)
         {
+            budget.ReserveObjectItem(property.Value);
             if (merged.TryGetPropertyValue(property.Key, out JsonNode? existing)
                 && existing is JsonObject existingObject
                 && property.Value is JsonObject incomingObject)
@@ -1247,6 +1255,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
         if (input is JsonArray arr)
         {
+            budget.ReserveBytes(88L * arr.Count);
             var keys = new JsonArray();
             for (int index = 0; index < arr.Count; index++)
             {
@@ -1282,6 +1291,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
             foreach (var property in obj)
             {
                 budget.ChargeNode();
+                budget.ReserveBytes(248);
+                budget.ReserveObjectItem(property.Value);
                 var entry = new JsonObject();
                 entry["key"] = JsonValue.Create(property.Key);
                 entry["value"] = Clone(property.Value);
@@ -1294,6 +1305,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
             for (int index = 0; index < arr.Count; index++)
             {
                 budget.ChargeNode();
+                budget.ReserveBytes(248);
+                budget.ReserveObjectItem(arr[index]);
                 var entry = new JsonObject();
                 entry["key"] = JsonValue.Create(index);
                 entry["value"] = Clone(arr[index]);
@@ -1327,6 +1340,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             budget.ChargeNode();
             JsonNode? value = entry.TryGetPropertyValue("value", out JsonNode? direct) ? direct
                 : entry.TryGetPropertyValue("Value", out JsonNode? capitalized) ? capitalized : null;
+            budget.ReserveObjectItem(value);
             result[keyName] = Clone(value);
         }
         return result;
@@ -1373,6 +1387,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             pending.RemoveAt(pending.Count - 1);
             if (current is JsonArray nested && level != 0)
             {
+                budget.ReserveBytes(48L * nested.Count);
                 for (int index = nested.Count - 1; index >= 0; index--)
                     pending.Add((nested[index], level - 1));
                 continue;
@@ -1418,6 +1433,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             if (current is JsonArray nested)
             {
                 JsonNode? next = Subtract(level, JsonValue.Create(1));
+                budget.ReserveBytes(48L * nested.Count);
                 for (int index = nested.Count - 1; index >= 0; index--)
                     pending.Add((nested[index], next));
                 continue;
@@ -1493,7 +1509,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
         if (input is JsonArray arr)
         {
             var rev = new JsonArray();
-            for (var i = arr.Count - 1; i >= 0; i--) rev.Add(Clone(arr[i]));
+            for (var i = arr.Count - 1; i >= 0; i--)
+            {
+                budget.ReserveArrayItem(arr[i]);
+                rev.Add(Clone(arr[i]));
+            }
             return rev;
         }
         if (Number(Length(input)) == 0)
@@ -1531,7 +1551,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JsonNode Indices(JsonNode? input, JsonNode? needle)
     {
         var arr = new JsonArray();
-        foreach (var index in MatchingIndices(input, needle)) arr.Add(JsonValue.Create(index));
+        foreach (var index in MatchingIndices(input, needle))
+        {
+            budget.ReserveBytes(88);
+            arr.Add(JsonValue.Create(index));
+        }
         return arr;
     }
 
@@ -1640,14 +1664,20 @@ internal sealed partial class JqRuntime(JqBudget budget)
             : text.EndsWith(fix, StringComparison.Ordinal);
     }
 
-    internal static string TrimAffix(JsonNode? input, JsonNode? affix, bool left, bool right)
+    internal string TrimAffix(JsonNode? input, JsonNode? affix, bool left, bool right)
     {
         if (!TryGetString(input, out string? text) || text is null || !TryGetString(affix, out string? fix) || fix is null)
             throw new JqException((left ? "startswith" : "endswith") + "() requires string inputs");
         if (left && text.StartsWith(fix, StringComparison.Ordinal))
+        {
+            budget.ChargeString(text.Length - fix.Length);
             text = text[fix.Length..];
+        }
         if (right && text.EndsWith(fix, StringComparison.Ordinal))
+        {
+            budget.ChargeString(text.Length - fix.Length);
             text = text[..^fix.Length];
+        }
         return text;
     }
 
@@ -1702,6 +1732,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         foreach (var rune in text.EnumerateRunes())
         {
             budget.ChargeNode();
+            budget.ReserveBytes(88);
             arr.Add(rune.Value);
         }
         return arr;
@@ -1742,6 +1773,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             foreach (var rune in text.EnumerateRunes())
             {
                 budget.ChargeNode();
+                budget.ReserveBytes(88);
                 budget.ChargeString(rune.Utf16SequenceLength);
                 arr.Add(rune.ToString());
             }
@@ -1753,6 +1785,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             var end = text.IndexOf(delimiter, start, StringComparison.Ordinal);
             var length = (end < 0 ? text.Length : end) - start;
             budget.ChargeNode();
+            budget.ReserveBytes(88);
             budget.ChargeString(length);
             arr.Add(text.Substring(start, length));
             if (end < 0) break;
@@ -1782,7 +1815,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             {
                 if (!hasSepText)
                 {
-                    JsonNode accNode = JsonValue.Create(builder.ToString());
+                    JsonNode accNode = JsonValue.Create(budget.Finish(builder));
                     throw new JqRuntimeException(TypeName(accNode) + " (" + Serialize(accNode, false, null, false) + ") and " + TypeName(separator) + " (" + Serialize(separator, false, null, false) + ") cannot be added");
                 }
                 budget.Append(builder, sepText);
@@ -1802,7 +1835,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
             else
             {
-                JsonNode leftNode = JsonValue.Create(builder.ToString());
+                JsonNode leftNode = JsonValue.Create(budget.Finish(builder));
                 throw new JqRuntimeException(TypeName(leftNode) + " (" + Serialize(leftNode, false, null, false) + ") and " + TypeName(item) + " (" + Serialize(item, false, null, false) + ") cannot be added");
             }
             budget.Append(builder, elemText);

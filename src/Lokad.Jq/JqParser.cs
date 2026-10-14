@@ -165,6 +165,7 @@ internal sealed class JqParser(
         ArgumentNullException.ThrowIfNull(filter);
         if (filter is LiteralFilter literal)
         {
+            _budget.ReserveCloneStorage(literal.Value);
             value = literal.Value?.DeepClone();
             return true;
         }
@@ -174,7 +175,11 @@ internal sealed class JqParser(
             {
                 var result = new JsonArray();
                 foreach (var item in items)
+                {
+                    _budget.ReserveArrayItem(item);
+                    _budget.ReserveCloneStorage(item);
                     result.Add(item?.DeepClone());
+                }
                 value = result;
                 return true;
             }
@@ -216,6 +221,8 @@ internal sealed class JqParser(
             return TryCollectCommaValues(comma.Left, collected) && TryCollectCommaValues(comma.Right, collected);
         if (TryGetConstant(filter, out JsonNode? value))
         {
+            _budget.ReserveBytes(24);
+            _budget.ReserveCloneStorage(value);
             collected.Add(value?.DeepClone());
             return true;
         }
@@ -238,6 +245,8 @@ internal sealed class JqParser(
                 built = null;
                 return false;
             }
+            _budget.ReserveObjectItem(value);
+            _budget.ReserveCloneStorage(value);
             result[property.StaticKey] = value?.DeepClone();
         }
         built = result;

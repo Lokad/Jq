@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -9,6 +10,13 @@ public sealed partial class JqTests
     [InlineData("try sort_by(.) catch \"caught\"")]
     [InlineData("try group_by(.) catch \"caught\"")]
     [InlineData("try map(.) catch \"caught\"")]
+    [InlineData("try . + . catch \"caught\"")]
+    [InlineData("try reverse catch \"caught\"")]
+    [InlineData("try keys catch \"caught\"")]
+    [InlineData("try to_entries catch \"caught\"")]
+    [InlineData("try walk(.) catch \"caught\"")]
+    [InlineData("try [tostream] catch \"caught\"")]
+    [InlineData("try [paths] catch \"caught\"")]
     public async Task Jq_GovernedCollectionAdmissionPreservesPrefixUnderCompetingDemand(string operation)
     {
         const long limit = 1024 * 1024;
@@ -41,6 +49,9 @@ public sealed partial class JqTests
     [InlineData("try indices(\"x\") catch \"caught\"")]
     [InlineData("try trim catch \"caught\"")]
     [InlineData("try getpath([{start: 0, end: 8000}]) catch \"caught\"")]
+    [InlineData("try explode catch \"caught\"")]
+    [InlineData("try split(\"\") catch \"caught\"")]
+    [InlineData("try ltrimstr(\"x\") catch \"caught\"")]
     public async Task Jq_GovernedUnicodeScratchAdmissionPrecedesLargeLists(string operation)
     {
         const long limit = 1024 * 1024;
@@ -62,6 +73,24 @@ public sealed partial class JqTests
         Assert.NotNull(pressure);
         Assert.Equal(pressure.Bytes, memory.ReservedBytes);
         pressure.Dispose();
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedConstantModuleMetadataAdmitsContainerCopies()
+    {
+        string source = "module {data: [" + string.Join(',', Enumerable.Repeat("1", 100)) + "]}; .";
+        using var lexicalBudget = new JqBudget(CancellationToken.None);
+        var tokens = Lexer.Tokenize(source, JqProgramSource.Inline, lexicalBudget);
+        var memory = new TestMemoryBudget(1024);
+        using (var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline, budget))
+        {
+            var parser = new JqParser(tokens, JqProgramSource.Inline, context.RootEnvironment, budget);
+            var failure = Assert.Throws<JqQuotaException>(() => parser.ParseImportsOnly());
+            Assert.True(failure.IsMemoryAdmission);
+            Assert.InRange(memory.ReservedBytes, 1, 1024);
+        }
         Assert.Equal(0, memory.ReservedBytes);
     }
 
