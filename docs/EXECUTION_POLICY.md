@@ -73,14 +73,19 @@ without changing existing charges. Negative estimates throw; admission through
 disposed owners throws. Refusal reports terminal status 5 and cannot be caught
 by jq handlers. Complete earlier output remains visible.
 
-The first increment covers reusable JSON/raw output backing capacity and
-information output. Growth reserves old and new storage together until the
-replacement or framing copy finishes; retained capacity stays charged between
-records. Other major storage owners and command binding are still being
-migrated. This is partial admission coverage, not a live-memory or process-memory
-guarantee. Existing calls without a memory hook still use the cumulative policy
-above; its migration is unfinished. Estimated reserved bytes are separate from
-actual managed allocation measurements.
+Current coverage includes reusable JSON/raw output backing capacity, information
+output, cursor read/accumulation buffers, streaming token capacity and hosted
+filter/module/variable-file read buffers. Growth reserves old and new storage
+together until replacement or copying finishes. Retained capacity stays charged
+between records. Cursor buffers survive pending reads and owned-descriptor
+cleanup; a hosted read result owns its accumulated capacity until decoding ends.
+Temporary read storage is released after the awaited read loop completes.
+
+Value, compilation, cache and command-binding owners are still being migrated.
+This is partial admission coverage, not a live-memory or process-memory guarantee.
+Existing calls without a memory hook still use the cumulative policy above; its
+migration is unfinished. Estimated reserved bytes are separate from actual
+managed allocation measurements.
 
 ## Fixed safety ceilings
 

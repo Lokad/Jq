@@ -146,7 +146,8 @@ internal sealed class JqModuleLoader(
                 return null;
             throw new JqException("module not found: " + import.RelPath);
         }
-        return await LoadFuncModuleAtPathAsync(found.Value.CanonicalPath, found.Value.Content, depth, cancellationToken).ConfigureAwait(false);
+        using var content = found.Value.Content;
+        return await LoadFuncModuleAtPathAsync(found.Value.CanonicalPath, content.Content, depth, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<JsonNode?> TryLoadDataAsync(
@@ -161,7 +162,8 @@ internal sealed class JqModuleLoader(
                 return null;
             throw new JqException("module not found: " + import.RelPath);
         }
-        ReadOnlyMemory<byte> content = found.Value.Content;
+        using var ownedContent = found.Value.Content;
+        ReadOnlyMemory<byte> content = ownedContent.Content;
         string canonical = found.Value.CanonicalPath;
         budget.ChargeString(Encoding.UTF8.GetCharCount(content.Span));
         if (import.IsRaw)
@@ -251,7 +253,7 @@ internal sealed class JqModuleLoader(
         }
     }
 
-    private async Task<(string CanonicalPath, ReadOnlyMemory<byte> Content)?> FindModuleFileAsync(
+    private async Task<(string CanonicalPath, BoundedReadResult.Complete Content)?> FindModuleFileAsync(
         JqModuleImport import,
         string importerDir,
         string suffix,
@@ -294,9 +296,9 @@ internal sealed class JqModuleLoader(
                 try
                 {
                     var result = await host.TryReadAllBytesAsync(
-                        opened.FileDescriptor.Value, budget.RemainingInput, budget.ChargeInput, cancellationToken).ConfigureAwait(false);
+                        opened.FileDescriptor.Value, budget, cancellationToken).ConfigureAwait(false);
                     if (result is BoundedReadResult.Complete complete)
-                        return (path.Path, complete.Content);
+                        return (path.Path, complete);
                     if (result is BoundedReadResult.TooLarge)
                         throw new JqQuotaException(budget.InputLimitMessage);
                     continue;
@@ -415,7 +417,8 @@ internal sealed class JqModuleLoader(
         var found = await FindModuleFileAsync(probe, workingDirectory, ".jq", cancellationToken).ConfigureAwait(false);
         if (found is null)
             throw new JqException("module not found: " + relPath);
-        var loaded = await LoadFuncModuleAtPathAsync(found.Value.CanonicalPath, found.Value.Content, 0, cancellationToken).ConfigureAwait(false);
+        using var content = found.Value.Content;
+        var loaded = await LoadFuncModuleAtPathAsync(found.Value.CanonicalPath, content.Content, 0, cancellationToken).ConfigureAwait(false);
         return BuildMetadataObject(loaded);
     }
 

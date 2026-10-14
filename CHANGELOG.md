@@ -5,8 +5,10 @@
 - Add library-local cooperative memory admission interfaces and execution
   overloads borrowing a shared host allowance. Reusable JSON/raw output capacity
   and information output reserve before allocation, include replacement peaks,
-  and stay charged through awaited writes and descriptor cleanup. Coverage is
-  partial; input, value, compilation and command ownership are still being
+  and stay charged through awaited writes and descriptor cleanup. Cursor buffers,
+  streaming token capacity and hosted file reads also reserve before allocation;
+  successful read results retain their charge until decoding finishes. Coverage
+  is partial; value, compilation, cache and command ownership are still being
   migrated from the cumulative policy. Existing overloads retain that policy.
 
 ## 0.1.0 — pending NuGet publication

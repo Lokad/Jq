@@ -90,7 +90,8 @@ internal static class JqExecutor
             var filterText = invocation.Filter ?? ".";
             if (invocation.FilterFile is { } filterFile)
             {
-                var bytes = await ReadFileAsync(filterFile, host, budget, cancellationToken).ConfigureAwait(false);
+                using var content = await ReadFileAsync(filterFile, host, budget, cancellationToken).ConfigureAwait(false);
+                ReadOnlyMemory<byte> bytes = content.Content;
                 if (bytes.Span.Contains((byte)0))
                     throw new JqException("program file contains NUL bytes");
                 budget.ChargeString(Encoding.UTF8.GetCharCount(bytes.Span));
@@ -332,7 +333,8 @@ internal static class JqExecutor
             try
             {
                 var resolved = JqPathResolution.ResolveArgument(path, invocation.WorkingDirectory);
-                var bytes = await ReadFileAsync(resolved, host, context.Budget, cancellationToken).ConfigureAwait(false);
+                using var content = await ReadFileAsync(resolved, host, context.Budget, cancellationToken).ConfigureAwait(false);
+                ReadOnlyMemory<byte> bytes = content.Content;
                 JsonNode? value;
                 if (raw)
                 {
@@ -397,7 +399,7 @@ internal static class JqExecutor
         return count;
     }
 
-    private static async Task<ReadOnlyMemory<byte>> ReadFileAsync(
+    private static async Task<BoundedReadResult.Complete> ReadFileAsync(
         JqResolvedPath path, IJqHost host, JqBudget budget, CancellationToken cancellationToken)
     {
         var opened = await JqHostExtensions.GuardHostAsync(() => host.OpenReadAsync(path.Absolute, cancellationToken)).ConfigureAwait(false);
@@ -419,14 +421,14 @@ internal static class JqExecutor
         }
     }
 
-    private static async Task<ReadOnlyMemory<byte>> ReadAllAsync(
+    private static async Task<BoundedReadResult.Complete> ReadAllAsync(
         IJqHost host, JqFileDescriptor descriptor, JqBudget budget, CancellationToken cancellationToken)
     {
         var result = await host.TryReadAllBytesAsync(
-            descriptor, budget.RemainingInput, budget.ChargeInput, cancellationToken).ConfigureAwait(false);
+            descriptor, budget, cancellationToken).ConfigureAwait(false);
         return result switch
         {
-            BoundedReadResult.Complete complete => complete.Content,
+            BoundedReadResult.Complete complete => complete,
             BoundedReadResult.Failed => throw new JqException("input read failed"),
             BoundedReadResult.TooLarge => throw new JqQuotaException(budget.InputLimitMessage),
             _ => throw new InvalidOperationException("Unknown bounded read result.")

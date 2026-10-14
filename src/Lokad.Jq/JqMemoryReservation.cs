@@ -32,13 +32,18 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
         _bytes = bytes;
     }
 
-    internal void ReplaceBuffer(ref byte[] buffer, int capacity)
+    internal void ReplaceBuffer(ref byte[] buffer, int capacity) =>
+        ReplaceBuffer(ref buffer, capacity, 0, 0);
+
+    internal void ReplaceBuffer(ref byte[] buffer, int capacity, int offset, int count)
     {
         long previous = Bytes;
         Resize(checked(previous + capacity));
         try
         {
-            buffer = new byte[capacity];
+            var replacement = new byte[capacity];
+            buffer.AsSpan(offset, count).CopyTo(replacement);
+            buffer = replacement;
         }
         catch
         {

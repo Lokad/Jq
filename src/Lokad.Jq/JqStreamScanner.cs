@@ -38,12 +38,13 @@ internal readonly record struct StreamScanOutcome(
 // for completed containers. With `--stream-errors`, recoverable failures
 // surface as `["message", path]` values and scanning continues; with
 // `--seq`, records split at RS with truncation checks and resync recovery.
-internal sealed class JqStreamScanner
+internal sealed class JqStreamScanner : IDisposable
 {
     private const int MaxPathDepth = 64;
 
     private readonly JqBudget _budget;
     private readonly JqRuntime _runtime;
+    private readonly JqMemoryReservation _tokenMemory;
     private readonly bool _seq;
     private readonly bool _streamErrors;
 
@@ -92,6 +93,7 @@ internal sealed class JqStreamScanner
         ArgumentNullException.ThrowIfNull(runtime);
         _budget = budget;
         _runtime = runtime;
+        _tokenMemory = new JqMemoryReservation(budget.MemoryBudget);
         _seq = seq;
         _streamErrors = streamErrors;
         _seqWaiting = seq;
@@ -107,6 +109,15 @@ internal sealed class JqStreamScanner
         }
         @event = null;
         return false;
+    }
+
+    public void Dispose()
+    {
+        _token = [];
+        _next = null;
+        _stashed = null;
+        _path.Clear();
+        _tokenMemory.Dispose();
     }
 
     // Scans bytes until the first event, error, or stall. With isFinal, also
@@ -495,7 +506,7 @@ internal sealed class JqStreamScanner
         {
             int capacity = _token.Length == 0 ? 256 : _token.Length * 2;
             _budget.ChargeBytes(capacity);
-            Array.Resize(ref _token, capacity);
+            _tokenMemory.ReplaceBuffer(ref _token, capacity, 0, _tokenLength);
         }
         _token[_tokenLength++] = b;
     }

@@ -44,7 +44,9 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private bool _streamEofDone;
     private readonly List<Source> _sources;
     private readonly CancellationToken _cancellationToken;
-    private readonly byte[] _readBuffer = new byte[ChunkSize];
+    private byte[] _readBuffer = [];
+    private readonly JqMemoryReservation _readMemory;
+    private readonly JqMemoryReservation _bufferMemory;
 
     private int _index = -1;
     private bool _active;
@@ -80,6 +82,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(context);
         _host = host;
         _budget = context.Budget;
+        _readMemory = new JqMemoryReservation(_budget.MemoryBudget);
+        _bufferMemory = new JqMemoryReservation(_budget.MemoryBudget);
         _runtime = context.Runtime;
         _context = context;
         _stdin = invocation.StdIn;
@@ -318,6 +322,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private async Task FillAsync()
     {
         _budget.CheckCancellation();
+        if (_readBuffer.Length == 0)
+            _readMemory.ReplaceBuffer(ref _readBuffer, ChunkSize);
         JqFileDescriptor descriptor = _owned ?? _stdin;
         // Bounded requests with a one-byte overflow probe, matching the
         // hosted read protocol pinned by the input-limit tests.
@@ -984,10 +990,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         int needed = _count + additional;
         int capacity = Math.Max(needed, _buffer.Length == 0 ? ChunkSize : _buffer.Length * 2);
         _budget.ChargeBytes(capacity);
-        var grown = new byte[capacity];
-        if (_count > 0)
-            Array.Copy(_buffer, _start, grown, 0, _count);
-        _buffer = grown;
+        _bufferMemory.ReplaceBuffer(ref _buffer, capacity, _start, _count);
         _start = 0;
     }
 
@@ -1010,10 +1013,21 @@ internal sealed class JqInputCursor : IAsyncDisposable
             return;
         _disposed = true;
         _jsonReader?.Reset();
-        if (_owned is { } owned)
+        try
         {
-            _owned = null;
-            await _host.CloseOwnedDescriptorAsync(owned, earlier).ConfigureAwait(false);
+            if (_owned is { } owned)
+            {
+                _owned = null;
+                await _host.CloseOwnedDescriptorAsync(owned, earlier).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _scanner?.Dispose();
+            _readBuffer = [];
+            _buffer = [];
+            _readMemory.Dispose();
+            _bufferMemory.Dispose();
         }
     }
 

@@ -35,27 +35,59 @@ internal static class JqHostExtensions
 
     // Read with bounded requests and publish accumulated bytes only on successful EOF.
     internal static async ValueTask<BoundedReadResult> TryReadAllBytesAsync(
-        this IJqHost host, JqFileDescriptor descriptor, int maximumBytes,
-        Action<int> chargeRead, CancellationToken cancellationToken)
+        this IJqHost host, JqFileDescriptor descriptor, JqBudget budget,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        using var output = new MemoryStream(Math.Min(4096, maximumBytes));
-        var buffer = new byte[Math.Min(8192, maximumBytes + 1)];
-        while (true)
+        int maximumBytes = budget.RemainingInput;
+        using var readMemory = new JqMemoryReservation(budget.MemoryBudget);
+        var outputMemory = new JqMemoryReservation(budget.MemoryBudget);
+        bool published = false;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var length = Math.Min(buffer.Length, maximumBytes - (int)output.Length + 1);
-            var read = await GuardedReadAsync(host, descriptor, buffer.AsMemory(0, length), cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            if (read.IsError)
-                return new BoundedReadResult.Failed(read);
-            chargeRead(read.BytesRead);
-            cancellationToken.ThrowIfCancellationRequested();
-            if (read.BytesRead > maximumBytes - output.Length)
-                return new BoundedReadResult.TooLarge();
-            output.Write(buffer.AsSpan(0, read.BytesRead));
-            if (read.ReachedEoF)
-                return new BoundedReadResult.Complete(output.GetBuffer().AsMemory(0, (int)output.Length));
+            int initialCapacity = Math.Min(4096, maximumBytes);
+            outputMemory.Resize(initialCapacity);
+            using var output = new MemoryStream(initialCapacity);
+            byte[] buffer = [];
+            readMemory.ReplaceBuffer(ref buffer, Math.Min(8192, maximumBytes + 1));
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var length = Math.Min(buffer.Length, maximumBytes - (int)output.Length + 1);
+                var read = await GuardedReadAsync(host, descriptor, buffer.AsMemory(0, length), cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (read.IsError)
+                    return new BoundedReadResult.Failed(read);
+                budget.ChargeInput(read.BytesRead);
+                if (read.BytesRead > maximumBytes - output.Length)
+                    return new BoundedReadResult.TooLarge();
+                int required = (int)output.Length + read.BytesRead;
+                if (required > output.Capacity)
+                {
+                    int previous = output.Capacity;
+                    int capacity = Math.Max(required, Math.Max(256, previous * 2));
+                    outputMemory.Resize((long)previous + capacity);
+                    try { output.Capacity = capacity; }
+                    catch
+                    {
+                        outputMemory.Resize(previous);
+                        throw;
+                    }
+                    outputMemory.Resize(capacity);
+                }
+                output.Write(buffer.AsSpan(0, read.BytesRead));
+                if (read.ReachedEoF)
+                {
+                    var result = new BoundedReadResult.Complete(
+                        output.GetBuffer().AsMemory(0, (int)output.Length), outputMemory);
+                    published = true;
+                    return result;
+                }
+            }
+        }
+        finally
+        {
+            if (!published) outputMemory.Dispose();
         }
     }
 
