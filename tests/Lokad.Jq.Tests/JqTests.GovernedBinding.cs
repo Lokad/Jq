@@ -2,6 +2,29 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Theory]
+    [InlineData("--rawfile")]
+    [InlineData("--slurpfile")]
+    public async Task Jq_GovernedFileVariableAllocationFailurePropagatesAndRefunds(string option)
+    {
+        var memory = new TestMemoryBudget(128 * 1024);
+        var host = new MockFileSystem();
+        host.AddFile("/data", "1");
+        var failure = new OutOfMemoryException("simulated allocation failure");
+        host.BeforeByteRead = _ => throw failure;
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", option, "data", "/data", "$data")));
+
+        var actual = await Assert.ThrowsAsync<OutOfMemoryException>(() =>
+            command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Same(failure, actual);
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.True(memory.PeakBytes > 0);
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
     [Fact]
     public void Jq_GovernedInvocationFailureRefundsUnusedSnapshotAdmission()
     {

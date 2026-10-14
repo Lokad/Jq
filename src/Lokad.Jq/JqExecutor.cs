@@ -403,7 +403,8 @@ internal static class JqExecutor
             }
             catch (Exception exception) when (exception is not OperationCanceledException
                 && exception is not JqQuotaException
-                && exception is not JqHostFailureException)
+                && exception is not JqHostFailureException
+                && exception is not OutOfMemoryException)
             {
                 throw new JqException($"Bad JSON in --{which} {name} {path}: {exception.Message}");
             }

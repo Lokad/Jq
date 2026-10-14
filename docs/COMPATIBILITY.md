@@ -138,8 +138,8 @@ at their storage lifetime boundaries. Its estimates, coverage and conservative
 retention are documented in EXECUTION_POLICY.md. The public cumulative work guard is
 `MaximumAllocationWorkBytes`; `MaximumAllocationBytes` remains only as a
 deprecated alias scheduled for removal at the next breaking API release.
-Local Windows validation of this integration passes all 3,825 tests, including
-89 governed-memory boundary cases, and 16 detached package-consumer checks.
+Local Windows validation of this integration passes all 3,827 tests, including
+91 governed-memory boundary cases, and 16 detached package-consumer checks.
 These resource/lifetime checks add no new upstream conformance claim; earlier
 cross-platform CI and differential evidence remains scoped to its revision.
 

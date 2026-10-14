@@ -190,6 +190,8 @@ execution deadline. A global operation can therefore take multiple allowances;
 jq value/allocation-work counters still bound produced results. Host contract
 failures propagate separately. Catchable language failures, such as invalid
 regex syntax, retain their jq handler behavior.
+Actual `OutOfMemoryException` propagates separately from admission refusal,
+including file-variable reads; owned admission and descriptors still unwind.
 Data imports and streaming numeric decoding propagate quotas unchanged; input
 depth exhaustion also remains terminal under `--seq` and `--stream-errors`.
 

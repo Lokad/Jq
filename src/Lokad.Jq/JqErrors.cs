@@ -5,8 +5,8 @@ namespace Lokad.Jq;
 
 // Shared boundary between catchable evaluation failures and terminal
 // signals. Quota exhaustion, compile errors, cancellation, and host
-// failures always propagate; everything else is catchable by user code
-// (optional suppression, pattern alternation, and later try/catch).
+// failures and actual allocation failures always propagate. Known language
+// failures are catchable by optional suppression, pattern alternation and try/catch.
 internal static class JqErrors
 {
     internal static bool IsCatchable(Exception exception) =>

@@ -102,7 +102,7 @@ is explicit, opt-in development tooling and does not run in ordinary tests or CI
 ## Local source and package evidence
 
 The governed-memory integration was checked locally on Windows on 2026-10-14:
-warning-free Release build, all 3,825 tests and all 16 detached consumer checks.
+warning-free Release build, all 3,827 tests and all 16 detached consumer checks.
 The consumer verified the exact packed-artifact hash, locked restore and the
 unchanged managed dependency graph in an isolated cache. Shared admission,
 reuse, refusal, pending cleanup and canceled borrows are exercised through the
