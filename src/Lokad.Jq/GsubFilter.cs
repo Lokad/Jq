@@ -25,7 +25,8 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
             // sub without an explicit g flag stops after the first match.
             bool stopFirst = firstOnly && !flagText.Contains('g');
             var regex = context.Regexes.Get(JqMatch.RequirePattern(context, pattern), options.Pattern);
-            ReadOnlyMemory<byte> subject = context.Regexes.EncodeSubject(text);
+            using var ownedSubject = context.Regexes.EncodeSubject(text);
+            ReadOnlyMemory<byte> subject = ownedSubject.Value;
             var matchOptions = options.Match;
             // jq aligns replacement streams by their result index across successive matches.
             var results = new List<StringBuilder>();
@@ -33,7 +34,8 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
             var start = 0;
             while (start <= subject.Length)
             {
-                var match = context.Regexes.Match(regex, subject, start, matchOptions);
+                using var ownedMatch = context.Regexes.Match(regex, subject, start, matchOptions);
+                var match = ownedMatch.Value;
                 if (!match.Success) break;
                 context.Budget.ChargeNode();
                 var end = match.Value.EndOffsetInUtf16;

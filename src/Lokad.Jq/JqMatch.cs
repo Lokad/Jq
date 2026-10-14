@@ -58,12 +58,14 @@ internal static class JqMatch
         JqRegexCache.Pattern compiled = context.Regexes.Get(pattern, options.Pattern);
         Pcre2MatchOptions matchOptions = options.Match;
         Dictionary<int, string> names = GroupNameMap(compiled);
-        ReadOnlyMemory<byte> subject = context.Regexes.EncodeSubject(text);
+        using var ownedSubject = context.Regexes.EncodeSubject(text);
+        ReadOnlyMemory<byte> subject = ownedSubject.Value;
         var results = new List<JsonObject>();
         int start = 0;
         while (true)
         {
-            Utf8Pcre2MatchContext match = context.Regexes.Match(compiled, subject, start, matchOptions);
+            using var ownedMatch = context.Regexes.Match(compiled, subject, start, matchOptions);
+            Utf8Pcre2MatchContext match = ownedMatch.Value;
             if (!match.Success)
                 break;
             context.Budget.ChargeNode();

@@ -79,9 +79,13 @@ filter/module/variable-file read buffers. Growth reserves old and new storage
 together until replacement or copying finishes. Retained capacity stays charged
 between records. Cursor buffers survive pending reads and owned-descriptor
 cleanup; a hosted read result owns its accumulated capacity until decoding ends.
-Temporary read storage is released after the awaited read loop completes.
+Temporary read storage is released after the awaited read loop completes. Regex
+compiled-pattern and pooled-workspace estimates remain charged under one cache
+owner until context disposal. Subject encoding and detailed capture contexts
+have operation owners; failed compilation or matching refunds unused admission,
+and nested replacement calls keep their parent's operation charges live.
 
-Value, compilation, cache and command-binding owners are still being migrated.
+Value, filter/module compilation and command-binding owners are still being migrated.
 This is partial admission coverage, not a live-memory or process-memory guarantee.
 Existing calls without a memory hook still use the cumulative policy above; its
 migration is unfinished. Estimated reserved bytes are separate from actual

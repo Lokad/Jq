@@ -12,19 +12,30 @@ internal sealed class JqRegexCache : IDisposable
     private const int MaximumPatternLength = 16 * 1024;
     private const int MaximumWorkingBytes = 256 * 1024;
     private readonly JqBudget _budget;
+    private readonly JqMemoryReservation _memory;
+    private bool _disposed;
     private readonly Dictionary<(string Pattern, Pcre2CompileOptions Options), Pattern> _patterns = new();
 
-    internal JqRegexCache(JqBudget budget) => _budget = budget;
+    internal JqRegexCache(JqBudget budget)
+    {
+        _budget = budget;
+        _memory = new JqMemoryReservation(budget.MemoryBudget);
+    }
 
     internal Pattern Get(string pattern, Pcre2CompileOptions options)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         _budget.CheckCancellation();
         if (_patterns.TryGetValue((pattern, options), out Pattern? cached)) return cached;
         if (pattern.Length > MaximumPatternLength)
             throw new JqQuotaException("regex pattern exceeds the 16384-character limit");
         // Conservative compilation and pooled workspace reservations. These are jq
         // allocation charges, not a claim about the engine's compiled representation size.
-        _budget.ChargeBytes(64 * 1024L + MaximumWorkingBytes + 64L * pattern.Length);
+        long estimate = 64 * 1024L + MaximumWorkingBytes + 64L * pattern.Length;
+        _budget.ChargeBytes(estimate);
+        long previous = _memory.Bytes;
+        _memory.Resize(checked(previous + estimate));
+        bool retained = false;
         try
         {
             var regex = new Utf8Pcre2Regex(pattern, options | Pcre2CompileOptions.Ucp,
@@ -42,12 +53,14 @@ internal sealed class JqRegexCache : IDisposable
                 }, _budget.Policy.MaximumRegexTime);
             _budget.CheckCancellation();
             _budget.ChargeBytes(64L * regex.NameEntryCount);
+            _memory.Resize(checked(_memory.Bytes + 64L * regex.NameEntryCount));
             var entries = new Pcre2NameEntry[regex.NameEntryCount];
             regex.CopyNameEntries(entries, out _);
             var names = new Dictionary<int, string>();
             foreach (Pcre2NameEntry entry in entries) names[entry.Number] = entry.Name;
             cached = new Pattern(regex, names, pattern.Length + 1);
             _patterns.Add((pattern, options), cached);
+            retained = true;
             return cached;
         }
         catch (Pcre2CompileException ex)
@@ -58,31 +71,69 @@ internal sealed class JqRegexCache : IDisposable
         {
             throw new JqException($"unsupported regex: {ex.Message}");
         }
-        finally { _budget.CheckCancellation(); }
+        finally
+        {
+            if (!retained) _memory.Resize(previous);
+            _budget.CheckCancellation();
+        }
     }
 
-    internal ReadOnlyMemory<byte> EncodeSubject(string text)
+    internal JqMemoryValue<ReadOnlyMemory<byte>> EncodeSubject(string text)
     {
-        _budget.ChargeBytes(64L + Encoding.UTF8.GetByteCount(text));
-        try { return Utf8Text.Encode(text); }
-        catch (EncoderFallbackException ex) { throw new JqException($"invalid regex input: {ex.Message}"); }
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        long estimate = 64L + Encoding.UTF8.GetByteCount(text);
+        _budget.ChargeBytes(estimate);
+        var memory = new JqMemoryReservation(_budget.MemoryBudget);
+        try
+        {
+            memory.Resize(estimate);
+            return new JqMemoryValue<ReadOnlyMemory<byte>>(Utf8Text.Encode(text), memory);
+        }
+        catch (EncoderFallbackException ex)
+        {
+            memory.Dispose();
+            throw new JqException($"invalid regex input: {ex.Message}");
+        }
+        catch
+        {
+            memory.Dispose();
+            throw;
+        }
     }
 
-    internal Utf8Pcre2MatchContext Match(Pattern pattern, ReadOnlyMemory<byte> input,
+    internal MatchResult Match(Pattern pattern, ReadOnlyMemory<byte> input,
         int start, Pcre2MatchOptions options)
     {
         // A numeric capture slot needs at least one pattern character. Reserve the
         // upper bound before the engine materializes detailed results; do not parse
         // its grammar here or treat its reserved MaxResultBytes as an enforced limit.
-        _budget.ChargeBytes(128L + 64L * pattern.MaximumCaptureSlots);
-        try { return pattern.Regex.MatchDetailed(input.Span, start, options); }
-        catch (Pcre2MatchException ex) { throw MapMatchFailure(ex); }
-        catch (NotSupportedException ex) { throw new JqException($"unsupported regex: {ex.Message}"); }
-        finally { _budget.CheckCancellation(); }
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        long estimate = 128L + 64L * pattern.MaximumCaptureSlots;
+        _budget.ChargeBytes(estimate);
+        var memory = new JqMemoryReservation(_budget.MemoryBudget);
+        try
+        {
+            memory.Resize(estimate);
+            return new MatchResult(MatchCore(), memory);
+        }
+        catch
+        {
+            memory.Dispose();
+            throw;
+        }
+
+        Utf8Pcre2MatchContext MatchCore()
+        {
+            try { return pattern.Regex.MatchDetailed(input.Span, start, options); }
+            catch (Pcre2MatchException ex) { throw MapMatchFailure(ex); }
+            catch (NotSupportedException ex) { throw new JqException($"unsupported regex: {ex.Message}"); }
+            finally { _budget.CheckCancellation(); }
+        }
     }
 
     internal bool IsMatch(Pattern pattern, ReadOnlyMemory<byte> input, Pcre2MatchOptions options)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         _budget.CheckCancellation();
         try { return pattern.Regex.IsMatch(input.Span, 0, options); }
         catch (Pcre2MatchException ex) { throw MapMatchFailure(ex); }
@@ -98,7 +149,20 @@ internal sealed class JqRegexCache : IDisposable
         _ => new JqException($"regex matching failed: {exception.Message}")
     };
 
-    public void Dispose() => _patterns.Clear();
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _patterns.Clear();
+        _memory.Dispose();
+    }
 
     internal sealed record Pattern(Utf8Pcre2Regex Regex, Dictionary<int, string> Names, int MaximumCaptureSlots);
+
+    internal readonly ref struct MatchResult(Utf8Pcre2MatchContext value, JqMemoryReservation memory)
+    {
+        internal Utf8Pcre2MatchContext Value { get; } = value;
+
+        public void Dispose() => memory.Dispose();
+    }
 }

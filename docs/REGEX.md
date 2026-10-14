@@ -58,6 +58,16 @@ These charges are conservative accounting, not a bound on total process memory
 or an exact compiled-pattern size. Engine `MaxResultBytes` is reserved and is
 not relied on for enforcement.
 
+When execution receives an `IMemoryBudget`, the regex cache also reserves its
+compiled-pattern/workspace estimate against that shared allowance before
+compilation. Successful cached entries stay charged until context disposal;
+failed compilation refunds its admission. UTF-8 subjects and detailed capture
+contexts reserve before materialization and release at the end of their
+operation, including failures. Parent operations remain charged during nested
+replacement filters. The estimates follow storage lifetimes, independently of
+the transitional cumulative allocation policy; they remain approximate and do
+not enforce an engine compiled-storage cap.
+
 Work, time, depth and working-memory exhaustion terminate execution with status
 5, bypassing `try` and `?`. Cancellation propagates as `OperationCanceledException`.
 Published version 0.3.0 has no cancellation-token overloads: checks run before

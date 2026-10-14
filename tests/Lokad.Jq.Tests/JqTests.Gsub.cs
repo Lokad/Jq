@@ -130,7 +130,8 @@ public sealed partial class JqTests
         var pattern = regexes.Get("x", Pcre2CompileOptions.None);
         for (int i = 0; i < 100; i++)
         {
-            Assert.True(regexes.Match(pattern, "x"u8.ToArray(), 0, Pcre2MatchOptions.None).Success);
+            using var match = regexes.Match(pattern, "x"u8.ToArray(), 0, Pcre2MatchOptions.None);
+            Assert.True(match.Value.Success);
             Assert.True(regexes.IsMatch(pattern, "x"u8.ToArray(), Pcre2MatchOptions.None));
         }
     }

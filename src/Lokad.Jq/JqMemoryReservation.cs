@@ -8,7 +8,7 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
     private long _bytes;
     private bool _disposed;
 
-    internal long Bytes => _bytes;
+    internal long Bytes => _reservation?.Bytes ?? _bytes;
 
     internal void Resize(long bytes)
     {

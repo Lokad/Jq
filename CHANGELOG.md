@@ -8,8 +8,12 @@
   and stay charged through awaited writes and descriptor cleanup. Cursor buffers,
   streaming token capacity and hosted file reads also reserve before allocation;
   successful read results retain their charge until decoding finishes. Coverage
-  is partial; value, compilation, cache and command ownership are still being
+  is partial; value, filter/module compilation and command ownership are still being
   migrated from the cumulative policy. Existing overloads retain that policy.
+- Govern retained regex pattern/workspace estimates and operation-owned UTF-8
+  subjects and detailed captures. Failed compilation/matching refunds admission;
+  nested replacements retain parent charges. This preserves the existing engine
+  profile and work/time/cancellation boundaries, with approximate storage sizing.
 
 ## 0.1.0 — pending NuGet publication
 

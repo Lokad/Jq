@@ -181,6 +181,23 @@ public sealed partial class JqTests
         Assert.Equal(0, memory.ReservedBytes);
     }
 
+    [Fact]
+    public void Jq_GovernedReservationForwardsAncestorInvalidation()
+    {
+        var memory = new TestMemoryBudget(8);
+        using var owner = memory.CreateScope();
+        using var reservation = new JqMemoryReservation(owner);
+        reservation.Resize(8);
+        owner.Dispose();
+        Assert.Equal(0, reservation.Bytes);
+        Assert.Equal(0, memory.ReservedBytes);
+        Assert.Throws<ObjectDisposedException>(() => reservation.Resize(1));
+        reservation.Dispose();
+        Assert.True(memory.TryReserve(8, out IMemoryReservation? reused));
+        reused.Dispose();
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
     private sealed class MemoryBorrowHost(MockFileSystem inner) : IJqHost
     {
         internal bool DelayCleanup { get; init; }
