@@ -34,6 +34,10 @@
   key/sort workspaces, Unicode scratch lists/builders and module metadata copies.
   Preserve output prefixes and exact ordering when shared demand refuses a later
   operation; newly compiled cache keys retain persistent ownership.
+- Admit terminal diagnostic and halt UTF-8 buffers before encoding, retain them
+  through pending host writes, and avoid large intermediate message copies. A
+  refused payload reports terminal status 5 using a small immutable diagnostic,
+  preserving earlier output and the caller's existing reservations.
 
 ## 0.1.0 — pending NuGet publication
 

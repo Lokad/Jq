@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -27,14 +28,14 @@ internal static class JqExecutor
         }
         catch (JqQuotaException exception) when (exception.IsMemoryAdmission)
         {
-            await host.AppendAsync(commandInvocation.StdErr,
-                "jq: memory budget exceeded\n"u8.ToArray(), cancellationToken).ConfigureAwait(false);
+            await JqDiagnosticWriter.TryWriteAsync(host, commandInvocation.StdErr,
+                ["jq: memory budget exceeded"], true, memoryScope, cancellationToken).ConfigureAwait(false);
             return 5;
         }
         if (invocation.Error != null)
         {
-            await WriteErrorAsync(host, invocation, invocation.Error, cancellationToken).ConfigureAwait(false);
-            return 2;
+            return await WriteErrorAsync(host, invocation, [invocation.Error], memoryScope,
+                cancellationToken).ConfigureAwait(false) ? 2 : 5;
         }
         using var budget = new JqBudget(policy, memoryScope, cancellationToken);
         string? information = invocation.Help ? JqHelp.Text
@@ -51,7 +52,8 @@ internal static class JqExecutor
             }
             catch (JqQuotaException exception)
             {
-                await WriteErrorAsync(host, invocation, "jq: " + exception.Message, cancellationToken).ConfigureAwait(false);
+                await WriteErrorAsync(host, invocation, ["jq: ", exception.Message], memoryScope,
+                    cancellationToken).ConfigureAwait(false);
                 return 5;
             }
         }
@@ -75,22 +77,33 @@ internal static class JqExecutor
         // Inputs never read report <unknown>; line numbers count the newlines
         // consumed through the failing value, so values on unterminated tails
         // report one past the reference fgets-based count.
-        static string RenderUncaughtError(JqContext context, Exception exception)
+        static IReadOnlyList<string> RenderUncaughtError(JqContext context, Exception exception)
         {
-            string position = context.InputFilename is string name
-                ? $"{name}:{context.InputLineNumber}"
-                : "<unknown>";
+            var parts = new List<string> { "jq: error (at ", context.InputFilename ?? "<unknown>" };
+            if (context.InputFilename is not null)
+            {
+                parts.Add(":");
+                parts.Add(context.InputLineNumber.ToString(CultureInfo.InvariantCulture));
+            }
             if (exception is JqErrorException user
                 && JqRuntime.TryGetString(user.Payload, out string text))
-                return $"jq: error (at {position}): {text}";
-            if (exception is JqErrorException userPayload)
             {
-                string rendered = userPayload.Payload is null
-                    ? "null"
-                    : context.Runtime.ToJqString(userPayload.Payload);
-                return $"jq: error (at {position}) (not a string): {rendered}";
+                parts.Add("): ");
+                parts.Add(text);
             }
-            return $"jq: error (at {position}): {exception.Message}";
+            else if (exception is JqErrorException userPayload)
+            {
+                parts.Add(") (not a string): ");
+                parts.Add(userPayload.Payload is null
+                    ? "null"
+                    : context.Runtime.ToJqString(userPayload.Payload));
+            }
+            else
+            {
+                parts.Add("): ");
+                parts.Add(exception.Message);
+            }
+            return parts;
         }
 
         var stage = 2;
@@ -165,7 +178,9 @@ internal static class JqExecutor
                     {
                         if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int errorStopped)
                             return errorStopped;
-                        await WriteErrorAsync(host, invocation, RenderUncaughtError(context, exception), cancellationToken).ConfigureAwait(false);
+                        if (!await WriteErrorAsync(host, invocation, RenderUncaughtError(context, exception),
+                            memoryScope, cancellationToken).ConfigureAwait(false))
+                            return 5;
                         stickyError = 5;
                     }
                 }
@@ -195,7 +210,11 @@ internal static class JqExecutor
             if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int haltStopped)
                 return haltStopped;
             if (ex.StderrText is not null)
-                await host.AppendAsync(invocation.StdErr, Utf8Text.Encode(ex.StderrText), cancellationToken).ConfigureAwait(false);
+            {
+                if (!await JqDiagnosticWriter.TryWriteAsync(host, invocation.StdErr, [ex.StderrText],
+                    false, memoryScope, cancellationToken).ConfigureAwait(false))
+                    return 5;
+            }
             return ex.ExitCode;
         }
         catch (JqQuotaException ex)
@@ -204,7 +223,8 @@ internal static class JqExecutor
             // stage was active when the budget tripped.
             if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int quotaStopped)
                 return quotaStopped;
-            await WriteErrorAsync(host, invocation, $"jq: {ex.Message}", cancellationToken).ConfigureAwait(false);
+            await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
+                cancellationToken).ConfigureAwait(false);
             return 5;
         }
         catch (JqInputException ex)
@@ -213,20 +233,23 @@ internal static class JqExecutor
             // report status 2, matching the reference command.
             if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int inputStopped)
                 return inputStopped;
-            await WriteErrorAsync(host, invocation, $"jq: {ex.Message}", cancellationToken).ConfigureAwait(false);
-            return ex.ExitCode;
+            return await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
+                cancellationToken).ConfigureAwait(false) ? ex.ExitCode : 5;
         }
         catch (JqCompileException ex)
         {
-            await WriteErrorAsync(host, invocation, "jq: " + ex.Message + " at line " + ex.Span.Line + " column " + ex.Span.Column + " (" + ex.ProgramSource.Label + ")", cancellationToken).ConfigureAwait(false);
-            return stage;
+            return await WriteErrorAsync(host, invocation,
+                ["jq: ", ex.Message, " at line ", ex.Span.Line.ToString(CultureInfo.InvariantCulture),
+                    " column ", ex.Span.Column.ToString(CultureInfo.InvariantCulture),
+                    " (", ex.ProgramSource.Label, ")"], memoryScope,
+                cancellationToken).ConfigureAwait(false) ? stage : 5;
         }
         catch (Exception ex) when (ex is JqException or JsonException or FormatException or ArgumentException or OverflowException)
         {
             if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int errorStopped)
                 return errorStopped;
-            await WriteErrorAsync(host, invocation, $"jq: {ex.Message}", cancellationToken).ConfigureAwait(false);
-            return stage;
+            return await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
+                cancellationToken).ConfigureAwait(false) ? stage : 5;
         }
 
         static async Task<int?> DrainStderrAsync(IJqHost host, JqInvocation invocation, JqContext context, CancellationToken cancellationToken)
@@ -457,8 +480,7 @@ internal static class JqExecutor
         };
     }
 
-    private static async Task WriteErrorAsync(IJqHost host, JqInvocation invocation, string message, CancellationToken cancellationToken)
-    {
-        await host.AppendAsync(invocation.StdErr, Utf8Text.Encode(message + "\n"), cancellationToken).ConfigureAwait(false);
-    }
+    private static Task<bool> WriteErrorAsync(IJqHost host, JqInvocation invocation,
+        IReadOnlyList<string> parts, IMemoryBudget? memoryBudget, CancellationToken cancellationToken) =>
+        JqDiagnosticWriter.TryWriteAsync(host, invocation.StdErr, parts, true, memoryBudget, cancellationToken);
 }

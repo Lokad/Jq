@@ -123,6 +123,13 @@ is released after all awaited appends finish. Small standalone scalar wrappers
 are untracked; managed scalar clones borrow immutable payloads already charged
 to their source owner. Container copies reserve backing slots and stored wrappers.
 
+Terminal diagnostic and halt payloads reserve their UTF-8 output before encoding,
+without concatenating a large intermediate message. That storage stays charged
+until the host append completes. If admission refuses, a small immutable library
+diagnostic reports `memory budget exceeded` and status 5, including a refused halt
+payload. This emergency diagnostic is intentionally outside workload accounting
+so exhaustion can remain observable.
+
 Path update/deletion/slice copies and padding reserve before copying or mutating
 containers. Collection results, precomputed keys and stable-sort workspaces have
 coarse record estimates, including stored scalar wrappers. Unicode matching,

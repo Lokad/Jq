@@ -12,6 +12,12 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
 
     internal void Resize(long bytes)
     {
+        if (!TryResize(bytes))
+            throw new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
+    }
+
+    internal bool TryResize(long bytes)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentOutOfRangeException.ThrowIfNegative(bytes);
         if (memoryBudget is not null)
@@ -22,7 +28,7 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
                     ? reservation.TryResize(bytes)
                     : memoryBudget.TryReserve(bytes, out _reservation);
                 if (!admitted)
-                    throw new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
+                    return false;
             }
             catch (Exception exception) when (exception is ArgumentException or OverflowException)
             {
@@ -30,6 +36,7 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
             }
         }
         _bytes = bytes;
+        return true;
     }
 
     internal void ReplaceBuffer(ref byte[] buffer, int capacity) =>

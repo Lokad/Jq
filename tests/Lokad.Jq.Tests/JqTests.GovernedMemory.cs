@@ -223,6 +223,7 @@ public sealed partial class JqTests
     private sealed class MemoryBorrowHost(MockFileSystem inner) : IJqHost
     {
         internal bool DelayCleanup { get; init; }
+        internal JqFileDescriptor DelayedDescriptor { get; init; } = JqFileDescriptor.StdOut;
         internal TaskCompletionSource<ReadOnlyMemory<byte>> Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource Closing { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -235,7 +236,7 @@ public sealed partial class JqTests
         public async Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor,
             ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
         {
-            if (descriptor == JqFileDescriptor.StdOut && !Ready.Task.IsCompleted)
+            if (descriptor == DelayedDescriptor && !Ready.Task.IsCompleted)
             {
                 Ready.SetResult(content);
                 // Deliberately ignore cancellation while borrowing the bytes.
