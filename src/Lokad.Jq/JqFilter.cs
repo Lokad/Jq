@@ -1040,7 +1040,7 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                 : index.Evaluate(pair.Value, context, environment);
             foreach (JsonNode? key in pathKeys)
             {
-                JqValueSegment segment = PathSegmentFor(key);
+                JqValueSegment segment = PathSegmentFor(key, context);
                 RequireTracked(pair, segment, context);
                 // Like the reference INDEX step, the read itself follows the
                 // value-mode get: exotic keys append as-is while get failures
@@ -1052,7 +1052,7 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
         }
     }
 
-    private static JqValueSegment PathSegmentFor(JsonNode? key)
+    private static JqValueSegment PathSegmentFor(JsonNode? key, JqContext context)
     {
         if (TryGetString(key, out string? name))
             return new KeySegment(name);
@@ -1060,6 +1060,7 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
             return new FractionalSegment(fractional);
         if (TryGetIndex(key, out long index, out bool isNaN))
             return new IndexSegment(index, isNaN);
+        context.Budget.ReserveCloneStorage(key);
         return new InvalidSegment(key?.DeepClone());
     }
 }
@@ -1080,9 +1081,13 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                     if (value is JsonArray arr)
                     {
                         JqPaths.ResolveSlice(arr.Count, startBound, endBound, out int from, out int to);
+                        context.Budget.ReserveBytes(64 + 24L * (to - from));
                         var result = new JsonArray();
                         for (var i = from; i < to; i++)
+                        {
+                            context.Budget.ReserveArrayItem(arr[i]);
                             result.Add(context.Runtime.Clone(arr[i]));
+                        }
                         yield return result;
                     }
                     else if (TryGetString(value, out var text))
@@ -1186,21 +1191,27 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                     if (pair.Value is JsonArray arr)
                     {
                         JqPaths.ResolveSlice(arr.Count, lower, upper, out int from, out int to);
+                        context.Budget.ReserveBytes(64 + 24L * (to - from));
                         var part = new JsonArray();
                         for (int position = from; position < to; position++)
+                        {
+                            context.Budget.ReserveArrayItem(arr[position]);
+                            context.Budget.ReserveCloneStorage(arr[position]);
                             part.Add(arr[position]?.DeepClone());
+                        }
                         yield return new JqValuePath(Extend(pair.Segments, segment), part, true);
                     }
                     else if (pair.Value is JsonValue scalar && scalar.TryGetValue<string>(out string? text) && text is not null)
                     {
+                        context.Budget.ReserveBytes(12L * text.Length);
                         var runes = new List<System.Text.Rune>();
                         foreach (var rune in text.EnumerateRunes())
                             runes.Add(rune);
                         JqPaths.ResolveSlice(runes.Count, lower, upper, out int from, out int to);
                         var builder = new System.Text.StringBuilder();
                         for (int position = from; position < to; position++)
-                            builder.Append(runes[position].ToString());
-                        yield return new JqValuePath(Extend(pair.Segments, segment), JsonValue.Create(builder.ToString()), true);
+                            context.Budget.Append(builder, runes[position].ToString());
+                        yield return new JqValuePath(Extend(pair.Segments, segment), JsonValue.Create(context.Budget.Finish(builder)), true);
                     }
                     else if (pair.Value == null)
                         yield return new JqValuePath(Extend(pair.Segments, segment), null, true);
@@ -2001,9 +2012,9 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "ltrimstr": yield return JsonValue.Create(TrimAffix(input, Arg(0), true, false)); break;
                 case "rtrimstr": yield return JsonValue.Create(TrimAffix(input, Arg(0), false, true)); break;
                 case "trimstr": yield return JsonValue.Create(TrimAffix(input, Arg(0), true, true)); break;
-                case "trim": yield return JsonValue.Create(TrimSides(input, true, true)); break;
-                case "ltrim": yield return JsonValue.Create(TrimSides(input, true, false)); break;
-                case "rtrim": yield return JsonValue.Create(TrimSides(input, false, true)); break;
+                case "trim": yield return JsonValue.Create(context.Runtime.TrimSides(input, true, true)); break;
+                case "ltrim": yield return JsonValue.Create(context.Runtime.TrimSides(input, true, false)); break;
+                case "rtrim": yield return JsonValue.Create(context.Runtime.TrimSides(input, false, true)); break;
                 case "explode": yield return context.Runtime.Explode(input); break;
                 case "implode": yield return context.Runtime.Implode(input); break;
                 case "split":

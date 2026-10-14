@@ -123,6 +123,13 @@ is released after all awaited appends finish. Small standalone scalar wrappers
 are untracked; managed scalar clones borrow immutable payloads already charged
 to their source owner. Container copies reserve backing slots and stored wrappers.
 
+Path update/deletion/slice copies and padding reserve before copying or mutating
+containers. Collection results, precomputed keys and stable-sort workspaces have
+coarse record estimates, including stored scalar wrappers. Unicode matching,
+path slices and trimming reserve large scratch lists/builders before allocation.
+Module metadata copies use record storage; newly compiled cache keys and
+definitions keep persistent admission across later records.
+
 Within a single outer evaluation, discarded value and builder temporaries may
 remain conservatively charged until that evaluation finishes. TODO: use narrower
 existing generator/aggregate boundaries where profiling shows a material gap,

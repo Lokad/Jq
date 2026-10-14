@@ -191,6 +191,8 @@ internal sealed class JqModuleLoader(
                     break;
                 JsonNode? node = runtime.ReadJsonValue(content.Span[offset..], out int consumed);
                 offset += consumed;
+                budget.ReserveArrayItem(node);
+                budget.ReserveCloneStorage(node);
                 array.Add(node?.DeepClone());
             }
             return array;
@@ -212,6 +214,9 @@ internal sealed class JqModuleLoader(
         using var storage = budget.UseExecutionStorage();
         if (_cache.TryGetValue(canonicalPath, out JqLoadedModule? cached))
             return cached;
+        // Cache keys must survive a record-local modulemeta search path.
+        budget.ChargeString(canonicalPath.Length);
+        canonicalPath = new string(canonicalPath.AsSpan());
         if (!_loading.Add(canonicalPath))
             throw new JqException("circular import of " + canonicalPath);
         try
@@ -280,7 +285,7 @@ internal sealed class JqModuleLoader(
             foreach (string candidate in candidates)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                budget.ChargeAllocationWork(128 + 64L * candidate.Length);
+                budget.ChargeAllocation(128 + 64L * candidate.Length);
                 JqPath path;
                 try
                 {
@@ -435,6 +440,8 @@ internal sealed class JqModuleLoader(
     private JsonObject BuildMetadataObject(JqLoadedModule loaded)
     {
         ArgumentNullException.ThrowIfNull(loaded);
+        budget.ReserveBytes(192);
+        budget.ReserveCloneStorage(loaded.Metadata);
         JsonObject baseObject = loaded.Metadata is not null
             ? (JsonObject)loaded.Metadata.DeepClone()
             : new JsonObject();
@@ -442,6 +449,8 @@ internal sealed class JqModuleLoader(
         foreach (JqModuleImport import in loaded.Imports)
         {
             budget.CheckCancellation();
+            budget.ReserveBytes(64 + 160 * 3);
+            budget.ReserveCloneStorage(import.Metadata);
             var dep = new JsonObject();
             if (import.Metadata is not null)
             {
@@ -460,6 +469,7 @@ internal sealed class JqModuleLoader(
         foreach (JqFunctionDefinition definition in loaded.Definitions)
         {
             budget.CheckCancellation();
+            budget.ReserveBytes(128 + 2L * (definition.Name.Length + 12));
             string entry = definition.Name + "/" + definition.Arity.ToString(System.Globalization.CultureInfo.InvariantCulture);
             budget.ChargeNode();
             budget.ChargeString(entry.Length);

@@ -30,6 +30,10 @@
   that invocation; allocating option/JSON binding now runs within each execution's
   shared scope. Keep ordinary argument errors at status 2 and admission refusal
   at terminal status 5, including JSON arguments and positional JSON.
+- Admit path-update/deletion/slice copies and padding, collection backing slots,
+  key/sort workspaces, Unicode scratch lists/builders and module metadata copies.
+  Preserve output prefixes and exact ordering when shared demand refuses a later
+  operation; newly compiled cache keys retain persistent ownership.
 
 ## 0.1.0 — pending NuGet publication
 

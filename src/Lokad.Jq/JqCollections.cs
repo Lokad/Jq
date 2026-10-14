@@ -18,7 +18,10 @@ internal sealed class MapFilter(JqFilter Body) : JqFilter
         context.Budget.ChargeNode();
         foreach (JsonNode? element in Iterate(input, context, environment))
             foreach (JsonNode? value in Body.Evaluate(element, context, environment))
+            {
+                context.Budget.ReserveArrayItem(value);
                 result.Add(context.Runtime.Clone(value));
+            }
         yield return result;
     }
 
@@ -47,7 +50,10 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
             {
                 using IEnumerator<JsonNode?> outputs = Body.Evaluate(element, context, environment).GetEnumerator();
                 if (outputs.MoveNext())
+                {
+                    context.Budget.ReserveArrayItem(outputs.Current);
                     result.Add(context.Runtime.Clone(outputs.Current));
+                }
             }
             yield return result;
             yield break;
@@ -60,7 +66,10 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
             {
                 using IEnumerator<JsonNode?> outputs = Body.Evaluate(property.Value, context, environment).GetEnumerator();
                 if (outputs.MoveNext())
+                {
+                    context.Budget.ReserveObjectItem(outputs.Current);
                     result.Add(property.Key, context.Runtime.Clone(outputs.Current));
+                }
             }
             yield return result;
             yield break;
@@ -81,7 +90,10 @@ internal sealed class WithEntriesFilter(JqFilter Body) : JqFilter
         var mapped = new JsonArray();
         foreach (JsonNode? entry in context.Runtime.ToEntries(input))
             foreach (JsonNode? value in Body.Evaluate(entry, context, environment))
+            {
+                context.Budget.ReserveArrayItem(value);
                 mapped.Add(context.Runtime.Clone(value));
+            }
         yield return context.Runtime.FromEntries(mapped);
     }
 }
@@ -347,6 +359,7 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
             yield return new JsonArray();
             yield break;
         }
+        context.Budget.ReserveBytes(4L * rows.Count);
         var positions = new int[rows.Count];
         while (true)
         {
@@ -356,6 +369,7 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
             for (int index = 0; index < rows.Count; index++)
             {
                 context.Budget.ChargeNode();
+                context.Budget.ReserveArrayItem(rows[index][positions[index]]);
                 combo.Add(context.Runtime.Clone(rows[index][positions[index]]));
             }
             yield return combo;
@@ -414,6 +428,8 @@ internal static class CollectionKeys
 {
     internal static List<(JsonNode? Element, JsonNode Keys)> Keyed(JsonNode? input, JqFilter keys, JqContext context, JqEnvironment environment)
     {
+        long count = input is JsonArray array ? array.Count : input is JsonObject obj ? obj.Count : 0;
+        context.Budget.ReserveBytes(80L * count);
         var keyed = new List<(JsonNode? Element, JsonNode Keys)>();
         foreach (JsonNode? element in MapFilter.Iterate(input, context, environment))
         {
@@ -421,6 +437,7 @@ internal static class CollectionKeys
             foreach (JsonNode? key in keys.Evaluate(element, context, environment))
             {
                 context.Budget.ChargeNode();
+                context.Budget.ReserveArrayItem(key);
                 collected.Add(context.Runtime.Clone(key));
             }
             keyed.Add((element, collected));
@@ -445,6 +462,7 @@ internal sealed class SortByFilter(JqFilter Keys) : JqFilter
         foreach (var (element, _) in CollectionKeys.Keyed(input, Keys, context, environment).OrderBy(pair => pair.Keys, CollectionKeys.TotalOrder()))
         {
             context.Budget.ChargeNode();
+            context.Budget.ReserveArrayItem(element);
             result.Add(context.Runtime.Clone(element));
         }
         yield return result;
@@ -475,6 +493,7 @@ internal sealed class GroupByFilter(JqFilter Keys) : JqFilter
                 current = keys;
             }
             context.Budget.ChargeNode();
+            context.Budget.ReserveArrayItem(element);
             group.Add(context.Runtime.Clone(element));
         }
         yield return result;
@@ -500,6 +519,7 @@ internal sealed class UniqueByFilter(JqFilter Keys) : JqFilter
             if (first || !context.Runtime.JsonEquals(current, keys))
             {
                 context.Budget.ChargeNode();
+                context.Budget.ReserveArrayItem(element);
                 result.Add(context.Runtime.Clone(element));
                 current = keys;
                 first = false;
@@ -546,6 +566,7 @@ internal sealed class SortByImplFilter(JqFilter Keys) : JqFilter
         {
             if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
                 throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
+            context.Budget.ReserveBytes(80L * elements.Count);
             var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
             for (int index = 0; index < elements.Count; index++)
             {
@@ -557,6 +578,7 @@ internal sealed class SortByImplFilter(JqFilter Keys) : JqFilter
             foreach (var pair in pairs.OrderBy(static item => item.Key, CollectionKeys.TotalOrder()))
             {
                 context.Budget.ChargeNode();
+                context.Budget.ReserveArrayItem(pair.Element);
                 result.Add(context.Runtime.Clone(pair.Element));
             }
             yield return result;
@@ -577,6 +599,7 @@ internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
         {
             if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
                 throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
+            context.Budget.ReserveBytes(80L * elements.Count);
             var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
             for (int index = 0; index < elements.Count; index++)
             {
@@ -598,6 +621,7 @@ internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
                     current = pair.Key;
                 }
                 context.Budget.ChargeNode();
+                context.Budget.ReserveArrayItem(pair.Element);
                 group.Add(context.Runtime.Clone(pair.Element));
             }
             yield return result;
@@ -618,6 +642,7 @@ internal sealed class UniqueByImplFilter(JqFilter Keys) : JqFilter
         {
             if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
                 throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
+            context.Budget.ReserveBytes(80L * elements.Count);
             var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
             for (int index = 0; index < elements.Count; index++)
             {
@@ -634,6 +659,7 @@ internal sealed class UniqueByImplFilter(JqFilter Keys) : JqFilter
                 if (first || !context.Runtime.JsonEquals(current, pair.Key))
                 {
                     context.Budget.ChargeNode();
+                    context.Budget.ReserveArrayItem(pair.Element);
                     result.Add(context.Runtime.Clone(pair.Element));
                     current = pair.Key;
                     first = false;
@@ -718,6 +744,7 @@ internal sealed class SqlIndexFilter(JqFilter? Stream, JqFilter IndexExpr) : JqF
                 string name = context.Runtime.ToJqString(key);
                 context.Budget.ChargeNode();
                 context.Budget.ChargeString(name.Length);
+                context.Budget.ReserveObjectItem(row);
                 result[name] = context.Runtime.Clone(row);
             }
         }

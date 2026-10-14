@@ -140,6 +140,10 @@ internal sealed class JqBudget : IDisposable
         }
     }
 
+    internal void ReserveArrayItem(JsonNode? value) => ReserveBytes(value is JsonValue ? 88 : 24);
+
+    internal void ReserveObjectItem(JsonNode? value) => ReserveBytes(value is JsonValue ? 160 : 96);
+
     internal static long EstimateTreeStorage(JsonNode? value)
     {
         if (value is null) return 0;

@@ -677,7 +677,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     }
                 }
                 if (!excluded)
+                {
+                    budget.ReserveArrayItem(item);
                     result.Add(Clone(item));
+                }
             }
             return result;
         }
@@ -1228,6 +1231,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (input is JsonObject obj)
         {
+            budget.ReserveBytes(112L * obj.Count);
             var names = new List<string>();
             foreach (var property in obj)
                 names.Add(property.Key);
@@ -1374,6 +1378,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 continue;
             }
             budget.ChargeNode();
+            budget.ReserveArrayItem(current);
             result.Add(Clone(current));
         }
     }
@@ -1418,6 +1423,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 continue;
             }
             budget.ChargeNode();
+            budget.ReserveArrayItem(current);
             result.Add(Clone(current));
         }
     }
@@ -1426,6 +1432,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (input is not JsonArray arr)
             throw new JqException("cannot be sorted, as it is not an array");
+        budget.ReserveBytes(40L * arr.Count);
         var ordered = new List<JsonNode?>(arr.Count);
         foreach (JsonNode? element in arr)
         {
@@ -1437,6 +1444,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         foreach (JsonNode? element in ordered.OrderBy(static element => element, Comparer<JsonNode?>.Create((left, right) => Compare(left, right))))
         {
             budget.ChargeNode();
+            budget.ReserveArrayItem(element);
             result.Add(Clone(element));
         }
         return result;
@@ -1457,6 +1465,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         foreach (JsonNode? element in ordered)
         {
             budget.ChargeNode();
+            budget.ReserveArrayItem(element);
             result.Add(Clone(element));
         }
         return result;
@@ -1539,6 +1548,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             // Scalar offsets, matching rune-wise substring search. Like the
             // reference byte search, an empty needle matches nowhere and the
             // scan resumes one scalar past each hit so overlaps are reported.
+            budget.ReserveBytes(12L * text.Length + 12L * (fragment?.Length ?? 0));
             var runes = new List<System.Text.Rune>();
             foreach (var rune in text.EnumerateRunes())
                 runes.Add(rune);
@@ -1654,10 +1664,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
         || codepoint == 0x205F
         || codepoint == 0x3000;
 
-    internal static string TrimSides(JsonNode? input, bool left, bool right)
+    internal string TrimSides(JsonNode? input, bool left, bool right)
     {
         if (!TryGetString(input, out string? text) || text is null)
             throw new JqException("trim input must be a string");
+        budget.ReserveBytes(36L * text.Length);
         var units = new List<(int Offset, int Length, bool Whitespace)>();
         int cursor = 0;
         while (cursor < text.Length)
@@ -1678,6 +1689,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 last--;
         int start = first < units.Count ? units[first].Offset : text.Length;
         int end = last > 0 ? units[last - 1].Offset + units[last - 1].Length : 0;
+        if (start == 0 && end == text.Length) return text;
+        budget.ChargeString(Math.Max(0, end - start));
         return text[start..end];
     }
 
