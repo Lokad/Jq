@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Add library-local cooperative memory admission interfaces and execution
+  overloads borrowing a shared host allowance. Reusable JSON/raw output capacity
+  and information output reserve before allocation, include replacement peaks,
+  and stay charged through awaited writes and descriptor cleanup. Coverage is
+  partial; input, value, compilation and command ownership are still being
+  migrated from the cumulative policy. Existing overloads retain that policy.
+
 ## 0.1.0 — pending NuGet publication
 
 Embeddable jq 1.8.2 runtime with host-mediated IO. Compatibility is

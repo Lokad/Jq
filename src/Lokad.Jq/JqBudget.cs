@@ -28,8 +28,12 @@ internal sealed class JqBudget
         : this(JqExecutionPolicy.Default, cancellationToken) { }
 
     internal JqBudget(JqExecutionPolicy policy, CancellationToken cancellationToken)
+        : this(policy, null, cancellationToken) { }
+
+    internal JqBudget(JqExecutionPolicy policy, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
     {
         Policy = policy;
+        MemoryBudget = memoryBudget;
         _cancellationToken = cancellationToken;
         _remainingBytes = policy.MaximumAllocationBytes;
         _remainingNodes = policy.MaximumValueNodes;
@@ -38,6 +42,8 @@ internal sealed class JqBudget
     }
 
     internal JqExecutionPolicy Policy { get; }
+
+    internal IMemoryBudget? MemoryBudget { get; }
 
     internal CancellationToken CancellationToken => _cancellationToken;
 

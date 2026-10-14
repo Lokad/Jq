@@ -32,7 +32,22 @@ public sealed class Jq
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(policy);
-        return JqExecutor.ExecuteAsync(host, _invocation, policy, cancellationToken);
+        return JqExecutor.ExecuteAsync(host, _invocation, policy, null, cancellationToken);
+    }
+
+    /// <summary>Executes using a borrowed host memory allowance and the default work policy.</summary>
+    public Task<int> ExecuteAsync(IJqHost host, IMemoryBudget memoryBudget, CancellationToken cancellationToken) =>
+        ExecuteAsync(host, JqExecutionPolicy.Default, memoryBudget, cancellationToken);
+
+    /// <summary>Executes using a borrowed shared memory allowance and independent work limits.</summary>
+    /// <remarks>The execution owns a child scope until all evaluation, writes and descriptor cleanup finish.</remarks>
+    public Task<int> ExecuteAsync(IJqHost host, JqExecutionPolicy policy,
+        IMemoryBudget memoryBudget, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentNullException.ThrowIfNull(memoryBudget);
+        return JqExecutor.ExecuteAsync(host, _invocation, policy, memoryBudget, cancellationToken);
     }
 
     private static bool IsJqName(string name) => name is "jq" || name.EndsWith("/jq");

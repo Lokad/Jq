@@ -15,6 +15,7 @@ internal sealed partial class JqRuntime
         private JqJsonBuffer? _buffer;
         private Utf8JsonWriter? _writer;
         private byte[] _rawBuffer = [];
+        private readonly JqMemoryReservation _rawMemory = new(budget.MemoryBudget);
 
         internal ReadOnlyMemory<byte> Render(JsonNode? node)
         {
@@ -43,6 +44,7 @@ internal sealed partial class JqRuntime
             if (terminator is byte ending)
                 framed[length - 1] = ending;
             buffer.Advance(length);
+            buffer.ReleaseReplacedStorage();
             return buffer.WrittenMemory;
         }
 
@@ -56,7 +58,7 @@ internal sealed partial class JqRuntime
             // Exact growth needs no allowance beyond the old record allocation.
             budget.ChargeOutput(length);
             if (_rawBuffer.Length < length)
-                _rawBuffer = new byte[length];
+                _rawMemory.ReplaceBuffer(ref _rawBuffer, length);
             int written = Utf8Text.Encode(text, _rawBuffer);
             if (terminator is byte ending)
                 _rawBuffer[written] = ending;
@@ -72,6 +74,9 @@ internal sealed partial class JqRuntime
                 writer.Reset();
                 writer.Dispose();
             }
+            _buffer?.Dispose();
+            _rawMemory.Dispose();
+            _rawBuffer = [];
         }
     }
 }

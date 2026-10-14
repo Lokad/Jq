@@ -12,15 +12,17 @@ namespace Lokad.Jq;
 
 internal static class JqExecutor
 {
-    public static async Task<int> ExecuteAsync(IJqHost host, JqInvocation invocation, JqExecutionPolicy policy, CancellationToken cancellationToken)
+    public static async Task<int> ExecuteAsync(IJqHost host, JqInvocation invocation,
+        JqExecutionPolicy policy, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        using var memoryScope = memoryBudget?.CreateScope();
         if (invocation.Error != null)
         {
             await WriteErrorAsync(host, invocation, invocation.Error, cancellationToken).ConfigureAwait(false);
             return 2;
         }
-        var budget = new JqBudget(policy, cancellationToken);
+        var budget = new JqBudget(policy, memoryScope, cancellationToken);
         string? information = invocation.Help ? JqHelp.Text
             : invocation.Version ? "Lokad jq\n"
             : invocation.BuildConfiguration ? JqBuildConfiguration.Text + "\n" : null;
@@ -29,13 +31,15 @@ internal static class JqExecutor
             try
             {
                 budget.ChargeOutput(Encoding.UTF8.GetByteCount(information));
+                using var informationMemory = new JqMemoryReservation(memoryScope);
+                informationMemory.Resize(Encoding.UTF8.GetByteCount(information));
+                return await host.AppendAsync(invocation.StdOut, Utf8Text.Encode(information), cancellationToken).ConfigureAwait(false);
             }
             catch (JqQuotaException exception)
             {
                 await WriteErrorAsync(host, invocation, "jq: " + exception.Message, cancellationToken).ConfigureAwait(false);
                 return 5;
             }
-            return await host.AppendAsync(invocation.StdOut, Utf8Text.Encode(information), cancellationToken).ConfigureAwait(false);
         }
         JqProgramSource programSource = invocation.FilterFile is { } programPath
             ? JqProgramSource.File(Utf8Text.Decode(programPath.Display))

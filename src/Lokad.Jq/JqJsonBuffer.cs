@@ -7,15 +7,26 @@ namespace Lokad.Jq;
 /// Bounds writer reservations before ArrayBufferWriter grows. The byte builders used by shell
 /// descriptors do not implement the writable-memory contract required by Utf8JsonWriter.
 /// </summary>
-internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>
+internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>, IDisposable
 {
     private readonly ArrayBufferWriter<byte> _buffer = new();
+    private readonly JqMemoryReservation _memory = new(budget.MemoryBudget);
+    private bool _disposed;
 
     internal ReadOnlyMemory<byte> WrittenMemory => _buffer.WrittenMemory;
 
     // The host may retain output memory only until its append completes. The
     // executor waits for that completion before resetting this storage.
-    internal void Reset() => _buffer.ResetWrittenCount();
+    internal void Reset()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _buffer.ResetWrittenCount();
+        ReleaseReplacedStorage();
+    }
+
+    // Growth may leave a body slice borrowing the previous backing array while
+    // record framing copies it. Refund old capacity only after that copy ends.
+    internal void ReleaseReplacedStorage() => _memory.Resize(_buffer.Capacity);
 
     public void Advance(int count)
     {
@@ -27,17 +38,28 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>
     public Memory<byte> GetMemory(int sizeHint)
     {
         Reserve(sizeHint);
-        return _buffer.GetMemory(sizeHint);
+        try { return _buffer.GetMemory(sizeHint); }
+        catch
+        {
+            _memory.Resize(_buffer.Capacity);
+            throw;
+        }
     }
 
     public Span<byte> GetSpan(int sizeHint)
     {
         Reserve(sizeHint);
-        return _buffer.GetSpan(sizeHint);
+        try { return _buffer.GetSpan(sizeHint); }
+        catch
+        {
+            _memory.Resize(_buffer.Capacity);
+            throw;
+        }
     }
 
     private void Reserve(int sizeHint)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         budget.CheckCancellation();
         var count = Math.Max(1, sizeHint);
         if (count > JqBudget.MaximumJsonBufferBytes - _buffer.WrittenCount)
@@ -48,6 +70,14 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>
             if (growth > JqBudget.MaximumJsonBufferBytes - _buffer.Capacity)
                 throw new JqQuotaException("JSON buffer exceeds the 64 MiB limit");
             budget.ChargeBytes((long)_buffer.Capacity + growth);
+            _memory.Resize(checked(_memory.Bytes + _buffer.Capacity + growth));
         }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _memory.Dispose();
     }
 }

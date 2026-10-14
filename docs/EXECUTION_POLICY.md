@@ -52,6 +52,36 @@ and exit-2 argument-error contract, including JSON-valued arguments. Execution
 snapshots, compilation and IO then use the supplied policy. This separation
 keeps command reuse independent of host and execution state.
 
+## Cooperative memory admission (in progress)
+
+`ExecuteAsync(host, memoryBudget, cancellationToken)` and
+`ExecuteAsync(host, policy, memoryBudget, cancellationToken)` accept a borrowed
+`IMemoryBudget` implemented by the embedding host. The library defines the
+interfaces in its own namespace and introduces no governor package or host
+dependency. The host forwards all cooperating libraries and nested commands to
+the same allowance; scopes introduce neither a new limit nor a copied balance.
+
+An execution creates and owns a child `IMemoryScope`. It disposes that scope
+after evaluation, awaited writes and owned-descriptor cleanup finish. Cancellation
+does not refund storage while a host operation still borrows it. The supplied
+budget stays owned by its caller. Reservations and scopes have non-throwing,
+idempotent disposal; refunds are available immediately, independently of GC.
+The host must serialize owner disposal with active users.
+
+`TryReserve` and `TryResize` admit nonnegative estimates immediately or refuse
+without changing existing charges. Negative estimates throw; admission through
+disposed owners throws. Refusal reports terminal status 5 and cannot be caught
+by jq handlers. Complete earlier output remains visible.
+
+The first increment covers reusable JSON/raw output backing capacity and
+information output. Growth reserves old and new storage together until the
+replacement or framing copy finishes; retained capacity stays charged between
+records. Other major storage owners and command binding are still being
+migrated. This is partial admission coverage, not a live-memory or process-memory
+guarantee. Existing calls without a memory hook still use the cumulative policy
+above; its migration is unfinished. Estimated reserved bytes are separate from
+actual managed allocation measurements.
+
 ## Fixed safety ceilings
 
 JSON/value/parser/module depth remains 64; evaluation depth remains 256. Filter
