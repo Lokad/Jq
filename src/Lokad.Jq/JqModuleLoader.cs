@@ -209,6 +209,7 @@ internal sealed class JqModuleLoader(
         int depth,
         CancellationToken cancellationToken)
     {
+        using var storage = budget.UseExecutionStorage();
         if (_cache.TryGetValue(canonicalPath, out JqLoadedModule? cached))
             return cached;
         if (!_loading.Add(canonicalPath))

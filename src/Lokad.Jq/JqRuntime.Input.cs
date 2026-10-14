@@ -53,7 +53,7 @@ internal sealed partial class JqRuntime
                             case JsonTokenType.StartObject:
                                 if (_frames.Count >= JqBudget.MaximumDepth)
                                     throw new JqQuotaException("value nesting limit exceeded");
-                                budget.ChargeNode();
+                                budget.ChargeValueNode();
                                 if (_frames.Count == _frames.Capacity)
                                 {
                                     int capacity = System.Math.Min(JqBudget.MaximumDepth,
@@ -109,12 +109,16 @@ internal sealed partial class JqRuntime
                 if (_frames.Count == 0)
                     _root = node;
                 else if (_frames[^1].Container is JsonArray array)
+                {
+                    budget.ReserveBytes(24);
                     array.Add(node);
+                }
                 else
                 {
                     Frame frame = _frames[^1];
                     if (frame.Container is not JsonObject obj || frame.Key is not string key)
                         throw new System.InvalidOperationException("Expected a JSON object property.");
+                    budget.ReserveBytes(96);
                     obj[key] = node;
                     _frames[^1] = frame with { Key = null };
                 }

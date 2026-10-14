@@ -85,8 +85,30 @@ owner until context disposal. Subject encoding and detailed capture contexts
 have operation owners; failed compilation or matching refunds unused admission,
 and nested replacement calls keep their parent's operation charges live.
 
-Value, filter/module compilation and command-binding owners are still being migrated.
-This is partial admission coverage, not a live-memory or process-memory guarantee.
+Execution snapshots and filter/module compilation use a persistent storage owner.
+UTF-16 materialization, decoded JSON nodes/backing slots, container clones and
+array/object construction use coarse value owners. Each outer input evaluation
+starts an owner that survives its generators, variable aliases, nested input,
+awaited writes and terminal cleanup. Its estimate is refunded before the next
+outer input evaluation. Slurp keeps the whole aggregate charged. Sequence queues
+and streaming paths/pending events have a separate cursor owner; record refunds
+preserve the data it still retains. Module compilation during `modulemeta` uses
+the persistent owner so cached definitions survive record refunds.
+
+Serialization results own their byte capacity until consumption finishes.
+Queued diagnostic copies have a separate owner that survives record refunds and
+is released after all awaited appends finish. Small standalone scalar wrappers
+are untracked; managed scalar clones borrow immutable payloads already charged
+to their source owner. Container copies reserve backing slots and stored wrappers.
+
+Within a single outer evaluation, discarded value and builder temporaries may
+remain conservatively charged until that evaluation finishes. TODO: use narrower
+existing generator/aggregate boundaries where profiling shows a material gap,
+without introducing per-object reservations or alias-graph tracking.
+
+Command-binding admission, remaining allocation-site audits and legacy-policy
+migration are still required. This is partial admission coverage, not a
+live-memory or process-memory guarantee.
 Existing calls without a memory hook still use the cumulative policy above; its
 migration is unfinished. Estimated reserved bytes are separate from actual
 managed allocation measurements.

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
+using System.Text;
+using Lokad.Jq.Helpers;
 
 namespace Lokad.Jq;
 
@@ -46,15 +48,45 @@ internal sealed class JqContext(
     // synchronously while the executor drains to the host between outputs,
     // so retained bytes stay bounded by one output plus its diagnostics.
     private readonly List<ReadOnlyMemory<byte>> _stderr = new();
+    private readonly JqMemoryReservation _stderrMemory = new(budget.MemoryBudget);
 
     internal bool HasPendingStderr => _stderr.Count > 0;
 
-    internal void EmitStderr(byte[] chunk)
+    internal void EmitStderr(string text)
     {
-        ArgumentNullException.ThrowIfNull(chunk);
-        Budget.ChargeBytes(chunk.Length);
-        _stderr.Add(chunk);
+        int length = Encoding.UTF8.GetByteCount(text);
+        Budget.ChargeBytes(length);
+        long previous = _stderrMemory.Bytes;
+        _stderrMemory.Resize(checked(previous + length));
+        try { _stderr.Add(Utf8Text.Encode(text)); }
+        catch
+        {
+            _stderrMemory.Resize(previous);
+            throw;
+        }
     }
+
+    internal void EmitStderr(ReadOnlyMemory<byte> content, bool newline)
+    {
+        int length = checked(content.Length + (newline ? 1 : 0));
+        Budget.ChargeBytes(length);
+        long previous = _stderrMemory.Bytes;
+        _stderrMemory.Resize(checked(previous + length));
+        try
+        {
+            var bytes = new byte[length];
+            content.Span.CopyTo(bytes);
+            if (newline) bytes[^1] = (byte)'\n';
+            _stderr.Add(bytes);
+        }
+        catch
+        {
+            _stderrMemory.Resize(previous);
+            throw;
+        }
+    }
+
+    internal void ReleaseDrainedStderr() => _stderrMemory.Resize(0);
 
     internal List<ReadOnlyMemory<byte>> TakePendingStderr()
     {
@@ -63,5 +95,11 @@ internal sealed class JqContext(
         return taken;
     }
 
-    public void Dispose() => Regexes.Dispose();
+    public void Dispose()
+    {
+        Regexes.Dispose();
+        _stderr.Clear();
+        _stderrMemory.Dispose();
+        Budget.Dispose();
+    }
 }

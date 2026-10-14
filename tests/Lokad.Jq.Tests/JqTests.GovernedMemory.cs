@@ -7,21 +7,30 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedRawOutputPreflightsReplacementPeakAndPreservesBorrowedOwner()
     {
-        var memory = new TestMemoryBudget(11);
+        const long limit = 64 * 1024;
+        var memory = new TestMemoryBudget(limit);
         using IMemoryScope caller = memory.CreateScope();
         Assert.True(caller.TryReserve(2, out IMemoryReservation? retained));
         using (retained)
         {
             var host = new MockFileSystem();
+            IMemoryReservation? pressure = null;
+            host.BeforeByteAppend = () =>
+            {
+                if (pressure is null)
+                    Assert.True(memory.TryReserve(limit - memory.ReservedBytes - 3, out pressure));
+            };
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", "\"xx\",\"longxx\"")));
 
             Assert.Equal(5, await command.ExecuteAsync(host, caller, CancellationToken.None));
             Assert.Equal("xx\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
-            Assert.Equal(5, memory.PeakBytes);
+            Assert.NotNull(pressure);
+            Assert.Equal(2 + pressure.Bytes, memory.ReservedBytes);
+            pressure.Dispose();
             Assert.Equal(2, memory.ReservedBytes);
             Assert.Equal(2, retained.Bytes);
-            Assert.True(caller.TryReserve(9, out IMemoryReservation? available));
+            Assert.True(caller.TryReserve(limit - 2, out IMemoryReservation? available));
             available.Dispose();
         }
         Assert.Equal(0, memory.ReservedBytes);
@@ -30,17 +39,23 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedRawOutputReusesAllowanceAcrossRecordsAndInvocations()
     {
-        var memory = new TestMemoryBudget(3);
+        var memory = new TestMemoryBudget(16 * 1024);
+        long? observed = null;
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", "range(100) | \"xx\"")));
         for (int run = 0; run < 3; run++)
         {
             var host = new MockFileSystem();
+            host.BeforeByteAppend = () =>
+            {
+                observed ??= memory.ReservedBytes;
+                Assert.Equal(observed.Value, memory.ReservedBytes);
+            };
             Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
             Assert.Equal(string.Concat(Enumerable.Repeat("xx\n", 100)), host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(0, memory.ReservedBytes);
         }
-        Assert.Equal(3, memory.PeakBytes);
+        Assert.Equal(observed, memory.PeakBytes);
     }
 
     [Fact]
@@ -117,7 +132,8 @@ public sealed partial class JqTests
         host.Release.SetResult();
         await host.Closing.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.False(execution.IsCompleted);
-        Assert.Equal(charged, memory.ReservedBytes);
+        if (cancel) Assert.Equal(charged, memory.ReservedBytes);
+        else Assert.InRange(memory.ReservedBytes, pending.Length, charged);
         host.CloseRelease.SetResult();
         if (cancel)
         {
@@ -138,7 +154,8 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedOverlappingExecutionsShareParentDemand()
     {
-        var memory = new TestMemoryBudget(7);
+        const long limit = 64 * 1024;
+        var memory = new TestMemoryBudget(limit);
         using IMemoryScope caller = memory.CreateScope();
         Assert.True(caller.TryReserve(1, out IMemoryReservation? retained));
         using (retained)
@@ -150,20 +167,25 @@ public sealed partial class JqTests
             await first.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Task<int> secondCall = command.ExecuteAsync(second, caller, CancellationToken.None);
             await second.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            Assert.Equal(7, memory.ReservedBytes);
-            var refused = new MockFileSystem();
-            Assert.Equal(5, await command.ExecuteAsync(refused, caller, CancellationToken.None));
-            Assert.Empty(refused.GetOutput(JqFileDescriptor.StdOut));
-            Assert.Equal("jq: memory budget exceeded\n", refused.GetOutput(JqFileDescriptor.StdErr));
-            Assert.Equal(7, memory.ReservedBytes);
-            first.Release.SetResult();
-            second.Release.SetResult();
-            Assert.Equal(new[] { 0, 0 }, await Task.WhenAll(firstCall, secondCall));
-            Assert.Equal(1, memory.ReservedBytes);
-            Assert.Equal(1, retained.Bytes);
+            long combined = memory.ReservedBytes;
+            Assert.True(combined > 7);
+            Assert.True(memory.TryReserve(limit - combined, out IMemoryReservation? pressure));
+            using (pressure)
+            {
+                var refused = new MockFileSystem();
+                Assert.Equal(5, await command.ExecuteAsync(refused, caller, CancellationToken.None));
+                Assert.Empty(refused.GetOutput(JqFileDescriptor.StdOut));
+                Assert.Equal("jq: memory budget exceeded\n", refused.GetOutput(JqFileDescriptor.StdErr));
+                Assert.Equal(limit, memory.ReservedBytes);
+                first.Release.SetResult();
+                second.Release.SetResult();
+                Assert.Equal(new[] { 0, 0 }, await Task.WhenAll(firstCall, secondCall));
+                Assert.Equal(1 + pressure.Bytes, memory.ReservedBytes);
+                Assert.Equal(1, retained.Bytes);
+            }
         }
         Assert.Equal(0, memory.ReservedBytes);
-        Assert.Equal(7, memory.PeakBytes);
+        Assert.Equal(limit, memory.PeakBytes);
     }
 
     [Theory]

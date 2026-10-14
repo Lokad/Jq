@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
-using Lokad.Jq.Helpers;
 
 namespace Lokad.Jq;
 
@@ -27,7 +26,7 @@ internal sealed class DebugFilter(IReadOnlyList<JqFilter> args) : JqFilter
     private static void EmitDebug(JqContext context, JsonNode? value)
     {
         var line = new JsonArray(JsonValue.Create("DEBUG:"), context.Runtime.Clone(value));
-        byte[] bytes = ByteLines.AppendNewline(context.Runtime.SerializeUtf8(line, context.AsciiOutput, null, false, context.SortKeys)).ToArray();
-        context.EmitStderr(bytes);
+        using var bytes = context.Runtime.SerializeUtf8(line, context.AsciiOutput, null, false, context.SortKeys);
+        context.EmitStderr(bytes.Value, true);
     }
 }

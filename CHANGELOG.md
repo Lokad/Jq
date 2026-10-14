@@ -14,6 +14,11 @@
   subjects and detailed captures. Failed compilation/matching refunds admission;
   nested replacements retain parent charges. This preserves the existing engine
   profile and work/time/cancellation boundaries, with approximate storage sizing.
+- Add coarse record and persistent storage owners for UTF-16 materialization,
+  decoded JSON, container copies/construction, snapshots and filter/module
+  compilation. Preserve aliases, slurp aggregates, sequence queues, streaming
+  paths and cached module definitions across safe record refunds. Serialization
+  results and queued diagnostic bytes have explicit storage lifetimes.
 
 ## 0.1.0 — pending NuGet publication
 

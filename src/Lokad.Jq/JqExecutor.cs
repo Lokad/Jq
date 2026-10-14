@@ -22,7 +22,7 @@ internal static class JqExecutor
             await WriteErrorAsync(host, invocation, invocation.Error, cancellationToken).ConfigureAwait(false);
             return 2;
         }
-        var budget = new JqBudget(policy, memoryScope, cancellationToken);
+        using var budget = new JqBudget(policy, memoryScope, cancellationToken);
         string? information = invocation.Help ? JqHelp.Text
             : invocation.Version ? "Lokad jq\n"
             : invocation.BuildConfiguration ? JqBuildConfiguration.Text + "\n" : null;
@@ -84,7 +84,7 @@ internal static class JqExecutor
         {
             foreach (var entry in invocation.Variables)
             {
-                budget.ChargeTree(entry.Value);
+                budget.ChargeClone(entry.Value);
                 executionVariables[entry.Key] = entry.Value?.DeepClone();
             }
             var filterText = invocation.Filter ?? ".";
@@ -129,6 +129,8 @@ internal static class JqExecutor
                 while (true)
                 {
                     stage = 4;
+                    cursor.ReleaseCompletedRecordStorage();
+                    budget.BeginRecord();
                     if (!await inputs.MoveNextAsync().ConfigureAwait(false)) break;
                     stage = 5;
                     try
@@ -217,12 +219,16 @@ internal static class JqExecutor
         {
             if (!context.HasPendingStderr)
                 return null;
-            foreach (ReadOnlyMemory<byte> chunk in context.TakePendingStderr())
+            try
             {
-                JqAppendResult appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdErr, chunk, cancellationToken)).ConfigureAwait(false);
-                if (!appended.CanAcceptMore)
-                    return appended.ExitCode;
+                foreach (ReadOnlyMemory<byte> chunk in context.TakePendingStderr())
+                {
+                    JqAppendResult appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdErr, chunk, cancellationToken)).ConfigureAwait(false);
+                    if (!appended.CanAcceptMore)
+                        return appended.ExitCode;
+                }
             }
+            finally { context.ReleaseDrainedStderr(); }
             return null;
         }
         static async IAsyncEnumerable<JsonNode?> OuterInputsAsync(
@@ -298,6 +304,7 @@ internal static class JqExecutor
                 }
                 if (!pulled.HasValue)
                     break;
+                context.Budget.ReserveBytes(24);
                 slurped.Add(pulled.Value);
             }
             context.InputFilename = cursor.LastName;
@@ -312,7 +319,7 @@ internal static class JqExecutor
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(message);
-        context.EmitStderr(Utf8Text.Encode("jq: ignoring parse error: " + message + "\n").ToArray());
+        context.EmitStderr("jq: ignoring parse error: " + message + "\n");
     }
 
     // Hosted `--rawfile`/`--slurpfile` variables resolve after the filter
@@ -372,6 +379,7 @@ internal static class JqExecutor
         {
             if (bytes.Span[offset..].TrimStart(" \t\r\n"u8).IsEmpty)
                 break;
+            context.Budget.ReserveBytes(24);
             values.Add(context.Runtime.ReadJsonValue(bytes.Span[offset..], out int consumed));
             offset += consumed;
         }

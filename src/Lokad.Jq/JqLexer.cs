@@ -46,7 +46,20 @@ internal static class Lexer
         if (source.Length > 1024 * 1024)
             throw new JqCompileException("filter exceeds the 1 Mi-character limit", JqSourceSpan.FromOffset(source, 0), programSource);
         budget.ChargeBytes(2L * source.Length);
+        budget.ReserveBytes(128 + 4L * source.Length);
         var tokens = new List<Token>();
+        void AddToken(Token token)
+        {
+            if (tokens.Count == tokens.Capacity)
+            {
+                int capacity = Math.Max(4, tokens.Capacity * 2);
+                // Token backing capacity plus a coarse allowance for syntax and
+                // literal metadata retained with this compiled program.
+                budget.ReserveBytes(128L * capacity);
+                tokens.EnsureCapacity(capacity);
+            }
+            tokens.Add(token);
+        }
         for (var i = 0; i < source.Length;)
         {
             budget.CheckCancellation();
@@ -98,7 +111,7 @@ internal static class Lexer
                     }
                 }
                 var kind = isField ? TokenKind.FieldName : TokenKind.Identifier;
-                tokens.Add(new Token(kind, source[start..i], JqSourceSpan.FromOffset(source, start)));
+                AddToken(new Token(kind, source[start..i], JqSourceSpan.FromOffset(source, start)));
                 continue;
             }
             // Numbers never take a sign; `-` stays an operator so `1+2` and
@@ -124,7 +137,7 @@ internal static class Lexer
                     while (i < source.Length && char.IsDigit(source[i]))
                         i++;
                 }
-                tokens.Add(new Token(TokenKind.Number, source[start..i], JqSourceSpan.FromOffset(source, start)));
+                AddToken(new Token(TokenKind.Number, source[start..i], JqSourceSpan.FromOffset(source, start)));
                 continue;
             }
 if (c == '"')
@@ -193,7 +206,7 @@ if (c == '"')
                 }
                 if (!closed)
                     throw new JqCompileException("unterminated string", JqSourceSpan.FromOffset(source, start), programSource);
-                tokens.Add(new Token(TokenKind.String, sb.ToString(), JqSourceSpan.FromOffset(source, start)));
+                AddToken(new Token(TokenKind.String, sb.ToString(), JqSourceSpan.FromOffset(source, start)));
                 continue;
             }
 
@@ -202,31 +215,31 @@ if (c == '"')
             // spaced `?` and `//` stay a postfix suppression plus alternative.
             if (i + 3 <= source.Length && source.Substring(i, 3) == "?//")
             {
-                tokens.Add(new Token(TokenKind.Symbol, "?//", JqSourceSpan.FromOffset(source, i)));
+                AddToken(new Token(TokenKind.Symbol, "?//", JqSourceSpan.FromOffset(source, i)));
                 i += 3;
                 continue;
             }
             if (i + 3 <= source.Length && source.Substring(i, 3) == "//=")
             {
-                tokens.Add(new Token(TokenKind.Symbol, "//=", JqSourceSpan.FromOffset(source, i)));
+                AddToken(new Token(TokenKind.Symbol, "//=", JqSourceSpan.FromOffset(source, i)));
                 i += 3;
                 continue;
             }
             if (two is "==" or "!=" or "<=" or ">=" or "//" or "|=" or "+=" or "-=" or "*=" or "/=" or "%=")
             {
-                tokens.Add(new Token(TokenKind.Symbol, two, JqSourceSpan.FromOffset(source, i)));
+                AddToken(new Token(TokenKind.Symbol, two, JqSourceSpan.FromOffset(source, i)));
                 i += 2;
                 continue;
             }
             if (".,|+-*/%()[]{}:;$?<>@=".Contains(c, StringComparison.Ordinal))
             {
-                tokens.Add(new Token(TokenKind.Symbol, c.ToString(), JqSourceSpan.FromOffset(source, i)));
+                AddToken(new Token(TokenKind.Symbol, c.ToString(), JqSourceSpan.FromOffset(source, i)));
                 i++;
                 continue;
             }
             throw new JqCompileException($"invalid character {c}", JqSourceSpan.FromOffset(source, i), programSource);
         }
-        tokens.Add(new Token(TokenKind.End, "<end>", JqSourceSpan.FromOffset(source, source.Length)));
+        AddToken(new Token(TokenKind.End, "<end>", JqSourceSpan.FromOffset(source, source.Length)));
         return tokens;
     }
 }

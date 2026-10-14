@@ -111,6 +111,17 @@ internal sealed class JqStreamScanner : IDisposable
         return false;
     }
 
+    internal long RetainedValueBytes
+    {
+        get
+        {
+            long bytes = JqBudget.EstimateTreeStorage(_next) + JqBudget.EstimateTreeStorage(_stashed);
+            foreach (Segment segment in _path)
+                if (segment.Key is { } key) bytes += 2L * key.Length;
+            return bytes;
+        }
+    }
+
     public void Dispose()
     {
         _token = [];

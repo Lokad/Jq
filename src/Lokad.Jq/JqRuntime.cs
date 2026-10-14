@@ -16,22 +16,40 @@ internal sealed partial class JqRuntime(JqBudget budget)
     private static readonly JsonSerializerOptions AsciiJson = new() { Encoder = JavaScriptEncoder.Default };
 
     internal string Serialize(JsonNode? node, bool ascii, int? indent, bool tabs)
-        => Encoding.UTF8.GetString(SerializeUtf8(node, ascii, indent, tabs).Span);
+    {
+        using var rendered = SerializeUtf8(node, ascii, indent, tabs);
+        budget.ReserveBytes(2L * Encoding.UTF8.GetCharCount(rendered.Value.Span));
+        return Encoding.UTF8.GetString(rendered.Value.Span);
+    }
 
-    internal ReadOnlyMemory<byte> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs) =>
+    internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs) =>
         SerializeUtf8(node, ascii, indent, tabs, sorted: false);
 
-    internal ReadOnlyMemory<byte> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted)
+    internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted)
     {
         JsonNode? clean = PrepareJson(node, sorted);
         var buffer = new JqJsonBuffer(budget);
-        using var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs));
-        return WriteJson(clean, ascii, indent, tabs, buffer, writer);
+        try
+        {
+            using var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs));
+            try
+            {
+                return new JqMemoryValue<ReadOnlyMemory<byte>>(
+                    WriteJson(clean, ascii, indent, tabs, buffer, writer), buffer);
+            }
+            finally { writer.Reset(); }
+        }
+        catch
+        {
+            buffer.Dispose();
+            throw;
+        }
     }
 
     private JsonNode? PrepareJson(JsonNode? node, bool sorted)
     {
         budget.ChargeTree(node);
+        if (sorted) budget.ReserveCloneStorage(node);
         JsonNode? shaped = sorted ? SortedClone(node) : node;
         if (sorted)
             budget.ChargeTree(shaped);
@@ -60,7 +78,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         rendered = LowercaseUnicodeEscapes(rendered);
         if (indent != null || tabs)
             rendered = NormalizeNewlines(rendered);
-        budget.ChargeString(Encoding.UTF8.GetCharCount(rendered.Span));
+        budget.ChargeStringWork(Encoding.UTF8.GetCharCount(rendered.Span));
         return rendered;
     }
 
@@ -69,7 +87,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // backslash in writer output introduces an escape, so a copy carrying
     // lowercase digits is value-identical. The input returns untouched when
     // no uppercase escape digits are present (the common all-ASCII case).
-    private static ReadOnlyMemory<byte> LowercaseUnicodeEscapes(ReadOnlyMemory<byte> body)
+    private ReadOnlyMemory<byte> LowercaseUnicodeEscapes(ReadOnlyMemory<byte> body)
     {
         ReadOnlySpan<byte> span = body.Span;
         bool dirty = false;
@@ -88,6 +106,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
         if (!dirty)
             return body;
+        budget.ReserveBytes(span.Length);
         var lowered = new byte[span.Length];
         span.CopyTo(lowered);
         for (int index = 0; index + 5 < lowered.Length; index++)
@@ -131,7 +150,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // LF-only. Raw carriage returns cannot appear inside JSON string
     // literals (controls stay escaped), so dropping `\r` before `\n` only
     // touches structural newlines.
-    private static ReadOnlyMemory<byte> NormalizeNewlines(ReadOnlyMemory<byte> body)
+    private ReadOnlyMemory<byte> NormalizeNewlines(ReadOnlyMemory<byte> body)
     {
         ReadOnlySpan<byte> span = body.Span;
         int pairs = 0;
@@ -145,6 +164,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
         if (pairs == 0)
             return body;
+        budget.ReserveBytes(span.Length - pairs);
         var normalized = new byte[span.Length - pairs];
         int written = 0;
         for (var i = 0; i < span.Length; i++)
@@ -217,7 +237,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode? Clone(JsonNode? node)
     {
-        budget.ChargeTree(node);
+        budget.ChargeClone(node);
         return node?.DeepClone();
     }
 
@@ -231,7 +251,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (node is null || node.Parent is null)
             return node;
-        budget.ChargeTree(node);
+        budget.ChargeClone(node);
         return node.DeepClone();
     }
 
@@ -252,7 +272,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             int firstContent = SkipJsonWhitespace(text, 0);
             if (TryMatchNonFinite(text, firstContent, out double topValue, out int topEnd))
             {
-                budget.ChargeNode();
+                budget.ChargeValueNode();
                 consumed = topEnd;
                 budget.ChargeBytes(consumed - firstContent);
                 return JsonValue.Create(topValue);
@@ -408,7 +428,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 if (IsValuePreceded(source, failure)
                     && TryMatchNonFinite(source, failure, out double number, out int end))
                 {
-                    budget.ChargeNode();
+                    budget.ChargeValueNode();
                     int resume = SkipJsonWhitespace(source, end);
                     if (consumeComma && resume < source.Length && source[resume] == (byte)',')
                         resume++;
@@ -429,7 +449,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 case JsonTokenType.StartObject:
                     if (depth >= JqBudget.MaximumDepth)
                         throw new JqQuotaException("value nesting limit exceeded");
-                    budget.ChargeNode();
+                    budget.ChargeValueNode();
                     var obj = new JsonObject();
                     bool expectsObjectValue = true;
                     while (true)
@@ -442,6 +462,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                         if (reader.TokenType != JsonTokenType.PropertyName)
                             throw new JqException("expected object key");
                         string name = ReadBoundedString(ref reader);
+                        budget.ReserveBytes(96);
                         ReadToken(ref reader, source, ref consumedBase, headState, expectsObjectValue, out bool hasValue, out JsonNode? valueFallback);
                         if (!hasValue)
                             throw new JqException("truncated JSON value");
@@ -460,7 +481,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 case JsonTokenType.StartArray:
                     if (depth >= JqBudget.MaximumDepth)
                         throw new JqQuotaException("value nesting limit exceeded");
-                    budget.ChargeNode();
+                    budget.ChargeValueNode();
                     var array = new JsonArray();
                     bool expectsValue = true;
                     while (true)
@@ -471,11 +492,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
                             throw new JqException("truncated JSON value");
                         if (nonFinite is not null)
                         {
+                            budget.ReserveBytes(24);
                             array.Add(nonFinite);
                             continue;
                         }
                         if (reader.TokenType == JsonTokenType.EndArray)
                             return array;
+                        budget.ReserveBytes(24);
                         array.Add(ReadValue(ref reader, source, ref consumedBase, depth + 1));
                         expectsValue = false;
                     }
@@ -489,7 +512,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
         if (reader.TokenType is not (JsonTokenType.String or JsonTokenType.Number
             or JsonTokenType.True or JsonTokenType.False or JsonTokenType.Null))
             throw new JqException("expected a JSON value");
-        budget.ChargeNode();
+        if (reader.TokenType == JsonTokenType.Null) budget.ChargeNode();
+        else budget.ChargeValueNode();
         switch (reader.TokenType)
         {
             case JsonTokenType.String:
@@ -549,6 +573,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JsonNode? ParseJson(string text)
     {
         budget.ChargeBytes(Encoding.UTF8.GetByteCount(text));
+        budget.ReserveBytes(Encoding.UTF8.GetByteCount(text));
         var bytes = Encoding.UTF8.GetBytes(text);
         int prefix = HasBomPrefix(bytes) ? 3 : 0;
         int consumed;
@@ -1581,6 +1606,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // Like the reference explode|map|implode definition, non-strings fail at the explode step.
         if (!TryGetString(input, out string? text) || text is null)
             throw new JqException("explode input must be a string");
+        budget.ReserveBytes(2L * text.Length);
         var builder = new StringBuilder(text.Length);
         foreach (char ch in text)
         {
@@ -1591,7 +1617,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             else
                 builder.Append(ch);
         }
-        budget.ChargeString(builder.Length);
+        budget.ChargeStringWork(builder.Length);
         return budget.Finish(builder);
     }
 
@@ -1830,7 +1856,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             {
                 var bytes = Encoding.UTF8.GetByteCount(text);
                 budget.ChargeString(4 * ((bytes + 2L) / 3));
-                budget.ChargeBytes(bytes);
+                budget.ChargeAllocation(bytes);
                 return Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
             }
             case "base64d": return Base64Decode(text, value);
@@ -1845,7 +1871,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 var count = Math.Min(1024, text.Length - start);
                 if (start + count < text.Length && char.IsHighSurrogate(text[start + count - 1])) count--;
                 // Encoders work on bounded chunks; never split a surrogate pair at a chunk boundary.
-                budget.ChargeBytes(24L * count);
+                budget.ChargeAllocation(24L * count);
                 budget.Append(builder, encode(text.Substring(start, count)));
                 start += count;
             }
@@ -1874,7 +1900,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // Codes: 61 is =, 65 to 90 are A-Z, 97 to 122 are a-z, 48 to 57 are 0-9, 43 is +, 47 is /.
         string Base64Decode(string source, JsonNode? original)
         {
-            budget.ChargeBytes(2L * source.Length + 8);
+            budget.ChargeAllocation(2L * source.Length + 8);
             var decoded = new List<byte>(source.Length);
             uint code = 0;
             int pending = 0;
@@ -1929,7 +1955,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // Code 37 is percent.
         string UriDecode(string source, JsonNode? original)
         {
-            budget.ChargeBytes(3L * source.Length + 8);
+            budget.ChargeAllocation(3L * source.Length + 8);
             var decoded = new List<byte>(source.Length);
             for (int index = 0; index < source.Length; index++)
             {

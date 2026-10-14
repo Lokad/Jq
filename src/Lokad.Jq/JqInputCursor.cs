@@ -47,6 +47,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private byte[] _readBuffer = [];
     private readonly JqMemoryReservation _readMemory;
     private readonly JqMemoryReservation _bufferMemory;
+    private readonly JqMemoryReservation _retainedValues;
 
     private int _index = -1;
     private bool _active;
@@ -84,6 +85,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _budget = context.Budget;
         _readMemory = new JqMemoryReservation(_budget.MemoryBudget);
         _bufferMemory = new JqMemoryReservation(_budget.MemoryBudget);
+        _retainedValues = _budget.CreateStorageOwner();
         _runtime = context.Runtime;
         _context = context;
         _stdin = invocation.StdIn;
@@ -114,6 +116,15 @@ internal sealed class JqInputCursor : IAsyncDisposable
     internal string? LastName { get; private set; }
 
     internal int LastLine { get; private set; }
+
+    internal void ReleaseCompletedRecordStorage()
+    {
+        long retained = (_scanner?.RetainedValueBytes ?? 0) + 24L * _seqQueue.Count;
+        foreach (JsonNode? queued in _seqQueue)
+            retained += JqBudget.EstimateTreeStorage(queued);
+        if (_seqError is { } error) retained += 2L * error.Message.Length;
+        if (_retainedValues.Bytes != retained) _retainedValues.Resize(retained);
+    }
 
     // Async pull for outer iteration. Returns false when every source is
     // exhausted; otherwise sets filename/line state and returns the value.
@@ -546,6 +557,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     private async Task<(bool HasValue, JsonNode? Value)> PullSeqAsync()
     {
+        using var storage = _budget.UseStorage(_retainedValues);
         while (true)
         {
             _budget.CheckCancellation();
@@ -581,6 +593,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     private async Task<(bool HasValue, JsonNode? Value)> PullStreamAsync()
     {
+        using var storage = _budget.UseStorage(_retainedValues);
         ArgumentNullException.ThrowIfNull(_scanner);
         while (true)
         {
@@ -824,6 +837,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 return;
             }
             pos += consumed;
+            _budget.ReserveBytes(24);
             _seqQueue.Enqueue(value);
         }
     }
@@ -849,6 +863,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 return;
             }
             pos += consumed;
+            _budget.ReserveBytes(24);
             _seqQueue.Enqueue(value);
         }
     }
@@ -926,6 +941,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 JsonNode? literal = _runtime.ReadJsonValue(run, out _);
                 Advance(length);
                 _seqDone = true;
+                _budget.ReserveBytes(24);
                 _seqQueue.Enqueue(literal);
                 return;
             }

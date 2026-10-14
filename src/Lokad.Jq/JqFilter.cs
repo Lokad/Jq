@@ -21,7 +21,7 @@ internal abstract class JqFilter
             foreach (var value in EvaluateCore(input, context, environment))
             {
                 context.Budget.ChargeNode();
-                if (TryGetString(value, out var text)) context.Budget.ChargeString(text.Length);
+                if (TryGetString(value, out var text)) context.Budget.ChargeStringWork(text.Length);
                 yield return value;
             }
         }
@@ -91,7 +91,7 @@ internal abstract class SingleValueFilter : JqFilter
         {
             JsonNode? value = EvaluateValue(input, context, environment);
             context.Budget.ChargeNode();
-            if (TryGetString(value, out var text)) context.Budget.ChargeString(text.Length);
+            if (TryGetString(value, out var text)) context.Budget.ChargeStringWork(text.Length);
             yield return value;
         }
         finally
@@ -1383,9 +1383,13 @@ internal sealed class ArrayFilter(JqFilter item) : JqFilter
 
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
+        context.Budget.ReserveBytes(64);
         var array = new JsonArray();
         foreach (var value in item.Evaluate(input, context, environment))
+        {
+            context.Budget.ReserveBytes(value is JsonValue ? 88 : 24);
             array.Add(context.Runtime.Clone(value));
+        }
         yield return array;
     }
 }
@@ -1402,6 +1406,7 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
     {
         if (properties.Count == 0)
         {
+            context.Budget.ReserveBytes(64);
             yield return new JsonObject();
             yield break;
         }
@@ -1416,6 +1421,10 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
                 // The logical prefix/value copies were charged before each
                 // field. Allocate only the finished object; never attach the
                 // borrowed inputs or expose the backtracking field table.
+                context.Budget.ReserveBytes(64 + 96L * fields.Count);
+                context.Budget.ReserveBytes(64L * fields.Values.Count(value => value is JsonValue));
+                foreach (var field in fields)
+                    context.Budget.ReserveCloneStorage(field.Value);
                 var result = new JsonObject();
                 foreach (var field in fields)
                     result.Add(field.Key, field.Value?.DeepClone());
@@ -1921,9 +1930,12 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "env": yield return context.Runtime.Clone(context.Variables.TryGetValue("ENV", out JsonNode? envValue) ? envValue : new JsonObject()); break;
                 case "stderr":
                     if (TryGetString(input, out string? message) && message is not null)
-                        context.EmitStderr(Utf8Text.Encode(message).ToArray());
+                        context.EmitStderr(message);
                     else
-                        context.EmitStderr(context.Runtime.SerializeUtf8(input, false, null, false).ToArray());
+                    {
+                        using var bytes = context.Runtime.SerializeUtf8(input, false, null, false);
+                        context.EmitStderr(bytes.Value, false);
+                    }
                     yield return context.Runtime.Clone(input);
                     break;
                 case "tonumber": yield return context.Runtime.ToJsonNumber(input); break;
@@ -2217,6 +2229,7 @@ for (; i < template.Length; i++)
             {
                 foreach (var prefix in Combine(index - 1))
                 {
+                    context.Budget.ReserveBytes(2L * (prefix.Length + run.Text.Length));
                     StringBuilder assembled = new StringBuilder(prefix.Length + run.Text.Length);
                     assembled.Append(prefix);
                     context.Budget.Append(assembled, run.Text.AsSpan());
@@ -2231,6 +2244,7 @@ for (; i < template.Length; i++)
                     string rendered = Render(value);
                     foreach (var prefix in Combine(index - 1))
                     {
+                        context.Budget.ReserveBytes(2L * (prefix.Length + rendered.Length));
                         StringBuilder assembled = new StringBuilder(prefix.Length + rendered.Length);
                         assembled.Append(prefix);
                         context.Budget.Append(assembled, rendered.AsSpan());
