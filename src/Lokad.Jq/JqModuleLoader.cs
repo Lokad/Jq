@@ -280,7 +280,7 @@ internal sealed class JqModuleLoader(
             foreach (string candidate in candidates)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                budget.ChargeBytes(128 + 64L * candidate.Length);
+                budget.ChargeAllocationWork(128 + 64L * candidate.Length);
                 JqPath path;
                 try
                 {

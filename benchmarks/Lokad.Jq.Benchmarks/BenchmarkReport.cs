@@ -9,6 +9,8 @@ namespace Lokad.Jq.Benchmarking;
 internal sealed record HostProvenance(string Commit, bool CleanCheckout, string Sdk, string Runtime,
     string OperatingSystem, string Architecture, string Cpu, int LogicalProcessors,
     string BenchmarkBuild, string LibraryBuild, string BenchmarkAssemblySha256);
+// Keep the historical JSON field so existing evidence remains readable. It
+// stores MaximumAllocationWorkBytes and never represents current reserved memory.
 internal sealed record PolicyProvenance(int InputBytes, int OutputBytes, long AllocationBytes,
     int ValueNodes, int StringUtf16Units, int JsonDepth);
 internal sealed record ComparisonRow(ComparisonWorkloadInfo Workload, CaseVerification Verification, QualificationResult Timing);
@@ -57,7 +59,7 @@ internal static class BenchmarkReport
     {
         var policy = JqExecutionPolicy.Default;
         return new(SchemaVersion, mode, DateTimeOffset.UtcNow, Contract, host, reference,
-            new(policy.MaximumInputBytes, policy.MaximumOutputBytes, policy.MaximumAllocationBytes,
+            new(policy.MaximumInputBytes, policy.MaximumOutputBytes, policy.MaximumAllocationWorkBytes,
                 policy.MaximumValueNodes, policy.MaximumStringLength, 64), gate, pairs, requestedCases, complete, rows.ToArray());
     }
 

@@ -8,8 +8,8 @@
   and stay charged through awaited writes and descriptor cleanup. Cursor buffers,
   streaming token capacity and hosted file reads also reserve before allocation;
   successful read results retain their charge until decoding finishes. Coverage
-  is partial; value, filter/module compilation and command ownership are still being
-  migrated from the cumulative policy. Existing overloads retain that policy.
+  is partial; command ownership and the remaining allocation-site audit are still
+  pending. Existing overloads enforce the independent work/I/O/structural policy.
 - Govern retained regex pattern/workspace estimates and operation-owned UTF-8
   subjects and detailed captures. Failed compilation/matching refunds admission;
   nested replacements retain parent charges. This preserves the existing engine
@@ -19,6 +19,11 @@
   compilation. Preserve aliases, slurp aggregates, sequence queues, streaming
   paths and cached module definitions across safe record refunds. Serialization
   results and queued diagnostic bytes have explicit storage lifetimes.
+- Rename the cumulative guard to `MaximumAllocationWorkBytes` and distinguish
+  `allocation work allowance exceeded` from shared-memory refusal. Keep
+  `MaximumAllocationBytes` only as a deprecated alias until the next breaking API
+  release. Remove obsolete partial-object copy accounting; reserve completed
+  objects and update work-policy fixtures and benchmark policy provenance.
 
 ## 0.1.0 — pending NuGet publication
 

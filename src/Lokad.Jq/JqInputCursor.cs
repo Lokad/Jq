@@ -1005,7 +1005,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         }
         int needed = _count + additional;
         int capacity = Math.Max(needed, _buffer.Length == 0 ? ChunkSize : _buffer.Length * 2);
-        _budget.ChargeBytes(capacity);
+        _budget.ChargeAllocationWork(capacity);
         _bufferMemory.ReplaceBuffer(ref _buffer, capacity, _start, _count);
         _start = 0;
     }

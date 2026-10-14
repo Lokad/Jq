@@ -26,18 +26,28 @@ original policy unchanged. There is no unlimited setting.
 | --- | --- | --- |
 | `MaximumInputBytes` | 16 MiB | Cumulative bytes read from stdin, input files, filter files, file variables, and modules. |
 | `MaximumOutputBytes` | 32 MiB | Cumulative stdout bytes, including newlines, NUL/RS framing, and information output. |
-| `MaximumAllocationBytes` | 256 MiB | Cumulative conservative allocation charges, including intermediate and discarded values. |
+| `MaximumAllocationWorkBytes` | 256 MiB | Cumulative conservative allocation-work charges, including intermediate and discarded work. |
 | `MaximumValueNodes` | 262,144 | Cumulative value and evaluation charges, including discarded work. |
 | `MaximumStringLength` | 8 Mi UTF-16 code units | Each charged string or text buffer, including keys, rendered JSON, and decoded filter-file text. |
 | `MaximumRegexWork` | 10,000,000 | Engine work steps per search; a fresh allowance for each `IsMatch` or `MatchDetailed` call. |
 | `MaximumRegexTime` | Five seconds | Time per engine search; excludes compilation, filter replacement evaluation and host waits. |
 
-Allocation accounting measures charged work, rather than retained heap or exact
-process memory. Charges are not refunded when values are discarded. Small
+Allocation-work accounting measures charged work. Its charges are not refunded
+when values are discarded. Small
 allowances can expire during variable snapshots or compilation, before any
 input is read. The output allowance covers stdout; queued `debug`/`stderr` bytes
-consume the allocation allowance. Terminal diagnostics remain writable after
+consume allocation work. Terminal diagnostics remain writable after
 exhaustion so the host can observe its cause.
+
+`MaximumAllocationBytes` is a deprecated compatibility alias for
+`MaximumAllocationWorkBytes`, with the same backing value and validation. It
+introduces no separate memory balance or backend. Remove the alias in the next
+breaking API release; maintained examples, runtime consumers and ordinary tests
+use the canonical work property. Work exhaustion reports
+`allocation work allowance exceeded`; shared admission refusal reports
+`memory budget exceeded`. Both remain terminal status 5 and bypass jq handlers.
+Calls without a host memory hook enforce only the independent work/I/O/structural
+policies; they provide no shared live-storage admission.
 
 Input reads use bounded requests and a one-byte overflow probe. Filter/module
 and variable-file reads use the remaining cumulative allowance. A rejected
@@ -106,11 +116,10 @@ remain conservatively charged until that evaluation finishes. TODO: use narrower
 existing generator/aggregate boundaries where profiling shows a material gap,
 without introducing per-object reservations or alias-graph tracking.
 
-Command-binding admission, remaining allocation-site audits and legacy-policy
-migration are still required. This is partial admission coverage, not a
+Command-binding admission and remaining allocation-site audits are still
+required. This is partial admission coverage, not a
 live-memory or process-memory guarantee.
-Existing calls without a memory hook still use the cumulative policy above; its
-migration is unfinished. Estimated reserved bytes are separate from actual
+The cumulative work policy above remains independent. Estimated reserved bytes are separate from actual
 managed allocation measurements.
 
 ## Fixed safety ceilings
@@ -140,7 +149,7 @@ input records and files are abandoned. Cancellation propagates as
 compilation and each bounded synchronous search, and cannot interrupt a running
 engine call. Its work/time allowances are per search rather than a cumulative
 execution deadline. A global operation can therefore take multiple allowances;
-jq value/allocation counters still bound produced results. Host contract
+jq value/allocation-work counters still bound produced results. Host contract
 failures propagate separately. Catchable language failures, such as invalid
 regex syntax, retain their jq handler behavior.
 Data imports and streaming numeric decoding propagate quotas unchanged; input

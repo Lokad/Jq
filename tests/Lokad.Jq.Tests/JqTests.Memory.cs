@@ -49,7 +49,7 @@ public sealed partial class JqTests
     [InlineData("\"a🚀bc\"[4:]", "\"\"\n")]
     [InlineData("\"a🚀bc\"[2:2]", "\"\"\n")]
     [InlineData("\"xx\" | gsub(\"x\"; \"y\" * 4194304) | length", "8388608\n")]
-    public async Task Jq_MemoryLimitsPreserveOrdinaryResults(string filter, string expected)
+    public async Task Jq_ResourceLimitsPreserveOrdinaryResults(string filter, string expected)
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
@@ -92,14 +92,14 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_ChargesStringsAcrossManySmallResults()
+    public async Task Jq_AllocationWorkCountsManyStringResults()
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n",
             "[range(0;150) | \"x\" * 262144] | length")));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("allocation work allowance exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -580,7 +580,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
         Assert.Equal(2, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("allocation work allowance exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 

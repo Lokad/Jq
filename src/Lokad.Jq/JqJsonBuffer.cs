@@ -69,7 +69,7 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>, IDisp
             var growth = Math.Max(count, Math.Max(256, _buffer.Capacity));
             if (growth > JqBudget.MaximumJsonBufferBytes - _buffer.Capacity)
                 throw new JqQuotaException("JSON buffer exceeds the 64 MiB limit");
-            budget.ChargeBytes((long)_buffer.Capacity + growth);
+            budget.ChargeAllocationWork((long)_buffer.Capacity + growth);
             _memory.Resize(checked(_memory.Bytes + _buffer.Capacity + growth));
         }
     }

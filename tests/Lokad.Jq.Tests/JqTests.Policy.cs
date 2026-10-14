@@ -176,11 +176,11 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "/missing")));
         var policy = nodes
             ? new JqExecutionPolicy { MaximumValueNodes = 1 }
-            : new JqExecutionPolicy { MaximumAllocationBytes = 1 };
+            : new JqExecutionPolicy { MaximumAllocationWorkBytes = 1 };
 
         Assert.Equal(5, await command.ExecuteAsync(host, policy, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal(nodes ? "jq: value budget exceeded\n" : "jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(nodes ? "jq: value budget exceeded\n" : "jq: allocation work allowance exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.ClosedDescriptors);
         Assert.Equal(0, host.ReadBytesCallCount);
     }
@@ -307,7 +307,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1")));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host,
-            new JqExecutionPolicy { MaximumAllocationBytes = 1 }, cancellation.Token));
+            new JqExecutionPolicy { MaximumAllocationWorkBytes = 1 }, cancellation.Token));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.AppendCallCount);
@@ -350,12 +350,12 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_StreamNumericDecodeCannotConvertAllocationQuotaToParseError(bool finish)
     {
-        var budget = new JqBudget(new JqExecutionPolicy { MaximumAllocationBytes = 1024 }, CancellationToken.None);
+        var budget = new JqBudget(new JqExecutionPolicy { MaximumAllocationWorkBytes = 1024 }, CancellationToken.None);
         var scanner = new JqStreamScanner(budget, new JqRuntime(budget), false, false);
         scanner.Consume("1"u8, false); // The token buffer reserves 256 bytes.
-        budget.ChargeBytes(768);
+        budget.ChargeAllocationWork(768);
 
-        Assert.Equal("memory budget exceeded", Assert.Throws<JqQuotaException>(() =>
+        Assert.Equal("allocation work allowance exceeded", Assert.Throws<JqQuotaException>(() =>
         {
             if (finish) scanner.FinishFinal();
             else scanner.Consume(" "u8, false);
@@ -389,7 +389,7 @@ public sealed partial class JqTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumInputBytes = value });
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumOutputBytes = value });
-        Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumAllocationBytes = value });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumAllocationWorkBytes = value });
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumValueNodes = value });
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumStringLength = value });
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumRegexWork = value });
@@ -410,7 +410,7 @@ public sealed partial class JqTests
         string token = "\"" + (escaped ? string.Concat(Enumerable.Repeat("\\u0061", 262144)) : new string('a', 262144)) + "\"";
         byte[] input = System.Text.Encoding.UTF8.GetBytes(objectKey ? "{" + token + ":0}" : token);
         var policy = allocationLimit
-            ? new JqExecutionPolicy { MaximumAllocationBytes = 1024 }
+            ? new JqExecutionPolicy { MaximumAllocationWorkBytes = 1024 }
             : new JqExecutionPolicy { MaximumStringLength = 32 };
         Assert.Throws<JqQuotaException>(() => new JqRuntime(new JqBudget(policy, CancellationToken.None)).ReadJsonValue(input, out _));
 
@@ -427,7 +427,7 @@ public sealed partial class JqTests
         }
         long allocated = GC.GetAllocatedBytesForCurrentThread() - started;
 
-        Assert.Equal(allocationLimit ? "memory budget exceeded" : "string result exceeds the 32 UTF-16 code unit limit",
+        Assert.Equal(allocationLimit ? "allocation work allowance exceeded" : "string result exceeds the 32 UTF-16 code unit limit",
             Assert.IsType<JqQuotaException>(failure).Message);
         Assert.True(allocated < 65536, $"Rejected JSON must not allocate its decoded string; allocated {allocated} bytes.");
     }
@@ -446,7 +446,7 @@ public sealed partial class JqTests
     public void Jq_JsonStringPreflightCountsDecodedCodeUnitsOnce(string token, string expected, bool objectKey)
     {
         byte[] input = System.Text.Encoding.UTF8.GetBytes(objectKey ? "{" + token + ":0}" : token);
-        var policy = new JqExecutionPolicy { MaximumStringLength = expected.Length, MaximumAllocationBytes = input.Length + 2 * expected.Length };
+        var policy = new JqExecutionPolicy { MaximumStringLength = expected.Length, MaximumAllocationWorkBytes = input.Length + 2 * expected.Length };
         var budget = new JqBudget(policy, CancellationToken.None);
         var runtime = new JqRuntime(budget);
 
@@ -456,7 +456,7 @@ public sealed partial class JqTests
             Assert.Equal(expected, Assert.Single(Assert.IsType<System.Text.Json.Nodes.JsonObject>(value)).Key);
         else
             Assert.Equal(expected, Assert.IsAssignableFrom<System.Text.Json.Nodes.JsonValue>(value).GetValue<string>());
-        Assert.Equal("memory budget exceeded", Assert.Throws<JqQuotaException>(() => budget.ChargeBytes(1)).Message);
+        Assert.Equal("allocation work allowance exceeded", Assert.Throws<JqQuotaException>(() => budget.ChargeAllocationWork(1)).Message);
 
         var smaller = new JqExecutionPolicy { MaximumStringLength = expected.Length - 1 };
         Assert.Throws<JqQuotaException>(() => new JqRuntime(new JqBudget(smaller, CancellationToken.None)).ReadJsonValue(input, out _));

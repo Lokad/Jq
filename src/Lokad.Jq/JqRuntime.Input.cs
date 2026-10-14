@@ -58,7 +58,7 @@ internal sealed partial class JqRuntime
                                 {
                                     int capacity = System.Math.Min(JqBudget.MaximumDepth,
                                         System.Math.Max(4, _frames.Capacity * 2));
-                                    budget.ChargeBytes(32L + capacity * 2L * System.IntPtr.Size);
+                                    budget.ChargeAllocationWork(32L + capacity * 2L * System.IntPtr.Size);
                                     _frames.Capacity = capacity;
                                 }
                                 JsonNode container = reader.TokenType == JsonTokenType.StartArray
@@ -81,7 +81,7 @@ internal sealed partial class JqRuntime
                         if (_frames.Count == 0)
                         {
                             consumed = _offset + (int)reader.BytesConsumed;
-                            budget.ChargeBytes(consumed);
+                            budget.ChargeAllocationWork(consumed);
                             value = _root;
                             Reset();
                             return true;

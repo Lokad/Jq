@@ -17,7 +17,7 @@ internal sealed class JqBudget : IDisposable
     internal const int MaximumJsonBufferBytes = 64 * 1024 * 1024;
     internal const int MaximumDepth = 64;
     private readonly CancellationToken _cancellationToken;
-    private long _remainingBytes;
+    private long _remainingAllocationWork;
     private int _remainingNodes;
     private int _remainingInput;
     private int _remainingOutput;
@@ -40,7 +40,7 @@ internal sealed class JqBudget : IDisposable
         _executionStorage = new JqMemoryReservation(memoryBudget);
         _storage = _executionStorage;
         _cancellationToken = cancellationToken;
-        _remainingBytes = policy.MaximumAllocationBytes;
+        _remainingAllocationWork = policy.MaximumAllocationWorkBytes;
         _remainingNodes = policy.MaximumValueNodes;
         _remainingInput = policy.MaximumInputBytes;
         _remainingOutput = policy.MaximumOutputBytes;
@@ -109,7 +109,7 @@ internal sealed class JqBudget : IDisposable
 
     internal void ChargeAllocation(long bytes)
     {
-        ChargeBytes(bytes);
+        ChargeAllocationWork(bytes);
         ReserveBytes(bytes);
     }
 
@@ -182,12 +182,12 @@ internal sealed class JqBudget : IDisposable
         ? "input exceeds the 16 MiB limit"
         : $"input exceeds the {Policy.MaximumInputBytes}-byte limit";
 
-    internal void ChargeBytes(long count)
+    internal void ChargeAllocationWork(long count)
     {
         CheckCancellation();
-        if (count < 0 || count > _remainingBytes)
-            throw new JqQuotaException("memory budget exceeded");
-        _remainingBytes -= count;
+        if (count < 0 || count > _remainingAllocationWork)
+            throw new JqQuotaException("allocation work allowance exceeded");
+        _remainingAllocationWork -= count;
     }
 
     internal void ChargeNode()
@@ -203,8 +203,8 @@ internal sealed class JqBudget : IDisposable
         CheckCancellation();
         if (bytes < 0 || bytes > _remainingInput)
             throw new JqQuotaException(InputLimitMessage);
-        // Allow for the old and new backing arrays while the bounded input buffer grows.
-        ChargeBytes(4L * bytes);
+        // Conservative work charge for read, staging and decode preparation.
+        ChargeAllocationWork(4L * bytes);
         _remainingInput -= bytes;
     }
 
@@ -215,7 +215,7 @@ internal sealed class JqBudget : IDisposable
             throw new JqQuotaException(Policy.MaximumOutputBytes == MaximumJsonBytes
                 ? "output exceeds the 32 MiB limit"
                 : $"output exceeds the {Policy.MaximumOutputBytes}-byte limit");
-        ChargeBytes(bytes);
+        ChargeAllocationWork(bytes);
         _remainingOutput -= bytes;
     }
 
@@ -237,7 +237,7 @@ internal sealed class JqBudget : IDisposable
     internal void ChargeStringWork(long length)
     {
         CheckStringLength(length);
-        ChargeBytes(length * sizeof(char));
+        ChargeAllocationWork(length * sizeof(char));
     }
 
     internal void Append(StringBuilder builder, ReadOnlySpan<char> text)
@@ -256,18 +256,6 @@ internal sealed class JqBudget : IDisposable
     internal void ChargeTree(JsonNode? node)
     {
         Visit(node, 0);
-    }
-
-    // Object construction keeps borrowed fields until a completed result is
-    // copied. Account for the old prefix copy at the same depth and stage.
-    internal void ChargeObjectPrefix(Dictionary<string, JsonNode?> fields)
-    {
-        ChargeNode();
-        foreach (var field in fields)
-        {
-            ChargeStringWork(field.Key.Length);
-            Visit(field.Value, 1);
-        }
     }
 
     private void Visit(JsonNode? value, int depth)

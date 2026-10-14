@@ -112,9 +112,9 @@ internal static class JqExecutor
             context.ModuleLoader = loader;
             JqEnvironment moduleEnv = await loader.LoadMainImportsAsync(mainImports, mainImporterDir, cancellationToken).ConfigureAwait(false);
             // Reuse the immutable token sequence with the newly linked scope.
-            // Keep the previous second-lexing allowance, so policy boundaries
-            // remain conservative while the actual token allocation disappears.
-            budget.ChargeBytes(2L * filterText.Length);
+            // Import scanning and full parsing each consume compilation work;
+            // reused token storage has only one persistent admission.
+            budget.ChargeAllocationWork(2L * filterText.Length);
             var filter = new JqParser(tokens, programSource, moduleEnv, budget).Parse();
             stage = 4;
             await using var cursor = new JqInputCursor(host, invocation, context, cancellationToken);

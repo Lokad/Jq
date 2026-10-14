@@ -1418,8 +1418,7 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
         {
             if (index == properties.Count)
             {
-                // The logical prefix/value copies were charged before each
-                // field. Allocate only the finished object; never attach the
+                // Reserve the completed copy; never attach the
                 // borrowed inputs or expose the backtracking field table.
                 context.Budget.ReserveBytes(64 + 96L * fields.Count);
                 context.Budget.ReserveBytes(64L * fields.Values.Count(value => value is JsonValue));
@@ -1469,7 +1468,8 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
 
         (bool Exists, JsonNode? Value) SetField(string key, JsonNode? value)
         {
-            context.Budget.ChargeObjectPrefix(fields);
+            context.Budget.ChargeNode();
+            context.Budget.ChargeStringWork(key.Length);
             context.Budget.ChargeTree(value);
             bool existed = fields.TryGetValue(key, out JsonNode? previous);
             fields[key] = value;

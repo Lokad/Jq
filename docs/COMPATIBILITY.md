@@ -115,10 +115,10 @@ compatibility work. Remaining module semantics and caveats are listed in the mat
 
 ## Current resource policy
 
-Input/output/allocation/value budgets are cumulative per execution, not a
+Input/output/allocation-work/value-work budgets are cumulative per execution, not a
 measurement of total managed memory. Regex work/time limits apply per search.
 Current constants include 16 MiB input, 32 MiB output (plus a 64 MiB JSON buffer
-allowance), 8 Mi UTF-16 code units per string, 256 MiB cumulative allocation
+allowance), 8 Mi UTF-16 code units per string, 256 MiB cumulative allocation-work
 allowance, 262,144 value nodes, JSON/parser depth 64, filter length 1 Mi characters,
 and 4,096 tokens/command arguments.
 Regex patterns and per-search engine work have additional limits in `JqRegexCache`.
@@ -130,6 +130,12 @@ host failures propagate separately. Command binding keeps its independent defaul
 allowance; structural and regex workspace ceilings remain fixed. See
 [EXECUTION_POLICY.md](EXECUTION_POLICY.md) for configured versus fixed limits.
 Finite limits do not establish upstream conformance or excuse missing semantics.
+
+Explicit memory admission borrows one host allowance and refunds coarse owners
+at their storage lifetime boundaries. Its estimates and partial integration
+scope are documented in EXECUTION_POLICY.md. The public cumulative work guard is
+`MaximumAllocationWorkBytes`; `MaximumAllocationBytes` remains only as a
+deprecated alias scheduled for removal at the next breaking API release.
 
 ## Conformance work
 

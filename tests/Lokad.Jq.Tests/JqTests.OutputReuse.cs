@@ -45,7 +45,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "range(0;1024)")));
 
         Assert.Equal(0, await command.ExecuteAsync(host,
-            new JqExecutionPolicy { MaximumAllocationBytes = 65536 }, CancellationToken.None));
+            new JqExecutionPolicy { MaximumAllocationWorkBytes = 65536 }, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Range(0, 1024)
             .Select(i => i.ToString(CultureInfo.InvariantCulture) + "\n")), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -68,15 +68,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_OutputMemoryQuotaDoesNotEscapeDuringWriterCleanup()
+    public async Task Jq_OutputAllocationWorkFailureDoesNotEscapeDuringWriterCleanup()
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "[range(0;2000)]")));
 
         Assert.Equal(5, await command.ExecuteAsync(host,
-            new JqExecutionPolicy { MaximumAllocationBytes = 4096 }, CancellationToken.None));
+            new JqExecutionPolicy { MaximumAllocationWorkBytes = 4096 }, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: allocation work allowance exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Theory]

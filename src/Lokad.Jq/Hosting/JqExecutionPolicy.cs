@@ -4,7 +4,7 @@ namespace Lokad.Jq;
 
 /// <summary>Immutable resource allowances for a single execution of a jq command.</summary>
 /// <remarks>
-/// Input, output, allocation and value counters are cumulative, including discarded values,
+/// Input, output, allocation-work and value-work counters are cumulative, including discarded values,
 /// and reset for every execution. Regex work and time allowances apply to each engine search.
 /// Positive limits may be reduced from the tested defaults. Parser, depth, JSON-buffer,
 /// and regex workspace safety ceilings remain fixed. Command binding uses its own default allowance.
@@ -16,7 +16,7 @@ public sealed record JqExecutionPolicy
 
     private int _maximumInputBytes = JqBudget.MaximumInputBytes;
     private int _maximumOutputBytes = JqBudget.MaximumJsonBytes;
-    private long _maximumAllocationBytes = 256L * 1024 * 1024;
+    private long _maximumAllocationWorkBytes = 256L * 1024 * 1024;
     private int _maximumValueNodes = 262144;
     private int _maximumStringLength = JqBudget.MaximumStringLength;
     private int _maximumRegexWork = RegexWorkCeiling;
@@ -39,11 +39,19 @@ public sealed record JqExecutionPolicy
         init => _maximumOutputBytes = (int)Validate(value, JqBudget.MaximumJsonBytes, nameof(MaximumOutputBytes));
     }
 
-    /// <summary>Gets or initializes cumulative allocation charges, rather than retained heap size; default 256 MiB.</summary>
+    /// <summary>Gets or initializes cumulative conservative allocation-work charges; default 256 MiB. Live storage uses IMemoryBudget.</summary>
+    public long MaximumAllocationWorkBytes
+    {
+        get => _maximumAllocationWorkBytes;
+        init => _maximumAllocationWorkBytes = Validate(value, 256L * 1024 * 1024, nameof(MaximumAllocationWorkBytes));
+    }
+
+    /// <summary>Gets or initializes the legacy alias for MaximumAllocationWorkBytes; this never measures live storage.</summary>
+    [Obsolete("Use MaximumAllocationWorkBytes for cumulative work and IMemoryBudget for live storage admission.")]
     public long MaximumAllocationBytes
     {
-        get => _maximumAllocationBytes;
-        init => _maximumAllocationBytes = Validate(value, 256L * 1024 * 1024, nameof(MaximumAllocationBytes));
+        get => _maximumAllocationWorkBytes;
+        init => _maximumAllocationWorkBytes = Validate(value, 256L * 1024 * 1024, nameof(MaximumAllocationBytes));
     }
 
     /// <summary>Gets or initializes cumulative value and evaluation charges; default 262,144.</summary>

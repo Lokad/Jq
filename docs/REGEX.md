@@ -65,7 +65,7 @@ failed compilation refunds its admission. UTF-8 subjects and detailed capture
 contexts reserve before materialization and release at the end of their
 operation, including failures. Parent operations remain charged during nested
 replacement filters. The estimates follow storage lifetimes, independently of
-the transitional cumulative allocation policy; they remain approximate and do
+the independent cumulative allocation-work policy; they remain approximate and do
 not enforce an engine compiled-storage cap.
 
 Work, time, depth and working-memory exhaustion terminate execution with status

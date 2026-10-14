@@ -199,7 +199,7 @@ internal static class JqCommandLineParser
             var maximumLength = (long)path.Length + (path.StartsWith('/') ? 0L : currentDirectory.Path.Length + 1L);
             // Reserve fixed path objects, combined/normalized strings, segment tables and
             // validation copies, including per-segment allocations for many short segments.
-            budget.ChargeBytes(128 + 64 * maximumLength);
+            budget.ChargeAllocationWork(128 + 64 * maximumLength);
         }
 
         static bool TryParseArguments(IReadOnlyList<string> arguments, out JqArgs parsed,

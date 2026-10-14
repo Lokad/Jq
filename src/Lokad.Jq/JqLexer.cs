@@ -45,7 +45,7 @@ internal static class Lexer
         ArgumentNullException.ThrowIfNull(budget);
         if (source.Length > 1024 * 1024)
             throw new JqCompileException("filter exceeds the 1 Mi-character limit", JqSourceSpan.FromOffset(source, 0), programSource);
-        budget.ChargeBytes(2L * source.Length);
+        budget.ChargeAllocationWork(2L * source.Length);
         budget.ReserveBytes(128 + 4L * source.Length);
         var tokens = new List<Token>();
         void AddToken(Token token)

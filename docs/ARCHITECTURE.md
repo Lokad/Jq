@@ -37,13 +37,21 @@ them. Invalid regex syntax remains a catchable language error. Variable snapshot
 allocation and bounded file reads use the same terminal quota path.
 
 `ExecuteAsync` accepts an immutable `JqExecutionPolicy` for stricter allowances.
-Input/output/allocation/value counters are cumulative; regex work/time limits
+Input/output/allocation-work/value-work counters are cumulative; regex work/time limits
 apply to each engine search. Every execution creates an independent budget;
 command binding keeps its separate default allowance. Structural and regex
 workspace ceilings stay fixed. Utf8Regex 0.3.0 lacks cancellation-token overloads;
 cancellation is checked before and after bounded synchronous regex calls.
 See [REGEX.md](REGEX.md) for the engine profile and cancellation limits.
 See [EXECUTION_POLICY.md](EXECUTION_POLICY.md) for the exact accounting contract.
+
+Explicit execution overloads borrow an `IMemoryBudget` sharing the host's root
+allowance. Memory admission owns live storage estimates with execution, record,
+buffer, result and cache lifetimes; it does not copy a remaining balance into
+per-invocation caps. Current coverage and conservative retention caveats are
+listed in EXECUTION_POLICY.md. `MaximumAllocationWorkBytes` is an independent
+cumulative work guard; its deprecated `MaximumAllocationBytes` alias is retained
+until the next breaking API release.
 
 ## IO ownership
 

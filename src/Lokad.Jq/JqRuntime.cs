@@ -274,7 +274,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             {
                 budget.ChargeValueNode();
                 consumed = topEnd;
-                budget.ChargeBytes(consumed - firstContent);
+                budget.ChargeAllocationWork(consumed - firstContent);
                 return JsonValue.Create(topValue);
             }
             if (TryInvalidNonFiniteLiteral(text, firstContent, out string invalidMessage))
@@ -285,7 +285,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             int consumedBase = 0;
             JsonNode? value = ReadValue(ref reader, text, ref consumedBase, 0);
             consumed = consumedBase + (int)reader.BytesConsumed;
-            budget.ChargeBytes(consumed - start);
+            budget.ChargeAllocationWork(consumed - start);
             return value;
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
@@ -572,7 +572,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode? ParseJson(string text)
     {
-        budget.ChargeBytes(Encoding.UTF8.GetByteCount(text));
+        budget.ChargeAllocationWork(Encoding.UTF8.GetByteCount(text));
         budget.ReserveBytes(Encoding.UTF8.GetByteCount(text));
         var bytes = Encoding.UTF8.GetBytes(text);
         int prefix = HasBomPrefix(bytes) ? 3 : 0;

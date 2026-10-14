@@ -55,7 +55,7 @@ internal sealed class JqContext(
     internal void EmitStderr(string text)
     {
         int length = Encoding.UTF8.GetByteCount(text);
-        Budget.ChargeBytes(length);
+        Budget.ChargeAllocationWork(length);
         long previous = _stderrMemory.Bytes;
         _stderrMemory.Resize(checked(previous + length));
         try { _stderr.Add(Utf8Text.Encode(text)); }
@@ -69,7 +69,7 @@ internal sealed class JqContext(
     internal void EmitStderr(ReadOnlyMemory<byte> content, bool newline)
     {
         int length = checked(content.Length + (newline ? 1 : 0));
-        Budget.ChargeBytes(length);
+        Budget.ChargeAllocationWork(length);
         long previous = _stderrMemory.Bytes;
         _stderrMemory.Resize(checked(previous + length));
         try

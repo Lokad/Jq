@@ -32,6 +32,11 @@ Pass a `JqExecutionPolicy` to `ExecuteAsync(host, policy, cancellationToken)`
 to reduce per-execution resource allowances. Existing calls retain the defaults;
 see [execution policy](docs/EXECUTION_POLICY.md) for accounting and fixed ceilings.
 
+The cumulative `MaximumAllocationWorkBytes` guard limits charged work. Shared
+storage admission uses the explicit `IMemoryBudget` execution overloads; its
+current coverage is described in the execution policy. The old
+`MaximumAllocationBytes` spelling is a deprecated work-policy alias.
+
 ## Develop
 
 ```text
