@@ -44,12 +44,17 @@ Run the explicit shared-budget lane separately from historical timings:
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --governor --iterations 128 --workers 1,4
 ```
 
-The 26 bounded cases cover tiny commands, raw/JSON/sequence/stream records,
+The 48 bounded cases cover tiny commands, raw/JSON/sequence/stream records,
 numeric/string mapping, HTML text, implode, growing output/regex subjects,
-diagnostics, serialization and regex subject/result retention boundaries. Every
+diagnostics, serialization and regex subject/result retention boundaries. Text
+events, queued diagnostic bursts, serializer warm-up and alternating sizes also
+exercise boundaries that fixed-size scalar runs miss. Every
 execution checks status and separate stdout/stderr SHA-256 digests against
 independently generated expected bytes. `--case NAME` selects
 one case; `--output artifacts/PATH` chooses an ignored JSON checkpoint.
+Stderr remains separately captured; known governor bursts may raise its 1 MiB
+host bound to their expected byte count, within a 32 MiB ceiling. That capture
+cost is included in both lanes and can dominate large-burst allocation totals.
 
 The governed lane forwards one shared 256 MiB allowance across workers. A
 development-only lock-based host tracks active owners rather than historical

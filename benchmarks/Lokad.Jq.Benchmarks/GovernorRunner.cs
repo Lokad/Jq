@@ -9,6 +9,8 @@ namespace Lokad.Jq.Benchmarking;
 
 internal sealed record GovernorWorkload(ComparisonWorkload Workload, OutputDigest Expected, OutputDigest ExpectedError)
 {
+    internal BenchmarkHost CreateHost() => new(Workload.Input, false, Math.Max(1024 * 1024, ExpectedError.Length));
+
     internal void Verify(ExecutionResult result)
     {
         if (result.ExitCode != 0 || result.Digest != Expected || OutputDigest.FromBytes(result.Error) != ExpectedError)
@@ -145,7 +147,7 @@ internal static class GovernorRunner
                     cancellationToken.ThrowIfCancellationRequested();
                     using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                     deadline.CancelAfter(TimeSpan.FromSeconds(15));
-                    using var host = new BenchmarkHost(item.Workload.Input, false);
+                    using var host = item.CreateHost();
                     int status = memory is null
                         ? await command.ExecuteAsync(host, deadline.Token).ConfigureAwait(false)
                         : await command.ExecuteAsync(host, memory, deadline.Token).ConfigureAwait(false);
@@ -206,6 +208,17 @@ internal static class GovernorRunner
         AddDiagnostic("debug", records, ["-nc", "range(1000) | debug"], "",
             string.Concat(Enumerable.Range(0, records).Select(value => value.ToString(CultureInfo.InvariantCulture) + "\n")),
             string.Concat(Enumerable.Range(0, records).Select(value => "[\"DEBUG:\"," + value.ToString(CultureInfo.InvariantCulture) + "]\n")));
+        AddDiagnostic("debug-burst", records, ["-nc", "range(1000) | debug | empty"], "", "",
+            string.Concat(Enumerable.Range(0, records).Select(value => "[\"DEBUG:\"," + value.ToString(CultureInfo.InvariantCulture) + "]\n")));
+        AddDiagnostic("stderr-drained-1", records, ["-nr", "range(1000) | \"a\" | stderr"], "",
+            string.Concat(Enumerable.Repeat("a\n", records)), new string('a', records));
+        foreach (int length in new[] { 1, 4096 })
+        {
+            string text = new('a', length);
+            AddDiagnostic("stderr-burst-" + length.ToString(CultureInfo.InvariantCulture), records,
+                ["-nr", "--arg", "s", text, "range(1000) | $s | stderr | empty"], "", "",
+                string.Concat(Enumerable.Repeat(text, records)));
+        }
         foreach (int length in new[] { 127, 128, 2048 })
         {
             string text = new('a', length);
@@ -228,6 +241,19 @@ internal static class GovernorRunner
         Add("stream-array", records, ["--stream", "-c", ".[1] // empty"],
             "[" + string.Join(',', Enumerable.Range(0, records)) + "]",
             string.Concat(Enumerable.Range(0, records).Select(value => value.ToString(CultureInfo.InvariantCulture) + "\n")));
+        foreach (int length in new[] { 84, 85, 128 })
+        {
+            string quoted = "\"" + new string('a', length) + "\"";
+            string lines = string.Concat(Enumerable.Repeat("\u001e" + quoted + "\n", records));
+            Add("seq-strings-" + length.ToString(CultureInfo.InvariantCulture), records, ["--seq", "-c", "."], lines, lines);
+        }
+        foreach (int length in new[] { 96, 97, 128 })
+        {
+            string quoted = "\"" + new string('a', length) + "\"";
+            Add("stream-strings-" + length.ToString(CultureInfo.InvariantCulture), records, ["--stream", "-c", ".[1] // empty"],
+                "[" + string.Join(',', Enumerable.Repeat(quoted, records)) + "]",
+                string.Concat(Enumerable.Repeat(quoted + "\n", records)));
+        }
         Add("growing-regex-subject", records, ["-nc", "range(1;1001) | \"a\" * . | test(\"a\")"], "",
             string.Concat(Enumerable.Repeat("true\n", records)));
         foreach (int length in new[] { 61, 62 })
@@ -237,13 +263,37 @@ internal static class GovernorRunner
                 ["-nrc", "--arg", "p", pattern, "range(1000) | $p | match($p) | .length"], "",
                 string.Concat(Enumerable.Repeat(length.ToString(CultureInfo.InvariantCulture) + "\n", records)));
         }
-        foreach (int length in new[] { 1, 1000 })
+        foreach (int length in new[] { 4032, 4033 })
+        {
+            Add("regex-subject-alternating-" + length.ToString(CultureInfo.InvariantCulture), records,
+                ["-nr", "--arg", "s", "a", "--arg", "l", new string('a', length),
+                    "range(1000) | (if . % 2 == 0 then $s else $l end) | test(\"a\")"], "",
+                string.Concat(Enumerable.Repeat("true\n", records)));
+        }
+        Add("regex-result-alternating-62", records,
+            ["-nr", "--arg", "s", "a", "--arg", "l", new string('a', 62),
+                "range(1000) | (if . % 2 == 0 then $s else $l end) as $p | $p | match($p) | .length"], "",
+            string.Concat(Enumerable.Repeat("1\n62\n", records / 2)));
+        foreach (int length in new[] { 1, 1000, 1364, 1365 })
         {
             string text = new('a', length);
             Add("tojson-" + length.ToString(CultureInfo.InvariantCulture), records,
                 ["-nr", "--arg", "s", text, "range(1000) | $s | tojson"], "",
                 string.Concat(Enumerable.Repeat("\"" + text + "\"\n", records)));
         }
+        foreach (int length in new[] { 1193, 1194, 1364, 1365 })
+        {
+            string text = new('a', length);
+            Add("tojson-warm-small-" + length.ToString(CultureInfo.InvariantCulture), records + 32,
+                ["-nr", "--arg", "s", "a", "--arg", "l", text,
+                    "(range(32) | $s | tojson), (range(1000) | (if . % 2 == 0 then $s else $l end) | tojson)"], "",
+                string.Concat(Enumerable.Repeat("\"a\"\n", 32))
+                    + string.Concat(Enumerable.Repeat("\"a\"\n\"" + text + "\"\n", records / 2)));
+        }
+        foreach (int count in new[] { 31, 32, 33 })
+            Add("tojson-heat-" + count.ToString(CultureInfo.InvariantCulture), count,
+                ["-nr", "range(" + count.ToString(CultureInfo.InvariantCulture) + ") | \"a\" | tojson"], "",
+                string.Concat(Enumerable.Repeat("\"a\"\n", count)));
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>

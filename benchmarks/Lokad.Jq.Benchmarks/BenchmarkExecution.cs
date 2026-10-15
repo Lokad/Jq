@@ -20,15 +20,22 @@ internal sealed class BenchmarkHost : IJqHost, IDisposable
 {
     private ReadOnlyMemory<byte> _remaining;
     private readonly bool _capture;
+    private readonly long _maximumErrorBytes;
     private readonly MemoryStream _output = new();
     private readonly MemoryStream _error = new();
     private readonly IncrementalHash _hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
     private long _length;
 
     public BenchmarkHost(byte[] input, bool capture)
+        : this(input, capture, 1024 * 1024) { }
+
+    internal BenchmarkHost(byte[] input, bool capture, long maximumErrorBytes)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumErrorBytes);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maximumErrorBytes, 32 * 1024 * 1024);
         _remaining = input;
         _capture = capture;
+        _maximumErrorBytes = maximumErrorBytes;
     }
 
     public ExecutionResult Finish(int exitCode) => new(exitCode, _output.ToArray(), _error.ToArray(),
@@ -62,7 +69,7 @@ internal sealed class BenchmarkHost : IJqHost, IDisposable
         }
         else if (descriptor == JqFileDescriptor.StdErr)
         {
-            if (_error.Length + content.Length > 1024 * 1024)
+            if (_error.Length + content.Length > _maximumErrorBytes)
                 throw new InvalidOperationException("Benchmark stderr exceeds its capture bound.");
             _error.Write(content.Span);
         }

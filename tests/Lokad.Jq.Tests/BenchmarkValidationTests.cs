@@ -15,7 +15,7 @@ public sealed class BenchmarkValidationTests
         {
             using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", item.Workload.Arguments, []);
             var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
-            using var host = new BenchmarkHost(item.Workload.Input, false);
+            using var host = item.CreateHost();
             int status = governed
                 ? await command.ExecuteAsync(host, root, CancellationToken.None)
                 : await command.ExecuteAsync(host, CancellationToken.None);
