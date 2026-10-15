@@ -90,6 +90,12 @@ budget stays owned by its caller. Reservations and scopes have non-throwing,
 idempotent disposal; refunds are available immediately, independently of GC.
 The host must serialize owner disposal with active users.
 
+Runtime owners use their last successful admission for local accounting rather
+than repeatedly querying the host's reservation counter. Explicit counter
+observations still reflect ancestor disposal. Buffer reuse sends no unchanged
+capacity notifications; actual growth, replacement peaks and refunds still reach
+the supplied host allowance.
+
 `TryReserve` and `TryResize` admit nonnegative estimates immediately or refuse
 without changing existing charges. Negative estimates throw; admission through
 disposed owners throws. Refusal reports terminal status 5 and cannot be caught

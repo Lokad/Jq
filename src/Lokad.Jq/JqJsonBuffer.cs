@@ -26,7 +26,12 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>, IDisp
 
     // Growth may leave a body slice borrowing the previous backing array while
     // record framing copies it. Refund old capacity only after that copy ends.
-    internal void ReleaseReplacedStorage() => _memory.Resize(_buffer.Capacity);
+    internal void ReleaseReplacedStorage()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_memory.LastAdmittedBytes != _buffer.Capacity)
+            _memory.Resize(_buffer.Capacity);
+    }
 
     public void Advance(int count)
     {
@@ -41,7 +46,7 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>, IDisp
         try { return _buffer.GetMemory(sizeHint); }
         catch
         {
-            _memory.Resize(_buffer.Capacity);
+            ReleaseReplacedStorage();
             throw;
         }
     }
@@ -52,7 +57,7 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>, IDisp
         try { return _buffer.GetSpan(sizeHint); }
         catch
         {
-            _memory.Resize(_buffer.Capacity);
+            ReleaseReplacedStorage();
             throw;
         }
     }
@@ -70,7 +75,7 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>, IDisp
             if (growth > JqBudget.MaximumJsonBufferBytes - _buffer.Capacity)
                 throw new JqQuotaException("JSON buffer exceeds the 64 MiB limit");
             budget.ChargeAllocationWork((long)_buffer.Capacity + growth);
-            _memory.Resize(checked(_memory.Bytes + _buffer.Capacity + growth));
+            _memory.Resize(checked(_memory.LastAdmittedBytes + _buffer.Capacity + growth));
         }
     }
 

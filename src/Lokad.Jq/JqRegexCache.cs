@@ -33,7 +33,7 @@ internal sealed class JqRegexCache : IDisposable
         // allocation charges, not a claim about the engine's compiled representation size.
         long estimate = 64 * 1024L + MaximumWorkingBytes + 64L * pattern.Length;
         _budget.ChargeAllocationWork(estimate);
-        long previous = _memory.Bytes;
+        long previous = _memory.LastAdmittedBytes;
         _memory.Resize(checked(previous + estimate));
         bool retained = false;
         try
@@ -53,7 +53,8 @@ internal sealed class JqRegexCache : IDisposable
                 }, _budget.Policy.MaximumRegexTime);
             _budget.CheckCancellation();
             _budget.ChargeAllocationWork(64L * regex.NameEntryCount);
-            _memory.Resize(checked(_memory.Bytes + 64L * regex.NameEntryCount));
+            if (regex.NameEntryCount != 0)
+                _memory.Resize(checked(_memory.LastAdmittedBytes + 64L * regex.NameEntryCount));
             var entries = new Pcre2NameEntry[regex.NameEntryCount];
             regex.CopyNameEntries(entries, out _);
             var names = new Dictionary<int, string>();

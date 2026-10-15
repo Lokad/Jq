@@ -214,6 +214,7 @@ public sealed partial class JqTests
         Assert.Equal(0, reservation.Bytes);
         Assert.Equal(0, memory.ReservedBytes);
         Assert.Throws<ObjectDisposedException>(() => reservation.Resize(1));
+        Assert.Throws<ObjectDisposedException>(() => reservation.Resize(8));
         reservation.Dispose();
         Assert.True(memory.TryReserve(8, out IMemoryReservation? reused));
         reused.Dispose();

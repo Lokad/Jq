@@ -10,6 +10,11 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
 
     internal long Bytes => _reservation?.Bytes ?? _bytes;
 
+    // Valid for owner-local accounting while its borrowers are live. Ancestor
+    // disposal is serialized with users; explicit Bytes observations still
+    // forward invalidation, and every admission still reaches the host.
+    internal long LastAdmittedBytes => _bytes;
+
     internal void Resize(long bytes)
     {
         if (!TryResize(bytes))
@@ -44,7 +49,7 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
 
     internal void ReplaceBuffer(ref byte[] buffer, int capacity, int offset, int count)
     {
-        long previous = Bytes;
+        long previous = _bytes;
         Resize(checked(previous + capacity));
         try
         {
@@ -57,7 +62,7 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
             Resize(previous);
             throw;
         }
-        Resize(capacity);
+        if (previous != 0) Resize(capacity);
     }
 
     public void Dispose()

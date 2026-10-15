@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Reduce governor traffic using owner-local admitted sizes, zero-charge fast
+  paths and unchanged-buffer notification elision. Explicit reservation counter
+  observations still reflect ancestor invalidation; direct admission calls still
+  validate disposed owners. A 1,000-scalar output diagnostic falls from 3,004
+  resizes and nine counter reads to four resizes and no reads, preserving its
+  estimated peak. Add shared forwarding call counters and boundary regressions;
+  this establishes call counts, not a throughput claim.
 - Add library-local cooperative memory admission interfaces and execution
   overloads borrowing a shared host allowance. Reusable JSON/raw output capacity
   and information output reserve before allocation, include replacement peaks,

@@ -96,9 +96,11 @@ internal sealed class JqBudget : IDisposable
     internal void ReserveBytes(long bytes)
     {
         CheckCancellation();
-        if (bytes < 0 || bytes > long.MaxValue - _storage.Bytes)
+        if (bytes == 0) return;
+        long previous = _storage.LastAdmittedBytes;
+        if (bytes < 0 || bytes > long.MaxValue - previous)
             throw new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
-        if (bytes != 0) _storage.Resize(_storage.Bytes + bytes);
+        _storage.Resize(previous + bytes);
     }
 
     internal void ChargeValueNode()

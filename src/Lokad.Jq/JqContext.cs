@@ -56,7 +56,7 @@ internal sealed class JqContext(
     {
         int length = Encoding.UTF8.GetByteCount(text);
         Budget.ChargeAllocationWork(length);
-        long previous = _stderrMemory.Bytes;
+        long previous = _stderrMemory.LastAdmittedBytes;
         _stderrMemory.Resize(checked(previous + length));
         try { _stderr.Add(Utf8Text.Encode(text)); }
         catch
@@ -70,7 +70,7 @@ internal sealed class JqContext(
     {
         int length = checked(content.Length + (newline ? 1 : 0));
         Budget.ChargeAllocationWork(length);
-        long previous = _stderrMemory.Bytes;
+        long previous = _stderrMemory.LastAdmittedBytes;
         _stderrMemory.Resize(checked(previous + length));
         try
         {
