@@ -130,8 +130,11 @@ compiled-pattern and pooled-workspace estimates remain charged under one cache
 owner until context disposal and completion of its borrowers. Subject encoding
 and detailed capture contexts have operation owners. The cache can retain one
 idle UTF-8 subject buffer and one idle capture allowance, each at most 4 KiB and
-still charged. Reuse avoids admission calls for unchanged capacity; subject
-growth includes old-plus-new storage. Larger owners and failed operations refund
+still charged. Reuse avoids admission calls for unchanged capacity. Subjects start
+at exact capacity, then double growth within the existing 4 KiB idle-owner ceiling
+(including metadata). Larger subjects stay exact. Refused optional growth falls
+back once to exact capacity and disables padding for that owner. Subject growth
+includes old-plus-new storage. Larger owners and failed operations refund
 on return. Nested operations use separate owners, and closing the cache waits for
 active borrowers before refunding their compiled-pattern admission.
 

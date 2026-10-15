@@ -1,9 +1,80 @@
 using Lokad.Utf8Regex.Pcre2;
+using Lokad.Jq.Benchmarking;
+using System.Text;
 
 namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Fact]
+    public void Jq_GovernedRegexSubjectGrowthAmortizesCallsAndKeepsItsIdleBound()
+    {
+        var root = new TestMemoryBudget(16 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var regexes = new JqRegexCache(budget);
+        for (int length = 1; length <= 1000; length++)
+        {
+            string text = new('a', length);
+            using var subject = regexes.EncodeSubject(text);
+            Assert.Equal(Encoding.UTF8.GetBytes(text), subject.Value.ToArray());
+        }
+        Assert.InRange(memory.Counts.Reservations, 1, 2);
+        Assert.InRange(memory.Counts.Resizes, 1, 24);
+        Assert.InRange(root.ReservedBytes, 1064, 4096);
+        Assert.Equal(0, memory.Counts.BytesReads);
+        Assert.Equal(0, memory.Counts.SameSizeResizes);
+        regexes.Dispose();
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedRegexSubjectCapacityFallsBackOnceUnderSharedPressure()
+    {
+        var root = new TestMemoryBudget(1000);
+        var memory = new CountingMemoryBudget(root);
+        Assert.True(root.TryReserve(926, out var pressure));
+        using (pressure)
+        using (var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None))
+        using (var regexes = new JqRegexCache(budget))
+        {
+            using (var first = regexes.EncodeSubject("aaaa"))
+                Assert.Equal(994, root.ReservedBytes);
+            using (var second = regexes.EncodeSubject("aaaaa"))
+                Assert.Equal("aaaaa"u8.ToArray(), second.Value.ToArray());
+            Assert.Equal(995, root.ReservedBytes);
+            Assert.Equal(1, memory.Counts.Refusals);
+            Assert.Equal(999, root.PeakBytes);
+            pressure.Dispose();
+            using (var third = regexes.EncodeSubject("aaaaaa"))
+                Assert.Equal("aaaaaa"u8.ToArray(), third.Value.ToArray());
+            Assert.Equal(70, root.ReservedBytes); // Pressure recovery does not re-enable padding.
+            Assert.Equal(1, memory.Counts.Refusals);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedRegexSubjectIdleBoundaryUsesUtf8CapacityIncludingMetadata()
+    {
+        var root = new TestMemoryBudget(16 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var regexes = new JqRegexCache(budget);
+        foreach (string text in new[] { new string('a', 4032), new string('é', 2016), string.Concat(Enumerable.Repeat("🚀", 1008)) })
+        {
+            using var subject = regexes.EncodeSubject(text);
+            Assert.Equal(Encoding.UTF8.GetBytes(text), subject.Value.ToArray());
+            Assert.Equal(4096, root.ReservedBytes);
+        }
+        Assert.Equal(1, memory.Counts.Reservations);
+        Assert.Equal(0, memory.Counts.Resizes);
+        using (var large = regexes.EncodeSubject(new string('é', 2016) + "a"))
+            Assert.Equal(4033, large.Value.Length);
+        Assert.Equal(0, root.ReservedBytes);
+        Assert.Equal(8129, root.PeakBytes);
+    }
+
     [Fact]
     public void Jq_GovernedRegexCacheRetainsPatternsAndRollsBackFailedCompilation()
     {

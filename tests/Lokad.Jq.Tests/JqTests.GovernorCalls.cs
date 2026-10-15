@@ -9,6 +9,29 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(100)]
     [InlineData(1000)]
+    public async Task Jq_GovernedGrowingRegexCallsFollowSubjectCapacity(int count)
+    {
+        var root = new TestMemoryBudget(4 * 1024 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        host.SetStandardInput("[" + string.Join(',', Enumerable.Range(1, count).Select(length =>
+            "\"" + new string('a', length) + "\"")) + "]");
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".[] | test(\"a\")")));
+        MemoryCallCounts? firstOutput = null;
+        host.BeforeByteAppend = () => firstOutput ??= memory.Counts;
+
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(string.Concat(Enumerable.Repeat("true\n", count)), host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
+        Assert.NotNull(firstOutput);
+        Assert.InRange(memory.Counts.Resizes - firstOutput.Value.Resizes, 1, 32);
+        Assert.Equal(0, memory.Counts.BytesReads);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData(100)]
+    [InlineData(1000)]
     public async Task Jq_GovernedEmptyStderrKeepsHostEffectsWithoutAdmissionChurn(int count)
     {
         var root = new TestMemoryBudget(64 * 1024);

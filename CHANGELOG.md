@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Amortize gradually growing regex subjects with bounded geometric capacity,
+  preserving the existing 4 KiB idle-owner ceiling, old-plus-new peaks and exact
+  fallback under shared pressure. Keep large subjects exact and nested leases separate.
 - Skip zero-byte diagnostic admissions and unchanged queue refunds while keeping
   empty host appends, cancellation, pending borrows and earlier queued bytes intact.
   Validate disposed context use even when accounting needs no host notification.
