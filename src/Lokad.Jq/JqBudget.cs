@@ -26,6 +26,9 @@ internal sealed class JqBudget : IDisposable
     private JqStorage _storage;
     private JqStorage? _recordStorage;
     private readonly List<JqStorage> _persistentStorageOwners = [];
+    private JqJsonBuffer? _serializationBuffer;
+    private int _serializedResults;
+    private bool _disposed;
 
     internal JqBudget(CancellationToken cancellationToken)
         : this(JqExecutionPolicy.Default, cancellationToken) { }
@@ -51,6 +54,38 @@ internal sealed class JqBudget : IDisposable
     internal IMemoryBudget? MemoryBudget { get; }
 
     internal CancellationToken CancellationToken => _cancellationToken;
+
+    internal JqJsonBuffer RentSerializationBuffer()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        JqJsonBuffer buffer = _serializationBuffer ?? new JqJsonBuffer(this);
+        _serializationBuffer = null;
+        try { buffer.Reset(); return buffer; }
+        catch { buffer.Dispose(); throw; }
+    }
+
+    internal IDisposable OwnSerializationBuffer(JqJsonBuffer buffer)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _serializedResults = Math.Min(32, _serializedResults + 1);
+        // Cold one-off results retain their existing immediate refund behavior.
+        return _serializedResults < 32 ? buffer : new SerializationReturn(this, buffer);
+    }
+
+    private sealed class SerializationReturn(JqBudget budget, JqJsonBuffer buffer) : IDisposable
+    {
+        private bool _returned;
+
+        public void Dispose()
+        {
+            if (_returned) return;
+            _returned = true;
+            if (!budget._disposed && budget._serializationBuffer is null && buffer.AdmittedBytes <= 4096)
+                budget._serializationBuffer = buffer;
+            else
+                buffer.Dispose();
+        }
+    }
 
     internal int RemainingInput => _remainingInput;
 
@@ -174,6 +209,10 @@ internal sealed class JqBudget : IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        _serializationBuffer?.Dispose();
+        _serializationBuffer = null;
         foreach (JqStorage owner in _persistentStorageOwners) owner.Dispose();
         _persistentStorageOwners.Clear();
         _recordStorage?.Dispose();

@@ -27,14 +27,14 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted)
     {
         JsonNode? clean = PrepareJson(node, sorted);
-        var buffer = new JqJsonBuffer(budget);
+        JqJsonBuffer buffer = budget.RentSerializationBuffer();
         try
         {
             using var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs));
             try
             {
-                return new JqMemoryValue<ReadOnlyMemory<byte>>(
-                    WriteJson(clean, ascii, indent, tabs, buffer, writer), buffer);
+                ReadOnlyMemory<byte> value = WriteJson(clean, ascii, indent, tabs, buffer, writer);
+                return new JqMemoryValue<ReadOnlyMemory<byte>>(value, budget.OwnSerializationBuffer(buffer));
             }
             finally { writer.Reset(); }
         }

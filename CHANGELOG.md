@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Reuse one returned serialization buffer after 32 successful serializations,
+  retaining at most 4 KiB of admitted capacity per budget. Keep cold refunds,
+  overlapping result ownership, failed-buffer cleanup and independent work guards;
+  active results remain charged when their budget closes.
 - Reuse at most 256 bytes of already-admitted cursor credit across safe sequence
   and stream boundaries, alongside actual retained trees. Preserve larger refunds
   and terminal cleanup while avoiding scalar-event grow/refund oscillation.
