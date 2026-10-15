@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Reuse one coarse outer-record reservation across safe input boundaries. Keep at
+  most 4 KiB of already-admitted credit charged, avoid eager padding for small
+  records, and refund it at execution cleanup. Preserve aliases/aggregates and
+  the separate sequence/stream retained-value owner and its real refunds.
 - Batch small value/slot charges inside their existing coarse owners using at
   most one 4 KiB block of charged credit. Keep small owners and known copies
   exact; a refused padding request falls back once to required size, then disables

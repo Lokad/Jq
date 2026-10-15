@@ -54,12 +54,13 @@ internal sealed class JqBudget : IDisposable
 
     internal int RemainingInput => _remainingInput;
 
-    // One owner for each outer input evaluation. Keep the last record charged
-    // through terminal diagnostics and cleanup; refund it before the next pull.
+    // Reuse one coarse record owner only at the safe outer-input boundary.
+    // Retain at most one charged block; the last record stays fully charged
+    // through terminal diagnostics and cleanup.
     internal void BeginRecord()
     {
-        _recordStorage?.Dispose();
-        _recordStorage = new JqStorage(MemoryBudget);
+        _recordStorage ??= new JqStorage(MemoryBudget);
+        _recordStorage.ReuseForNextRecord();
         _storage = _recordStorage;
     }
 

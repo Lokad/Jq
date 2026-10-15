@@ -51,6 +51,17 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
         _used = bytes;
     }
 
+    // The executor has finished all users of the previous outer record. Reuse
+    // its host reservation, retaining only bounded, still-charged credit. Small
+    // records retain only what they already admitted; no block is prepaid here.
+    internal void ReuseForNextRecord()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        long retained = Math.Min(_memory.LastAdmittedBytes, BlockBytes);
+        if (_memory.LastAdmittedBytes != retained) _memory.Resize(retained);
+        _used = 0;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

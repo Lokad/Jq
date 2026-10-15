@@ -22,9 +22,11 @@ public sealed partial class JqTests
         budget.ReserveBytes(2);
         Assert.Equal(5, memory.ReservedBytes);
         budget.BeginRecord();
-        Assert.Equal(3, memory.ReservedBytes);
+        Assert.Equal(5, memory.ReservedBytes); // Two bytes of reusable record credit remain charged.
         Assert.Equal("allocation work allowance exceeded", Assert.Throws<JqQuotaException>(() =>
             budget.ChargeAllocationWork(1)).Message);
+        budget.Dispose();
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Fact]

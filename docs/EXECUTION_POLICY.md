@@ -127,10 +127,13 @@ and nested replacement calls keep their parent's operation charges live.
 
 Execution snapshots and filter/module compilation use a persistent storage owner.
 UTF-16 materialization, decoded JSON nodes/backing slots, container clones and
-array/object construction use coarse value owners. Each outer input evaluation
-starts an owner that survives its generators, variable aliases, nested input,
-awaited writes and terminal cleanup. Its estimate is refunded before the next
-outer input evaluation. Slurp keeps the whole aggregate charged. Sequence queues
+array/object construction use coarse value owners. The outer-record owner survives
+its generators, variable aliases, nested input, awaited writes and terminal
+cleanup. At a safe next-record boundary its logical demand resets, refunding
+all but at most 4 KiB of already-admitted reusable credit. Small records retain
+only their existing admission; there is no eager block allocation. That credit
+stays charged until reused or execution disposal, avoiding a fresh host reservation
+for each input. Slurp keeps the whole aggregate charged. Sequence queues
 and streaming paths/pending events have a separate cursor owner; record refunds
 preserve the data it still retains. Module compilation during `modulemeta` uses
 the persistent owner so cached definitions survive record refunds.

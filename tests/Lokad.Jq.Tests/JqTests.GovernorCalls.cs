@@ -6,6 +6,52 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Theory]
+    [InlineData(false, 100)]
+    [InlineData(false, 1000)]
+    [InlineData(true, 100)]
+    [InlineData(true, 1000)]
+    public async Task Jq_GovernedRecordReservationsReuseTheirAllowance(bool raw, int count)
+    {
+        var root = new TestMemoryBudget(64 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        string line = raw ? "x\n" : "1\n";
+        string content = string.Concat(Enumerable.Repeat(line, count));
+        host.SetStandardInput(content);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", raw ? "-Rr" : "-c", ".")));
+
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(content, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 32);
+        Assert.InRange(memory.Counts.ReservationDisposals, 1, 8);
+        Assert.Equal(0, memory.Counts.BytesReads);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedRecordReuseKeepsOnlyBoundedAdmittedCredit()
+    {
+        var root = new TestMemoryBudget(32 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        using (var storage = new JqStorage(memory))
+        {
+            storage.ReserveBytes(16000);
+            storage.ReuseForNextRecord();
+            Assert.Equal(0, storage.UsedBytes);
+            Assert.Equal(4096, root.ReservedBytes);
+            MemoryCallCounts reused = memory.Counts;
+            storage.ReserveBytes(2000);
+            storage.ReuseForNextRecord();
+            storage.ReserveBytes(3000);
+            Assert.Equal(reused, memory.Counts);
+            Assert.Equal(3000, storage.UsedBytes);
+            Assert.Equal(4096, root.ReservedBytes);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
     [Fact]
     public void Jq_GovernedStorageCreditStaysChargedAndRefundsAtReconciliation()
     {
