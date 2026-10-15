@@ -17,6 +17,8 @@ internal sealed class BenchmarkMemoryBudget : IMemoryBudget
 
     internal long ReservedBytes { get { lock (_state.Gate) return _state.Reserved; } }
     internal long PeakBytes { get { lock (_state.Gate) return _state.Peak; } }
+    internal int ActiveScopes { get { lock (_state.Gate) return _state.ActiveScopes; } }
+    internal int PeakScopes { get { lock (_state.Gate) return _state.PeakScopes; } }
 
     public IMemoryScope CreateScope() => _state.CreateScope(null);
 
@@ -28,6 +30,7 @@ internal sealed class BenchmarkMemoryBudget : IMemoryBudget
         internal readonly object Gate = new();
         internal readonly HashSet<Reservation> Unscoped = [];
         internal long Reserved, Peak;
+        internal int ActiveScopes, PeakScopes;
 
         internal void SetReserved(long bytes)
         {
@@ -42,6 +45,8 @@ internal sealed class BenchmarkMemoryBudget : IMemoryBudget
                 parent?.CheckLive();
                 var scope = new Scope(this, parent);
                 parent?.Children.Add(scope);
+                ActiveScopes++;
+                PeakScopes = Math.Max(PeakScopes, ActiveScopes);
                 return scope;
             }
         }
@@ -97,6 +102,7 @@ internal sealed class BenchmarkMemoryBudget : IMemoryBudget
         {
             if (_disposed) return;
             _disposed = true;
+            state.ActiveScopes--;
             foreach (var child in Children) child.DisposeCore();
             foreach (var reservation in Owned) reservation.DisposeCore(false);
             Children.Clear();

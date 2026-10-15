@@ -44,10 +44,11 @@ Run the explicit shared-budget lane separately from historical timings:
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --governor --iterations 128 --workers 1,4
 ```
 
-The ten bounded cases cover tiny commands, raw/JSON records, array mapping,
-small/large HTML text, implode, growing raw output and boolean/detailed regex
-operations. Every execution checks status, separate stderr, output length and
-SHA-256 against independently generated expected bytes. `--case NAME` selects
+The 26 bounded cases cover tiny commands, raw/JSON/sequence/stream records,
+numeric/string mapping, HTML text, implode, growing output/regex subjects,
+diagnostics, serialization and regex subject/result retention boundaries. Every
+execution checks status and separate stdout/stderr SHA-256 digests against
+independently generated expected bytes. `--case NAME` selects
 one case; `--output artifacts/PATH` chooses an ignored JSON checkpoint.
 
 The governed lane forwards one shared 256 MiB allowance across workers. A
@@ -65,8 +66,10 @@ least eight executions per worker and one second, then records three alternating
 pairs. JSON preserves every elapsed-time, process-wide managed-allocation and GC
 sample, the requested worker count, library hash and runtime/OS/architecture.
 Admission peaks and zero final charges are recorded separately from GC bytes.
-Requested workers do not prove full simultaneous occupancy; controlled lifetime
-tests establish actual overlapping demand.
+Peak live governed scopes record observed overlap in each batch. Requested
+workers do not prove full simultaneous occupancy, and scope overlap does not
+measure lock wait or tail latency; controlled lifetime tests establish combined
+demand and complete refunds.
 
 These local cost probes are unqualified diagnostics. Scheduling, shared-root
 contention, GC and tiered compilation can affect ratios, especially tiny batches.

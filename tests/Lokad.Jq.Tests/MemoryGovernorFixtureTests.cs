@@ -25,6 +25,8 @@ public sealed class MemoryGovernorFixtureTests
                 Assert.Throws<ArgumentOutOfRangeException>(() => child.TryReserve(-1, out _));
                 parent.Dispose();
                 Assert.Equal(0, root.ReservedBytes);
+                Assert.Equal(0, root.ActiveScopes);
+                Assert.Equal(2, root.PeakScopes);
                 Assert.Equal(0, reservation.Bytes);
                 Assert.Throws<ObjectDisposedException>(() => reservation.TryResize(6));
                 Assert.Throws<ObjectDisposedException>(() => child.TryReserve(0, out _));
@@ -62,6 +64,8 @@ public sealed class MemoryGovernorFixtureTests
         {
             await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Equal(128, root.ReservedBytes);
+            Assert.Equal(9, root.ActiveScopes);
+            Assert.Equal(9, root.PeakScopes);
             Assert.False(parent.TryReserve(1, out var refused));
             Assert.Null(refused);
             Assert.Equal(128, root.ReservedBytes);
@@ -73,5 +77,8 @@ public sealed class MemoryGovernorFixtureTests
         }
         Assert.Equal(0, root.ReservedBytes);
         Assert.Equal(128, root.PeakBytes);
+        Assert.Equal(1, root.ActiveScopes);
+        parent.Dispose();
+        Assert.Equal(0, root.ActiveScopes);
     }
 }

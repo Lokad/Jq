@@ -6,6 +6,30 @@ namespace Lokad.Jq.Tests;
 public sealed class BenchmarkValidationTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GovernorCatalogChecksIndependentStdoutAndStderrDigests(bool governed)
+    {
+        var root = new BenchmarkMemoryBudget(256L * 1024 * 1024);
+        foreach (var item in GovernorRunner.CreateWorkloads())
+        {
+            using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", item.Workload.Arguments, []);
+            var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
+            using var host = new BenchmarkHost(item.Workload.Input, false);
+            int status = governed
+                ? await command.ExecuteAsync(host, root, CancellationToken.None)
+                : await command.ExecuteAsync(host, CancellationToken.None);
+            ExecutionResult result = host.Finish(status);
+            item.Verify(result);
+            var wrongError = item with { ExpectedError = OutputDigest.FromBytes("incorrect"u8.ToArray()) };
+            Assert.Throws<InvalidOperationException>(() => wrongError.Verify(result));
+            Assert.Equal(0, root.ReservedBytes);
+            Assert.Equal(0, root.ActiveScopes);
+        }
+        Assert.Equal(governed ? 1 : 0, root.PeakScopes);
+    }
+
+    [Theory]
     [InlineData("empty", "7\n")]
     [InlineData("8", "7\n")]
     [InlineData("error(\"failed\")", "")]

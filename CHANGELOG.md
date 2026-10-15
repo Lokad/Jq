@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Expand governed cost diagnostics to 26 cases covering threshold behavior,
+  growing subjects, serialization and diagnostics. Verify independent stdout
+  and stderr digests, record observed live-scope overlap, and retain separate
+  call-count and warmed timing/allocation lanes.
 - Amortize gradually growing regex subjects with bounded geometric capacity,
   preserving the existing 4 KiB idle-owner ceiling, old-plus-new peaks and exact
   fallback under shared pressure. Keep large subjects exact and nested leases separate.

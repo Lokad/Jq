@@ -7,12 +7,20 @@ using System.Text.Json;
 
 namespace Lokad.Jq.Benchmarking;
 
-internal sealed record GovernorWorkload(ComparisonWorkload Workload, OutputDigest Expected);
+internal sealed record GovernorWorkload(ComparisonWorkload Workload, OutputDigest Expected, OutputDigest ExpectedError)
+{
+    internal void Verify(ExecutionResult result)
+    {
+        if (result.ExitCode != 0 || result.Digest != Expected || OutputDigest.FromBytes(result.Error) != ExpectedError)
+            throw new InvalidOperationException($"Governor workload {Workload.Name} failed: exit {result.ExitCode}, stdout/stderr digest mismatch.");
+    }
+}
 internal sealed record GovernorCostBatch(int Pair, bool Governed, int Executions,
     double Milliseconds, double ManagedBytesPerExecution, int Gen0, int Gen1, int Gen2,
-    long PeakReservedBytes, long EndReservedBytes);
+    long PeakReservedBytes, long EndReservedBytes, int PeakScopes);
 internal sealed record GovernorCostRow(ComparisonWorkloadInfo Workload, int Workers,
-    OutputDigest Expected, MemoryCallCounts Calls, long CountedPeakBytes, GovernorCostBatch[] Batches);
+    OutputDigest Expected, OutputDigest ExpectedError, MemoryCallCounts Calls,
+    long CountedPeakBytes, int CountedPeakScopes, GovernorCostBatch[] Batches);
 internal sealed record GovernorCostReport(string Runtime, string OS, string Architecture, int Processors,
     bool ServerGc, string LibrarySha256, string Contract, bool Complete, GovernorCostRow[] Cases);
 
@@ -86,8 +94,8 @@ internal static class GovernorRunner
                     batches.Add(await MeasureAsync(firstGoverned, pair).ConfigureAwait(false));
                     batches.Add(await MeasureAsync(!firstGoverned, pair).ConfigureAwait(false));
                 }
-                rows.Add(new(BenchmarkReport.Describe(item.Workload), concurrency, item.Expected,
-                    counted.Counts, countedRoot.PeakBytes, batches.ToArray()));
+                rows.Add(new(BenchmarkReport.Describe(item.Workload), concurrency, item.Expected, item.ExpectedError,
+                    counted.Counts, countedRoot.PeakBytes, countedRoot.PeakScopes, batches.ToArray()));
                 await SaveAsync(rows.Count == workloads.Length * workers.Count).ConfigureAwait(false);
                 double baseline = batches.Where(batch => !batch.Governed).Select(batch => batch.Milliseconds / batch.Executions).Order().ElementAt(1);
                 double governed = batches.Where(batch => batch.Governed).Select(batch => batch.Milliseconds / batch.Executions).Order().ElementAt(1);
@@ -105,7 +113,7 @@ internal static class GovernorRunner
                     AssertRefunded(root);
                     return new(pair, governed, concurrency * iterations, milliseconds,
                         (double)bytes / (concurrency * iterations), GC.CollectionCount(0) - gen0,
-                        GC.CollectionCount(1) - gen1, GC.CollectionCount(2) - gen2, root.PeakBytes, root.ReservedBytes);
+                        GC.CollectionCount(1) - gen1, GC.CollectionCount(2) - gen2, root.PeakBytes, root.ReservedBytes, root.PeakScopes);
                 }
 
                 async Task WarmAsync(IMemoryBudget? memory)
@@ -141,7 +149,7 @@ internal static class GovernorRunner
                     int status = memory is null
                         ? await command.ExecuteAsync(host, deadline.Token).ConfigureAwait(false)
                         : await command.ExecuteAsync(host, memory, deadline.Token).ConfigureAwait(false);
-                    BenchmarkExecution.Verify(host.Finish(status), item.Expected);
+                    item.Verify(host.Finish(status));
                 }
             }
         }
@@ -167,7 +175,8 @@ internal static class GovernorRunner
 
         static void AssertRefunded(BenchmarkMemoryBudget root)
         {
-            if (root.ReservedBytes != 0) throw new InvalidOperationException("Governor storage was not refunded.");
+            if (root.ReservedBytes != 0 || root.ActiveScopes != 0)
+                throw new InvalidOperationException("Governor storage or scopes were not refunded.");
         }
     }
 
@@ -193,10 +202,56 @@ internal static class GovernorRunner
             string.Concat(Enumerable.Range(1, records).Select(length => new string('x', length) + "\n")));
         Add("regex-test", records, ["-n", "-c", "range(1000) | \"abc\" | test(\"^a\")"], "", string.Concat(Enumerable.Repeat("true\n", records)));
         Add("regex-scan", records, ["-c", "[scan(\"a\")] | length"], "\"" + new string('a', records) + "\"", "1000\n");
+        Add("empty-stderr", records, ["-nr", "range(1000) | \"\" | stderr"], "", new string('\n', records));
+        AddDiagnostic("debug", records, ["-nc", "range(1000) | debug"], "",
+            string.Concat(Enumerable.Range(0, records).Select(value => value.ToString(CultureInfo.InvariantCulture) + "\n")),
+            string.Concat(Enumerable.Range(0, records).Select(value => "[\"DEBUG:\"," + value.ToString(CultureInfo.InvariantCulture) + "]\n")));
+        foreach (int length in new[] { 127, 128, 2048 })
+        {
+            string text = new('a', length);
+            Add("string-map-" + length.ToString(CultureInfo.InvariantCulture), records, ["-c", "map(. + \"x\")"],
+                "[" + string.Join(',', Enumerable.Repeat("\"" + text + "\"", records)) + "]",
+                "[" + string.Join(',', Enumerable.Repeat("\"" + text + "x\"", records)) + "]\n");
+        }
+        foreach (int length in new[] { 2048, 4095, 4032, 4033 })
+        {
+            string text = new('a', length);
+            string lines = string.Concat(Enumerable.Repeat(text + "\n", records));
+            if (length is 2048 or 4095)
+                Add("raw-lines-" + length.ToString(CultureInfo.InvariantCulture), records, ["-Rr", "."], lines, lines);
+            else
+                Add("regex-subject-" + length.ToString(CultureInfo.InvariantCulture), records, ["-Rr", "test(\"a\")"], lines,
+                    string.Concat(Enumerable.Repeat("true\n", records)));
+        }
+        Add("seq-records", records, ["--seq", "-c", "."], string.Concat(Enumerable.Repeat("\u001e1\n", records)),
+            string.Concat(Enumerable.Repeat("\u001e1\n", records)));
+        Add("stream-array", records, ["--stream", "-c", ".[1] // empty"],
+            "[" + string.Join(',', Enumerable.Range(0, records)) + "]",
+            string.Concat(Enumerable.Range(0, records).Select(value => value.ToString(CultureInfo.InvariantCulture) + "\n")));
+        Add("growing-regex-subject", records, ["-nc", "range(1;1001) | \"a\" * . | test(\"a\")"], "",
+            string.Concat(Enumerable.Repeat("true\n", records)));
+        foreach (int length in new[] { 61, 62 })
+        {
+            string pattern = new('a', length);
+            Add("regex-result-" + length.ToString(CultureInfo.InvariantCulture), records,
+                ["-nrc", "--arg", "p", pattern, "range(1000) | $p | match($p) | .length"], "",
+                string.Concat(Enumerable.Repeat(length.ToString(CultureInfo.InvariantCulture) + "\n", records)));
+        }
+        foreach (int length in new[] { 1, 1000 })
+        {
+            string text = new('a', length);
+            Add("tojson-" + length.ToString(CultureInfo.InvariantCulture), records,
+                ["-nr", "--arg", "s", text, "range(1000) | $s | tojson"], "",
+                string.Concat(Enumerable.Repeat("\"" + text + "\"\n", records)));
+        }
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>
+            AddDiagnostic(name, size, arguments, input, expected, "");
+
+        void AddDiagnostic(string name, int size, string[] arguments, string input, string expected, string error) =>
             workloads.Add(new(new ComparisonWorkload(name, "governor", size, arguments,
-                Encoding.UTF8.GetBytes(input), ComparisonKind.Bytes), OutputDigest.FromBytes(Encoding.UTF8.GetBytes(expected))));
+                Encoding.UTF8.GetBytes(input), ComparisonKind.Bytes), OutputDigest.FromBytes(Encoding.UTF8.GetBytes(expected)),
+                OutputDigest.FromBytes(Encoding.UTF8.GetBytes(error))));
     }
 }
