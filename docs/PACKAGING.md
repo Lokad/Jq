@@ -52,7 +52,8 @@ non-finite parsing, output/regex policy, cancellation, and borrowed descriptors.
 Six additional checks exercise governed invocation snapshots, sequential reuse,
 refusal preserving caller charges, overlapping shared demand, pending cleanup,
 cancellation/refunds and the independent allocation-work API. The fixture reuses
-the test-only deterministic host budget; no governor is included in the package.
+the development-only deterministic host budget through the test adapter; no
+governor is included in the package.
 The original ten checks passed against the CI-built packages at `9f223bf` on
 Windows and Linux. Later changes require a new consumer receipt.
 The isolated workspace is retained for inspection. The project template is not

@@ -1,7 +1,8 @@
 # Benchmarks
 
-The development harness covers non-regex workloads only. Regex performance
-belongs to the regex engine layer; semantic and resource tests remain in Jq.
+The reference comparison and BenchmarkDotNet catalog cover non-regex workloads.
+Governor diagnostics also sample regex adapter ownership costs; regex engine
+performance comparisons remain separate. Semantic and resource tests remain in Jq.
 The latest reference campaign matches jq in all 38 cases and qualifies
 all 36 workload measurements, each favoring Lokad.Jq in the declared comparison.
 The two startup/latency controls remain unqualified:
@@ -34,6 +35,46 @@ consumption and checksum costs are included. Historical reports below identify
 their measured revisions; they do not qualify the governed-memory changes.
 The verified-consumption host replaces earlier discard/capture hosts, so older
 timings are not directly comparable to measurements with this harness.
+
+## Governor interface cost diagnostics
+
+Run the explicit shared-budget lane separately from historical timings:
+
+```text
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --governor --iterations 128 --workers 1,4
+```
+
+The ten bounded cases cover tiny commands, raw/JSON records, array mapping,
+small/large HTML text, implode, growing raw output and boolean/detailed regex
+operations. Every execution checks status, separate stderr, output length and
+SHA-256 against independently generated expected bytes. `--case NAME` selects
+one case; `--output artifacts/PATH` chooses an ignored JSON checkpoint.
+
+The governed lane forwards one shared 256 MiB allowance across workers. A
+development-only lock-based host tracks active owners rather than historical
+reservations; tests and the detached consumer reuse that implementation through
+a thin adapter. It adds no runtime package dependency or production governor.
+Counts are collected in a separate instrumented pass, including reserve/resize,
+counter reads, same-target changes, refunds, disposal, scopes and refusal.
+
+Timing/allocation lanes omit that counter decorator and compare the explicit
+execution hook with no hook. Both bind and compile afresh, consume/checksum all
+output and use linked 15-second cancellation deadlines. Caller-owned snapshots,
+input generation and recognition are outside both lanes. Each lane warms for at
+least eight executions per worker and one second, then records three alternating
+pairs. JSON preserves every elapsed-time, process-wide managed-allocation and GC
+sample, the requested worker count, library hash and runtime/OS/architecture.
+Admission peaks and zero final charges are recorded separately from GC bytes.
+Requested workers do not prove full simultaneous occupancy; controlled lifetime
+tests establish actual overlapping demand.
+
+These local cost probes are unqualified diagnostics. Scheduling, shared-root
+contention, GC and tiered compilation can affect ratios, especially tiny batches.
+Keep other builds/tests/tools idle during a probe; retain all samples and inspect
+their spread. A representative lock-based host does not establish another host's
+governor cost, upstream speedup or process-memory bound. The older performance
+receipts below do not qualify these memory changes. See EXECUTION_POLICY.md for
+bounded charged credit, idle retention, exact fallback and lifetime rules.
 
 ## Upstream comparison
 

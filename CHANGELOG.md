@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add explicit `--governor` diagnostics comparing the execution hook with no hook
+  under single/shared-root workers. Keep call counters separate from warmed
+  timing/allocation samples, verify independent output digests and full refunds,
+  and record every sample as unqualified local cost evidence. Reuse one
+  development-only active-owner governor fixture across tests and detached
+  consumers; no fixture enters the runtime package.
 - Grow reusable raw output geometrically after its exact first allocation, while
   keeping actual retained capacity and replacement peaks charged. Optional
   headroom refusal falls back once to exact capacity and disables further padding

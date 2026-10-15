@@ -3,6 +3,17 @@ using BenchmarkDotNet.Running;
 using Lokad.Jq;
 using Lokad.Jq.Benchmarking;
 
+if (args.Length > 0 && args[0] == "--governor")
+{
+    using var cancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, signal) => { signal.Cancel = true; cancellation.Cancel(); };
+    try { Environment.ExitCode = await GovernorRunner.RunAsync(args[1..], cancellation.Token); }
+    catch (OperationCanceledException) { Console.Error.WriteLine("Cancelled; completed governor checkpoints remain in artifacts/."); Environment.ExitCode = 130; }
+    catch (Exception exception) when (exception is IOException or InvalidOperationException)
+    { Console.Error.WriteLine("Governor tool failed: " + exception.Message); Environment.ExitCode = 1; }
+    return;
+}
+
 if (args is ["--check-machine"])
 {
     var check = await MachineQuietProbe.CheckAsync(5, TimeSpan.FromSeconds(1), CancellationToken.None);
