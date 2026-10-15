@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Batch small value/slot charges inside their existing coarse owners using at
+  most one 4 KiB block of charged credit. Keep small owners and known copies
+  exact; a refused padding request falls back once to required size, then disables
+  padding for that owner. Preserve real reconciliation refunds and terminal
+  required-storage refusal. Preflight HTML/implode builder capacities together
+  and batch literal time-format runs while keeping work/cancellation guards.
 - Reduce governor traffic using owner-local admitted sizes, zero-charge fast
   paths and unchanged-buffer notification elision. Explicit reservation counter
   observations still reflect ancestor invalidation; direct admission calls still

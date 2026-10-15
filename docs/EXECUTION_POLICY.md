@@ -96,6 +96,18 @@ observations still reflect ancestor disposal. Buffer reuse sends no unchanged
 capacity notifications; actual growth, replacement peaks and refunds still reach
 the supplied host allowance.
 
+Coarse value/compiler owners separate logical demand from admitted credit. Owners
+up to 4 KiB and charges of at least 256 bytes stay exact. After demand exceeds
+4 KiB, increments below 256 bytes may reserve up to one 4 KiB block ahead; that credit
+remains charged to the same host allowance and can satisfy later local charges.
+If optional padding is refused, one immediate exact-size attempt preserves the
+required allocation's outcome, then that owner uses exact growth without further
+padding probes. Refusal of required storage remains terminal. Reconciliation
+refunds unused credit along with discarded demand. No root balance is copied.
+HTML and implode builders preflight their exact capacity in bulk; literal runs
+in time formatting are charged together. Cancellation and work guards remain
+independent, including bounded checks during long text scans.
+
 `TryReserve` and `TryResize` admit nonnegative estimates immediately or refuse
 without changing existing charges. Negative estimates throw; admission through
 disposed owners throws. Refusal reports terminal status 5 and cannot be caught

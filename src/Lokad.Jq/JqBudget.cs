@@ -22,10 +22,10 @@ internal sealed class JqBudget : IDisposable
     private int _remainingInput;
     private int _remainingOutput;
     private int _evaluationDepth;
-    private readonly JqMemoryReservation _executionStorage;
-    private JqMemoryReservation _storage;
-    private JqMemoryReservation? _recordStorage;
-    private readonly List<JqMemoryReservation> _persistentStorageOwners = [];
+    private readonly JqStorage _executionStorage;
+    private JqStorage _storage;
+    private JqStorage? _recordStorage;
+    private readonly List<JqStorage> _persistentStorageOwners = [];
 
     internal JqBudget(CancellationToken cancellationToken)
         : this(JqExecutionPolicy.Default, cancellationToken) { }
@@ -37,7 +37,7 @@ internal sealed class JqBudget : IDisposable
     {
         Policy = policy;
         MemoryBudget = memoryBudget;
-        _executionStorage = new JqMemoryReservation(memoryBudget);
+        _executionStorage = new JqStorage(memoryBudget);
         _storage = _executionStorage;
         _cancellationToken = cancellationToken;
         _remainingAllocationWork = policy.MaximumAllocationWorkBytes;
@@ -59,7 +59,7 @@ internal sealed class JqBudget : IDisposable
     internal void BeginRecord()
     {
         _recordStorage?.Dispose();
-        _recordStorage = new JqMemoryReservation(MemoryBudget);
+        _recordStorage = new JqStorage(MemoryBudget);
         _storage = _recordStorage;
     }
 
@@ -67,21 +67,21 @@ internal sealed class JqBudget : IDisposable
 
     // The execution owns this region; cursors borrow it so terminal payloads
     // still retain their charge after descriptor/cursor cleanup.
-    internal JqMemoryReservation CreateStorageOwner()
+    internal JqStorage CreateStorageOwner()
     {
-        var owner = new JqMemoryReservation(MemoryBudget);
+        var owner = new JqStorage(MemoryBudget);
         _persistentStorageOwners.Add(owner);
         return owner;
     }
 
-    internal IDisposable UseStorage(JqMemoryReservation storage)
+    internal IDisposable UseStorage(JqStorage storage)
     {
         var selection = new StorageSelection(this, _storage);
         _storage = storage;
         return selection;
     }
 
-    private sealed class StorageSelection(JqBudget budget, JqMemoryReservation previous) : IDisposable
+    private sealed class StorageSelection(JqBudget budget, JqStorage previous) : IDisposable
     {
         private bool _disposed;
 
@@ -97,10 +97,7 @@ internal sealed class JqBudget : IDisposable
     {
         CheckCancellation();
         if (bytes == 0) return;
-        long previous = _storage.LastAdmittedBytes;
-        if (bytes < 0 || bytes > long.MaxValue - previous)
-            throw new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
-        _storage.Resize(previous + bytes);
+        _storage.ReserveBytes(bytes);
     }
 
     internal void ChargeValueNode()
@@ -176,7 +173,7 @@ internal sealed class JqBudget : IDisposable
 
     public void Dispose()
     {
-        foreach (JqMemoryReservation owner in _persistentStorageOwners) owner.Dispose();
+        foreach (JqStorage owner in _persistentStorageOwners) owner.Dispose();
         _persistentStorageOwners.Clear();
         _recordStorage?.Dispose();
         _executionStorage.Dispose();

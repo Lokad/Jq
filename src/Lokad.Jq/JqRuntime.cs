@@ -1742,8 +1742,24 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (input is not JsonArray arr)
             throw new JqException("implode input must be an array");
-        var sb = new StringBuilder();
-        foreach (JsonNode? item in arr)
+        long length = 0;
+        for (int index = 0; index < arr.Count; index++)
+        {
+            if ((index & 4095) == 0) budget.CheckCancellation();
+            length += Scalar(arr[index]) > 0xFFFF ? 2 : 1;
+        }
+        budget.ChargeString(length);
+        var sb = new StringBuilder((int)length);
+        Span<char> encoded = stackalloc char[2];
+        for (int index = 0; index < arr.Count; index++)
+        {
+            if ((index & 4095) == 0) budget.CheckCancellation();
+            int count = new Rune(Scalar(arr[index])).EncodeToUtf16(encoded);
+            sb.Append(encoded[..count]);
+        }
+        return JsonValue.Create(budget.Finish(sb));
+
+        int Scalar(JsonNode? item)
         {
             long point;
             if (item is JsonValue small && small.TryGetValue<int>(out int direct))
@@ -1754,10 +1770,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 point = (long)value;
             else
                 throw new JqException($"{TypeName(item)} ({Serialize(item, false, null, false)}) can't be imploded, unicode codepoint needs to be numeric");
-            int scalar = point < 0 || point > 0x10FFFF || (point >= 0xD800 && point <= 0xDFFF) ? 0xFFFD : (int)point;
-            budget.Append(sb, char.ConvertFromUtf32(scalar).AsSpan());
+            return point < 0 || point > 0x10FFFF || (point >= 0xD800 && point <= 0xDFFF) ? 0xFFFD : (int)point;
         }
-        return JsonValue.Create(budget.Finish(sb));
     }
 
     internal JsonNode Split(JsonNode? input, JsonNode? separator)
@@ -1928,15 +1942,24 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // leaving UTF-8 bytes raw. Codes: 38 is &, 60 is <, 62 is >, 39 is apostrophe, 34 is quote.
         string Html(string source)
         {
-            var builder = new StringBuilder();
-            foreach (char ch in source)
+            long length = source.Length;
+            for (int index = 0; index < source.Length; index++)
             {
-                if (ch == (char)38) budget.Append(builder, "&amp;");
-                else if (ch == (char)60) budget.Append(builder, "&lt;");
-                else if (ch == (char)62) budget.Append(builder, "&gt;");
-                else if (ch == (char)39) budget.Append(builder, "&apos;");
-                else if (ch == (char)34) budget.Append(builder, "&quot;");
-                else budget.Append(builder, new ReadOnlySpan<char>(in ch));
+                if ((index & 4095) == 0) budget.CheckCancellation();
+                length += source[index] switch { '&' => 4, '<' or '>' => 3, '\'' or '"' => 5, _ => 0 };
+            }
+            budget.ChargeString(length);
+            var builder = new StringBuilder((int)length);
+            for (int index = 0; index < source.Length; index++)
+            {
+                if ((index & 4095) == 0) budget.CheckCancellation();
+                char ch = source[index];
+                if (ch == (char)38) builder.Append("&amp;");
+                else if (ch == (char)60) builder.Append("&lt;");
+                else if (ch == (char)62) builder.Append("&gt;");
+                else if (ch == (char)39) builder.Append("&apos;");
+                else if (ch == (char)34) builder.Append("&quot;");
+                else builder.Append(ch);
             }
             return budget.Finish(builder);
         }

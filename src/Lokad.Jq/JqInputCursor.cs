@@ -47,7 +47,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private byte[] _readBuffer = [];
     private readonly JqMemoryReservation _readMemory;
     private readonly JqMemoryReservation _bufferMemory;
-    private readonly JqMemoryReservation _retainedValues;
+    private readonly JqStorage _retainedValues;
 
     private int _index = -1;
     private bool _active;
@@ -123,7 +123,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         foreach (JsonNode? queued in _seqQueue)
             retained += JqBudget.EstimateTreeStorage(queued);
         if (_seqError is { } error) retained += 2L * error.Message.Length;
-        if (_retainedValues.LastAdmittedBytes != retained) _retainedValues.Resize(retained);
+        if (_retainedValues.UsedBytes != retained) _retainedValues.Resize(retained);
     }
 
     // Async pull for outer iteration. Returns false when every source is

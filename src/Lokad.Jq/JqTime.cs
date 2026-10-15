@@ -321,7 +321,13 @@ internal static class JqTime
         {
             if (format[index] != (char)37 || index + 1 >= format.Length)
             {
-                context.Budget.Append(builder, format.AsSpan(index, 1));
+                int start = index;
+                while (index + 1 < format.Length && format[index + 1] != (char)37)
+                {
+                    index++;
+                    if ((index & 4095) == 0) context.Budget.CheckCancellation();
+                }
+                context.Budget.Append(builder, format.AsSpan(start, index - start + 1));
                 continue;
             }
             char spec = format[index + 1];
