@@ -7,6 +7,63 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(100)]
+    [InlineData(1000)]
+    public async Task Jq_GovernedRawCapacityGrowsGeometricallyAndKeepsExactOutput(int count)
+    {
+        var root = new TestMemoryBudget(4 * 1024 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        host.SetStandardInput("[" + string.Join(',', Enumerable.Range(1, count).Select(length =>
+            "\"" + new string('x', length) + "\"")) + "]");
+        // Bind input once; only the changing raw capacity grows during output.
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", ".[]")));
+        MemoryCallCounts? firstOutput = null;
+        host.BeforeByteAppend = () => firstOutput ??= memory.Counts;
+
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(string.Concat(Enumerable.Range(1, count).Select(length =>
+            new string('x', length) + "\n")), host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.NotNull(firstOutput);
+        Assert.InRange(memory.Counts.Resizes - firstOutput.Value.Resizes, 0, 32);
+        Assert.Equal(0, memory.Counts.BytesReads);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_GovernedRawGrowthFallsBackOnceUnderSharedPressure()
+    {
+        const long limit = 64 * 1024;
+        var root = new TestMemoryBudget(limit);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", "\"x\",\"xx\",\"xxx\"")));
+        IMemoryReservation? pressure = null;
+        int appended = 0;
+        host.BeforeByteAppend = () =>
+        {
+            if (appended == 0)
+                Assert.True(root.TryReserve(limit - root.ReservedBytes - 3, out pressure));
+            else if (appended == 1)
+            {
+                Assert.NotNull(pressure);
+                Assert.True(pressure.TryResize(pressure.Bytes - 2));
+            }
+            appended++;
+        };
+
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("x\nxx\nxxx\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(1, memory.Counts.Refusals);
+        Assert.NotNull(pressure);
+        Assert.Equal(pressure.Bytes, root.ReservedBytes);
+        pressure.Dispose();
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData(false, 100)]
     [InlineData(false, 1000)]
     [InlineData(true, 100)]

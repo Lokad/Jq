@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Grow reusable raw output geometrically after its exact first allocation, while
+  keeping actual retained capacity and replacement peaks charged. Optional
+  headroom refusal falls back once to exact capacity and disables further padding
+  probes for that renderer. Preserve exact output, earlier host effects and
+  terminal refusal when required storage cannot fit.
 - Reuse one coarse outer-record reservation across safe input boundaries. Keep at
   most 4 KiB of already-admitted credit charged, avoid eager padding for small
   records, and refund it at execution cleanup. Preserve aliases/aggregates and

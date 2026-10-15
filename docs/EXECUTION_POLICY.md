@@ -119,6 +119,11 @@ filter/module/variable-file read buffers. Growth reserves old and new storage
 together until replacement or copying finishes. Retained capacity stays charged
 between records. Cursor buffers survive pending reads and owned-descriptor
 cleanup; a hosted read result owns its accumulated capacity until decoding ends.
+Raw output starts with exact capacity and doubles later growth up to its output
+ceiling, keeping that backing capacity charged. If optional growth is refused,
+one exact replacement is attempted and further growth stays exact for that
+renderer. Both attempts preserve the old-plus-new replacement peak; a successful
+smaller replacement does not replay output or consume output allowance twice.
 Temporary read storage is released after the awaited read loop completes. Regex
 compiled-pattern and pooled-workspace estimates remain charged under one cache
 owner until context disposal. Subject encoding and detailed capture contexts

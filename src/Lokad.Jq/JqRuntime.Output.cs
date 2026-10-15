@@ -16,6 +16,7 @@ internal sealed partial class JqRuntime
         private Utf8JsonWriter? _writer;
         private byte[] _rawBuffer = [];
         private readonly JqMemoryReservation _rawMemory = new(budget.MemoryBudget);
+        private bool _exactRawGrowth;
 
         internal ReadOnlyMemory<byte> Render(JsonNode? node)
         {
@@ -55,10 +56,21 @@ internal sealed partial class JqRuntime
             byte? terminator = invocation.RawOutput0 ? (byte)0 : invocation.JoinOutput ? null : (byte)'\n';
             int length = Encoding.UTF8.GetByteCount(text) + (terminator.HasValue ? 1 : 0);
             // Preserve the per-record charge before growing or changing storage.
-            // Exact growth needs no allowance beyond the old record allocation.
             budget.ChargeOutput(length);
             if (_rawBuffer.Length < length)
-                _rawMemory.ReplaceBuffer(ref _rawBuffer, length);
+            {
+                int capacity = _exactRawGrowth || _rawBuffer.Length == 0 ? length
+                    : Math.Max(length, Math.Min(JqBudget.MaximumJsonBytes, _rawBuffer.Length * 2));
+                if (capacity == length)
+                    _rawMemory.ReplaceBuffer(ref _rawBuffer, length);
+                else if (!_rawMemory.TryReplaceBuffer(ref _rawBuffer, capacity, 0, 0))
+                {
+                    // Optional headroom must not reject an exact replacement
+                    // that fits. Remember pressure instead of probing it again.
+                    _exactRawGrowth = true;
+                    _rawMemory.ReplaceBuffer(ref _rawBuffer, length);
+                }
+            }
             int written = Utf8Text.Encode(text, _rawBuffer);
             if (terminator is byte ending)
                 _rawBuffer[written] = ending;
