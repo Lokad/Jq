@@ -58,7 +58,11 @@ Coarse owners separate logical storage demand from bounded, already-admitted
 credit, so small local charges need not call the host each time. Safe record
 boundaries retain at most 4 KiB of reusable credit. Regex caches retain at most
 one idle subject buffer and one detailed-result allowance, capped at 4 KiB each;
-nested operations keep distinct owners. Direct buffers still admit replacement
+nested operations keep distinct owners. Cursor reconciliation retains at most
+256 bytes of existing credit beyond actual retained trees. After 32 successful
+serializations, each budget may reuse one returned buffer capped at 4 KiB of
+admission; active results keep distinct owners. Cold results refund immediately.
+Direct buffers still admit replacement
 peaks and refund them after copying. EXECUTION_POLICY.md describes exact fallback
 under root pressure and the retained-headroom tradeoff.
 

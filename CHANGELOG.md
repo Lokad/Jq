@@ -5,7 +5,7 @@
 - Reuse one returned serialization buffer after 32 successful serializations,
   retaining at most 4 KiB of admitted capacity per budget. Keep cold refunds,
   overlapping result ownership, failed-buffer cleanup and independent work guards;
-  active results remain charged when their budget closes.
+  active byte-buffer leases retain admission after cache closure.
 - Reuse at most 256 bytes of already-admitted cursor credit across safe sequence
   and stream boundaries, alongside actual retained trees. Preserve larger refunds
   and terminal cleanup while avoiding scalar-event grow/refund oscillation.
@@ -95,7 +95,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,857 tests pass,
+- Validation on Windows: warning-free Release build and all 3,881 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 16 detached consumer checks with isolated cache, exact package hash and
   locked restore.
