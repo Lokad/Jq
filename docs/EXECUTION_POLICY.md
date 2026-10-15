@@ -158,7 +158,7 @@ the persistent owner so cached definitions survive record refunds.
 
 Serialization results own their byte capacity until consumption finishes.
 After 32 successful serializations, a budget may retain one returned buffer with
-at most 4 KiB of admission, including any outstanding replacement estimate.
+at most 4 KiB of admitted capacity.
 Before handing off a hot result whose current buffer fits that ceiling, finished
 writer borrows end and replaced capacity is refunded. Actual growth still admits
 the old-plus-new peak first. This lets a fitting grown buffer remain reusable;
@@ -166,8 +166,8 @@ the retained admission stays charged even where it was previously discarded.
 Cold results refund immediately. Borrowed results remain distinct; failed or
 oversized buffers release, and closing the budget releases idle capacity while
 active result owners retain their own admission until returned. Output rendering
-and queued copies use separate storage. Reuse still checks work/cancellation and
-reconciles any remaining completed replacement peaks before another serialization.
+and queued copies use separate storage. Reuse still checks work and cancellation
+on every serialization.
 Queued diagnostic copies have a separate owner that survives record refunds and
 all awaited appends. Cold drains refund completely. After 32 nonempty messages
 smaller than 256 bytes, drains may retain at most 256 bytes of existing credit.

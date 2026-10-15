@@ -102,7 +102,17 @@ is explicit, opt-in development tooling and does not run in ordinary tests or CI
 
 ## Local source and package evidence
 
-The governed-memory integration was checked locally on Windows on 2026-10-14:
+The bounded governor-call follow-up at committed revision `2d94dab` was checked
+on Windows on 2026-10-15 in a fresh checkout without `PLAN.md` or `external/`:
+locked restore, warning-free Release build, all 3,908 tests and Release pack.
+The package passes all 16 detached consumer checks with an isolated cache,
+verified artifact hash and locked restore. Its symbols pass assembly identity,
+public commit mappings and SHA-256 checksums for 70 committed and three embedded
+documents. Dependencies and lock files are unchanged. Hosted source downloads
+were not requested; this adds no new hosted-source, cross-platform package,
+publication or qualified performance claim.
+
+The earlier governed-memory integration was checked locally on Windows on 2026-10-14:
 warning-free Release build, all 3,827 tests and all 16 detached consumer checks.
 The consumer verified the exact packed-artifact hash, locked restore and the
 unchanged managed dependency graph in an isolated cache. Shared admission,
@@ -124,7 +134,7 @@ restore/build/test/pack and detached-consumer checks. The Linux run exposed a
 Windows-only cube-root test pin; the corrected test follows the platform
 variation confirmed in official jq binaries, as recorded in `NUMERIC_PROFILE.md`.
 
-The latest package audit uses artifacts from GitHub Actions run `37348034783`
+The cross-platform package audit uses artifacts from GitHub Actions run `37348034783`
 for committed revision `9f223bf` on 2026-10-05. Both Windows and Ubuntu jobs
 passed locked restore, Release build, all 3,727 tests, Release pack and artifact
 uploads. Their respective packages passed ten detached consumer checks on

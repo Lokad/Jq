@@ -103,7 +103,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,881 tests pass,
+- Validation on Windows: warning-free Release build and all 3,908 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 16 detached consumer checks with isolated cache, exact package hash and
   locked restore.

@@ -84,6 +84,27 @@ governor cost, upstream speedup or process-memory bound. The older performance
 receipts below do not qualify these memory changes. See EXECUTION_POLICY.md for
 bounded charged credit, idle retention, exact fallback and lifetime rules.
 
+The 2026-10-15 local Windows diagnostic compares the 48-case catalog before the
+latest changes (`dcf2a74`) and after them (`2d94dab`): one/four workers, 128
+iterations per worker, 96 rows and 576 samples in each report. Independent
+stdout/stderr digests pass; all batches refund completely, with zero reservation
+counter reads, same-target resizes or unexpected refusals. Mixed-size serializer
+reuse, diagnostic credit and hot cursor credit reduce the targeted call counts;
+large-copy and oversized-owner policies remain unchanged. The targeted mixed
+serializer probe lowers governed managed allocation by about 2.16 MB per
+1,032-result execution. Diagnostic sample peaks rise by at most 255 bytes and
+sequence-text peaks by 256 bytes. Shared aggregate peaks vary with phase overlap;
+observing four live scopes does not prove four simultaneous allocation-heavy
+phases. The existing 4 KiB serializer ceiling remains, but newly reusable fitting
+buffers can retain admission where they previously released it.
+
+Raw ignored reports: `artifacts/benchmarks/governor-mixed-baseline.json` and
+`governor-mixed-final.json`. The final report's SHA-256 is
+`a6175b83d715f5eff8defb9a49ca01d631887c6f5c0f2addbe412fe7511d3e5b`.
+This receipt records bounded local cost/accounting evidence; timing is mixed and
+does not establish a general speedup, another host's contention cost or tail
+latency. Cold serializer cases still pay their deliberate immediate-refund floor.
+
 ## Upstream comparison
 
 Supply an independently installed jq 1.8.2 executable explicitly. The tool records
