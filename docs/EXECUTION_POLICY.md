@@ -96,9 +96,10 @@ observations still reflect ancestor disposal. Buffer reuse sends no unchanged
 capacity notifications; actual growth, replacement peaks and refunds still reach
 the supplied host allowance.
 
-Coarse value/compiler owners separate logical demand from admitted credit. Owners
-up to 4 KiB and charges of at least 256 bytes stay exact. After demand exceeds
-4 KiB, increments below 256 bytes may reserve up to one 4 KiB block ahead; that credit
+Coarse value/compiler owners separate logical demand from admitted credit. Charges
+of at least 256 bytes stay exact. Smaller increments stay exact on cold owners;
+after 32 small charges they may use 256-byte credit steps below 4 KiB. Above
+4 KiB they may reserve up to one 4 KiB block ahead; that credit
 remains charged to the same host allowance and can satisfy later local charges.
 If optional padding is refused, one immediate exact-size attempt preserves the
 required allocation's outcome, then that owner uses exact growth without further
@@ -126,9 +127,13 @@ renderer. Both attempts preserve the old-plus-new replacement peak; a successful
 smaller replacement does not replay output or consume output allowance twice.
 Temporary read storage is released after the awaited read loop completes. Regex
 compiled-pattern and pooled-workspace estimates remain charged under one cache
-owner until context disposal. Subject encoding and detailed capture contexts
-have operation owners; failed compilation or matching refunds unused admission,
-and nested replacement calls keep their parent's operation charges live.
+owner until context disposal and completion of its borrowers. Subject encoding
+and detailed capture contexts have operation owners. The cache can retain one
+idle UTF-8 subject buffer and one idle capture allowance, each at most 4 KiB and
+still charged. Reuse avoids admission calls for unchanged capacity; subject
+growth includes old-plus-new storage. Larger owners and failed operations refund
+on return. Nested operations use separate owners, and closing the cache waits for
+active borrowers before refunding their compiled-pattern admission.
 
 Execution snapshots and filter/module compilation use a persistent storage owner.
 UTF-16 materialization, decoded JSON nodes/backing slots, container clones and

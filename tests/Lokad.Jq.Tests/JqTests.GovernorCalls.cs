@@ -7,6 +7,65 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(false, 100)]
+    [InlineData(false, 1000)]
+    [InlineData(true, 100)]
+    [InlineData(true, 1000)]
+    public async Task Jq_GovernedRegexCallsReuseBoundedOperationOwners(bool detailed, int count)
+    {
+        var root = new TestMemoryBudget(2 * 1024 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        string filter = detailed ? "scan(\"a\")" : "range(" + count.ToString(CultureInfo.InvariantCulture) + ") | \"x\" | test(\"x\")";
+        if (detailed) host.SetStandardInput("\"" + new string('a', count) + "\"");
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", detailed ? "-c" : "-nc", filter)));
+
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(string.Concat(Enumerable.Repeat(detailed ? "\"a\"\n" : "true\n", count)),
+            host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.InRange(memory.Counts.Reservations, 1, 16);
+        Assert.InRange(memory.Counts.Resizes, 0, 80);
+        Assert.Equal(0, memory.Counts.BytesReads);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedSmallBurstsUseBoundedCreditWithoutPaddingColdOwners()
+    {
+        var root = new TestMemoryBudget(512);
+        var memory = new CountingMemoryBudget(root);
+        using (var storage = new JqStorage(memory))
+        {
+            for (int i = 0; i < 31; i++) storage.ReserveBytes(1);
+            Assert.Equal(31, root.ReservedBytes);
+            for (int i = 31; i < 300; i++) storage.ReserveBytes(1);
+            Assert.Equal(300, storage.UsedBytes);
+            Assert.InRange(root.ReservedBytes, 300, 555);
+            Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 40);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedSmallBurstPaddingRefusalFallsBackOnce()
+    {
+        var root = new TestMemoryBudget(300);
+        var memory = new CountingMemoryBudget(root);
+        using (var storage = new JqStorage(memory))
+        {
+            for (int i = 0; i < 300; i++) storage.ReserveBytes(1);
+            Assert.Equal(300, storage.UsedBytes);
+            Assert.Equal(300, root.ReservedBytes);
+            Assert.Equal(1, memory.Counts.Refusals);
+            Assert.Throws<JqQuotaException>(() => storage.ReserveBytes(1));
+            Assert.Equal(300, storage.UsedBytes);
+            Assert.Equal(300, root.ReservedBytes);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData(100)]
     [InlineData(1000)]
     public async Task Jq_GovernedRawCapacityGrowsGeometricallyAndKeepsExactOutput(int count)

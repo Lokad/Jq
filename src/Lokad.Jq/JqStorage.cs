@@ -11,6 +11,7 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
     private long _used;
     private bool _exactOnly;
     private bool _disposed;
+    private int _smallCharges;
 
     internal long UsedBytes => _used;
 
@@ -20,14 +21,16 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
         if (bytes < 0 || bytes > long.MaxValue - _used)
             throw new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
         long required = _used + bytes;
+        int smallCharges = bytes is > 0 and < SmallIncrementBytes ? Math.Min(32, _smallCharges + 1) : _smallCharges;
         if (required > _memory.LastAdmittedBytes)
         {
-            // Small owners and substantial known copies stay exact. Bounded
-            // credit amortizes small increments only after demand reaches a block.
+            // Cold owners and substantial known copies stay exact. Repeated
+            // small charges use 256-byte credit below 4 KiB, then 4 KiB credit.
             long target = required;
-            if (!_exactOnly && bytes < SmallIncrementBytes && required > BlockBytes
+            int quantum = required > BlockBytes ? BlockBytes : smallCharges == 32 ? SmallIncrementBytes : 0;
+            if (!_exactOnly && bytes < SmallIncrementBytes && quantum != 0
                 && required <= long.MaxValue - (BlockBytes - 1))
-                target = ((required + BlockBytes - 1) / BlockBytes) * BlockBytes;
+                target = ((required + quantum - 1) / quantum) * quantum;
             if (target == required)
                 _memory.Resize(required);
             else if (!_memory.TryResize(target))
@@ -39,6 +42,7 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
             }
         }
         _used = required;
+        _smallCharges = smallCharges;
     }
 
     // Cursor reconciliation is a real lifetime change. Refund both discarded
@@ -60,6 +64,7 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
         long retained = Math.Min(_memory.LastAdmittedBytes, BlockBytes);
         if (_memory.LastAdmittedBytes != retained) _memory.Resize(retained);
         _used = 0;
+        _smallCharges = 0;
     }
 
     public void Dispose()

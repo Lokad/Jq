@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Reuse bounded regex subject buffers and detailed-result allowances, keeping at
+  most one idle owner of each kind, capped at 4 KiB each. Preserve nested leases,
+  replacement peaks, immediate failure refunds and deferred cache cleanup for
+  active borrowers. Batch repeated small charges below 4 KiB with 256-byte credit
+  after a cold-owner threshold, retaining the exact fallback under pressure.
 - Add explicit `--governor` diagnostics comparing the execution hook with no hook
   under single/shared-root workers. Keep call counters separate from warmed
   timing/allocation samples, verify independent output digests and full refunds,
@@ -18,7 +23,7 @@
   records, and refund it at execution cleanup. Preserve aliases/aggregates and
   the separate sequence/stream retained-value owner and its real refunds.
 - Batch small value/slot charges inside their existing coarse owners using at
-  most one 4 KiB block of charged credit. Keep small owners and known copies
+  most one 4 KiB block of charged credit. Keep cold owners and known copies
   exact; a refused padding request falls back once to required size, then disables
   padding for that owner. Preserve real reconciliation refunds and terminal
   required-storage refusal. Preflight HTML/implode builder capacities together

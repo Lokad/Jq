@@ -14,6 +14,10 @@ internal sealed class JqRegexCache : IDisposable
     private readonly JqBudget _budget;
     private readonly JqMemoryReservation _memory;
     private bool _disposed;
+    private const int MaximumIdleBytes = 4096;
+    private OperationMemory? _idleSubject;
+    private OperationMemory? _idleMatch;
+    private int _borrowers;
     private readonly Dictionary<(string Pattern, Pcre2CompileOptions Options), Pattern> _patterns = new();
 
     internal JqRegexCache(JqBudget budget)
@@ -84,20 +88,19 @@ internal sealed class JqRegexCache : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         long estimate = 64L + Encoding.UTF8.GetByteCount(text);
         _budget.ChargeAllocationWork(estimate);
-        var memory = new JqMemoryReservation(_budget.MemoryBudget);
+        OperationMemory memory = Rent(subject: true);
         try
         {
-            memory.Resize(estimate);
-            return new JqMemoryValue<ReadOnlyMemory<byte>>(Utf8Text.Encode(text), memory);
+            return new JqMemoryValue<ReadOnlyMemory<byte>>(memory.Encode(text), memory);
         }
         catch (EncoderFallbackException ex)
         {
-            memory.Dispose();
+            memory.Reject();
             throw new JqException($"invalid regex input: {ex.Message}");
         }
         catch
         {
-            memory.Dispose();
+            memory.Reject();
             throw;
         }
     }
@@ -111,15 +114,15 @@ internal sealed class JqRegexCache : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         long estimate = 128L + 64L * pattern.MaximumCaptureSlots;
         _budget.ChargeAllocationWork(estimate);
-        var memory = new JqMemoryReservation(_budget.MemoryBudget);
+        OperationMemory memory = Rent(subject: false);
         try
         {
-            memory.Resize(estimate);
-            return new MatchResult(MatchCore(), memory);
+            memory.PrepareMatch(estimate);
+            return new MatchResult(MatchCore(), memory, memory.Generation);
         }
         catch
         {
-            memory.Dispose();
+            memory.Reject();
             throw;
         }
 
@@ -154,16 +157,113 @@ internal sealed class JqRegexCache : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _idleSubject?.Destroy();
+        _idleSubject = null;
+        _idleMatch?.Destroy();
+        _idleMatch = null;
+        if (_borrowers == 0) ReleaseCompiled();
+    }
+
+    private OperationMemory Rent(bool subject)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        OperationMemory memory = (subject ? _idleSubject : _idleMatch)
+            ?? new OperationMemory(this, subject, _budget.MemoryBudget);
+        if (subject) _idleSubject = null;
+        else _idleMatch = null;
+        memory.Begin();
+        _borrowers++;
+        return memory;
+    }
+
+    private void Return(OperationMemory memory, bool keep)
+    {
+        _borrowers--;
+        if (!keep || _disposed || memory.Capacity > MaximumIdleBytes)
+            memory.Destroy();
+        else if (memory.IsSubject && _idleSubject is null)
+            _idleSubject = memory;
+        else if (!memory.IsSubject && _idleMatch is null)
+            _idleMatch = memory;
+        else
+            memory.Destroy();
+        if (_disposed && _borrowers == 0) ReleaseCompiled();
+    }
+
+    private void ReleaseCompiled()
+    {
         _patterns.Clear();
         _memory.Dispose();
     }
 
+    // One idle subject buffer and one idle detailed-result allowance, each at
+    // most 4 KiB. Nested active operations rent separate owners. Failed work
+    // drops its owner; disposal waits for borrowers instead of refunding early.
+    internal sealed class OperationMemory(JqRegexCache cache, bool subject, IMemoryBudget? budget) : IDisposable
+    {
+        private readonly JqMemoryReservation _memory = new(budget);
+        private byte[] _buffer = [];
+        private bool _leased;
+        internal bool IsSubject => subject;
+        internal long Capacity => _memory.LastAdmittedBytes;
+        internal long Generation { get; private set; }
+
+        internal void Begin()
+        {
+            _leased = true;
+            Generation++;
+        }
+
+        internal ReadOnlyMemory<byte> Encode(string text)
+        {
+            int length = Encoding.UTF8.GetByteCount(text);
+            if (_memory.LastAdmittedBytes == 0 || length > _buffer.Length)
+            {
+                long previous = _memory.LastAdmittedBytes;
+                int oldCapacity = _buffer.Length;
+                _memory.Resize(64L + oldCapacity + length);
+                try { _buffer = new byte[length]; }
+                catch { _memory.Resize(previous); throw; }
+                if (oldCapacity != 0) _memory.Resize(64L + length);
+            }
+            int written = Utf8Text.Encode(text, _buffer);
+            return _buffer.AsMemory(0, written);
+        }
+
+        internal void PrepareMatch(long bytes)
+        {
+            if (bytes > _memory.LastAdmittedBytes) _memory.Resize(bytes);
+        }
+
+        internal void Return(long generation)
+        {
+            if (!_leased || generation != Generation) return;
+            _leased = false;
+            cache.Return(this, true);
+        }
+
+        internal void Reject()
+        {
+            if (!_leased) return;
+            _leased = false;
+            cache.Return(this, false);
+        }
+
+        internal void Destroy()
+        {
+            _buffer = [];
+            _memory.Dispose();
+        }
+
+        public void Dispose() => Return(Generation);
+    }
+
     internal sealed record Pattern(Utf8Pcre2Regex Regex, Dictionary<int, string> Names, int MaximumCaptureSlots);
 
-    internal readonly ref struct MatchResult(Utf8Pcre2MatchContext value, JqMemoryReservation memory)
+    internal readonly ref struct MatchResult(Utf8Pcre2MatchContext value, OperationMemory memory, long generation)
     {
         internal Utf8Pcre2MatchContext Value { get; } = value;
 
-        public void Dispose() => memory.Dispose();
+        public void Dispose() => memory.Return(generation);
     }
 }

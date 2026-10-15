@@ -62,9 +62,13 @@ When execution receives an `IMemoryBudget`, the regex cache also reserves its
 compiled-pattern/workspace estimate against that shared allowance before
 compilation. Successful cached entries stay charged until context disposal;
 failed compilation refunds its admission. UTF-8 subjects and detailed capture
-contexts reserve before materialization and release at the end of their
-operation, including failures. Parent operations remain charged during nested
-replacement filters. The estimates follow storage lifetimes, independently of
+contexts reserve before materialization. The cache reuses at most one idle
+subject buffer and one idle detailed-result allowance, each capped at 4 KiB of
+charged storage. Larger owners and failed operations release on return; idle
+owners release when the cache closes. Nested operations borrow separate owners,
+and cache closure defers the compiled-pattern refund until active borrowers
+finish. Subject growth admits the old-plus-new replacement peak. The estimates
+follow storage lifetimes, independently of
 the cumulative allocation-work policy; they remain approximate and do
 not enforce an engine compiled-storage cap.
 

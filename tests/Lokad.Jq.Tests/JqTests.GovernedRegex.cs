@@ -25,7 +25,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GovernedRegexSubjectsAndDetailedResultsHaveOperationLifetimes()
+    public void Jq_GovernedRegexKeepsBoundedIdleOwnersAndRefundsFailedEncoding()
     {
         var memory = new TestMemoryBudget(1024 * 1024);
         using var scope = memory.CreateScope();
@@ -41,11 +41,88 @@ public sealed partial class JqTests
                 Assert.False(match.Value.Success);
                 Assert.Equal(retained + 70 + 256, memory.ReservedBytes);
             }
-            Assert.Equal(retained + 70, memory.ReservedBytes);
+            Assert.Equal(retained + 70 + 256, memory.ReservedBytes);
+        }
+        Assert.Equal(retained + 70 + 256, memory.ReservedBytes);
+        Assert.Throws<JqException>(() => regexes.EncodeSubject("a\ud800"));
+        Assert.Equal(retained + 256, memory.ReservedBytes);
+        regexes.Dispose();
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedRegexNestedLeasesAndCopiedResultsSurviveCacheDisposal()
+    {
+        var memory = new TestMemoryBudget(1024 * 1024);
+        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var regexes = new JqRegexCache(budget);
+        var pattern = regexes.Get("x", Pcre2CompileOptions.None);
+        long compiled = memory.ReservedBytes;
+        using var parent = regexes.EncodeSubject("x");
+        using var nested = regexes.EncodeSubject("yy");
+        Assert.Equal("x"u8.ToArray(), parent.Value.ToArray());
+        Assert.Equal(compiled + 65 + 66, memory.ReservedBytes);
+        var first = regexes.Match(pattern, parent.Value, 0, Pcre2MatchOptions.None);
+        var stale = first;
+        first.Dispose();
+        var current = regexes.Match(pattern, parent.Value, 0, Pcre2MatchOptions.None);
+        Assert.True(current.Value.Success);
+        stale.Dispose(); // A copied old result must not release the new lease.
+        nested.Dispose();
+        regexes.Dispose();
+        parent.Dispose();
+        parent.Dispose();
+        Assert.Equal(compiled + 256, memory.ReservedBytes);
+        Assert.Throws<ObjectDisposedException>(() => regexes.EncodeSubject("x"));
+        current.Dispose();
+        Assert.Equal(0, memory.ReservedBytes);
+        current.Dispose();
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedRegexSubjectReuseIgnoresOldDisposeAndDropsLargeOwners()
+    {
+        var memory = new TestMemoryBudget(2 * 1024 * 1024);
+        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var regexes = new JqRegexCache(budget);
+        var old = regexes.EncodeSubject("x");
+        old.Dispose();
+        using var current = regexes.EncodeSubject("y");
+        old.Dispose();
+        Assert.Equal(65, memory.ReservedBytes);
+        using (var large = regexes.EncodeSubject(new string('a', 5000)))
+            Assert.Equal(65 + 5064, memory.ReservedBytes);
+        Assert.Equal(65, memory.ReservedBytes);
+        var pattern = regexes.Get(new string('x', 100), Pcre2CompileOptions.None);
+        long retained = memory.ReservedBytes;
+        using (var match = regexes.Match(pattern, current.Value, 0, Pcre2MatchOptions.None))
+        {
+            Assert.False(match.Value.Success);
+            Assert.Equal(retained + 6592, memory.ReservedBytes);
         }
         Assert.Equal(retained, memory.ReservedBytes);
-        Assert.Throws<JqException>(() => regexes.EncodeSubject("a\ud800"));
+        regexes.Dispose();
         Assert.Equal(retained, memory.ReservedBytes);
+        current.Dispose();
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedRegexRefusedSubjectGrowthRefundsItsIdleOwner()
+    {
+        var memory = new TestMemoryBudget(327744 + 400);
+        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var regexes = new JqRegexCache(budget);
+        regexes.Get("x", Pcre2CompileOptions.None);
+        using (var subject = regexes.EncodeSubject("x"))
+            Assert.Equal(327744 + 65, memory.ReservedBytes);
+        Assert.Throws<JqQuotaException>(() => regexes.EncodeSubject(new string('a', 400)));
+        Assert.Equal(327744, memory.ReservedBytes);
+        using (var next = regexes.EncodeSubject("y"))
+            Assert.Equal("y"u8.ToArray(), next.Value.ToArray());
+        regexes.Dispose();
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Theory]
@@ -88,7 +165,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_GovernedRegexRepeatsWithOneRetainedCacheAndRefundedSubjects()
+    public async Task Jq_GovernedRegexRepeatsWithBoundedCacheAndCompleteExecutionRefunds()
     {
         var memory = new TestMemoryBudget(384 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "range(1000) | \"x\" | test(\"x\")")));
