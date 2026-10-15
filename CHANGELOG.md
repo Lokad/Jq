@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reuse at most 256 bytes of diagnostic credit after 32 small nonempty messages,
+  with bounded hot growth and one-way exact fallback under shared pressure.
+  Keep cold refunds, empty appends, full queued-burst charges and pending drains.
 - Reconcile finished writer replacements before handing off hot serialization
   results whose current capacity fits the existing 4 KiB reuse ceiling. Preserve
   replacement-peak refusal, cold refunds, overlapping results and non-throwing

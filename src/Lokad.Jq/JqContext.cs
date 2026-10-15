@@ -45,10 +45,14 @@ internal sealed class JqContext(
     public int InputLineNumber { get; set; }
 
     // Diagnostic byte queue for debug and stderr filters. Filters enqueue
-    // synchronously while the executor drains to the host between outputs,
-    // so retained bytes stay bounded by one output plus its diagnostics.
+    // synchronously while the executor drains between outputs or at completion.
+    // A filter can queue many diagnostics before producing its next output.
+    private const int StderrCreditBytes = 256;
     private readonly List<ReadOnlyMemory<byte>> _stderr = new();
     private readonly JqMemoryReservation _stderrMemory = new(budget.MemoryBudget);
+    private long _stderrBytes;
+    private int _smallStderrMessages;
+    private bool _exactStderrGrowth;
     private bool _disposed;
 
     internal bool HasPendingStderr => _stderr.Count > 0;
@@ -58,14 +62,14 @@ internal sealed class JqContext(
         ObjectDisposedException.ThrowIf(_disposed, this);
         int length = Encoding.UTF8.GetByteCount(text);
         Budget.ChargeAllocationWork(length);
-        long previous = _stderrMemory.LastAdmittedBytes;
-        if (length != 0) _stderrMemory.Resize(checked(previous + length));
+        long previous = ReserveStderr(length);
         try { _stderr.Add(Utf8Text.Encode(text)); }
         catch
         {
-            if (length != 0) _stderrMemory.Resize(previous);
+            if (_stderrMemory.LastAdmittedBytes != previous) _stderrMemory.Resize(previous);
             throw;
         }
+        CommitStderr(length);
     }
 
     internal void EmitStderr(ReadOnlyMemory<byte> content, bool newline)
@@ -73,8 +77,7 @@ internal sealed class JqContext(
         ObjectDisposedException.ThrowIf(_disposed, this);
         int length = checked(content.Length + (newline ? 1 : 0));
         Budget.ChargeAllocationWork(length);
-        long previous = _stderrMemory.LastAdmittedBytes;
-        if (length != 0) _stderrMemory.Resize(checked(previous + length));
+        long previous = ReserveStderr(length);
         try
         {
             var bytes = new byte[length];
@@ -84,15 +87,47 @@ internal sealed class JqContext(
         }
         catch
         {
-            if (length != 0) _stderrMemory.Resize(previous);
+            if (_stderrMemory.LastAdmittedBytes != previous) _stderrMemory.Resize(previous);
             throw;
         }
+        CommitStderr(length);
+    }
+
+    private long ReserveStderr(int length)
+    {
+        long previous = _stderrMemory.LastAdmittedBytes;
+        long required = checked(_stderrBytes + length);
+        if (required > previous)
+        {
+            long target = required;
+            if (!_exactStderrGrowth && length < StderrCreditBytes && _smallStderrMessages >= 31
+                && required <= long.MaxValue - (StderrCreditBytes - 1))
+                target = ((required + StderrCreditBytes - 1) / StderrCreditBytes) * StderrCreditBytes;
+            if (target == required)
+                _stderrMemory.Resize(required);
+            else if (!_stderrMemory.TryResize(target))
+            {
+                _exactStderrGrowth = true;
+                _stderrMemory.Resize(required);
+            }
+        }
+        return previous;
+    }
+
+    private void CommitStderr(int length)
+    {
+        _stderrBytes += length;
+        if (length is > 0 and < StderrCreditBytes)
+            _smallStderrMessages = Math.Min(32, _smallStderrMessages + 1);
     }
 
     internal void ReleaseDrainedStderr()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_stderrMemory.LastAdmittedBytes != 0) _stderrMemory.Resize(0);
+        long previous = _stderrMemory.LastAdmittedBytes;
+        long retained = _smallStderrMessages == 32 ? Math.Min(previous, StderrCreditBytes) : 0;
+        if (previous != retained) _stderrMemory.Resize(retained);
+        _stderrBytes = 0;
     }
 
     internal List<ReadOnlyMemory<byte>> TakePendingStderr()
@@ -109,6 +144,7 @@ internal sealed class JqContext(
         Regexes.Dispose();
         _stderr.Clear();
         _stderrMemory.Dispose();
+        _stderrBytes = 0;
         Budget.Dispose();
     }
 }

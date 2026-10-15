@@ -167,7 +167,14 @@ active result owners retain their own admission until returned. Output rendering
 and queued copies use separate storage. Reuse still checks work/cancellation and
 reconciles any remaining completed replacement peaks before another serialization.
 Queued diagnostic copies have a separate owner that survives record refunds and
-is released after all awaited appends finish. Empty diagnostic chunks preserve
+all awaited appends. Cold drains refund completely. After 32 nonempty messages
+smaller than 256 bytes, drains may retain at most 256 bytes of existing credit.
+Hot small-message growth can round admission to 256-byte steps, with at most
+255 bytes above actual queued demand. Optional padding refusal falls back once
+to required bytes and disables further padding for that queue. Larger copies
+still preflight their full demand, and context disposal releases all credit.
+Suppressing stdout can queue many messages before a drain; every queued payload
+stays charged until all its host borrows end. Empty diagnostic chunks preserve
 their host append and cancellation behavior without making zero-byte admissions
 or unchanged resize notifications. Small standalone scalar wrappers
 are untracked; managed scalar clones borrow immutable payloads already charged

@@ -7,6 +7,131 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(100)]
+    [InlineData(1000)]
+    public async Task Jq_GovernedSmallStderrReusesBoundedCreditAndPreservesEveryAppend(int count)
+    {
+        var root = new TestMemoryBudget(64 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
+            "range(" + count + ") | \"a\" | stderr")));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(string.Concat(Enumerable.Repeat("a\n", count)), host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(new string('a', count), host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(2 * count, host.AppendCallCount);
+        Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 100);
+        Assert.Equal(0, memory.Counts.BytesReads);
+        Assert.Equal(0, memory.Counts.SameSizeResizes);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4096)]
+    public void Jq_GovernedDiagnosticBurstsTrackAllQueuedBytesWithBoundedPadding(int width)
+    {
+        var root = new TestMemoryBudget(8 * 1024 * 1024);
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline,
+            new JqBudget(JqExecutionPolicy.Default, root, CancellationToken.None)))
+        {
+            byte[] message = Encoding.UTF8.GetBytes(new string('a', width));
+            for (int i = 1; i <= 1000; i++)
+            {
+                context.EmitStderr(message, false);
+                Assert.InRange(root.ReservedBytes, (long)i * width, (long)i * width + 255);
+            }
+            var pending = context.TakePendingStderr();
+            Assert.Equal(1000, pending.Count);
+            foreach (ReadOnlyMemory<byte> chunk in pending) Assert.Equal(message, chunk.ToArray());
+            Assert.True(root.ReservedBytes >= 1000L * width);
+            context.ReleaseDrainedStderr();
+            Assert.InRange(root.ReservedBytes, 0, 256);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedDiagnosticCreditKeepsColdRefundsAndFallsBackOnceUnderPressure()
+    {
+        var root = new TestMemoryBudget(1024);
+        var memory = new CountingMemoryBudget(root);
+        Assert.True(root.TryReserve(900, out var pressure));
+        using (pressure)
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline,
+            new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None)))
+        {
+            for (int i = 0; i < 31; i++)
+            {
+                context.EmitStderr("a");
+                context.TakePendingStderr();
+                context.ReleaseDrainedStderr();
+                Assert.Equal(900, root.ReservedBytes);
+            }
+            context.EmitStderr("a");
+            Assert.Equal(1, memory.Counts.Refusals);
+            Assert.Equal(901, root.ReservedBytes);
+            pressure.Dispose();
+            context.EmitStderr("bb");
+            Assert.Equal(3, root.ReservedBytes);
+            Assert.Equal(1, memory.Counts.Refusals);
+            var failure = Assert.Throws<JqQuotaException>(() => context.EmitStderr(new string('x', 1022)));
+            Assert.True(failure.IsMemoryAdmission);
+            Assert.Equal(3, root.ReservedBytes);
+            var pending = context.TakePendingStderr();
+            Assert.Equal(2, pending.Count);
+            Assert.Equal("a"u8.ToArray(), pending[0].ToArray());
+            Assert.Equal("bb"u8.ToArray(), pending[1].ToArray());
+            context.ReleaseDrainedStderr();
+            Assert.Equal(3, root.ReservedBytes);
+            Assert.True(root.TryReserve(1021, out var competing));
+            using (competing)
+            {
+                Assert.False(root.TryReserve(1, out var refused));
+                Assert.Null(refused);
+                context.Dispose();
+                Assert.Equal(competing.Bytes, root.ReservedBytes);
+            }
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jq_GovernedHotDiagnosticQueueStaysChargedUntilPendingDrainEnds(bool cancel)
+    {
+        var memory = new TestMemoryBudget(128 * 1024);
+        using var cancellation = new CancellationTokenSource();
+        var inner = new MockFileSystem();
+        var host = new MemoryBorrowHost(inner) { DelayedDescriptor = JqFileDescriptor.StdErr };
+        string large = new('b', 2048);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "--arg", "large", large,
+            "(range(32) | \"a\" | stderr | empty), ($large | stderr)")));
+        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal("a"u8.ToArray(), pending.ToArray());
+        Assert.Equal(large + "\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        long retained = memory.ReservedBytes;
+        Assert.True(retained >= 32 + 2048);
+        if (cancel) cancellation.Cancel();
+        Assert.False(execution.IsCompleted);
+        Assert.Equal(retained, memory.ReservedBytes);
+        host.Release.SetResult();
+        if (cancel)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
+            Assert.Empty(inner.GetOutputBytes(JqFileDescriptor.StdErr));
+        }
+        else
+        {
+            Assert.Equal(0, await execution);
+            Assert.Equal(new string('a', 32) + large, inner.GetOutput(JqFileDescriptor.StdErr));
+        }
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Jq_GovernedEmptyStderrStillAwaitsHostAndPreservesCancellation(bool cancel)
