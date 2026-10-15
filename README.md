@@ -48,7 +48,9 @@ see [execution policy](docs/EXECUTION_POLICY.md) for accounting and fixed ceilin
 The cumulative `MaximumAllocationWorkBytes` guard limits charged work. Shared
 storage admission uses a governed invocation or an explicit `IMemoryBudget`
 execution overload; its estimates and lifetime boundaries are described in the
-execution policy. The old
+execution policy. Coarse owners batch small charges using bounded admitted
+credit; retained buffers and caches stay charged until their safe refund boundary.
+The old
 `MaximumAllocationBytes` spelling is a deprecated work-policy alias.
 
 ## Develop
@@ -75,7 +77,7 @@ its supported PCRE2 profile; see [regex behavior](docs/REGEX.md).
 - [Architecture](docs/ARCHITECTURE.md): execution model, host contract and I/O ownership.
 - [Regex behavior](docs/REGEX.md): engine syntax, flags, captures and cancellation boundaries.
 - [Execution policy](docs/EXECUTION_POLICY.md): resource allowances and fixed limits.
-- [Benchmarks](docs/BENCHMARKS.md): non-regex workloads and opt-in upstream comparisons.
+- [Benchmarks](docs/BENCHMARKS.md): workloads, governor cost diagnostics and opt-in upstream comparisons.
 - [Numeric profile](docs/NUMERIC_PROFILE.md): number semantics, precision and rendering.
 - [Packaging](docs/PACKAGING.md): builds, CI, package verification and release checks.
 - [Changelog](CHANGELOG.md): changes and validation history.

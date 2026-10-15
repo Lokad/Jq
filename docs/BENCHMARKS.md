@@ -348,7 +348,8 @@ Withheld experiments are part of the record:
   across ordinary and reversed lanes, including an 8.6% scalar slowdown.
   The unresolved regression prevents acceptance. Existing input Tasks remain.
 - Stack-span `implode` variants saved 5.3% allocations but showed slower or
-  inconsistent timing. The original implementation remains.
+  inconsistent timing. That campaign retained the original implementation;
+  later governor work added bulk capacity admission independently of this trial.
 - An early object prototype and an alternative owned-builder variant were
   superseded by the stronger measured implementation that borrows fields privately.
 - CPU-affinity trials changed runtime behavior and failed quietness checks;

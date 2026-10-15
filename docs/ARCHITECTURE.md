@@ -54,6 +54,14 @@ listed in EXECUTION_POLICY.md. `MaximumAllocationWorkBytes` is an independent
 cumulative work guard; its deprecated `MaximumAllocationBytes` alias is retained
 until the next breaking API release.
 
+Coarse owners separate logical storage demand from bounded, already-admitted
+credit, so small local charges need not call the host each time. Safe record
+boundaries retain at most 4 KiB of reusable credit. Regex caches retain at most
+one idle subject buffer and one detailed-result allowance, capped at 4 KiB each;
+nested operations keep distinct owners. Direct buffers still admit replacement
+peaks and refund them after copying. EXECUTION_POLICY.md describes exact fallback
+under root pressure and the retained-headroom tradeoff.
+
 Try-style invocation factories admit copied argument/environment vectors and
 derived directory storage before allocation. The invocation owns a scope and
 borrows the supplied budget; default execution overloads forward that budget.
