@@ -150,7 +150,9 @@ the persistent owner so cached definitions survive record refunds.
 
 Serialization results own their byte capacity until consumption finishes.
 Queued diagnostic copies have a separate owner that survives record refunds and
-is released after all awaited appends finish. Small standalone scalar wrappers
+is released after all awaited appends finish. Empty diagnostic chunks preserve
+their host append and cancellation behavior without making zero-byte admissions
+or unchanged resize notifications. Small standalone scalar wrappers
 are untracked; managed scalar clones borrow immutable payloads already charged
 to their source owner. Container copies reserve backing slots and stored wrappers.
 

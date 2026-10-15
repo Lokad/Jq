@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Skip zero-byte diagnostic admissions and unchanged queue refunds while keeping
+  empty host appends, cancellation, pending borrows and earlier queued bytes intact.
+  Validate disposed context use even when accounting needs no host notification.
 - Reuse bounded regex subject buffers and detailed-result allowances, keeping at
   most one idle owner of each kind, capped at 4 KiB each. Preserve nested leases,
   replacement peaks, immediate failure refunds and deferred cache cleanup for

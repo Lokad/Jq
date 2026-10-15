@@ -7,6 +7,27 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(100)]
+    [InlineData(1000)]
+    public async Task Jq_GovernedEmptyStderrKeepsHostEffectsWithoutAdmissionChurn(int count)
+    {
+        var root = new TestMemoryBudget(64 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
+            "range(" + count.ToString(CultureInfo.InvariantCulture) + ") | \"\" | stderr")));
+
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(Enumerable.Repeat((byte)'\n', count).ToArray(), host.GetOutputBytes(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
+        Assert.Equal(2 * count, host.AppendCallCount);
+        Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 32);
+        Assert.Equal(0, memory.Counts.BytesReads);
+        Assert.Equal(0, memory.Counts.SameSizeResizes);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData(false, 100)]
     [InlineData(false, 1000)]
     [InlineData(true, 100)]

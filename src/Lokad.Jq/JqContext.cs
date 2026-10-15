@@ -49,29 +49,32 @@ internal sealed class JqContext(
     // so retained bytes stay bounded by one output plus its diagnostics.
     private readonly List<ReadOnlyMemory<byte>> _stderr = new();
     private readonly JqMemoryReservation _stderrMemory = new(budget.MemoryBudget);
+    private bool _disposed;
 
     internal bool HasPendingStderr => _stderr.Count > 0;
 
     internal void EmitStderr(string text)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         int length = Encoding.UTF8.GetByteCount(text);
         Budget.ChargeAllocationWork(length);
         long previous = _stderrMemory.LastAdmittedBytes;
-        _stderrMemory.Resize(checked(previous + length));
+        if (length != 0) _stderrMemory.Resize(checked(previous + length));
         try { _stderr.Add(Utf8Text.Encode(text)); }
         catch
         {
-            _stderrMemory.Resize(previous);
+            if (length != 0) _stderrMemory.Resize(previous);
             throw;
         }
     }
 
     internal void EmitStderr(ReadOnlyMemory<byte> content, bool newline)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         int length = checked(content.Length + (newline ? 1 : 0));
         Budget.ChargeAllocationWork(length);
         long previous = _stderrMemory.LastAdmittedBytes;
-        _stderrMemory.Resize(checked(previous + length));
+        if (length != 0) _stderrMemory.Resize(checked(previous + length));
         try
         {
             var bytes = new byte[length];
@@ -81,12 +84,16 @@ internal sealed class JqContext(
         }
         catch
         {
-            _stderrMemory.Resize(previous);
+            if (length != 0) _stderrMemory.Resize(previous);
             throw;
         }
     }
 
-    internal void ReleaseDrainedStderr() => _stderrMemory.Resize(0);
+    internal void ReleaseDrainedStderr()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_stderrMemory.LastAdmittedBytes != 0) _stderrMemory.Resize(0);
+    }
 
     internal List<ReadOnlyMemory<byte>> TakePendingStderr()
     {
@@ -97,6 +104,8 @@ internal sealed class JqContext(
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         Regexes.Dispose();
         _stderr.Clear();
         _stderrMemory.Dispose();

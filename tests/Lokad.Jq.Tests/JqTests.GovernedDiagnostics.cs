@@ -1,9 +1,93 @@
 using System.Text;
+using System.Text.Json.Nodes;
+using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jq_GovernedEmptyStderrStillAwaitsHostAndPreservesCancellation(bool cancel)
+    {
+        var memory = new TestMemoryBudget(64 * 1024);
+        using var cancellation = new CancellationTokenSource();
+        var inner = new MockFileSystem();
+        var host = new MemoryBorrowHost(inner) { DelayedDescriptor = JqFileDescriptor.StdErr };
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "(\"\" | stderr), \"later\"")));
+        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(pending.IsEmpty);
+        Assert.Equal("\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        long retained = memory.ReservedBytes;
+        Assert.True(retained > 0);
+        if (cancel) cancellation.Cancel();
+        Assert.False(execution.IsCompleted);
+        Assert.Equal(retained, memory.ReservedBytes);
+        host.Release.SetResult();
+        if (cancel)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
+            Assert.Equal("\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        }
+        else
+        {
+            Assert.Equal(0, await execution);
+            Assert.Equal("\nlater\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        }
+        Assert.Empty(inner.GetOutputBytes(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedEmptyDiagnosticQueueKeepsPriorBytesAndValidatesLifetime()
+    {
+        var root = new TestMemoryBudget(8);
+        var memory = new CountingMemoryBudget(root);
+        using var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline,
+            new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None));
+        context.EmitStderr("é");
+        MemoryCallCounts admitted = memory.Counts;
+        context.EmitStderr("");
+        context.EmitStderr(ReadOnlyMemory<byte>.Empty, false);
+        Assert.Equal(admitted, memory.Counts);
+        Assert.Equal(2, root.ReservedBytes);
+        var chunks = context.TakePendingStderr();
+        Assert.Equal(3, chunks.Count);
+        Assert.Equal("é"u8.ToArray(), chunks[0].ToArray());
+        Assert.True(chunks[1].IsEmpty);
+        Assert.True(chunks[2].IsEmpty);
+        Assert.Equal(2, root.ReservedBytes);
+        context.ReleaseDrainedStderr();
+        Assert.Equal(0, root.ReservedBytes);
+        MemoryCallCounts refunded = memory.Counts;
+        context.EmitStderr("");
+        context.ReleaseDrainedStderr();
+        Assert.Equal(refunded, memory.Counts);
+        context.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => context.EmitStderr(""));
+        Assert.Throws<ObjectDisposedException>(() => context.EmitStderr(ReadOnlyMemory<byte>.Empty, false));
+        Assert.Throws<ObjectDisposedException>(() => context.ReleaseDrainedStderr());
+    }
+
+    [Fact]
+    public void Jq_GovernedEmptyDiagnosticsStillCheckCancellationAndPermitRefunds()
+    {
+        var memory = new TestMemoryBudget(8);
+        using var cancellation = new CancellationTokenSource();
+        using var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline,
+            new JqBudget(JqExecutionPolicy.Default, memory, cancellation.Token));
+        context.EmitStderr("x");
+        cancellation.Cancel();
+        Assert.Throws<OperationCanceledException>(() => context.EmitStderr(""));
+        Assert.Throws<OperationCanceledException>(() => context.EmitStderr(ReadOnlyMemory<byte>.Empty, false));
+        Assert.Equal(1, memory.ReservedBytes);
+        context.TakePendingStderr();
+        context.ReleaseDrainedStderr();
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
