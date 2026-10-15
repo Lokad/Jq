@@ -45,15 +45,16 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
         _smallCharges = smallCharges;
     }
 
-    // Retained cursor trees keep their real demand plus at most 256 bytes of
-    // already-admitted credit. Scalar events can reuse that credit; larger
-    // discarded estimates still refund at every safe record boundary.
+    // Retained cursor trees keep real demand plus bounded existing credit.
+    // Cold/pressured owners keep at most 256 bytes; after repeated small charges,
+    // 512 bytes amortizes short text events. Larger discarded demand still refunds.
     internal void ReconcileCursor(long bytes)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentOutOfRangeException.ThrowIfNegative(bytes);
         long admitted = _memory.LastAdmittedBytes;
-        long credit = Math.Min(256, Math.Max(0, admitted - bytes));
+        int maximumCredit = _smallCharges == 32 && !_exactOnly ? 512 : 256;
+        long credit = Math.Min(maximumCredit, Math.Max(0, admitted - bytes));
         long target = bytes + credit;
         if (admitted != target) _memory.Resize(target);
         _used = bytes;

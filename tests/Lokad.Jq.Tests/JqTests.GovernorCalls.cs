@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
@@ -6,6 +7,103 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Theory]
+    [InlineData(false, 85, 100)]
+    [InlineData(false, 85, 1000)]
+    [InlineData(false, 128, 100)]
+    [InlineData(false, 128, 1000)]
+    [InlineData(true, 97, 100)]
+    [InlineData(true, 97, 1000)]
+    [InlineData(true, 128, 100)]
+    [InlineData(true, 128, 1000)]
+    public async Task Jq_GovernedHotCursorTextReusesBoundedCredit(bool stream, int width, int count)
+    {
+        var root = new TestMemoryBudget(64 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        string quoted = "\"" + new string('a', width) + "\"";
+        string expected = string.Concat(Enumerable.Repeat((stream ? "" : "\u001e") + quoted + "\n", count));
+        host.SetStandardInput(stream ? "[" + string.Join(',', Enumerable.Repeat(quoted, count)) + "]" : expected);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", stream ? "--stream" : "--seq", "-c",
+            stream ? ".[1] // empty" : ".")));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(Encoding.UTF8.GetBytes(expected), host.GetOutputBytes(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
+        Assert.Equal(count, host.AppendCallCount);
+        Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 100);
+        Assert.Equal(0, memory.Counts.BytesReads);
+        Assert.Equal(0, memory.Counts.SameSizeResizes);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedCursorCreditWarmsWithoutPrepayingAndKeepsRetainedTreesCharged()
+    {
+        const int limit = 16 * 1024;
+        var root = new TestMemoryBudget(limit);
+        var memory = new CountingMemoryBudget(root);
+        using (var storage = new JqStorage(memory))
+        {
+            storage.ReconcileCursor(0);
+            Assert.Equal(0, memory.Counts.Reservations);
+            storage.ReserveBytes(1024);
+            storage.ReconcileCursor(0);
+            Assert.Equal(256, root.ReservedBytes);
+            for (int i = 0; i < 31; i++)
+            {
+                storage.ReserveBytes(64);
+                storage.ReconcileCursor(0);
+            }
+            storage.ReserveBytes(512);
+            storage.ReconcileCursor(0);
+            Assert.Equal(256, root.ReservedBytes);
+            storage.ReserveBytes(64);
+            storage.ReconcileCursor(0);
+            Assert.Equal(256, root.ReservedBytes); // Warming alone requests no additional credit.
+            storage.ReserveBytes(1024);
+            storage.ReconcileCursor(256);
+            Assert.Equal(256, storage.UsedBytes);
+            Assert.Equal(768, root.ReservedBytes);
+            MemoryCallCounts admitted = memory.Counts;
+            storage.ReserveBytes(512);
+            storage.ReconcileCursor(256);
+            Assert.Equal(admitted, memory.Counts);
+            storage.ReconcileCursor(0);
+            Assert.Equal(512, root.ReservedBytes);
+            Assert.True(root.TryReserve(limit - 512, out var competing));
+            using (competing)
+            {
+                Assert.False(root.TryReserve(1, out var refused));
+                Assert.Null(refused);
+                storage.Dispose();
+                Assert.Equal(competing.Bytes, root.ReservedBytes);
+            }
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedPressuredCursorKeepsSmallerCreditAfterPaddingRefusal()
+    {
+        var root = new TestMemoryBudget(7000);
+        var memory = new CountingMemoryBudget(root);
+        using (var storage = new JqStorage(memory))
+        {
+            for (int i = 0; i < 32; i++)
+            {
+                storage.ReserveBytes(64);
+                storage.ReconcileCursor(0);
+            }
+            storage.ReserveBytes(4096);
+            storage.ReserveBytes(1);
+            Assert.Equal(1, memory.Counts.Refusals);
+            storage.ReconcileCursor(1000);
+            Assert.Equal(1000, storage.UsedBytes);
+            Assert.Equal(1256, root.ReservedBytes);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
     [Theory]
     [InlineData(false, 100)]
     [InlineData(false, 1000)]

@@ -59,7 +59,9 @@ credit, so small local charges need not call the host each time. Safe record
 boundaries retain at most 4 KiB of reusable credit. Regex caches retain at most
 one idle subject buffer and one detailed-result allowance, capped at 4 KiB each;
 nested operations keep distinct owners. Cursor reconciliation retains at most
-256 bytes of existing credit beyond actual retained trees. After 32 successful
+256 bytes of existing credit beyond actual retained trees on cold owners, or
+512 bytes after 32 small storage charges. Padding-refused owners keep the smaller
+bound. After 32 successful
 serializations, each budget may reuse one returned buffer capped at 4 KiB of
 admission; active results keep distinct owners. Cold results refund immediately.
 Eligible hot buffers refund finished writer replacements before result handoff,

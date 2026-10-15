@@ -149,7 +149,9 @@ stays charged until reused or execution disposal, avoiding a fresh host reservat
 for each input. Slurp keeps the whole aggregate charged. Sequence queues
 and streaming paths/pending events have a separate cursor owner; record refunds
 preserve the data it still retains, plus at most 256 bytes of already-admitted
-reusable credit. No credit is prepaid on an empty cursor. Larger discarded
+reusable credit on cold owners. After 32 small storage charges, that bound may
+rise to 512 bytes; an owner that encountered optional-padding refusal keeps the
+256-byte bound. Warming alone admits no additional storage. Larger discarded
 estimates still refund at each safe boundary, and terminal cleanup refunds all
 remaining admission. Module compilation during `modulemeta` uses
 the persistent owner so cached definitions survive record refunds.

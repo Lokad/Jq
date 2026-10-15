@@ -13,9 +13,10 @@
   retaining at most 4 KiB of admitted capacity per budget. Keep cold refunds,
   overlapping result ownership, failed-buffer cleanup and independent work guards;
   active byte-buffer leases retain admission after cache closure.
-- Reuse at most 256 bytes of already-admitted cursor credit across safe sequence
-  and stream boundaries, alongside actual retained trees. Preserve larger refunds
-  and terminal cleanup while avoiding scalar-event grow/refund oscillation.
+- Reuse already-admitted cursor credit across safe sequence and stream boundaries,
+  alongside actual retained trees: at most 256 bytes on cold/pressured owners,
+  or 512 after 32 small storage charges. Preserve larger refunds and terminal
+  cleanup while avoiding repeated scalar/short-text grow-refund calls.
 - Expand governed cost diagnostics to 48 cases covering threshold behavior,
   growing subjects, serialization and diagnostics. Verify independent stdout
   and stderr digests, record observed live-scope overlap, and retain separate
