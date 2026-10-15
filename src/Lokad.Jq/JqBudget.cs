@@ -11,6 +11,7 @@ namespace Lokad.Jq;
 /// </summary>
 internal sealed class JqBudget : IDisposable
 {
+    private const int MaximumIdleSerializationBytes = 4096;
     internal const int MaximumStringLength = 8 * 1024 * 1024;
     internal const int MaximumInputBytes = 16 * 1024 * 1024;
     internal const int MaximumJsonBytes = 32 * 1024 * 1024;
@@ -69,7 +70,11 @@ internal sealed class JqBudget : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         _serializedResults = Math.Min(32, _serializedResults + 1);
         // Cold one-off results retain their existing immediate refund behavior.
-        return _serializedResults < 32 ? buffer : new SerializationReturn(this, buffer);
+        if (_serializedResults < 32) return buffer;
+        // The writer has ended its borrows before handoff. Reconcile only a
+        // reusable buffer; cold and truly oversized results refund on return.
+        if (buffer.Capacity <= MaximumIdleSerializationBytes) buffer.ReleaseReplacedStorage();
+        return new SerializationReturn(this, buffer);
     }
 
     private sealed class SerializationReturn(JqBudget budget, JqJsonBuffer buffer) : IDisposable
@@ -80,7 +85,8 @@ internal sealed class JqBudget : IDisposable
         {
             if (_returned) return;
             _returned = true;
-            if (!budget._disposed && budget._serializationBuffer is null && buffer.AdmittedBytes <= 4096)
+            if (!budget._disposed && budget._serializationBuffer is null
+                && buffer.AdmittedBytes <= MaximumIdleSerializationBytes)
                 budget._serializationBuffer = buffer;
             else
                 buffer.Dispose();

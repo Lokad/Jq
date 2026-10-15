@@ -30,13 +30,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
         JqJsonBuffer buffer = budget.RentSerializationBuffer();
         try
         {
-            using var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs));
-            try
+            ReadOnlyMemory<byte> value;
+            using (var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs)))
             {
-                ReadOnlyMemory<byte> value = WriteJson(clean, ascii, indent, tabs, buffer, writer);
-                return new JqMemoryValue<ReadOnlyMemory<byte>>(value, budget.OwnSerializationBuffer(buffer));
+                try { value = WriteJson(clean, ascii, indent, tabs, buffer, writer); }
+                finally { writer.Reset(); }
             }
-            finally { writer.Reset(); }
+            return new JqMemoryValue<ReadOnlyMemory<byte>>(value, budget.OwnSerializationBuffer(buffer));
         }
         catch
         {

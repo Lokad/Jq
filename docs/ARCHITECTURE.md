@@ -62,6 +62,8 @@ nested operations keep distinct owners. Cursor reconciliation retains at most
 256 bytes of existing credit beyond actual retained trees. After 32 successful
 serializations, each budget may reuse one returned buffer capped at 4 KiB of
 admission; active results keep distinct owners. Cold results refund immediately.
+Eligible hot buffers refund finished writer replacements before result handoff,
+so a pending peak does not unnecessarily prevent reuse within the same ceiling.
 Direct buffers still admit replacement
 peaks and refund them after copying. EXECUTION_POLICY.md describes exact fallback
 under root pressure and the retained-headroom tradeoff.

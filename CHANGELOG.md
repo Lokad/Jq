@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Reconcile finished writer replacements before handing off hot serialization
+  results whose current capacity fits the existing 4 KiB reuse ceiling. Preserve
+  replacement-peak refusal, cold refunds, overlapping results and non-throwing
+  return while avoiding repeated pool rejection after mixed-size serialization.
 - Reuse one returned serialization buffer after 32 successful serializations,
   retaining at most 4 KiB of admitted capacity per budget. Keep cold refunds,
   overlapping result ownership, failed-buffer cleanup and independent work guards;
