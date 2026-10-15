@@ -45,13 +45,17 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
         _smallCharges = smallCharges;
     }
 
-    // Cursor reconciliation is a real lifetime change. Refund both discarded
-    // estimates and unused credit instead of retaining a growing high watermark.
-    internal void Resize(long bytes)
+    // Retained cursor trees keep their real demand plus at most 256 bytes of
+    // already-admitted credit. Scalar events can reuse that credit; larger
+    // discarded estimates still refund at every safe record boundary.
+    internal void ReconcileCursor(long bytes)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentOutOfRangeException.ThrowIfNegative(bytes);
-        if (_memory.LastAdmittedBytes != bytes) _memory.Resize(bytes);
+        long admitted = _memory.LastAdmittedBytes;
+        long credit = Math.Min(256, Math.Max(0, admitted - bytes));
+        long target = bytes + credit;
+        if (admitted != target) _memory.Resize(target);
         _used = bytes;
     }
 

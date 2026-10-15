@@ -7,6 +7,59 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(false, 100)]
+    [InlineData(false, 1000)]
+    [InlineData(true, 100)]
+    [InlineData(true, 1000)]
+    public async Task Jq_GovernedCursorScalarEventsReuseBoundedCredit(bool stream, int count)
+    {
+        var root = new TestMemoryBudget(32 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        string expected = stream
+            ? string.Concat(Enumerable.Range(0, count).Select(value => value.ToString(CultureInfo.InvariantCulture) + "\n"))
+            : string.Concat(Enumerable.Repeat("\u001e1\n", count));
+        host.SetStandardInput(stream ? "[" + string.Join(',', Enumerable.Range(0, count)) + "]" : expected);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", stream ? "--stream" : "--seq", "-c",
+            stream ? ".[1] // empty" : ".")));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
+        Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 80);
+        Assert.Equal(0, memory.Counts.BytesReads);
+        Assert.Equal(0, memory.Counts.SameSizeResizes);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_GovernedCursorReconciliationKeepsOnlyBoundedExistingCredit()
+    {
+        var root = new TestMemoryBudget(16 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        using (var storage = new JqStorage(memory))
+        {
+            storage.ReconcileCursor(0);
+            Assert.Equal(0, memory.Counts.Reservations);
+            storage.ReserveBytes(4096);
+            storage.ReserveBytes(1);
+            storage.ReconcileCursor(1000);
+            Assert.Equal(1000, storage.UsedBytes);
+            Assert.Equal(1256, root.ReservedBytes);
+            MemoryCallCounts reconciled = memory.Counts;
+            storage.ReserveBytes(200);
+            storage.ReconcileCursor(1000);
+            Assert.Equal(reconciled, memory.Counts);
+            storage.ReconcileCursor(0);
+            Assert.Equal(0, storage.UsedBytes);
+            Assert.Equal(256, root.ReservedBytes);
+            Assert.Throws<JqQuotaException>(() => storage.ReconcileCursor(20000));
+            Assert.Equal(0, storage.UsedBytes);
+            Assert.Equal(256, root.ReservedBytes);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData(100)]
     [InlineData(1000)]
     public async Task Jq_GovernedGrowingRegexCallsFollowSubjectCapacity(int count)
@@ -227,8 +280,8 @@ public sealed partial class JqTests
             storage.ReserveBytes(2048);
             Assert.Equal(6145, storage.UsedBytes);
             Assert.Equal(admitted, memory.Counts);
-            storage.Resize(1000);
-            Assert.Equal(1000, root.ReservedBytes);
+            storage.ReconcileCursor(1000);
+            Assert.Equal(1256, root.ReservedBytes);
             Assert.Equal(1, memory.Counts.ShrinkingResizes);
         }
         Assert.Equal(0, root.ReservedBytes);

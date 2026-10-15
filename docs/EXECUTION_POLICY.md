@@ -104,7 +104,7 @@ remains charged to the same host allowance and can satisfy later local charges.
 If optional padding is refused, one immediate exact-size attempt preserves the
 required allocation's outcome, then that owner uses exact growth without further
 padding probes. Refusal of required storage remains terminal. Reconciliation
-refunds unused credit along with discarded demand. No root balance is copied.
+refunds discarded demand and bounds retained credit. No root balance is copied.
 HTML and implode builders preflight their exact capacity in bulk; literal runs
 in time formatting are charged together. Cancellation and work guards remain
 independent, including bounded checks during long text scans.
@@ -148,7 +148,10 @@ only their existing admission; there is no eager block allocation. That credit
 stays charged until reused or execution disposal, avoiding a fresh host reservation
 for each input. Slurp keeps the whole aggregate charged. Sequence queues
 and streaming paths/pending events have a separate cursor owner; record refunds
-preserve the data it still retains. Module compilation during `modulemeta` uses
+preserve the data it still retains, plus at most 256 bytes of already-admitted
+reusable credit. No credit is prepaid on an empty cursor. Larger discarded
+estimates still refund at each safe boundary, and terminal cleanup refunds all
+remaining admission. Module compilation during `modulemeta` uses
 the persistent owner so cached definitions survive record refunds.
 
 Serialization results own their byte capacity until consumption finishes.

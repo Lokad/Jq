@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reuse at most 256 bytes of already-admitted cursor credit across safe sequence
+  and stream boundaries, alongside actual retained trees. Preserve larger refunds
+  and terminal cleanup while avoiding scalar-event grow/refund oscillation.
 - Expand governed cost diagnostics to 26 cases covering threshold behavior,
   growing subjects, serialization and diagnostics. Verify independent stdout
   and stderr digests, record observed live-scope overlap, and retain separate

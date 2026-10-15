@@ -123,7 +123,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         foreach (JsonNode? queued in _seqQueue)
             retained += JqBudget.EstimateTreeStorage(queued);
         if (_seqError is { } error) retained += 2L * error.Message.Length;
-        if (_retainedValues.UsedBytes != retained) _retainedValues.Resize(retained);
+        _retainedValues.ReconcileCursor(retained);
     }
 
     // Async pull for outer iteration. Returns false when every source is
