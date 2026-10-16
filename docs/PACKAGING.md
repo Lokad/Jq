@@ -103,6 +103,17 @@ is explicit, opt-in development tooling and does not run in ordinary tests or CI
 
 ## Local source and package evidence
 
+The terminal-refusal follow-up at committed revision `4611381` was checked on
+Windows on 2026-10-16 in a fresh checkout without `PLAN.md` or `external/`:
+locked restore, warning-free Release build, all 3,919 tests and Release pack.
+The package passes all 18 detached consumer checks, including terminal padded
+admission, later allowance reuse and resource status after stderr closure, with
+an isolated cache, verified artifact hash and locked restore. Its symbols pass
+assembly identity, public commit mappings and SHA-256 checksums for 70 committed
+and three embedded documents. Dependencies and lock files are unchanged.
+Hosted source downloads and publication were not requested; this receipt adds
+no new hosted-source, cross-platform package or performance claim.
+
 The bounded governor-call follow-up at committed revision `2d94dab` was checked
 on Windows on 2026-10-15 in a fresh checkout without `PLAN.md` or `external/`:
 locked restore, warning-free Release build, all 3,908 tests and Release pack.
