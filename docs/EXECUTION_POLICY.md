@@ -101,10 +101,10 @@ of at least 256 bytes stay exact. Smaller increments stay exact on cold owners;
 after 32 small charges they may use 256-byte credit steps below 4 KiB. Above
 4 KiB they may reserve up to one 4 KiB block ahead; that credit
 remains charged to the same host allowance and can satisfy later local charges.
-If optional padding is refused, one immediate exact-size attempt preserves the
-required allocation's outcome, then that owner uses exact growth without further
-padding probes. Refusal of required storage remains terminal. Reconciliation
-refunds discarded demand and bounds retained credit. No root balance is copied.
+The owner selects one estimate before admission. Refusal of that estimate,
+including padding, terminates the command without an exact-size retry.
+Reconciliation refunds discarded demand and bounds retained credit. No root
+balance is copied.
 HTML and implode builders preflight their exact capacity in bulk; literal runs
 in time formatting are charged together. Cancellation and work guards remain
 independent, including bounded checks during long text scans.
@@ -112,7 +112,11 @@ independent, including bounded checks during long text scans.
 `TryReserve` and `TryResize` admit nonnegative estimates immediately or refuse
 without changing existing charges. Negative estimates throw; admission through
 disposed owners throws. Refusal reports terminal status 5 and cannot be caught
-by jq handlers. Complete earlier output remains visible.
+by jq handlers. Work stops, users and cleanup are awaited, and relinquished
+storage is refunded so later commands can reuse the allowance. Retained storage
+stays charged. Refusal does not trigger streaming, spilling, eviction, dropping
+optional storage, waiting or retries. Earlier output and side effects remain;
+there is no rollback or safe replay guarantee.
 
 Current coverage includes reusable JSON/raw output backing capacity, information
 output, cursor read/accumulation buffers, streaming token capacity and hosted
@@ -121,10 +125,8 @@ together until replacement or copying finishes. Retained capacity stays charged
 between records. Cursor buffers survive pending reads and owned-descriptor
 cleanup; a hosted read result owns its accumulated capacity until decoding ends.
 Raw output starts with exact capacity and doubles later growth up to its output
-ceiling, keeping that backing capacity charged. If optional growth is refused,
-one exact replacement is attempted and further growth stays exact for that
-renderer. Both attempts preserve the old-plus-new replacement peak; a successful
-smaller replacement does not replay output or consume output allowance twice.
+ceiling, keeping that backing capacity charged. Refused growth fails before
+replacement or output, even if an exact-size allocation could have fit.
 Temporary read storage is released after the awaited read loop completes. Regex
 compiled-pattern and pooled-workspace estimates remain charged under one cache
 owner until context disposal and completion of its borrowers. Subject encoding
@@ -132,8 +134,8 @@ and detailed capture contexts have operation owners. The cache can retain one
 idle UTF-8 subject buffer and one idle capture allowance, each at most 4 KiB and
 still charged. Reuse avoids admission calls for unchanged capacity. Subjects start
 at exact capacity, then double growth within the existing 4 KiB idle-owner ceiling
-(including metadata). Larger subjects stay exact. Refused optional growth falls
-back once to exact capacity and disables padding for that owner. Subject growth
+(including metadata). Larger subjects stay exact. Refused growth terminates
+without retrying or evicting cached storage to continue. Subject growth
 includes old-plus-new storage. Larger owners and failed operations refund
 on return. Nested operations use separate owners, and closing the cache waits for
 active borrowers before refunding their compiled-pattern admission.
@@ -150,8 +152,7 @@ for each input. Slurp keeps the whole aggregate charged. Sequence queues
 and streaming paths/pending events have a separate cursor owner; record refunds
 preserve the data it still retains, plus at most 256 bytes of already-admitted
 reusable credit on cold owners. After 32 small storage charges, that bound may
-rise to 512 bytes; an owner that encountered optional-padding refusal keeps the
-256-byte bound. Warming alone admits no additional storage. Larger discarded
+rise to 512 bytes. Warming alone admits no additional storage. Larger discarded
 estimates still refund at each safe boundary, and terminal cleanup refunds all
 remaining admission. Module compilation during `modulemeta` uses
 the persistent owner so cached definitions survive record refunds.
@@ -172,8 +173,8 @@ Queued diagnostic copies have a separate owner that survives record refunds and
 all awaited appends. Cold drains refund completely. After 32 nonempty messages
 smaller than 256 bytes, drains may retain at most 256 bytes of existing credit.
 Hot small-message growth can round admission to 256-byte steps, with at most
-255 bytes above actual queued demand. Optional padding refusal falls back once
-to required bytes and disables further padding for that queue. Larger copies
+255 bytes above actual queued demand. Refused padding terminates before the
+new message is encoded or queued, without a smaller admission. Larger copies
 still preflight their full demand, and context disposal releases all credit.
 Suppressing stdout can queue many messages before a drain; every queued payload
 stays charged until all its host borrows end. Empty diagnostic chunks preserve

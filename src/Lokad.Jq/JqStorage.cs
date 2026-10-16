@@ -9,7 +9,6 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
     private const int SmallIncrementBytes = 256;
     private readonly JqMemoryReservation _memory = new(memoryBudget);
     private long _used;
-    private bool _exactOnly;
     private bool _disposed;
     private int _smallCharges;
 
@@ -28,32 +27,24 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
             // small charges use 256-byte credit below 4 KiB, then 4 KiB credit.
             long target = required;
             int quantum = required > BlockBytes ? BlockBytes : smallCharges == 32 ? SmallIncrementBytes : 0;
-            if (!_exactOnly && bytes < SmallIncrementBytes && quantum != 0
+            if (bytes < SmallIncrementBytes && quantum != 0
                 && required <= long.MaxValue - (BlockBytes - 1))
                 target = ((required + quantum - 1) / quantum) * quantum;
-            if (target == required)
-                _memory.Resize(required);
-            else if (!_memory.TryResize(target))
-            {
-                // One exact attempt rejects only required storage, not optional
-                // padding. Do not keep probing padding on a pressured owner.
-                _exactOnly = true;
-                _memory.Resize(required);
-            }
+            _memory.Resize(target);
         }
         _used = required;
         _smallCharges = smallCharges;
     }
 
     // Retained cursor trees keep real demand plus bounded existing credit.
-    // Cold/pressured owners keep at most 256 bytes; after repeated small charges,
+    // Cold owners keep at most 256 bytes; after repeated small charges,
     // 512 bytes amortizes short text events. Larger discarded demand still refunds.
     internal void ReconcileCursor(long bytes)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentOutOfRangeException.ThrowIfNegative(bytes);
         long admitted = _memory.LastAdmittedBytes;
-        int maximumCredit = _smallCharges == 32 && !_exactOnly ? 512 : 256;
+        int maximumCredit = _smallCharges == 32 ? 512 : 256;
         long credit = Math.Min(maximumCredit, Math.Max(0, admitted - bytes));
         long target = bytes + credit;
         if (admitted != target) _memory.Resize(target);

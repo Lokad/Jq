@@ -204,7 +204,6 @@ internal sealed class JqRegexCache : IDisposable
         private readonly JqMemoryReservation _memory = new(budget);
         private byte[] _buffer = [];
         private bool _leased;
-        private bool _exactSubjectGrowth;
         internal bool IsSubject => subject;
         internal long Capacity => _memory.LastAdmittedBytes;
         internal long Generation { get; private set; }
@@ -224,16 +223,9 @@ internal sealed class JqRegexCache : IDisposable
                 int oldCapacity = _buffer.Length;
                 // Keep optional growth within the existing idle-owner ceiling.
                 // Large subjects and the first allocation retain exact capacity.
-                int capacity = !_exactSubjectGrowth && oldCapacity != 0 && length <= MaximumIdleBytes - 64
+                int capacity = oldCapacity != 0 && length <= MaximumIdleBytes - 64
                     ? Math.Max(length, Math.Min(MaximumIdleBytes - 64, oldCapacity * 2)) : length;
-                if (capacity == length)
-                    _memory.Resize(64L + oldCapacity + capacity);
-                else if (!_memory.TryResize(64L + oldCapacity + capacity))
-                {
-                    _exactSubjectGrowth = true;
-                    capacity = length;
-                    _memory.Resize(64L + oldCapacity + capacity);
-                }
+                _memory.Resize(64L + oldCapacity + capacity);
                 try { _buffer = new byte[capacity]; }
                 catch { _memory.Resize(previous); throw; }
                 if (oldCapacity != 0) _memory.Resize(64L + capacity);

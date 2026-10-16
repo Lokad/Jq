@@ -83,7 +83,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GovernedPressuredCursorKeepsSmallerCreditAfterPaddingRefusal()
+    public void Jq_GovernedHotCursorPaddingRefusalLeavesRetainedDemandUnchanged()
     {
         var root = new TestMemoryBudget(7000);
         var memory = new CountingMemoryBudget(root);
@@ -95,11 +95,14 @@ public sealed partial class JqTests
                 storage.ReconcileCursor(0);
             }
             storage.ReserveBytes(4096);
-            storage.ReserveBytes(1);
+            MemoryCallCounts before = memory.Counts;
+            long previous = storage.UsedBytes;
+            var failure = Assert.Throws<JqQuotaException>(() => storage.ReserveBytes(1));
+            Assert.True(failure.IsMemoryAdmission);
             Assert.Equal(1, memory.Counts.Refusals);
-            storage.ReconcileCursor(1000);
-            Assert.Equal(1000, storage.UsedBytes);
-            Assert.Equal(1256, root.ReservedBytes);
+            Assert.Equal(before.Resizes + 1, memory.Counts.Resizes);
+            Assert.Equal(previous, storage.UsedBytes);
+            Assert.Equal(previous, root.ReservedBytes);
         }
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -243,19 +246,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GovernedSmallBurstPaddingRefusalFallsBackOnce()
+    public void Jq_GovernedSmallBurstPaddingRefusalDoesNotRetryExactDemand()
     {
         var root = new TestMemoryBudget(300);
         var memory = new CountingMemoryBudget(root);
         using (var storage = new JqStorage(memory))
         {
-            for (int i = 0; i < 300; i++) storage.ReserveBytes(1);
-            Assert.Equal(300, storage.UsedBytes);
-            Assert.Equal(300, root.ReservedBytes);
+            for (int i = 0; i < 256; i++) storage.ReserveBytes(1);
+            MemoryCallCounts before = memory.Counts;
+            var failure = Assert.Throws<JqQuotaException>(() => storage.ReserveBytes(1));
+            Assert.True(failure.IsMemoryAdmission);
             Assert.Equal(1, memory.Counts.Refusals);
-            Assert.Throws<JqQuotaException>(() => storage.ReserveBytes(1));
-            Assert.Equal(300, storage.UsedBytes);
-            Assert.Equal(300, root.ReservedBytes);
+            Assert.Equal(before.Resizes + 1, memory.Counts.Resizes);
+            Assert.Equal(256, storage.UsedBytes);
+            Assert.Equal(256, root.ReservedBytes);
         }
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -286,7 +290,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_GovernedRawGrowthFallsBackOnceUnderSharedPressure()
+    public async Task Jq_GovernedRawPaddingRefusalStopsOutputEvenWhenExactReplacementFits()
     {
         const long limit = 64 * 1024;
         var root = new TestMemoryBudget(limit);
@@ -299,21 +303,21 @@ public sealed partial class JqTests
         {
             if (appended == 0)
                 Assert.True(root.TryReserve(limit - root.ReservedBytes - 3, out pressure));
-            else if (appended == 1)
-            {
-                Assert.NotNull(pressure);
-                Assert.True(pressure.TryResize(pressure.Bytes - 2));
-            }
             appended++;
         };
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
-        Assert.Equal("x\nxx\nxxx\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Equal(1, memory.Counts.Refusals);
+        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("x\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(2, memory.Counts.Refusals); // Replacement and terminal diagnostic payload.
         Assert.NotNull(pressure);
         Assert.Equal(pressure.Bytes, root.ReservedBytes);
         pressure.Dispose();
+        Assert.Equal(0, root.ReservedBytes);
+        var later = new MockFileSystem();
+        Assert.Equal(0, await command.ExecuteAsync(later, memory, CancellationToken.None));
+        Assert.Equal("x\nxx\nxxx\n", later.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(later.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
     }
 
@@ -386,25 +390,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GovernedStorageFallsBackToExactOnceAndPreservesFailedDemand()
+    public void Jq_GovernedStoragePaddingRefusalPreservesDemandWithoutAnExactRetry()
     {
         var root = new TestMemoryBudget(7000);
         var memory = new CountingMemoryBudget(root);
         using (var storage = new JqStorage(memory))
         {
             storage.ReserveBytes(4096);
-            storage.ReserveBytes(1);
-            Assert.Equal(4097, root.ReservedBytes);
-            Assert.Equal(1, memory.Counts.Refusals);
             long previousCalls = memory.Counts.Resizes;
-            storage.ReserveBytes(1);
+            var failure = Assert.Throws<JqQuotaException>(() => storage.ReserveBytes(1));
+            Assert.True(failure.IsMemoryAdmission);
             Assert.Equal(previousCalls + 1, memory.Counts.Resizes);
             Assert.Equal(1, memory.Counts.Refusals);
-            Assert.Throws<JqQuotaException>(() => storage.ReserveBytes(3000));
-            Assert.Equal(4098, storage.UsedBytes);
-            Assert.Equal(4098, root.ReservedBytes);
-            storage.ReserveBytes(1);
-            Assert.Equal(4099, root.ReservedBytes);
+            Assert.Equal(4096, storage.UsedBytes);
+            Assert.Equal(4096, root.ReservedBytes);
         }
         Assert.Equal(0, root.ReservedBytes);
     }

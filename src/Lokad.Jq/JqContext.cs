@@ -52,7 +52,6 @@ internal sealed class JqContext(
     private readonly JqMemoryReservation _stderrMemory = new(budget.MemoryBudget);
     private long _stderrBytes;
     private int _smallStderrMessages;
-    private bool _exactStderrGrowth;
     private bool _disposed;
 
     internal bool HasPendingStderr => _stderr.Count > 0;
@@ -100,16 +99,10 @@ internal sealed class JqContext(
         if (required > previous)
         {
             long target = required;
-            if (!_exactStderrGrowth && length < StderrCreditBytes && _smallStderrMessages >= 31
+            if (length < StderrCreditBytes && _smallStderrMessages >= 31
                 && required <= long.MaxValue - (StderrCreditBytes - 1))
                 target = ((required + StderrCreditBytes - 1) / StderrCreditBytes) * StderrCreditBytes;
-            if (target == required)
-                _stderrMemory.Resize(required);
-            else if (!_stderrMemory.TryResize(target))
-            {
-                _exactStderrGrowth = true;
-                _stderrMemory.Resize(required);
-            }
+            _stderrMemory.Resize(target);
         }
         return previous;
     }

@@ -119,13 +119,14 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("filter")]
-    [InlineData("module")]
-    [InlineData("rawfile")]
-    [InlineData("slurpfile")]
-    public async Task Jq_GovernedHostedReadRefusalClosesOwnedFileBeforeReading(string kind)
+    [InlineData("filter", 8191)]
+    [InlineData("module", 16384)]
+    [InlineData("rawfile", 8191)]
+    [InlineData("slurpfile", 8191)]
+    public async Task Jq_GovernedHostedReadRefusalClosesOwnedFileBeforeReading(string kind, long limit)
     {
-        var memory = new TestMemoryBudget(8191);
+        // Admit compilation first, then refuse the hosted read's backing storage.
+        var memory = new TestMemoryBudget(limit);
         var host = new MockFileSystem();
         host.AddFile("/data", "[1]");
         host.AddFile("/program", ".");

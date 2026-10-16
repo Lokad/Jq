@@ -2,8 +2,11 @@
 
 ## Unreleased
 
+- Fail the command on every refused admission, including optional padding, without
+  retrying a smaller estimate or evicting storage to continue. Keep coarse growth,
+  charged credit, replacement peaks, earlier effects and awaited cleanup.
 - Reuse at most 256 bytes of diagnostic credit after 32 small nonempty messages,
-  with bounded hot growth and one-way exact fallback under shared pressure.
+  with bounded hot growth.
   Keep cold refunds, empty appends, full queued-burst charges and pending drains.
 - Reconcile finished writer replacements before handing off hot serialization
   results whose current capacity fits the existing 4 KiB reuse ceiling. Preserve
@@ -14,7 +17,7 @@
   overlapping result ownership, failed-buffer cleanup and independent work guards;
   active byte-buffer leases retain admission after cache closure.
 - Reuse already-admitted cursor credit across safe sequence and stream boundaries,
-  alongside actual retained trees: at most 256 bytes on cold/pressured owners,
+  alongside actual retained trees: at most 256 bytes on cold owners,
   or 512 after 32 small storage charges. Preserve larger refunds and terminal
   cleanup while avoiding repeated scalar/short-text grow-refund calls.
 - Expand governed cost diagnostics to 48 cases covering threshold behavior,
@@ -22,8 +25,8 @@
   and stderr digests, record observed live-scope overlap, and retain separate
   call-count and warmed timing/allocation lanes.
 - Amortize gradually growing regex subjects with bounded geometric capacity,
-  preserving the existing 4 KiB idle-owner ceiling, old-plus-new peaks and exact
-  fallback under shared pressure. Keep large subjects exact and nested leases separate.
+  preserving the existing 4 KiB idle-owner ceiling and old-plus-new peaks.
+  Keep large subjects exact and nested leases separate.
 - Skip zero-byte diagnostic admissions and unchanged queue refunds while keeping
   empty host appends, cancellation, pending borrows and earlier queued bytes intact.
   Validate disposed context use even when accounting needs no host notification.
@@ -31,7 +34,7 @@
   most one idle owner of each kind, capped at 4 KiB each. Preserve nested leases,
   replacement peaks, immediate failure refunds and deferred cache cleanup for
   active borrowers. Batch repeated small charges below 4 KiB with 256-byte credit
-  after a cold-owner threshold, retaining the exact fallback under pressure.
+  after a cold-owner threshold.
 - Add explicit `--governor` diagnostics comparing the execution hook with no hook
   under single/shared-root workers. Keep call counters separate from warmed
   timing/allocation samples, verify independent output digests and full refunds,
@@ -39,19 +42,16 @@
   development-only active-owner governor fixture across tests and detached
   consumers; no fixture enters the runtime package.
 - Grow reusable raw output geometrically after its exact first allocation, while
-  keeping actual retained capacity and replacement peaks charged. Optional
-  headroom refusal falls back once to exact capacity and disables further padding
-  probes for that renderer. Preserve exact output, earlier host effects and
-  terminal refusal when required storage cannot fit.
+  keeping actual retained capacity and replacement peaks charged. Preserve exact
+  output, earlier host effects and terminal refusal.
 - Reuse one coarse outer-record reservation across safe input boundaries. Keep at
   most 4 KiB of already-admitted credit charged, avoid eager padding for small
   records, and refund it at execution cleanup. Preserve aliases/aggregates and
   the separate sequence/stream retained-value owner and its real refunds.
 - Batch small value/slot charges inside their existing coarse owners using at
   most one 4 KiB block of charged credit. Keep cold owners and known copies
-  exact; a refused padding request falls back once to required size, then disables
-  padding for that owner. Preserve real reconciliation refunds and terminal
-  required-storage refusal. Preflight HTML/implode builder capacities together
+  exact. Preserve real reconciliation refunds and terminal refusal.
+  Preflight HTML/implode builder capacities together
   and batch literal time-format runs while keeping work/cancellation guards.
 - Reduce governor traffic using owner-local admitted sizes, zero-charge fast
   paths and unchanged-buffer notification elision. Explicit reservation counter

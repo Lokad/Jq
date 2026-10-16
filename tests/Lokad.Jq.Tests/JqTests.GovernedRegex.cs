@@ -29,7 +29,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GovernedRegexSubjectCapacityFallsBackOnceUnderSharedPressure()
+    public void Jq_GovernedRegexSubjectPaddingRefusalDoesNotRetryOrEvictAndRecover()
     {
         var root = new TestMemoryBudget(1000);
         var memory = new CountingMemoryBudget(root);
@@ -40,16 +40,13 @@ public sealed partial class JqTests
         {
             using (var first = regexes.EncodeSubject("aaaa"))
                 Assert.Equal(994, root.ReservedBytes);
-            using (var second = regexes.EncodeSubject("aaaaa"))
-                Assert.Equal("aaaaa"u8.ToArray(), second.Value.ToArray());
-            Assert.Equal(995, root.ReservedBytes);
+            MemoryCallCounts before = memory.Counts;
+            var failure = Assert.Throws<JqQuotaException>(() => regexes.EncodeSubject("aaaaa"));
+            Assert.True(failure.IsMemoryAdmission);
+            Assert.Equal(before.Resizes + 1, memory.Counts.Resizes);
             Assert.Equal(1, memory.Counts.Refusals);
-            Assert.Equal(999, root.PeakBytes);
-            pressure.Dispose();
-            using (var third = regexes.EncodeSubject("aaaaaa"))
-                Assert.Equal("aaaaaa"u8.ToArray(), third.Value.ToArray());
-            Assert.Equal(70, root.ReservedBytes); // Pressure recovery does not re-enable padding.
-            Assert.Equal(1, memory.Counts.Refusals);
+            Assert.Equal(994, root.PeakBytes);
+            Assert.Equal(pressure.Bytes, root.ReservedBytes); // Failed operation cleans up its owner.
         }
         Assert.Equal(0, root.ReservedBytes);
     }

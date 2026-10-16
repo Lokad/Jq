@@ -49,14 +49,8 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
 
     internal void ReplaceBuffer(ref byte[] buffer, int capacity, int offset, int count)
     {
-        if (!TryReplaceBuffer(ref buffer, capacity, offset, count))
-            throw new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
-    }
-
-    internal bool TryReplaceBuffer(ref byte[] buffer, int capacity, int offset, int count)
-    {
         long previous = _bytes;
-        if (!TryResize(checked(previous + capacity))) return false;
+        Resize(checked(previous + capacity));
         try
         {
             var replacement = new byte[capacity];
@@ -69,7 +63,6 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
             throw;
         }
         if (previous != 0) Resize(capacity);
-        return true;
     }
 
     public void Dispose()

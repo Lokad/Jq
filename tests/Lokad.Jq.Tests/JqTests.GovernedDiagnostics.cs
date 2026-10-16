@@ -52,7 +52,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GovernedDiagnosticCreditKeepsColdRefundsAndFallsBackOnceUnderPressure()
+    public void Jq_GovernedDiagnosticPaddingRefusalKeepsQueuedBytesWithoutRetrying()
     {
         var root = new TestMemoryBudget(1024);
         var memory = new CountingMemoryBudget(root);
@@ -61,7 +61,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline,
             new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None)))
         {
-            for (int i = 0; i < 31; i++)
+            for (int i = 0; i < 30; i++)
             {
                 context.EmitStderr("a");
                 context.TakePendingStderr();
@@ -69,29 +69,17 @@ public sealed partial class JqTests
                 Assert.Equal(900, root.ReservedBytes);
             }
             context.EmitStderr("a");
+            Assert.Equal(901, root.ReservedBytes);
+            MemoryCallCounts before = memory.Counts;
+            var failure = Assert.Throws<JqQuotaException>(() => context.EmitStderr("bb"));
+            Assert.True(failure.IsMemoryAdmission);
+            Assert.Equal(before.Resizes + 1, memory.Counts.Resizes);
             Assert.Equal(1, memory.Counts.Refusals);
             Assert.Equal(901, root.ReservedBytes);
-            pressure.Dispose();
-            context.EmitStderr("bb");
-            Assert.Equal(3, root.ReservedBytes);
-            Assert.Equal(1, memory.Counts.Refusals);
-            var failure = Assert.Throws<JqQuotaException>(() => context.EmitStderr(new string('x', 1022)));
-            Assert.True(failure.IsMemoryAdmission);
-            Assert.Equal(3, root.ReservedBytes);
             var pending = context.TakePendingStderr();
-            Assert.Equal(2, pending.Count);
-            Assert.Equal("a"u8.ToArray(), pending[0].ToArray());
-            Assert.Equal("bb"u8.ToArray(), pending[1].ToArray());
+            Assert.Equal("a"u8.ToArray(), Assert.Single(pending).ToArray());
             context.ReleaseDrainedStderr();
-            Assert.Equal(3, root.ReservedBytes);
-            Assert.True(root.TryReserve(1021, out var competing));
-            using (competing)
-            {
-                Assert.False(root.TryReserve(1, out var refused));
-                Assert.Null(refused);
-                context.Dispose();
-                Assert.Equal(competing.Bytes, root.ReservedBytes);
-            }
+            Assert.Equal(pressure.Bytes, root.ReservedBytes);
         }
         Assert.Equal(0, root.ReservedBytes);
     }

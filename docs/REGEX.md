@@ -68,8 +68,9 @@ charged storage. Larger owners and failed operations release on return; idle
 owners release when the cache closes. Nested operations borrow separate owners,
 and cache closure defers the compiled-pattern refund until active borrowers
 finish. Subject capacity starts exact, then grows geometrically within the same
-4 KiB idle-owner ceiling including metadata. Larger subjects stay exact. Optional
-padding refusal falls back once to exact growth for that owner. All growth admits
+4 KiB idle-owner ceiling including metadata. Larger subjects stay exact. Any
+refused admission terminates without a smaller retry or eviction to continue.
+All growth admits
 the old-plus-new replacement peak. The estimates
 follow storage lifetimes, independently of
 the cumulative allocation-work policy; they remain approximate and do

@@ -82,7 +82,7 @@ Keep other builds/tests/tools idle during a probe; retain all samples and inspec
 their spread. A representative lock-based host does not establish another host's
 governor cost, upstream speedup or process-memory bound. The older performance
 receipts below do not qualify these memory changes. See EXECUTION_POLICY.md for
-bounded charged credit, idle retention, exact fallback and lifetime rules.
+bounded charged credit, idle retention, terminal refusal and lifetime rules.
 
 The 2026-10-15 local Windows diagnostic compares the 48-case catalog before the
 latest changes (`dcf2a74`) and after them (`2d94dab`): one/four workers, 128

@@ -50,6 +50,9 @@ storage admission uses a governed invocation or an explicit `IMemoryBudget`
 execution overload; its estimates and lifetime boundaries are described in the
 execution policy. Coarse owners batch small charges using bounded admitted
 credit; retained buffers and caches stay charged until their safe refund boundary.
+Every refused admission, including padded growth, fails the command with status 5
+without retrying. Earlier output remains; cleanup refunds relinquished storage
+so later commands can reuse the allowance.
 The old
 `MaximumAllocationBytes` spelling is a deprecated work-policy alias.
 

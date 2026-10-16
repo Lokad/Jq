@@ -60,8 +60,8 @@ boundaries retain at most 4 KiB of reusable credit. Regex caches retain at most
 one idle subject buffer and one detailed-result allowance, capped at 4 KiB each;
 nested operations keep distinct owners. Cursor reconciliation retains at most
 256 bytes of existing credit beyond actual retained trees on cold owners, or
-512 bytes after 32 small storage charges. Padding-refused owners keep the smaller
-bound. After 32 successful serializations, each budget may reuse one returned
+512 bytes after 32 small storage charges. After 32 successful serializations,
+each budget may reuse one returned
 buffer capped at 4 KiB of
 admission; active results keep distinct owners. Cold results refund immediately.
 Eligible hot buffers refund finished writer replacements before result handoff,
@@ -69,8 +69,9 @@ so a pending peak does not unnecessarily prevent reuse within the same ceiling.
 Diagnostic queues can reuse at most 256 bytes after 32 small nonempty messages;
 cold drains refund fully, and queued bursts stay charged through awaited appends.
 Direct buffers still admit replacement peaks and refund them after copying.
-EXECUTION_POLICY.md describes exact fallback
-under root pressure and the retained-headroom tradeoff.
+Every refused admission, including optional growth, terminates the command
+without retrying a smaller estimate. EXECUTION_POLICY.md describes failure,
+cleanup and the retained-headroom tradeoff.
 
 Try-style invocation factories admit copied argument/environment vectors and
 derived directory storage before allocation. The invocation owns a scope and
