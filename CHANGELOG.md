@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extend the detached package consumer to 18 checks, including terminal padded
+  admission, subsequent allowance reuse and resource status after stderr closes.
 - Preserve resource status 5 when draining queued diagnostics encounters closure
   or a reported write failure. Await owned cleanup and pending borrows; keep
   cancellation distinct and preserve earlier output and caller admission.

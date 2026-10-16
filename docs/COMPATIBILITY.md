@@ -138,9 +138,13 @@ at their storage lifetime boundaries. Its estimates, coverage and conservative
 retention are documented in EXECUTION_POLICY.md. The public cumulative work guard is
 `MaximumAllocationWorkBytes`; `MaximumAllocationBytes` remains only as a
 deprecated alias scheduled for removal at the next breaking API release.
-Local Windows validation passes all 3,908 tests, including governed-memory
+Every refusal, including padded growth, terminates with status 5. It bypasses
+jq handlers and remains a resource failure when pending stderr closes or reports
+a write failure. Cleanup preserves earlier effects and refunds relinquished
+storage; cancellation and actual allocation failure remain distinct.
+Local Windows validation passes all 3,919 tests, including governed-memory
 boundaries and bounded-call regressions. The detached package fixture exercises
-16 public API checks; see PACKAGING.md for the scoped artifact receipts.
+18 public API checks; see PACKAGING.md for the scoped artifact receipts.
 These resource/lifetime checks add no new upstream conformance claim; earlier
 cross-platform CI and differential evidence remains scoped to its revision.
 

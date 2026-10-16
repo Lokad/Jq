@@ -84,6 +84,19 @@ governor cost, upstream speedup or process-memory bound. The older performance
 receipts below do not qualify these memory changes. See EXECUTION_POLICY.md for
 bounded charged credit, idle retention, terminal refusal and lifetime rules.
 
+The 2026-10-16 terminal-refusal change preserves the no-refusal accounting
+policy. At runtime revision `6dd780e`, a count-only rerun of all 48 maintained
+cases with one/four workers passes 96 rows with unchanged calls, independent
+output digests and single-worker estimated peaks. All executions refund fully,
+with zero counter reads, unchanged resizes or refusals. Four-worker aggregate
+peaks differ in 28 rows as overlap varies; 47 rows observe four live scopes.
+Separate 94- and 193-row boundary matrices also preserve accounting and peaks;
+17 stack-attribution labels in the latter vary with inlining. The two former
+pressure-recovery scenarios are replaced by terminal-refusal regressions.
+Raw count-only evidence is in `tmp/refusal-catalog-review/results.json` and the
+`refusal-final.jsonl` files under the ignored granularity-review directories.
+These checks add no new elapsed-time or allocation-cost measurement.
+
 The 2026-10-15 local Windows diagnostic compares the 48-case catalog before the
 latest changes (`dcf2a74`) and after them (`2d94dab`): one/four workers, 128
 iterations per worker, 96 rows and 576 samples in each report. Independent

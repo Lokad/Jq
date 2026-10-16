@@ -224,6 +224,60 @@ int checks = 0;
         && host.Output(JqFileDescriptor.StdOut) == ""
         && host.Output(JqFileDescriptor.StdErr) == "jq: allocation work allowance exceeded\n");
 }
+{
+    const long limit = 64 * 1024;
+    var memory = new TestMemoryBudget(limit);
+    if (!JqCommandInvocation.TryCreateWithStandardDescriptors("jq", ["-nr", "\"x\",\"xx\",\"xxx\""],
+        [], memory, out var invocation))
+        throw new InvalidOperationException("Expected governed snapshot admission.");
+    using (invocation)
+    {
+        long snapshot = memory.ReservedBytes;
+        IMemoryReservation? pressure = null;
+        var host = new SmokeHost();
+        host.BeforeAppend = descriptor =>
+        {
+            if (descriptor == JqFileDescriptor.StdOut && pressure is null
+                && !memory.TryReserve(limit - memory.ReservedBytes - 3, out pressure))
+                throw new InvalidOperationException("Expected competing caller admission.");
+        };
+        try
+        {
+            var command = Jq.TryParse(invocation) ?? throw new InvalidOperationException("Expected a jq command.");
+            int status = await command.ExecuteAsync(host, CancellationToken.None);
+            bool stopped = status == 5 && host.Output(JqFileDescriptor.StdOut) == "x\n"
+                && host.Output(JqFileDescriptor.StdErr) == "jq: memory budget exceeded\n"
+                && pressure is not null && memory.ReservedBytes == snapshot + pressure.Bytes;
+            pressure?.Dispose();
+            var later = new SmokeHost();
+            Check("governed padding refusal stops and permits later reuse", stopped
+                && await command.ExecuteAsync(later, CancellationToken.None) == 0
+                && later.Output(JqFileDescriptor.StdOut) == "x\nxx\nxxx\n"
+                && later.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == snapshot);
+        }
+        finally { pressure?.Dispose(); }
+    }
+    if (memory.ReservedBytes != 0) throw new InvalidOperationException("Invocation storage was not refunded.");
+}
+{
+    var memory = new TestMemoryBudget(64 * 1024);
+    if (!JqCommandInvocation.TryCreateWithStandardDescriptors("jq", ["-r",
+        "\"prefix\", (\"note\" | stderr | empty), try (\"x\" * 1000000) catch \"caught\", \"later\"",
+        "/first", "/later"], [], memory, out var invocation))
+        throw new InvalidOperationException("Expected governed snapshot admission.");
+    using (invocation)
+    {
+        long snapshot = memory.ReservedBytes;
+        var host = new SmokeHost { StderrResult = JqAppendResult.Closed };
+        host.AddFile("/first", "0\n");
+        host.AddFile("/later", "1\n");
+        var command = Jq.TryParse(invocation) ?? throw new InvalidOperationException("Expected a jq command.");
+        Check("governed refusal keeps failure after stderr closure", await command.ExecuteAsync(host, CancellationToken.None) == 5
+            && host.Output(JqFileDescriptor.StdOut) == "prefix\n" && host.Output(JqFileDescriptor.StdErr) == "note"
+            && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == snapshot);
+    }
+    if (memory.ReservedBytes != 0) throw new InvalidOperationException("Invocation storage was not refunded.");
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 
@@ -258,6 +312,8 @@ sealed class SmokeHost : IJqHost
     private int _nextDescriptor = 10;
     public List<JqFileDescriptor> ClosedDescriptors { get; } = [];
     public int OpenFileCount => _inputs.Keys.Count(id => id >= 10);
+    internal Action<JqFileDescriptor>? BeforeAppend { get; set; }
+    internal JqAppendResult? StderrResult { get; init; }
 
     public void SetInput(string text) => _inputs[JqFileDescriptor.StdIn.Id] = Encoding.UTF8.GetBytes(text);
     public void AddFile(string path, string text) => _files[path] = Encoding.UTF8.GetBytes(text);
@@ -277,11 +333,12 @@ sealed class SmokeHost : IJqHost
 
     public Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
     {
+        BeforeAppend?.Invoke(descriptor);
         cancellationToken.ThrowIfCancellationRequested();
         if (!_outputs.TryGetValue(descriptor.Id, out var output))
             _outputs[descriptor.Id] = output = new MemoryStream();
         output.Write(content.Span);
-        return Task.FromResult(JqAppendResult.Open);
+        return Task.FromResult(descriptor == JqFileDescriptor.StdErr && StderrResult is { } result ? result : JqAppendResult.Open);
     }
 
     public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken)
