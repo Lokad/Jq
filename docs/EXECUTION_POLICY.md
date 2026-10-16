@@ -117,6 +117,9 @@ storage is refunded so later commands can reuse the allowance. Retained storage
 stays charged. Refusal does not trigger streaming, spilling, eviction, dropping
 optional storage, waiting or retries. Earlier output and side effects remain;
 there is no rollback or safe replay guarantee.
+If pending stderr closes or reports a write failure while reporting exhaustion,
+the resource status remains 5 and no further diagnostic append is attempted.
+Cancellation and thrown host failures still propagate separately.
 
 Current coverage includes reusable JSON/raw output backing capacity, information
 output, cursor read/accumulation buffers, streaming token capacity and hosted

@@ -225,6 +225,7 @@ public sealed partial class JqTests
     {
         internal bool DelayCleanup { get; init; }
         internal JqFileDescriptor DelayedDescriptor { get; init; } = JqFileDescriptor.StdOut;
+        internal JqAppendResult? StderrResult { get; init; }
         internal TaskCompletionSource<ReadOnlyMemory<byte>> Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource Closing { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -243,7 +244,8 @@ public sealed partial class JqTests
                 // Deliberately ignore cancellation while borrowing the bytes.
                 await Release.Task.ConfigureAwait(false);
             }
-            return await inner.AppendWhileOpenAsync(descriptor, content, cancellationToken).ConfigureAwait(false);
+            JqAppendResult result = await inner.AppendWhileOpenAsync(descriptor, content, cancellationToken).ConfigureAwait(false);
+            return descriptor == JqFileDescriptor.StdErr && StderrResult is { } stderrResult ? stderrResult : result;
         }
 
         public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) =>

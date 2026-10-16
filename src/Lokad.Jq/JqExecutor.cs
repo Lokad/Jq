@@ -221,8 +221,10 @@ internal static class JqExecutor
         {
             // Resource policy failures always report status 5, no matter which
             // stage was active when the budget tripped.
-            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int quotaStopped)
-                return quotaStopped;
+            // A stopped diagnostic descriptor prevents further writes, but
+            // cannot replace the resource failure with success or another code.
+            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is not null)
+                return 5;
             await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
                 cancellationToken).ConfigureAwait(false);
             return 5;

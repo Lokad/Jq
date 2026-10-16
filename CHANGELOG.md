@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Preserve resource status 5 when draining queued diagnostics encounters closure
+  or a reported write failure. Await owned cleanup and pending borrows; keep
+  cancellation distinct and preserve earlier output and caller admission.
 - Fail the command on every refused admission, including optional padding, without
   retrying a smaller estimate or evicting storage to continue. Keep coarse growth,
   charged credit, replacement peaks, earlier effects and awaited cleanup.

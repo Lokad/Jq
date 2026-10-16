@@ -94,6 +94,8 @@ the last bytes. `AppendWhileOpenAsync` must copy memory if retaining it beyond
 completion and may remain incomplete to apply backpressure. It distinguishes
 success, downstream closure, and failure; the evaluator stops producing output
 when the descriptor cannot accept more.
+After resource exhaustion, a closed or failed diagnostic append stops writing
+while preserving status 5. Cancellation and thrown host failures remain distinct.
 
 JSON output reuses a writer and bounded byte buffer within each execution; raw
 strings reuse separate UTF-8 storage. Record framing follows output quota checks.
