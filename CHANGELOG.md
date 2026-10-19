@@ -131,9 +131,8 @@
 Embeddable jq 1.8.2 runtime with host-mediated IO. Compatibility is
 incomplete; see `docs/COMPATIBILITY.md` for the per-row inventory
 (95 implemented, 8 intentionally different, 1 partial, no unimplemented
-rows) and `docs/UPSTREAM_VECTOR_CAMPAIGN.md` for the
-differential record (703 of 734 value vectors pass with every miss
-triaged).
+rows). The recorded differential campaign matched 703 of 734 value vectors,
+with every miss triaged.
 
 Delivered since the scaffold baseline:
 

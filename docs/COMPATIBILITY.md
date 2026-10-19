@@ -200,8 +200,7 @@ semantic gaps. References are the jq 1.8.2 manual and its parser/builtin registr
 
 The recorded packaged value campaign matches 703/734 vectors, with all 31 misses
 classified; regex and encoding sweeps match 66/66 and 32/32. These are bounded
-historical campaigns, not a full conformance suite. Details and regeneration are
-in [reference comparisons](UPSTREAM_VECTOR_CAMPAIGN.md).
+historical campaigns, not a full conformance suite.
 
 Deterministic public-API tests run without jq. Opt-in differential tests require
 `LOKAD_JQ_REFERENCE_JQ` to name an independently installed executable outside

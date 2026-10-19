@@ -84,7 +84,6 @@ replacement. Regex uses the managed `Lokad.Utf8Regex.Pcre2` package and follows
 its supported PCRE2 profile; see [regex behavior](docs/REGEX.md).
 
 - [Compatibility](docs/COMPATIBILITY.md): feature inventory, tests, supported scope and differences.
-- [Reference comparisons](docs/UPSTREAM_VECTOR_CAMPAIGN.md): differential results and evidence limits.
 - [Architecture](docs/ARCHITECTURE.md): execution model, host contract and I/O ownership.
 - [Regex behavior](docs/REGEX.md): engine syntax, flags, captures and cancellation boundaries.
 - [Execution policy](docs/EXECUTION_POLICY.md): resource allowances and fixed limits.
