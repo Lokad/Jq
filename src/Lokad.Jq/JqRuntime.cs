@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Lokad.Jq.Helpers;
 
 namespace Lokad.Jq;
 
@@ -548,7 +549,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JsonNode? ParseJson(string text)
     {
         budget.CheckCancellation();
-        budget.ReserveBytes(Encoding.UTF8.GetByteCount(text));
+        budget.ReserveBytes(JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, budget.CancellationToken), 0));
         var bytes = Encoding.UTF8.GetBytes(text);
         int prefix = HasBomPrefix(bytes) ? 3 : 0;
         int consumed;
@@ -886,11 +887,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
         throw new JqException($"{TypeName(node)} ({Serialize(node, false, null, false)}) cannot be parsed as a boolean");
     }
 
-    internal static int Utf8ByteLength(JsonNode? input, JqContext context)
+    internal static long Utf8ByteLength(JsonNode? input, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (TryGetString(input, out string? text) && text is not null)
-            return System.Text.Encoding.UTF8.GetByteCount(text);
+            return Utf8Text.GetByteCount(text, context.Budget.CancellationToken);
         throw new JqException($"{TypeName(input)} ({context.Runtime.Serialize(input, false, null, false)}) only strings have UTF-8 byte length");
     }
 
@@ -1894,7 +1895,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             case "uri": return EncodeChunks(Uri.EscapeDataString);
             case "base64":
             {
-                var bytes = Encoding.UTF8.GetByteCount(text);
+                var bytes = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, budget.CancellationToken), 0);
                 budget.ReserveString(4 * ((bytes + 2L) / 3));
                 budget.ReserveBytes(bytes);
                 return Convert.ToBase64String(Encoding.UTF8.GetBytes(text));

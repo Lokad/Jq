@@ -53,7 +53,7 @@ internal sealed partial class JqRuntime
             if (invocation.RawOutput0 && text.Contains((char)0))
                 throw new JqException("Cannot dump a string containing NUL with --raw-output0 option");
             byte? terminator = invocation.RawOutput0 ? (byte)0 : invocation.JoinOutput ? null : (byte)'\n';
-            int length = JqBudget.BufferCapacity((long)Encoding.UTF8.GetByteCount(text) + (terminator.HasValue ? 1 : 0), 0);
+            int length = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, budget.CancellationToken) + (terminator.HasValue ? 1 : 0), 0);
             budget.CheckCancellation();
             if (_rawBuffer.Length < length)
             {

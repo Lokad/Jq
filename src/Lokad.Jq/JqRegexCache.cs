@@ -182,7 +182,7 @@ internal sealed class JqRegexCache : IDisposable
 
         internal ReadOnlyMemory<byte> Encode(string text)
         {
-            int length = Encoding.UTF8.GetByteCount(text);
+            int length = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, cache._budget.CancellationToken), 0);
             if (_memory.LastAdmittedBytes == 0 || length > _buffer.Length)
             {
                 long previous = _memory.LastAdmittedBytes;

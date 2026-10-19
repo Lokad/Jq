@@ -5,6 +5,24 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(65534)]
+    [InlineData(65535)]
+    [InlineData(65536)]
+    public async Task Jq_Utf8CountsPreservePairsAcrossCooperativeChunks(int prefix)
+    {
+        string text = new string('x', prefix) + "🚀é";
+        var host = new MockFileSystem();
+        var memory = new TestMemoryBudget(2 * 1024 * 1024);
+        var invocation = BuildInvocation("jq", "-nr", "--arg", "text", text,
+            "$text, ($text | utf8bytelength)");
+        var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(text + "\n" + (prefix + 6) + "\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData("--stream")]
     [InlineData("--stream-errors")]
     public async Task Jq_AdmittedStreamingTokenExceedsFormerStringPolicy(string mode)

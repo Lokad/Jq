@@ -15,9 +15,18 @@ internal static class JqDiagnosticWriter
     {
         cancellationToken.ThrowIfCancellationRequested();
         long length = newline ? 1 : 0;
-        foreach (string part in parts) length += Encoding.UTF8.GetByteCount(part);
+        foreach (string part in parts)
+        {
+            long count = Utf8Text.GetByteCount(part, cancellationToken);
+            if (count > Array.MaxLength - length)
+            {
+                await host.AppendAsync(descriptor, Refusal, cancellationToken).ConfigureAwait(false);
+                return false;
+            }
+            length += count;
+        }
         using var memory = new JqMemoryReservation(memoryBudget);
-        if (length > int.MaxValue || !memory.TryResize(length))
+        if (length > Array.MaxLength || !memory.TryResize(length))
         {
             await host.AppendAsync(descriptor, Refusal, cancellationToken).ConfigureAwait(false);
             return false;

@@ -22,6 +22,8 @@
   storage admission and checked representability; borrowed reads require no new
   string admission. There is no fallback allowance on ungoverned overloads.
   Preserve cancellation during repeat construction and large ASCII transforms.
+  Count UTF-8 bytes in cancellable chunks with a long result; materializing
+  clients preflight CLR capacity, preserving surrogate pairs across chunks.
   Cover admitted strings above the former cap and pre-materialization refusals;
   replace cap-dependent fixtures with small shared allowances. Benchmark schema 5
   drops the final removed policy field without a compatibility path.
@@ -154,7 +156,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,935 tests pass,
+- Validation on Windows: warning-free Release build and all 3,938 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 19 detached consumer checks with isolated cache, exact package hash and
   locked restore.

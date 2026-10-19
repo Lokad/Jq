@@ -59,7 +59,7 @@ internal sealed class JqContext(
     internal void EmitStderr(string text)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        int length = Encoding.UTF8.GetByteCount(text);
+        int length = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, Budget.CancellationToken), 0);
         Budget.CheckCancellation();
         long previous = ReserveStderr(length);
         try { _stderr.Add(Utf8Text.Encode(text)); }
@@ -74,7 +74,7 @@ internal sealed class JqContext(
     internal void EmitStderr(ReadOnlyMemory<byte> content, bool newline)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        int length = checked(content.Length + (newline ? 1 : 0));
+        int length = JqBudget.BufferCapacity((long)content.Length + (newline ? 1 : 0), 0);
         Budget.CheckCancellation();
         long previous = ReserveStderr(length);
         try
