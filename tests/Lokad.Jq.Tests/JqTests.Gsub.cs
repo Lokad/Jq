@@ -1,5 +1,4 @@
 using Lokad.Jq;
-using Lokad.Utf8Regex.Pcre2;
 
 namespace Lokad.Jq.Tests;
 
@@ -124,15 +123,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_RegexWorkAllowanceResetsForEachSearch()
+    public void Jq_RegexCacheSupportsRepeatedSearches()
     {
-        using var regexes = new JqRegexCache(new JqBudget(new JqExecutionPolicy { MaximumRegexWork = 32 }, CancellationToken.None));
-        var pattern = regexes.Get("x", Pcre2CompileOptions.None);
+        using var regexes = new JqRegexCache(new JqBudget(JqExecutionPolicy.Default, CancellationToken.None));
+        var pattern = regexes.Get("x", JqRegexCompileOptions.None);
         for (int i = 0; i < 100; i++)
         {
-            using var match = regexes.Match(pattern, "x"u8.ToArray(), 0, Pcre2MatchOptions.None);
+            using var match = regexes.Match(pattern, "x"u8.ToArray(), 0, JqRegexMatchOptions.None);
             Assert.True(match.Value.Success);
-            Assert.True(regexes.IsMatch(pattern, "x"u8.ToArray(), Pcre2MatchOptions.None));
+            Assert.True(regexes.IsMatch(pattern, "x"u8.ToArray(), JqRegexMatchOptions.None));
         }
     }
 

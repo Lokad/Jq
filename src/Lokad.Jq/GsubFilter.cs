@@ -44,7 +44,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                     throw new JqException("gsub requires non-overlapping forward matches");
                 var gapStart = previous;
                 var gapLength = match.Value.StartOffsetInUtf16 - previous;
-                JsonObject captures = JqMatch.FoldNamedCaptures(context, match, JqMatch.GroupNameMap(regex), match.CaptureSlotCount - 1);
+                JsonObject captures = JqMatch.FoldNamedCaptures(context, text, match, JqMatch.GroupNameMap(regex), match.CaptureSlotCount - 1);
 
                 // Copy match positions and captures before evaluating a nested replacement filter.
                 var index = 0;

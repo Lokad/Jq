@@ -1,13 +1,21 @@
 # Regex behavior
 
-Jq's regex integration is internal: `JqRegexCache` compiles and owns patterns,
-`JqRegexOptions` maps flags, and `JqMatch` builds jq results. The runtime directly
-depends on managed `Lokad.Utf8Regex.Pcre2` 0.3.0 (and transitively
-`Lokad.Utf8Regex` 0.3.0). It exposes no replaceable regex-engine interface or
-separate adapter package.
+`JqExecutionPolicy.RegexEngine` selects a borrowed `IJqRegexEngine`; the default
+`JqUtf8RegexEngine.Instance` adapts managed `Lokad.Utf8Regex.Pcre2` 0.3.0
+(transitively `Lokad.Utf8Regex` 0.3.0). The default adapter ships in the runtime
+package. PCRE2-specific types stay behind it; there is no implicit fallback.
 
-Patterns go directly to the selected PCRE2 standard-matcher profile; supported
-syntax follows that engine. There is no Oniguruma emulation or native runtime.
+The adapter receives the active cancellation token and borrowed shared memory
+budget for compilation. Compiled handles receive the token on boolean and detailed
+searches and retain their budget association. The host owns the engine; Jq owns
+compiled handles until all subject/result borrowers finish. Implementations must
+cooperate inside their own operations, admit substantial internal storage before
+allocation, and surface refusal as terminal `JqRegexResourceException`.
+
+Default patterns go directly to the PCRE2 standard matcher; supported syntax
+follows that engine. There is no Oniguruma emulation or native runtime. Custom
+adapters explicitly choose their syntax while preserving complete-subject context,
+absolute offsets and the capture contract.
 
 ## Flags and syntax
 
@@ -47,16 +55,20 @@ their result streams; they do not interpret native replacement templates.
 
 ## Limits and cancellation
 
-Each synchronous search has its own work/time allowance: defaults are 10,000,000
-steps and five seconds, with depth 256 and a 256 KiB workspace bound. Compilation
-is outside the search timeout. Global operations may consume multiple allowances.
+Jq imposes no regex work allowance or search deadline. The default adapter uses
+unlimited engine work and an infinite timeout, retaining depth 256, a 256 KiB
+workspace bound and a 16,384-character pattern guard.
 
-Shared memory admission covers conservative pattern/workspace estimates, subject
-buffers and capture storage. Cached patterns and retained buffers stay charged;
-active borrowers delay refunds. Every refusal terminates the command. Reuse and
-structural ceilings are documented in [execution policy](EXECUTION_POLICY.md).
+Shared admission covers conservative pattern/workspace estimates, subject buffers
+and capture storage. Each allocation has one owner; cached handles and retained
+buffers stay charged, and active borrowers delay refunds. Every refusal terminates
+the command. Reuse and structural ceilings are described in
+[execution policy](EXECUTION_POLICY.md).
 
-Work, time, depth and workspace exhaustion report status 5 outside `try`/`?`.
-Cancellation propagates separately. Version 0.3.0 has no cancellation-token API;
-checks surround compilation and each bounded search, so an active engine call
-cannot be interrupted. `MaxResultBytes` is reserved and is not an enforced guard.
+Depth/workspace exhaustion reports status 5 outside `try`/`?`. Syntax errors stay
+catchable; cancellation propagates as `OperationCanceledException`. Utf8Regex
+0.3.0 has no cancellation-token API: the default adapter checks before and after
+engine calls and cannot interrupt a search in progress. It may therefore delay
+cancellation arbitrarily on a pathological pattern. A cooperating adapter can
+observe cancellation during work; Jq supplies no timer wrapper or abandoned task.
+The default engine's `MaxResultBytes` is reserved, not an enforced guard.

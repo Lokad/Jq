@@ -1,4 +1,3 @@
-using Lokad.Utf8Regex.Pcre2;
 using System.Threading;
 
 namespace Lokad.Jq.Tests;
@@ -7,14 +6,6 @@ public sealed partial class JqTests
 {
     [Theory]
     [InlineData("\"x\"", "test(\"x\" * 16385)", "regex pattern exceeds")]
-    [InlineData("\"a\" * 32 + \"b\"", "test(\"(a+)+$\")", "regex work limit exceeded")]
-    [InlineData("\"a\" * 32 + \"b\"", "match(\"(a+)+$\")", "regex work limit exceeded")]
-    [InlineData("\"a\" * 32 + \"b\"", "capture(\"(?<x>a+)+$\")", "regex work limit exceeded")]
-    [InlineData("\"a\" * 32 + \"b\"", "scan(\"(a+)+$\")", "regex work limit exceeded")]
-    [InlineData("\"a\" * 32 + \"b\"", "gsub(\"(a+)+$\"; \"x\")", "regex work limit exceeded")]
-    [InlineData("\"a\" * 32 + \"b\"", "sub(\"(a+)+$\"; \"x\")", "regex work limit exceeded")]
-    [InlineData("\"a\" * 32 + \"b\"", "split(\"(a+)+$\"; \"\")", "regex work limit exceeded")]
-    [InlineData("\"a\" * 32 + \"b\"", "splits(\"(a+)+$\")", "regex work limit exceeded")]
     public async Task Jq_RegexQuotasBypassLanguageHandlers(string input, string expression, string diagnostic)
     {
         foreach (string handler in new[] { "try (" + expression + ") catch \"caught\"", "(" + expression + ")?", "(" + expression + ")? // \"fallback\"" })
@@ -22,28 +13,11 @@ public sealed partial class JqTests
             var host = new MockFileSystem();
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", input + " | " + handler)));
 
-            Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { MaximumRegexWork = 32 }, CancellationToken.None));
+            Assert.Equal(5, await command.ExecuteAsync(host, JqExecutionPolicy.Default, CancellationToken.None));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
             Assert.StartsWith("jq: ", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
             Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
         }
-    }
-
-    [Fact]
-    public async Task Jq_RegexQuotaStopsLaterInputsAndClosesOwnedFiles()
-    {
-        var host = new MockFileSystem();
-        host.AddFile("/first", "\"ok\"\n\"" + new string('a', 32) + "b" + "\"\n\"ok\"\n");
-        host.AddFile("/later", "\"ok\"\n");
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq",
-            "if . == \"ok\" then . else try test(\"(a+)+$\") catch \"caught\" end",
-            "/first", "/later")));
-
-        Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { MaximumRegexWork = 32 }, CancellationToken.None));
-        Assert.Equal("\"ok\"\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: regex work limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Single(host.ClosedDescriptors);
-        Assert.Equal(0, host.OpenFileCount);
     }
 
     [Fact]
@@ -186,20 +160,6 @@ public sealed partial class JqTests
         Assert.Contains("depth limit", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
-    [Theory]
-    [InlineData("test")]
-    [InlineData("match")]
-    public async Task Jq_RegexTimeoutCannotBeCaught(string operation)
-    {
-        var host = new MockFileSystem();
-        var filter = "(\"a\" * 32 + \"b\") | try " + operation + "(\"(a+)+$\") catch \"caught\"";
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-        var policy = new JqExecutionPolicy { MaximumRegexTime = TimeSpan.FromTicks(1) };
-        Assert.Equal(5, await command.ExecuteAsync(host, policy, CancellationToken.None));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: regex time limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
-    }
-
     [Fact]
     public async Task Jq_RegexUnadmittedCalloutRemainsCatchable()
     {
@@ -211,29 +171,18 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(370000)]
-    public void Jq_PolicyRegexTimeUsesConfiguredAllowance(long ticks)
-    {
-        var policy = new JqExecutionPolicy { MaximumRegexTime = TimeSpan.FromTicks(ticks) };
-        using var regexes = new JqRegexCache(new JqBudget(policy, CancellationToken.None));
-        var pattern = regexes.Get("x", Pcre2CompileOptions.None);
-        Assert.Equal(policy.MaximumRegexTime, pattern.Regex.MatchTimeout);
-    }
-
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void Jq_PolicyRegexCancellationPropagatesAtSearchBoundary(bool detailed)
     {
         using var cancellation = new CancellationTokenSource();
         using var regexes = new JqRegexCache(new JqBudget(cancellation.Token));
-        var pattern = regexes.Get("x", Pcre2CompileOptions.None);
+        var pattern = regexes.Get("x", JqRegexCompileOptions.None);
         cancellation.Cancel();
         var error = Assert.Throws<OperationCanceledException>(() =>
         {
-            if (detailed) regexes.Match(pattern, "x"u8.ToArray(), 0, Pcre2MatchOptions.None);
-            else regexes.IsMatch(pattern, "x"u8.ToArray(), Pcre2MatchOptions.None);
+            if (detailed) regexes.Match(pattern, "x"u8.ToArray(), 0, JqRegexMatchOptions.None);
+            else regexes.IsMatch(pattern, "x"u8.ToArray(), JqRegexMatchOptions.None);
         });
         Assert.Equal(cancellation.Token, error.CancellationToken);
     }
@@ -349,8 +298,6 @@ public sealed partial class JqTests
     public void Jq_PolicyRejectsUntestedOrNonPositiveAllowances(int value)
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumStringLength = value });
-        Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumRegexWork = value });
-        Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumRegexTime = TimeSpan.FromSeconds(value) });
     }
 
     [Theory]

@@ -104,10 +104,10 @@ int checks = 0;
 }
 {
     var host = new SmokeHost();
-    var policy = new JqExecutionPolicy { MaximumRegexWork = 32 };
-    Check("terminal regex policy", await Command(["-n", "(\"a\" * 32 + \"b\") | try test(\"(a+)+$\") catch \"caught\""], [])
-        .ExecuteAsync(host, policy, CancellationToken.None) == 5
-        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr) == "jq: regex work limit exceeded\n");
+    Check("terminal regex depth protection", await Command(["-n",
+        "(\"a\" * 300 + \"b\" * 300) | try test(\"(?<r>a(?&r)?b)\") catch \"caught\""], [])
+        .ExecuteAsync(host, CancellationToken.None) == 5
+        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr).Contains("depth limit", StringComparison.Ordinal));
 }
 {
     using var cancellation = new CancellationTokenSource();

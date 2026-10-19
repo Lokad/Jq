@@ -6,18 +6,15 @@
 | Configurable limit | Default and maximum | Scope |
 | --- | --- | --- |
 | `MaximumStringLength` | 8 Mi UTF-16 code units | One constructed string, key or rendered text value. |
-| `MaximumRegexWork` | 10,000,000 steps | One synchronous regex search. |
-| `MaximumRegexTime` | Five seconds | One search; excludes compilation, replacements and host waits. |
 
-Values must be positive and no larger than these defaults; invalid initialization
+The string limit must be positive and no larger than its default; invalid initialization
 throws `ArgumentOutOfRangeException`.
 
 ```csharp
 var policy = new JqExecutionPolicy
 {
     MaximumStringLength = 1024 * 1024,
-    MaximumRegexWork = 1_000_000,
-    MaximumRegexTime = TimeSpan.FromSeconds(1),
+    RegexEngine = JqUtf8RegexEngine.Instance,
 };
 int status = await command.ExecuteAsync(host, policy, memoryBudget, cancellationToken);
 ```
@@ -112,6 +109,7 @@ estimates. Structural/regex exhaustion is terminal status 5, including under
 
 Cancellation propagates as `OperationCanceledException`; host contract failures
 and actual `OutOfMemoryException` remain distinct and still unwind ownership.
-Utf8Regex 0.3.0 cannot accept a cancellation token: checks surround compilation
-and each bounded synchronous search, and cannot interrupt an active engine call.
-A global operation may use several per-search allowances. See [regex behavior](REGEX.md).
+The selected regex adapter receives the active token and is responsible for
+cooperation within engine work. The default Utf8Regex 0.3.0 adapter can only check
+around synchronous calls; it cannot interrupt a search in progress. There are no
+work/time policies. See [regex behavior](REGEX.md).

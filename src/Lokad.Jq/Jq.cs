@@ -29,7 +29,7 @@ public sealed class Jq
     public Task<int> ExecuteAsync(IJqHost host, CancellationToken cancellationToken) =>
         ExecuteAsync(host, JqExecutionPolicy.Default, cancellationToken);
 
-    /// <summary>Executes with an immutable resource policy and fresh counters; exhaustion reports status 5.</summary>
+    /// <summary>Executes with immutable capabilities and fresh execution storage.</summary>
     public Task<int> ExecuteAsync(IJqHost host, JqExecutionPolicy policy, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -42,7 +42,7 @@ public sealed class Jq
     public Task<int> ExecuteAsync(IJqHost host, IMemoryBudget memoryBudget, CancellationToken cancellationToken) =>
         ExecuteAsync(host, JqExecutionPolicy.Default, memoryBudget, cancellationToken);
 
-    /// <summary>Executes using a borrowed shared memory allowance and independent work limits.</summary>
+    /// <summary>Executes using a borrowed shared memory allowance and selected capabilities.</summary>
     /// <remarks>The execution owns a child scope until all evaluation, writes and descriptor cleanup finish.</remarks>
     public Task<int> ExecuteAsync(IJqHost host, JqExecutionPolicy policy,
         IMemoryBudget memoryBudget, CancellationToken cancellationToken)

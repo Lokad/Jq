@@ -2,9 +2,19 @@
 
 ## Unreleased
 
+- Breaking: remove MaximumRegexWork and MaximumRegexTime completely. Regex engine
+  selection now uses JqExecutionPolicy.RegexEngine and the engine-neutral
+  IJqRegexEngine/IJqCompiledRegex contract, carrying cancellation and shared storage
+  admission. The default managed PCRE2 adapter uses unlimited work and an infinite
+  timeout, retaining structural guards; Utf8Regex 0.3.0 cannot interrupt an active
+  search. Handles stay owned through borrowers and admission refusal stays terminal.
+- Cover cancellation inside a cooperating adapter's compilation, boolean/detailed
+  searches and later global/replacement searches, plus refusal, cleanup and reuse.
+  Remove obsolete timeout/work fixtures and benchmark provenance (schema 4).
+
 - Breaking: remove MaximumValueNodes, MaximumAllocationWorkBytes and the deprecated
   MaximumAllocationBytes alias, together with their counters and fuel plumbing.
-  Cancellation, shared admission, construction limits and bounded regex searches
+  Cancellation, shared admission, construction limits and regex structural protection
   remain; no replacement fuel or compatibility switch is introduced.
 
 - Breaking: remove MaximumInputBytes and MaximumOutputBytes and their counters.
@@ -88,12 +98,12 @@
   streaming token capacity and hosted file reads also reserve before allocation;
   successful read results retain their charge until decoding finishes. Coverage
   uses coarse estimates and conservative record lifetimes, with small metadata
-  deliberately uninstrumented. Existing overloads enforce the independent work/I/O/structural policy
+  deliberately uninstrumented. Existing overloads preserve cancellation and structural protection
   and forward a governed invocation's associated budget.
 - Govern retained regex pattern/workspace estimates and operation-owned UTF-8
   subjects and detailed captures. Failed compilation/matching refunds admission;
   nested replacements retain parent charges. This preserves the existing engine
-  profile and work/time/cancellation boundaries, with approximate storage sizing.
+  profile and cancellation boundaries, with approximate storage sizing.
 - Add coarse record and persistent storage owners for UTF-16 materialization,
   decoded JSON, container copies/construction, snapshots and filter/module
   compilation. Preserve aliases, slurp aggregates, sequence queues, streaming
@@ -119,7 +129,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,923 tests pass,
+- Validation on Windows: warning-free Release build and all 3,920 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 18 detached consumer checks with isolated cache, exact package hash and
   locked restore.

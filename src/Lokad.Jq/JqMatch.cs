@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json.Nodes;
-using Lokad.Utf8Regex.Pcre2;
 using static Lokad.Jq.JqRuntime;
 
 namespace Lokad.Jq;
@@ -56,8 +55,8 @@ internal static class JqMatch
         JqRegexOptions options = JqRegexOptions.ParseOrThrow(modifiers);
         bool global = modifiers.Contains('g');
         JqRegexCache.Pattern compiled = context.Regexes.Get(pattern, options.Pattern);
-        Pcre2MatchOptions matchOptions = options.Match;
-        Dictionary<int, string> names = GroupNameMap(compiled);
+        JqRegexMatchOptions matchOptions = options.Match;
+        IReadOnlyDictionary<int, string> names = GroupNameMap(compiled);
         using var ownedSubject = context.Regexes.EncodeSubject(text);
         ReadOnlyMemory<byte> subject = ownedSubject.Value;
         var results = new List<JsonObject>();
@@ -65,7 +64,7 @@ internal static class JqMatch
         while (true)
         {
             using var ownedMatch = context.Regexes.Match(compiled, subject, start, matchOptions);
-            Utf8Pcre2MatchContext match = ownedMatch.Value;
+            JqRegexMatch match = ownedMatch.Value;
             if (!match.Success)
                 break;
             context.Budget.CheckCancellation();
@@ -89,7 +88,7 @@ internal static class JqMatch
         return results;
     }
 
-    internal static Dictionary<int, string> GroupNameMap(JqRegexCache.Pattern compiled)
+    internal static IReadOnlyDictionary<int, string> GroupNameMap(JqRegexCache.Pattern compiled)
     {
         ArgumentNullException.ThrowIfNull(compiled);
         return compiled.Names;
@@ -99,7 +98,7 @@ internal static class JqMatch
     // order with last-wins, including null for non-participating groups,
     // mirroring `def sub`'s reduce over .captures in builtin.jq. Duplicate
     // names (enabled via PCRE2_DUPNAMES) fold the same way.
-    internal static JsonObject FoldNamedCaptures(JqContext context, Utf8Pcre2MatchContext match, Dictionary<int, string> names, int captureCount)
+    internal static JsonObject FoldNamedCaptures(JqContext context, string text, JqRegexMatch match, IReadOnlyDictionary<int, string> names, int captureCount)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(names);
@@ -109,14 +108,14 @@ internal static class JqMatch
         {
             if (!names.TryGetValue(index, out string? name) || name is null)
                 continue;
-            if (!match.TryGetGroup(index, out Utf8Pcre2GroupContext group))
+            if (!match.TryGetGroup(index, out JqRegexCapture group))
                 break;
             context.Budget.CheckCancellation();
             context.Budget.ReserveString(name.Length);
             if (group.Success)
             {
                 context.Budget.ReserveString(group.EndOffsetInUtf16 - group.StartOffsetInUtf16);
-                string value = group.GetValueString();
+                string value = text.Substring(group.StartOffsetInUtf16, group.EndOffsetInUtf16 - group.StartOffsetInUtf16);
                 captures[name] = JsonValue.Create(value);
             }
             else
@@ -127,10 +126,10 @@ internal static class JqMatch
         return captures;
     }
 
-    private static JsonObject BuildMatch(JqContext context, string text, Utf8Pcre2MatchContext match, Dictionary<int, string> names, int captureCount)
+    private static JsonObject BuildMatch(JqContext context, string text, JqRegexMatch match, IReadOnlyDictionary<int, string> names, int captureCount)
     {
         context.Budget.ReserveString(match.Value.EndOffsetInUtf16 - match.Value.StartOffsetInUtf16);
-        string whole = match.GetValueString();
+        string whole = text.Substring(match.Value.StartOffsetInUtf16, match.Value.EndOffsetInUtf16 - match.Value.StartOffsetInUtf16);
         var result = new JsonObject
         {
             ["offset"] = JsonValue.Create(ScalarOffset(text, match.Value.StartOffsetInUtf16)),
@@ -140,7 +139,7 @@ internal static class JqMatch
         var captures = new JsonArray();
         for (int index = 1; index <= captureCount; index++)
         {
-            if (!match.TryGetGroup(index, out Utf8Pcre2GroupContext group))
+            if (!match.TryGetGroup(index, out JqRegexCapture group))
                 break;
             context.Budget.CheckCancellation();
             var capture = new JsonObject();
@@ -153,7 +152,7 @@ internal static class JqMatch
             else
             {
                 context.Budget.ReserveString(group.EndOffsetInUtf16 - group.StartOffsetInUtf16);
-                string value = group.GetValueString();
+                string value = text.Substring(group.StartOffsetInUtf16, group.EndOffsetInUtf16 - group.StartOffsetInUtf16);
                 capture["offset"] = JsonValue.Create(ScalarOffset(text, group.StartOffsetInUtf16));
                 capture["length"] = JsonValue.Create(ScalarOffset(text, group.EndOffsetInUtf16) - ScalarOffset(text, group.StartOffsetInUtf16));
                 capture["string"] = JsonValue.Create(value);

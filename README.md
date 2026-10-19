@@ -42,7 +42,7 @@ overloads automatically borrow its budget. Explicit execution hooks also work
 with caller-owned invocations constructed by the legacy APIs.
 
 Pass a `JqExecutionPolicy` to `ExecuteAsync(host, policy, cancellationToken)`
-to reduce per-execution resource allowances. Existing calls retain the defaults;
+to select a borrowed regex engine or reduce the string allowance. Existing calls retain the defaults;
 see [execution policy](docs/EXECUTION_POLICY.md) for accounting and fixed ceilings.
 
 Shared storage admission uses a governed invocation or an explicit `IMemoryBudget`
@@ -53,8 +53,8 @@ Every refused admission, including padded growth, fails the command with status 
 without retrying. Earlier output remains; cleanup refunds relinquished storage
 so later commands can reuse the allowance.
 Execution has no cumulative fuel or input/output byte ceiling. Use host
-cancellation to stop long-running commands; string, stack, buffer and bounded
-regex-search safeguards remain.
+cancellation to stop long-running commands; string, stack and buffer safeguards remain. Regex cooperation belongs to the
+selected adapter; the default engine cannot interrupt an active search.
 
 ## Develop
 

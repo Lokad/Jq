@@ -9,7 +9,7 @@ namespace Lokad.Jq.Benchmarking;
 internal sealed record HostProvenance(string Commit, bool CleanCheckout, string Sdk, string Runtime,
     string OperatingSystem, string Architecture, string Cpu, int LogicalProcessors,
     string BenchmarkBuild, string LibraryBuild, string BenchmarkAssemblySha256);
-internal sealed record PolicyProvenance(int StringUtf16Units, int JsonDepth, int RegexWork, TimeSpan RegexTime);
+internal sealed record PolicyProvenance(int StringUtf16Units, int JsonDepth);
 internal sealed record ComparisonRow(ComparisonWorkloadInfo Workload, CaseVerification Verification, QualificationResult Timing);
 internal sealed record ComparisonWorkloadInfo(string Name, string Scale, int Size, string[] Arguments,
     ComparisonKind Comparison, OutputDigest Input, string FilterSha256);
@@ -19,7 +19,7 @@ internal sealed record ComparisonReport(int SchemaVersion, string Mode, DateTime
 
 internal static class BenchmarkReport
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
     public const string Contract = "Warm embedded Lokad.Jq versus jq CLI; includes binding/compilation, parsing, evaluation, rendering and SHA-256 consumption; jq includes launch and pipes. No startup subtraction.";
     public const string BeginMarker = "<!-- BEGIN GENERATED COMPARISON -->";
     public const string EndMarker = "<!-- END GENERATED COMPARISON -->";
@@ -56,7 +56,7 @@ internal static class BenchmarkReport
     {
         var policy = JqExecutionPolicy.Default;
         return new(SchemaVersion, mode, DateTimeOffset.UtcNow, Contract, host, reference,
-            new(policy.MaximumStringLength, 64, policy.MaximumRegexWork, policy.MaximumRegexTime), gate, pairs, requestedCases, complete, rows.ToArray());
+            new(policy.MaximumStringLength, 64), gate, pairs, requestedCases, complete, rows.ToArray());
     }
 
     public static async Task SaveAsync(string path, ComparisonReport report, CancellationToken cancellationToken)
