@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using static Lokad.Jq.JqRuntime;
 
@@ -25,8 +26,14 @@ internal sealed class ReduceFilter(JqFilter Source, IReadOnlyList<BindingPattern
         foreach (JsonNode? initial in Init.Evaluate(input, context, environment))
         {
             JsonNode? state = initial;
+            JqStorage? trackedStorage = null;
+            long retainedUpdate = 0;
             foreach (JsonNode? item in Source.Evaluate(input, context, environment))
             {
+                JqStorage? storage = context.Budget.TemporaryStorage;
+                if (!ReferenceEquals(storage, trackedStorage)) retainedUpdate = 0;
+                trackedStorage = storage;
+                long before = storage?.UsedBytes ?? 0;
                 bool produced = false;
                 JsonNode? last = null;
                 foreach (var (_, updated) in AsFilter.DriveAlternatives(Alternatives, _allNames, item, environment, context, scope => Update.Evaluate(state, context, scope)))
@@ -38,11 +45,42 @@ internal sealed class ReduceFilter(JqFilter Source, IReadOnlyList<BindingPattern
 
                 // Like the reference LOADVN slot, an update with no outputs
                 // empties the cell and the run continues with the next item.
-                state = produced ? last : null;
+                JsonNode? next = produced ? last : null;
+                if (storage is not null && IsStandaloneScalar(state) && IsStandaloneScalar(next))
+                {
+                    long currentUpdate = storage.UsedBytes - before;
+                    // Scalars cannot retain another value graph. A string may
+                    // share its old backing, so preserve that admission instead
+                    // of refunding it. Initial/source/collected values remain
+                    // outside this update's demand and keep their parent charge.
+                    bool shared = ReferenceEquals(state, next)
+                        || TryGetString(state, out var oldText) && TryGetString(next, out var newText)
+                            && ReferenceEquals(oldText, newText);
+                    state = next;
+                    if (shared) storage.DiscardBytes(currentUpdate);
+                    else
+                    {
+                        storage.DiscardBytes(retainedUpdate);
+                        retainedUpdate = currentUpdate;
+                    }
+                }
+                else
+                {
+                    // Containers and opaque scalar backing keep conservative
+                    // ownership. Do not traverse aliases to reclaim history.
+                    retainedUpdate = 0;
+                    state = next;
+                }
             }
 
             yield return state;
         }
+
+        static bool IsStandaloneScalar(JsonNode? value) => value is null
+            || value is JsonValue scalar && !scalar.TryGetValue<JsonElement>(out _)
+                && (scalar.TryGetValue<string>(out _) || scalar.TryGetValue<long>(out _)
+                    || scalar.TryGetValue<int>(out _) || scalar.TryGetValue<double>(out _)
+                    || scalar.TryGetValue<bool>(out _));
     }
 }
 

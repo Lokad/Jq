@@ -14,6 +14,15 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
 
     internal long UsedBytes => _used;
 
+    // A caller proves this demand has ended within the same coarse owner.
+    // Keep existing bounded credit, never a copied root balance or new allowance.
+    internal void DiscardBytes(long bytes)
+    {
+        if (bytes < 0 || bytes > _used)
+            throw new InvalidOperationException("Released demand exceeds its storage owner.");
+        if (bytes != 0) ReconcileCursor(_used - bytes);
+    }
+
     internal void ReserveBytes(long bytes)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

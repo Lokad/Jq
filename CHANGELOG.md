@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Reconcile completed scalar `reduce` update demand within existing coarse
+  storage. Preserve shared string backing, source/initializer/collected values,
+  persistent caches, container/opaque ownership and replacement peaks. Add no
+  result scopes or accounting walks. Cover 100,000 bounded updates, escaping
+  errors, cancellation, terminal pressure and retained aliases.
+
 - Own and admit persistent regex keys/metadata in one coarse cache owner even
   when a custom provider retains no pattern text. Preflight before copying and
   compilation, roll back failed work, and defer refunds through active borrowers.
@@ -166,7 +172,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,950 tests pass,
+- Validation on Windows: warning-free Release build and all 3,959 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 19 detached consumer checks with isolated cache, exact package hash and
   locked restore.

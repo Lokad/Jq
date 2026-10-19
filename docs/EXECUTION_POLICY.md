@@ -58,7 +58,10 @@ this retention gap is separate from the removed cumulative fuel policies.
 Successful `any`/`all` predicates reuse one temporary owner after each predicate
 finishes; source state remains charged under its parent. A failure retains the
 owner because its payload can escape to a handler. No per-object reservation or
-alias-graph system is introduced.
+alias-graph system is introduced. Scalar-to-scalar `reduce` updates reconcile
+only their own completed demand; shared string backing keeps its charge, while
+containers and opaque backing retain conservative ownership. Sources, collected
+answers and persistent caches remain charged; failed updates never reclaim early.
 
 Estimates cover major storage; small objects, metadata and minor temporaries may
 remain untracked. Roughly 20% unaccounted memory is intentional, without a

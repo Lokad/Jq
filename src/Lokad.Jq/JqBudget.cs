@@ -45,6 +45,10 @@ internal sealed class JqBudget : IDisposable
 
     internal CancellationToken CancellationToken => _cancellationToken;
 
+    // Persistent compiler/module storage must never participate in local
+    // temporary-demand reconciliation, even in white-box evaluations.
+    internal JqStorage? TemporaryStorage => ReferenceEquals(_storage, _executionStorage) ? null : _storage;
+
     internal static int BufferCapacity(long required, long preferred)
     {
         if (required < 0 || required > Array.MaxLength)

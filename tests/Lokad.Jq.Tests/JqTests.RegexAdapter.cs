@@ -10,6 +10,7 @@ public sealed partial class JqTests
     [InlineData("boolean", "test(\"x\")", 1)]
     [InlineData("boolean", "all(range(1000); \"x\" | test(\"x\"))", 1)]
     [InlineData("boolean", "any(range(1000); \"x\" | test(\"x\"))", 1)]
+    [InlineData("boolean", "reduce range(1000) as $_ (\"\"; \"x\" | test(\"x\") | \"x\" * 128)", 1)]
     [InlineData("detailed", "match(\"x\")", 1)]
     [InlineData("detailed", "match(\"x\"; \"g\")", 2)]
     [InlineData("detailed", "gsub(\"x\"; \"y\")", 2)]

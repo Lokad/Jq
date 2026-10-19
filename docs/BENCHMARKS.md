@@ -164,10 +164,12 @@ credit would require broader evidence. Raw evidence: ignored
 `tmp/simplification-catalog/`. No new timing claim follows from those counts.
 The adapter/policy cleanup was checked separately with the same 96 count-only
 rows. Digests, complete refunds and zero counter reads/unchanged resizes/refusals
-are preserved. Single-worker call counts match except one alternating-pattern case:
-compiled-handle ownership adds one reservation/disposal and removes one resize.
-Its peak is unchanged; two growing-string peaks drop by two bytes. This is count
-and estimated-storage evidence, with no new timing or managed-allocation claim.
+are preserved. Nine single-pattern regex cases add one cache reservation/disposal
+at setup, with unchanged resize counts; the alternating-pattern case adds two
+reservations/disposals and keeps its resize count. Regex peaks rise by 128-382
+bytes; growing raw output drops two bytes. There is no new per-search owner or
+unchanged-target notification. This is count and estimated-storage evidence,
+with no new timing or managed-allocation claim.
 
 See [execution policy](EXECUTION_POLICY.md) for ownership and retained-credit bounds.
 
