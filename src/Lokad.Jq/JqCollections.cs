@@ -822,14 +822,7 @@ internal sealed class AnyFilter(JqFilter Generator, JqFilter Condition) : JqFilt
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? generated in Generator.Evaluate(input, context, environment))
-            foreach (JsonNode? probe in Condition.Evaluate(generated, context, environment))
-                if (Truthy(probe))
-                {
-                    yield return JsonValue.Create(true);
-                    yield break;
-                }
-        yield return JsonValue.Create(false);
+        yield return JsonValue.Create(JqPredicateFold.Evaluate(Generator, Condition, input, context, environment, false));
     }
 }
 
@@ -841,13 +834,44 @@ internal sealed class AllFilter(JqFilter Generator, JqFilter Condition) : JqFilt
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? generated in Generator.Evaluate(input, context, environment))
-            foreach (JsonNode? probe in Condition.Evaluate(generated, context, environment))
-                if (!Truthy(probe))
+        yield return JsonValue.Create(JqPredicateFold.Evaluate(Generator, Condition, input, context, environment, true));
+    }
+}
+
+// Only a boolean escapes a successful predicate fold. Sources remain under the
+// parent owner; predicate temporaries end after their enumerator is disposed.
+internal static class JqPredicateFold
+{
+    internal static bool Evaluate(JqFilter generator, JqFilter condition, JsonNode? input,
+        JqContext context, JqEnvironment environment, bool all)
+    {
+        JqStorage temporary = context.Budget.CreateStorageOwner();
+        bool completed = false;
+        try
+        {
+            bool result = Fold();
+            completed = true;
+            return result;
+        }
+        finally
+        {
+            // An exception may carry a constructed value into an outer handler.
+            // Keep that owner's admission through execution cleanup on failure.
+            if (completed) context.Budget.ReleaseStorageOwner(temporary);
+        }
+
+        bool Fold()
+        {
+            foreach (JsonNode? generated in generator.Evaluate(input, context, environment))
+            {
+                temporary.ReuseForNextRecord();
+                using var selection = context.Budget.UseStorage(temporary);
+                foreach (JsonNode? probe in condition.Evaluate(generated, context, environment))
                 {
-                    yield return JsonValue.Create(false);
-                    yield break;
+                    if (Truthy(probe) != all) return !all;
                 }
-        yield return JsonValue.Create(true);
+            }
+            return all;
+        }
     }
 }

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Reuse predicate temporary storage within `any`/`all`, keeping generator state
+  under the parent owner. Only a successful completed predicate can refund;
+  escaping error payloads retain admission through execution cleanup. Cover
+  100,000 allocating predicates under 64 KiB with bounded governor traffic,
+  plus aliases, collected results, cancellation, refusal and payload lifetimes.
+
 - Remove fixed source-length, token-count and command-argument ceilings. Preflight
   compiler/snapshot storage and preserve cancellation, real function arity and
   recursive depth guards. Iterate object/interpolation combinations, definition
@@ -156,7 +162,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,938 tests pass,
+- Validation on Windows: warning-free Release build and all 3,948 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 19 detached consumer checks with isolated cache, exact package hash and
   locked restore.

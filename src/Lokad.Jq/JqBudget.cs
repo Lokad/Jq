@@ -110,6 +110,13 @@ internal sealed class JqBudget : IDisposable
         return owner;
     }
 
+    internal void ReleaseStorageOwner(JqStorage owner)
+    {
+        if (!_persistentStorageOwners.Remove(owner))
+            throw new InvalidOperationException("Storage owner does not belong to this execution.");
+        owner.Dispose();
+    }
+
     internal IDisposable UseStorage(JqStorage storage)
     {
         var selection = new StorageSelection(this, _storage);

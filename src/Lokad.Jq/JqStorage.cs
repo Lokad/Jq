@@ -51,7 +51,7 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
         _used = bytes;
     }
 
-    // The executor has finished all users of the previous outer record. Reuse
+    // The caller has finished all users of the previous record or predicate. Reuse
     // its host reservation, retaining only bounded, still-charged credit. Small
     // records retain only what they already admitted; no block is prepaid here.
     internal void ReuseForNextRecord()
