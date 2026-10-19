@@ -37,7 +37,7 @@ them. Invalid regex syntax remains a catchable language error. Variable snapshot
 allocation and bounded file reads use the same terminal quota path.
 
 `ExecuteAsync` accepts an immutable `JqExecutionPolicy` for stricter allowances.
-Input/output/allocation-work/value-work counters are cumulative; regex work/time limits
+Allocation-work/value-work counters are cumulative; regex work/time limits
 apply to each engine search. Every execution creates independent work counters;
 command binding keeps its separate default work allowance within the same
 execution memory scope. Structural and regex
@@ -104,7 +104,9 @@ per-record backpressure and closure. Filter/diagnostic serialization uses
 separate storage.
 
 Input flows through a shared pull cursor (`JqInputCursor`) using chunked 8 KiB
-requests with a one-byte overflow probe. Implicit outer iteration and explicit
+requests. Total input and output bytes have no cumulative execution ceiling.
+Individual staging/materialization buffers stay bounded at 64 MiB, with shared
+admission ahead of growth. Implicit outer iteration and explicit
 `input`/`inputs` calls draw from the same cursor, so values interleave; `-`
 operands reuse borrowed stdin at its current position and are never closed,
 while file operands open lazily and close when exhausted, abandoned, or

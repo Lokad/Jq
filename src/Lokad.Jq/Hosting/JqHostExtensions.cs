@@ -39,33 +39,31 @@ internal static class JqHostExtensions
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        int maximumBytes = budget.RemainingInput;
         using var readMemory = new JqMemoryReservation(budget.MemoryBudget);
         var outputMemory = new JqMemoryReservation(budget.MemoryBudget);
         bool published = false;
         try
         {
-            int initialCapacity = Math.Min(4096, maximumBytes);
+            const int initialCapacity = 4096;
             outputMemory.Resize(initialCapacity);
             using var output = new MemoryStream(initialCapacity);
             byte[] buffer = [];
-            readMemory.ReplaceBuffer(ref buffer, Math.Min(8192, maximumBytes + 1));
+            readMemory.ReplaceBuffer(ref buffer, 8192);
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var length = Math.Min(buffer.Length, maximumBytes - (int)output.Length + 1);
-                var read = await GuardedReadAsync(host, descriptor, buffer.AsMemory(0, length), cancellationToken).ConfigureAwait(false);
+                var read = await GuardedReadAsync(host, descriptor, buffer, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (read.IsError)
                     return new BoundedReadResult.Failed(read);
-                budget.ChargeInput(read.BytesRead);
-                if (read.BytesRead > maximumBytes - output.Length)
-                    return new BoundedReadResult.TooLarge();
+                if (read.BytesRead > JqBudget.MaximumJsonBufferBytes - output.Length)
+                    throw new JqQuotaException("input buffer exceeds the 64 MiB limit");
                 int required = (int)output.Length + read.BytesRead;
                 if (required > output.Capacity)
                 {
                     int previous = output.Capacity;
-                    int capacity = Math.Max(required, Math.Max(256, previous * 2));
+                    int capacity = (int)Math.Min(JqBudget.MaximumJsonBufferBytes,
+                        Math.Max(required, Math.Max(256, 2L * previous)));
                     outputMemory.Resize((long)previous + capacity);
                     try { output.Capacity = capacity; }
                     catch

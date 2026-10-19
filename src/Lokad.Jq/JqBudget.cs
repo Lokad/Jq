@@ -13,15 +13,12 @@ internal sealed class JqBudget : IDisposable
 {
     private const int MaximumIdleSerializationBytes = 4096;
     internal const int MaximumStringLength = 8 * 1024 * 1024;
-    internal const int MaximumInputBytes = 16 * 1024 * 1024;
-    internal const int MaximumJsonBytes = 32 * 1024 * 1024;
+    internal const int MaximumSerializedValueBytes = 32 * 1024 * 1024;
     internal const int MaximumJsonBufferBytes = 64 * 1024 * 1024;
     internal const int MaximumDepth = 64;
     private readonly CancellationToken _cancellationToken;
     private long _remainingAllocationWork;
     private int _remainingNodes;
-    private int _remainingInput;
-    private int _remainingOutput;
     private int _evaluationDepth;
     private readonly JqStorage _executionStorage;
     private JqStorage _storage;
@@ -46,8 +43,6 @@ internal sealed class JqBudget : IDisposable
         _cancellationToken = cancellationToken;
         _remainingAllocationWork = policy.MaximumAllocationWorkBytes;
         _remainingNodes = policy.MaximumValueNodes;
-        _remainingInput = policy.MaximumInputBytes;
-        _remainingOutput = policy.MaximumOutputBytes;
     }
 
     internal JqExecutionPolicy Policy { get; }
@@ -92,8 +87,6 @@ internal sealed class JqBudget : IDisposable
                 buffer.Dispose();
         }
     }
-
-    internal int RemainingInput => _remainingInput;
 
     // Reuse one coarse record owner only at the safe outer-input boundary.
     // Retain at most one charged block; the last record stays fully charged
@@ -227,10 +220,6 @@ internal sealed class JqBudget : IDisposable
 
     internal void CheckCancellation() => _cancellationToken.ThrowIfCancellationRequested();
 
-    internal string InputLimitMessage => Policy.MaximumInputBytes == MaximumInputBytes
-        ? "input exceeds the 16 MiB limit"
-        : $"input exceeds the {Policy.MaximumInputBytes}-byte limit";
-
     internal void ChargeAllocationWork(long count)
     {
         CheckCancellation();
@@ -245,27 +234,6 @@ internal sealed class JqBudget : IDisposable
         if (_remainingNodes <= 0)
             throw new JqQuotaException("value budget exceeded");
         _remainingNodes--;
-    }
-
-    internal void ChargeInput(int bytes)
-    {
-        CheckCancellation();
-        if (bytes < 0 || bytes > _remainingInput)
-            throw new JqQuotaException(InputLimitMessage);
-        // Conservative work charge for read, staging and decode preparation.
-        ChargeAllocationWork(4L * bytes);
-        _remainingInput -= bytes;
-    }
-
-    internal void ChargeOutput(int bytes)
-    {
-        CheckCancellation();
-        if (bytes < 0 || bytes > _remainingOutput)
-            throw new JqQuotaException(Policy.MaximumOutputBytes == MaximumJsonBytes
-                ? "output exceeds the 32 MiB limit"
-                : $"output exceeds the {Policy.MaximumOutputBytes}-byte limit");
-        ChargeAllocationWork(bytes);
-        _remainingOutput -= bytes;
     }
 
     internal void CheckStringLength(long length)

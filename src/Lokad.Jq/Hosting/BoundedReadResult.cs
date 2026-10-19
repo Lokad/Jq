@@ -2,7 +2,7 @@ using System;
 
 namespace Lokad.Jq;
 
-/// <summary>Complete borrowed-descriptor input, a read failure, or an exceeded byte limit.</summary>
+/// <summary>Complete borrowed-descriptor input or a read failure.</summary>
 internal abstract record BoundedReadResult
 {
     private BoundedReadResult() { }
@@ -17,6 +17,4 @@ internal abstract record BoundedReadResult
     /// <summary>The original descriptor failure; partial input is not published.</summary>
     internal sealed record Failed(JqByteReadResult Failure) : BoundedReadResult;
 
-    /// <summary>Input exceeded the caller's limit; partial input is not published.</summary>
-    internal sealed record TooLarge : BoundedReadResult;
 }

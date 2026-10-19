@@ -135,33 +135,35 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_BoundsInputRequestsBeforeRejectingOversizeContent()
+    public async Task Jq_LongWhitespaceInputKeepsReadRequestsAndMemoryBounded()
     {
+        var memory = new TestMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
-        host.SetStandardInputBytes(new byte[JqBudget.MaximumInputBytes + 8192]);
-        var requests = new List<int>();
-        host.BeforeByteRead = buffer => requests.Add(buffer.Length);
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".")));
-
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("input exceeds", host.GetOutput(JqFileDescriptor.StdErr));
+        byte[] input = new byte[17 * 1024 * 1024];
+        input.AsSpan().Fill((byte)' ');
+        host.SetStandardInputBytes(input);
+        int largestRequest = 0;
+        host.BeforeByteRead = buffer => largestRequest = Math.Max(largestRequest, buffer.Length);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".")));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal(8192, requests.Max());
-        Assert.Equal(2049, host.ReadBytesCallCount);
-        Assert.Equal(JqBudget.MaximumInputBytes + 1, requests.Sum());
-        // IJqHost exposes only byte reads.
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(8192, largestRequest);
+        Assert.True(host.ReadBytesCallCount > 2048);
+        Assert.InRange(memory.PeakBytes, 1, 64 * 1024);
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Fact]
-    public async Task Jq_SharesInputLimitAcrossFilesAndClosesDescriptors()
+    public async Task Jq_LongInputAcrossFilesClosesOwnedDescriptors()
     {
         var host = new MockFileSystem();
         host.AddFile("/a", "0" + new string(' ', 8 * 1024 * 1024 - 1));
         host.AddFile("/b", new string(' ', 8 * 1024 * 1024 + 1));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "empty", "/a", "/b")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("input exceeds", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.OpenFileCount);
         // IJqHost exposes only byte reads.
     }
@@ -384,16 +386,6 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
-    [Fact]
-    public async Task Jq_BoundsCumulativeOutput()
-    {
-        var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", "range(0;17) | \"é\" * 1048576")));
-
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("output exceeds", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.True(host.GetOutputBytes(JqFileDescriptor.StdOut).Length < 32 * 1024 * 1024);
-    }
 
     [Fact]
     public async Task Jq_BoundsFilterFileAndClosesDescriptor()

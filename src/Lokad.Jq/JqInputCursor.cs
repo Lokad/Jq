@@ -336,14 +336,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
         if (_readBuffer.Length == 0)
             _readMemory.ReplaceBuffer(ref _readBuffer, ChunkSize);
         JqFileDescriptor descriptor = _owned ?? _stdin;
-        // Bounded requests with a one-byte overflow probe, matching the
-        // hosted read protocol pinned by the input-limit tests.
-        int request = (int)Math.Min(ChunkSize, (long)_budget.RemainingInput + 1);
         JqByteReadResult read;
         try
         {
             read = await JqHostExtensions.GuardedReadAsync(
-                _host, descriptor, _readBuffer.AsMemory(0, request), _cancellationToken).ConfigureAwait(false);
+                _host, descriptor, _readBuffer, _cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -359,7 +356,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
         }
         if (read.BytesRead > 0)
         {
-            _budget.ChargeInput(read.BytesRead);
             EnsureAdditional(read.BytesRead);
             Array.Copy(_readBuffer, 0, _buffer, _start + _count, read.BytesRead);
             _count += read.BytesRead;
@@ -1003,8 +999,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
             _start = 0;
             return;
         }
-        int needed = _count + additional;
-        int capacity = Math.Max(needed, _buffer.Length == 0 ? ChunkSize : _buffer.Length * 2);
+        long needed = (long)_count + additional;
+        if (needed > JqBudget.MaximumJsonBufferBytes)
+            throw new JqQuotaException("input buffer exceeds the 64 MiB limit");
+        int capacity = (int)Math.Min(JqBudget.MaximumJsonBufferBytes,
+            Math.Max(needed, _buffer.Length == 0 ? ChunkSize : 2L * _buffer.Length));
         _budget.ChargeAllocationWork(capacity);
         _bufferMemory.ReplaceBuffer(ref _buffer, capacity, _start, _count);
         _start = 0;

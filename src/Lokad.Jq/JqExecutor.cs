@@ -45,7 +45,7 @@ internal static class JqExecutor
         {
             try
             {
-                budget.ChargeOutput(Encoding.UTF8.GetByteCount(information));
+                budget.CheckCancellation();
                 using var informationMemory = new JqMemoryReservation(memoryScope);
                 informationMemory.Resize(Encoding.UTF8.GetByteCount(information));
                 return await host.AppendAsync(invocation.StdOut, Utf8Text.Encode(information), cancellationToken).ConfigureAwait(false);
@@ -468,7 +468,6 @@ internal static class JqExecutor
         {
             BoundedReadResult.Complete complete => complete,
             BoundedReadResult.Failed => throw new JqException("input read failed"),
-            BoundedReadResult.TooLarge => throw new JqQuotaException(budget.InputLimitMessage),
             _ => throw new InvalidOperationException("Unknown bounded read result.")
         };
     }

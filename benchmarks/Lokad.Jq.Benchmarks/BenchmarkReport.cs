@@ -11,7 +11,7 @@ internal sealed record HostProvenance(string Commit, bool CleanCheckout, string 
     string BenchmarkBuild, string LibraryBuild, string BenchmarkAssemblySha256);
 // Keep the historical JSON field so existing evidence remains readable. It
 // stores MaximumAllocationWorkBytes and never represents current reserved memory.
-internal sealed record PolicyProvenance(int InputBytes, int OutputBytes, long AllocationBytes,
+internal sealed record PolicyProvenance(long AllocationBytes,
     int ValueNodes, int StringUtf16Units, int JsonDepth);
 internal sealed record ComparisonRow(ComparisonWorkloadInfo Workload, CaseVerification Verification, QualificationResult Timing);
 internal sealed record ComparisonWorkloadInfo(string Name, string Scale, int Size, string[] Arguments,
@@ -22,7 +22,7 @@ internal sealed record ComparisonReport(int SchemaVersion, string Mode, DateTime
 
 internal static class BenchmarkReport
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
     public const string Contract = "Warm embedded Lokad.Jq versus jq CLI; includes binding/compilation, parsing, evaluation, rendering and SHA-256 consumption; jq includes launch and pipes. No startup subtraction.";
     public const string BeginMarker = "<!-- BEGIN GENERATED COMPARISON -->";
     public const string EndMarker = "<!-- END GENERATED COMPARISON -->";
@@ -59,7 +59,7 @@ internal static class BenchmarkReport
     {
         var policy = JqExecutionPolicy.Default;
         return new(SchemaVersion, mode, DateTimeOffset.UtcNow, Contract, host, reference,
-            new(policy.MaximumInputBytes, policy.MaximumOutputBytes, policy.MaximumAllocationWorkBytes,
+            new(policy.MaximumAllocationWorkBytes,
                 policy.MaximumValueNodes, policy.MaximumStringLength, 64), gate, pairs, requestedCases, complete, rows.ToArray());
     }
 

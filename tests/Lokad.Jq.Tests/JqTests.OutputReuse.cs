@@ -52,20 +52,6 @@ public sealed partial class JqTests
         Assert.Equal(1024, host.AppendCallCount);
     }
 
-    [Fact]
-    public async Task Jq_OutputReuseKeepsQuotaFailureBeforeTheNextRecord()
-    {
-        var host = new MockFileSystem();
-        host.AddFile("/data", "[null,false]");
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".[]", "/data")));
-
-        Assert.Equal(5, await command.ExecuteAsync(host,
-            new JqExecutionPolicy { MaximumOutputBytes = 5 }, CancellationToken.None));
-        Assert.Equal("null\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: output exceeds the 5-byte limit\n", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Single(host.ClosedDescriptors);
-        Assert.Equal(0, host.OpenFileCount);
-    }
 
     [Fact]
     public async Task Jq_OutputAllocationWorkFailureDoesNotEscapeDuringWriterCleanup()
@@ -136,7 +122,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_RawOutputReusePreflightsTheNextRecordAndStopsOnClosure()
+    public async Task Jq_RawOutputReuseStopsOnClosure()
     {
         foreach (bool closed in new[] { false, true })
         {
@@ -144,10 +130,9 @@ public sealed partial class JqTests
             host.AddFile("/data", "[\"é\",\"too long\"]");
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", ".[]", "/data")));
 
-            Assert.Equal(closed ? 0 : 5, await command.ExecuteAsync(host,
-                new JqExecutionPolicy { MaximumOutputBytes = 3 }, CancellationToken.None));
-            Assert.Equal("é\n", host.GetOutput(JqFileDescriptor.StdOut));
-            Assert.Equal(closed ? "" : "jq: output exceeds the 3-byte limit\n", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(closed ? "é\n" : "é\ntoo long\n", host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Single(host.ClosedDescriptors);
             Assert.Equal(0, host.OpenFileCount);
         }

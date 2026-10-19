@@ -32,7 +32,7 @@ internal sealed partial class JqRuntime
             int prefix = invocation.Seq ? 1 : 0;
             byte? terminator = invocation.RawOutput0 ? (byte)0 : invocation.JoinOutput ? null : (byte)'\n';
             int length = body.Length + prefix + (terminator.HasValue ? 1 : 0);
-            budget.ChargeOutput(length);
+            budget.CheckCancellation();
 
             // Reset keeps the bytes, so the common case copies onto the same
             // span. Copy before writing RS because source and target may overlap.
@@ -54,12 +54,11 @@ internal sealed partial class JqRuntime
                 throw new JqException("Cannot dump a string containing NUL with --raw-output0 option");
             byte? terminator = invocation.RawOutput0 ? (byte)0 : invocation.JoinOutput ? null : (byte)'\n';
             int length = Encoding.UTF8.GetByteCount(text) + (terminator.HasValue ? 1 : 0);
-            // Preserve the per-record charge before growing or changing storage.
-            budget.ChargeOutput(length);
+            budget.CheckCancellation();
             if (_rawBuffer.Length < length)
             {
                 int capacity = _rawBuffer.Length == 0 ? length
-                    : Math.Max(length, Math.Min(JqBudget.MaximumJsonBytes, _rawBuffer.Length * 2));
+                    : Math.Max(length, Math.Min(JqBudget.MaximumJsonBufferBytes, _rawBuffer.Length * 2));
                 _rawMemory.ReplaceBuffer(ref _rawBuffer, capacity);
             }
             int written = Utf8Text.Encode(text, _rawBuffer);

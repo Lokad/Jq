@@ -85,7 +85,7 @@ internal static class JqCommandLineParser
             if (args.Count > 4096)
                 throw new JqException("argument count exceeds the 4096 limit");
             foreach (var argument in args)
-                budget.ChargeInput(Encoding.UTF8.GetByteCount(argument));
+                budget.CheckCancellation();
             budget.ReserveBytes(128 + 160L * args.Count + 160L * environment.Count);
             var special = ExtractSpecialArguments(args, runtime);
             if (special.Error != null)

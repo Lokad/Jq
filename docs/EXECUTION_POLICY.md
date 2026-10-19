@@ -8,8 +8,7 @@ of the same command with the same policy.
 ```csharp
 var policy = new JqExecutionPolicy
 {
-    MaximumInputBytes = 1024 * 1024,
-    MaximumOutputBytes = 2 * 1024 * 1024,
+    MaximumStringLength = 1024 * 1024,
     MaximumValueNodes = 100_000,
 };
 var command = Jq.TryParse(invocation)
@@ -19,13 +18,11 @@ int status = await command.ExecuteAsync(host, policy, cancellationToken);
 
 Allowances must be positive and no greater than the tested defaults. Invalid
 configuration throws `ArgumentOutOfRangeException` during initialization. A
-record copy, such as `policy with { MaximumOutputBytes = 1024 }`, leaves the
+record copy, such as `policy with { MaximumStringLength = 1024 }`, leaves the
 original policy unchanged. There is no unlimited setting.
 
 | Allowance | Default and current ceiling | Accounting |
 | --- | --- | --- |
-| `MaximumInputBytes` | 16 MiB | Cumulative bytes read from stdin, input files, filter files, file variables, and modules. |
-| `MaximumOutputBytes` | 32 MiB | Cumulative stdout bytes, including newlines, NUL/RS framing, and information output. |
 | `MaximumAllocationWorkBytes` | 256 MiB | Cumulative conservative allocation-work charges, including intermediate and discarded work. |
 | `MaximumValueNodes` | 262,144 | Cumulative value and evaluation charges, including discarded work. |
 | `MaximumStringLength` | 8 Mi UTF-16 code units | Each charged string or text buffer, including keys, rendered JSON, and decoded filter-file text. |
@@ -35,8 +32,8 @@ original policy unchanged. There is no unlimited setting.
 Allocation-work accounting measures charged work. Its charges are not refunded
 when values are discarded. Small
 allowances can expire during variable snapshots or compilation, before any
-input is read. The output allowance covers stdout; queued `debug`/`stderr` bytes
-consume allocation work. Terminal diagnostics remain writable after
+input is read. Queued `debug`/`stderr` bytes consume allocation work.
+Terminal diagnostics remain writable after
 exhaustion so the host can observe its cause.
 
 `MaximumAllocationBytes` is a deprecated compatibility alias for
@@ -46,12 +43,13 @@ breaking API release; maintained examples, runtime consumers and ordinary tests
 use the canonical work property. Work exhaustion reports
 `allocation work allowance exceeded`; shared admission refusal reports
 `memory budget exceeded`. Both remain terminal status 5 and bypass jq handlers.
-Calls without a host memory hook enforce only the independent work/I/O/structural
+Calls without a host memory hook enforce only the independent work/structural
 policies; they provide no shared live-storage admission.
 
-Input reads use bounded requests and a one-byte overflow probe. Filter/module
-and variable-file reads use the remaining cumulative allowance. A rejected
-output is not appended: complete records already emitted remain visible.
+Input reads use bounded 8 KiB requests. Total input/output bytes have no cumulative
+execution ceiling. Individual input/JSON buffers are bounded at 64 MiB and
+preflight backing-capacity growth against the shared allowance. A rejected
+output allocation is not appended: complete records already emitted remain visible.
 Downstream closure ends production before subsequent outputs or charges.
 JSON strings and object keys preflight their decoded UTF-16 length and string
 allocation before materialization, including Unicode and other JSON escapes.

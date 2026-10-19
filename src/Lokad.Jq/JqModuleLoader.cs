@@ -305,8 +305,6 @@ internal sealed class JqModuleLoader(
                         opened.FileDescriptor.Value, budget, cancellationToken).ConfigureAwait(false);
                     if (result is BoundedReadResult.Complete complete)
                         return (path.Path, complete);
-                    if (result is BoundedReadResult.TooLarge)
-                        throw new JqQuotaException(budget.InputLimitMessage);
                     continue;
                 }
                 catch (Exception ex)

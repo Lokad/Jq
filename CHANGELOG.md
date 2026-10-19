@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Breaking: remove cumulative input/output policy properties and byte counters.
+  Streams continue through bounded 8 KiB reads and awaited writes, with 64 MiB
+  per-buffer safeguards, shared admission, cancellation and downstream closure.
+- Remove verified-unused qualified-lookup, stream-leaf, calendar and deletion
+  helpers, plus internal path-confinement machinery; keep hosted normalization.
 - Extend the detached package consumer to 18 checks, including terminal padded
   admission, subsequent allowance reuse and resource status after stderr closes.
 - Preserve resource status 5 when draining queued diagnostics encounters closure

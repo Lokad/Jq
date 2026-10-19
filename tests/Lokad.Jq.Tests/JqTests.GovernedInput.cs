@@ -99,22 +99,22 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedHostedReadResultOwnsCapacityAfterReadCompletion()
     {
-        var memory = new TestMemoryBudget(7);
+        var memory = new TestMemoryBudget(16 * 1024);
         using var caller = memory.CreateScope();
-        var budget = new JqBudget(new JqExecutionPolicy { MaximumInputBytes = 3 }, caller, CancellationToken.None);
+        var budget = new JqBudget(JqExecutionPolicy.Default, caller, CancellationToken.None);
         var host = new MockFileSystem();
         host.SetStandardInput("abc");
-        host.BeforeByteRead = _ => Assert.Equal(7, memory.ReservedBytes);
+        host.BeforeByteRead = _ => Assert.Equal(12288, memory.ReservedBytes);
 
         using (var content = Assert.IsType<BoundedReadResult.Complete>(
             await host.TryReadAllBytesAsync(JqFileDescriptor.StdIn, budget, CancellationToken.None)))
         {
             Assert.Equal("abc"u8.ToArray(), content.Content.ToArray());
-            Assert.Equal(3, memory.ReservedBytes);
-            Assert.Equal(3, content.Memory.Bytes);
+            Assert.Equal(4096, memory.ReservedBytes);
+            Assert.Equal(4096, content.Memory.Bytes);
         }
         Assert.Equal(0, memory.ReservedBytes);
-        Assert.Equal(7, memory.PeakBytes);
+        Assert.Equal(12288, memory.PeakBytes);
         Assert.Empty(host.ClosedDescriptors);
     }
 

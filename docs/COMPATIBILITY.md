@@ -116,10 +116,10 @@ compatibility work. Remaining module semantics and caveats are listed in the mat
 
 ## Current resource policy
 
-Input/output/allocation-work/value-work budgets are cumulative per execution, not a
+Allocation-work/value-work budgets are cumulative per execution, not a
 measurement of total managed memory. Regex work/time limits apply per search.
-Current constants include 16 MiB input, 32 MiB output (plus a 64 MiB JSON buffer
-allowance), 8 Mi UTF-16 code units per string, 256 MiB cumulative allocation-work
+Input/output streams have no cumulative byte ceiling. Current constants include
+64 MiB per input/JSON buffer, 8 Mi UTF-16 code units per string, 256 MiB cumulative allocation-work
 allowance, 262,144 value nodes, JSON/parser depth 64, filter length 1 Mi characters,
 and 4,096 tokens/command arguments.
 Regex patterns and per-search engine work have additional limits in `JqRegexCache`.

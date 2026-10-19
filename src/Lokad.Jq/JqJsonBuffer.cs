@@ -37,7 +37,7 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>, IDisp
 
     public void Advance(int count)
     {
-        if (count > JqBudget.MaximumJsonBytes - _buffer.WrittenCount)
+        if (count > JqBudget.MaximumSerializedValueBytes - _buffer.WrittenCount)
             throw new JqQuotaException("JSON output exceeds the 32 MiB limit");
         _buffer.Advance(count);
     }

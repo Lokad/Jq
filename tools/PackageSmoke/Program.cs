@@ -98,9 +98,9 @@ int checks = 0;
 }
 {
     var host = new SmokeHost();
-    var policy = new JqExecutionPolicy { MaximumOutputBytes = 2 };
-    Check("output policy", await Command(["-n", "1,2"], []).ExecuteAsync(host, policy, CancellationToken.None) == 5
-        && host.Output(JqFileDescriptor.StdOut) == "1\n" && host.Output(JqFileDescriptor.StdErr) == "jq: output exceeds the 2-byte limit\n");
+    var policy = new JqExecutionPolicy { MaximumStringLength = 32 };
+    Check("string construction policy", await Command(["-nr", "\"ok\", (\"x\" * 33)"], []).ExecuteAsync(host, policy, CancellationToken.None) == 5
+        && host.Output(JqFileDescriptor.StdOut) == "ok\n" && host.Output(JqFileDescriptor.StdErr) == "jq: string result exceeds the 32 UTF-16 code unit limit\n");
 }
 {
     var host = new SmokeHost();

@@ -62,13 +62,13 @@ public sealed partial class JqTests
     [InlineData("ab\n", "-R", "ab\n")]
     [InlineData("\u001e1\n", "--seq", "\u001e1\n")]
     [InlineData("[1]\n", "--stream", "[[0],1]\n[[0]]\n")]
-    public async Task Jq_PolicyBoundsInputModesAtExactBytes(string input, string mode, string expected)
+    public async Task Jq_InputModesPreserveTrailingWhitespaceSemantics(string input, string mode, string expected)
     {
         var invocation = mode.Length == 0
             ? BuildInvocation("jq", "-c", "-r", ".")
             : BuildInvocation("jq", "-c", "-r", mode, ".");
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
-        var policy = new JqExecutionPolicy { MaximumInputBytes = System.Text.Encoding.UTF8.GetByteCount(input) };
+        var policy = JqExecutionPolicy.Default;
         var exact = new MockFileSystem();
         exact.SetStandardInput(input);
 
@@ -78,13 +78,13 @@ public sealed partial class JqTests
 
         var over = new MockFileSystem();
         over.SetStandardInput(input + " ");
-        Assert.Equal(5, await command.ExecuteAsync(over, policy, CancellationToken.None));
-        Assert.Empty(over.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal($"jq: input exceeds the {policy.MaximumInputBytes}-byte limit\n", over.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, await command.ExecuteAsync(over, policy, CancellationToken.None));
+        Assert.Equal(mode == "-R" ? expected + " \n" : expected, over.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(over.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]
-    public async Task Jq_PolicyInputIsSharedAcrossOwnedFiles()
+    public async Task Jq_InputTraversesOwnedFilesWithBoundedRequests()
     {
         var host = new MockFileSystem();
         host.AddFile("/first", "1");
@@ -94,11 +94,11 @@ public sealed partial class JqTests
         host.BeforeByteRead = buffer => requests.Add(buffer.Length);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "/first", "/second", "/later")));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { MaximumInputBytes = 2 }, CancellationToken.None));
-        Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: input exceeds the 2-byte limit\n", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Equal(new[] { 3, 2 }, requests);
-        Assert.Equal(2, host.ClosedDescriptors.Count);
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("1\n22\n3\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(new[] { 8192, 8192, 8192 }, requests);
+        Assert.Equal(3, host.ClosedDescriptors.Count);
         Assert.Equal(0, host.OpenFileCount);
     }
 
@@ -107,7 +107,7 @@ public sealed partial class JqTests
     [InlineData("module")]
     [InlineData("rawfile")]
     [InlineData("slurpfile")]
-    public async Task Jq_PolicyBoundsFilterModuleAndVariableFileReads(string kind)
+    public async Task Jq_HostedReadsCloseOwnedFilesAfterCompletion(string kind)
     {
         var host = new MockFileSystem();
         host.AddFile("/data", "12");
@@ -122,46 +122,28 @@ public sealed partial class JqTests
         };
         var command = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", arguments, [])));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { MaximumInputBytes = 1 }, CancellationToken.None));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: input exceeds the 1-byte limit\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        string expected = kind switch
+        {
+            "rawfile" => "\"12\"\n",
+            "slurpfile" => "[\n  12\n]\n",
+            _ => "12\n",
+        };
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
         Assert.Equal(0, host.OpenFileCount);
     }
 
-    [Fact]
-    public async Task Jq_PolicyOutputPreflightKeepsCompleteRecords()
-    {
-        var host = new MockFileSystem();
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-e", "1,2")));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { MaximumOutputBytes = 2 }, CancellationToken.None));
-        Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: output exceeds the 2-byte limit\n", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Equal(2, host.AppendCallCount); // One stdout record and one diagnostic.
-    }
-
-    [Theory]
-    [InlineData("--help")]
-    [InlineData("--version")]
-    [InlineData("--build-configuration")]
-    public async Task Jq_PolicyBoundsInformationOutput(string option)
-    {
-        var host = new MockFileSystem();
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", option)));
-
-        Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { MaximumOutputBytes = 1 }, CancellationToken.None));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: output exceeds the 1-byte limit\n", host.GetOutput(JqFileDescriptor.StdErr));
-    }
 
     [Fact]
-    public async Task Jq_PolicyStopsOnDownstreamClosureBeforeLaterExhaustion()
+    public async Task Jq_DownstreamClosureStopsLaterOutputs()
     {
         var host = new MockFileSystem { AppendRemainsOpen = false };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1,2")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, new JqExecutionPolicy { MaximumOutputBytes = 2 }, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(1, host.AppendCallCount);
@@ -275,27 +257,23 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_PolicyCountersResetForSharedConcurrentCommands()
+    public async Task Jq_PolicyRemainsImmutableAcrossConcurrentCommands()
     {
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "range(4)")));
-        var policy = new JqExecutionPolicy { MaximumOutputBytes = 8 };
-        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(async () =>
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "\"abcd\"")));
+        var policy = new JqExecutionPolicy { MaximumStringLength = 32 };
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
         {
-            for (int repeat = 0; repeat < 2; repeat++)
-            {
-                var host = new MockFileSystem();
-                Assert.Equal(0, await command.ExecuteAsync(host, policy, CancellationToken.None));
-                Assert.Equal("0\n1\n2\n3\n", host.GetOutput(JqFileDescriptor.StdOut));
-                Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
-            }
-        })));
-
+            var host = new MockFileSystem();
+            Assert.Equal(0, await command.ExecuteAsync(host, policy, CancellationToken.None));
+            Assert.Equal("abcd\n", host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        }));
         var strict = new MockFileSystem();
-        Assert.Equal(5, await command.ExecuteAsync(strict, policy with { MaximumOutputBytes = 2 }, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(strict, policy with { MaximumStringLength = 2 }, CancellationToken.None));
         var ordinary = new MockFileSystem();
         Assert.Equal(0, await command.ExecuteAsync(ordinary, CancellationToken.None));
-        Assert.Equal("0\n1\n2\n3\n", ordinary.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal(8, policy.MaximumOutputBytes);
+        Assert.Equal("abcd\n", ordinary.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(32, policy.MaximumStringLength);
     }
 
     [Fact]
@@ -387,8 +365,6 @@ public sealed partial class JqTests
     [InlineData(int.MaxValue)]
     public void Jq_PolicyRejectsUntestedOrNonPositiveAllowances(int value)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumInputBytes = value });
-        Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumOutputBytes = value });
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumAllocationWorkBytes = value });
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumValueNodes = value });
         Assert.Throws<ArgumentOutOfRangeException>(() => new JqExecutionPolicy { MaximumStringLength = value });

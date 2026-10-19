@@ -9,7 +9,7 @@ internal static class StressChecks
         // Small explicit policies expose cumulative failures without allocating
         // hundreds of megabytes or turning elapsed time into a test assertion.
         await CheckAsync(["-n", "-c", "range(0;100)"], [],
-            new JqExecutionPolicy { MaximumOutputBytes = 4 }, 5, "0\n1\n").ConfigureAwait(false);
+            JqExecutionPolicy.Default, 0, string.Concat(Enumerable.Range(0, 100).Select(value => value + "\n"))).ConfigureAwait(false);
         await CheckAsync(["-n", "[range(0;1000)]"], [],
             new JqExecutionPolicy { MaximumValueNodes = 128 }, 5, "").ConfigureAwait(false);
         await CheckAsync(["-n", "-r", "\"x\" * 33"], [],

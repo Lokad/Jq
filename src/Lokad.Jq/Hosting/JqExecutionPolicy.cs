@@ -4,7 +4,7 @@ namespace Lokad.Jq;
 
 /// <summary>Immutable resource allowances for a single execution of a jq command.</summary>
 /// <remarks>
-/// Input, output, allocation-work and value-work counters are cumulative, including discarded values,
+/// Allocation-work and value-work counters are cumulative, including discarded values,
 /// and reset for every execution. Regex work and time allowances apply to each engine search.
 /// Positive limits may be reduced from the tested defaults. Parser, depth, JSON-buffer,
 /// and regex workspace safety ceilings remain fixed. Command binding uses its own default allowance.
@@ -14,8 +14,6 @@ public sealed record JqExecutionPolicy
     internal const int RegexWorkCeiling = 10_000_000;
     internal static readonly TimeSpan RegexTimeCeiling = TimeSpan.FromSeconds(5);
 
-    private int _maximumInputBytes = JqBudget.MaximumInputBytes;
-    private int _maximumOutputBytes = JqBudget.MaximumJsonBytes;
     private long _maximumAllocationWorkBytes = 256L * 1024 * 1024;
     private int _maximumValueNodes = 262144;
     private int _maximumStringLength = JqBudget.MaximumStringLength;
@@ -24,20 +22,6 @@ public sealed record JqExecutionPolicy
 
     /// <summary>Gets the existing resource allowances used when no policy is supplied.</summary>
     public static JqExecutionPolicy Default { get; } = new();
-
-    /// <summary>Gets or initializes cumulative bytes read from all execution input sources; default 16 MiB.</summary>
-    public int MaximumInputBytes
-    {
-        get => _maximumInputBytes;
-        init => _maximumInputBytes = (int)Validate(value, JqBudget.MaximumInputBytes, nameof(MaximumInputBytes));
-    }
-
-    /// <summary>Gets or initializes cumulative stdout bytes, including framing; default 32 MiB.</summary>
-    public int MaximumOutputBytes
-    {
-        get => _maximumOutputBytes;
-        init => _maximumOutputBytes = (int)Validate(value, JqBudget.MaximumJsonBytes, nameof(MaximumOutputBytes));
-    }
 
     /// <summary>Gets or initializes cumulative conservative allocation-work charges; default 256 MiB. Live storage uses IMemoryBudget.</summary>
     public long MaximumAllocationWorkBytes
