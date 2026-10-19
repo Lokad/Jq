@@ -133,7 +133,7 @@ Every refusal, including padded growth, terminates with status 5. It bypasses
 jq handlers and remains a resource failure when pending stderr closes or reports
 a write failure. Cleanup preserves earlier effects and refunds relinquished
 storage; cancellation and actual allocation failure remain distinct.
-Local Windows validation passes all 3,897 tests, including governed-memory
+Local Windows validation passes all 3,923 tests, including governed-memory
 boundaries and bounded-call regressions. The detached package fixture exercises
 18 public API checks; see PACKAGING.md for the scoped artifact receipts.
 These resource/lifetime checks add no new upstream conformance claim; earlier

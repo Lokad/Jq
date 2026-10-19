@@ -112,7 +112,6 @@ internal sealed class IdentityFilter : SingleValueFilter
 {
     protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        context.Budget.CheckValueStructure(input);
         return input;
     }
 
@@ -149,7 +148,6 @@ internal sealed class VariableFilter(string name) : SingleValueFilter
     {
         if (!environment.TryGetValue(name, out JsonNode? value))
             throw new JqException($"undefined variable ${name}");
-        context.Budget.CheckValueStructure(value);
         return value;
     }
 
@@ -295,11 +293,9 @@ internal sealed class AsFilter(
         switch (pattern)
         {
             case VariablePattern variable:
-                context.Budget.CheckValueStructure(value);
                 yield return scope.Extend(variable.Name, value);
                 break;
             case AliasPattern alias:
-                context.Budget.CheckValueStructure(value);
                 JqEnvironment aliased = scope.Extend(alias.Name, value);
                 foreach (JqEnvironment inner in Match(alias.Inner, value, aliased, context))
                     yield return inner;
@@ -607,7 +603,6 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         JqEnvironment scope = closure.Environment;
         for (int position = 0; position < frame.ValuePositions.Count; position++)
         {
-            context.Budget.CheckValueStructure(frame.Values[position]);
             scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, frame.Values[position]);
         }
         for (int index = 0; index < frame.Filters.Length; index++)
@@ -681,7 +676,6 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         JqEnvironment scope = closure.Environment;
         for (int position = 0; position < frame.ValuePositions.Count; position++)
         {
-            context.Budget.CheckValueStructure(frame.Values[position]);
             scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, frame.Values[position]);
         }
         for (int index = 0; index < frame.Filters.Length; index++)
@@ -901,7 +895,6 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
                 // Reads share the child reference: nothing mutates shared
                 // nodes in place downstream.
                 JsonNode? field = obj.TryGetPropertyValue(name, out var child) ? child : null;
-                context.Budget.CheckValueStructure(field);
                 yield return field;
             }
             else if (value == null)
@@ -964,7 +957,6 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                 {
                     long resolved = ix < 0 ? arr.Count + ix : ix;
                     JsonNode? element = resolved >= 0 && resolved < arr.Count ? arr[(int)resolved] : null;
-                    context.Budget.CheckValueStructure(element);
                     yield return element;
                 }
                 else if (value is JsonArray && key is JsonValue nan && nan.TryGetValue<double>(out double missing) && double.IsNaN(missing))
@@ -1000,7 +992,6 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                 else if (value is JsonObject obj && TryGetString(key, out var name))
                 {
                     JsonNode? field = obj.TryGetPropertyValue(name, out var child) ? child : null;
-                    context.Budget.CheckValueStructure(field);
                     yield return field;
                 }
                 else if (key is JsonObject objectKey && value is not null)
@@ -1060,8 +1051,7 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
             return new FractionalSegment(fractional);
         if (TryGetIndex(key, out long index, out bool isNaN))
             return new IndexSegment(index, isNaN);
-        context.Budget.ReserveCloneStorage(key);
-        return new InvalidSegment(key?.DeepClone());
+        return new InvalidSegment(context.Budget.CopyValue(key, 0, false));
     }
 }
 
@@ -1196,8 +1186,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                         for (int position = from; position < to; position++)
                         {
                             context.Budget.ReserveArrayItem(arr[position]);
-                            context.Budget.ReserveCloneStorage(arr[position]);
-                            part.Add(arr[position]?.DeepClone());
+                            part.Add(context.Budget.CopyValue(arr[position], 1, false));
                         }
                         yield return new JqValuePath(Extend(pair.Segments, segment, context.Budget), part, true);
                     }
@@ -1268,7 +1257,6 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
             {
                 foreach (var child in arr)
                 {
-                    context.Budget.CheckValueStructure(child);
                     yield return child;
                 }
             }
@@ -1276,7 +1264,6 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
             {
                 foreach (var child in obj)
                 {
-                    context.Budget.CheckValueStructure(child.Value);
                     yield return child.Value;
                 }
             }
@@ -1326,7 +1313,6 @@ internal sealed class RecursiveDescentFilter : JqFilter
         {
             context.Budget.CheckCancellation();
             JsonNode? current = stack.Pop();
-            context.Budget.CheckValueStructure(current);
             yield return current;
             if (current is JsonArray array)
             {
@@ -1401,7 +1387,7 @@ internal sealed class ArrayFilter(JqFilter item) : JqFilter
         foreach (var value in item.Evaluate(input, context, environment))
         {
             context.Budget.ReserveBytes(value is JsonValue ? 88 : 24);
-            array.Add(context.Runtime.Clone(value));
+            array.Add(context.Runtime.Clone(value, 1));
         }
         yield return array;
     }
@@ -1435,11 +1421,9 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
                 // borrowed inputs or expose the backtracking field table.
                 context.Budget.ReserveBytes(64 + 96L * fields.Count);
                 context.Budget.ReserveBytes(64L * fields.Values.Count(value => value is JsonValue));
-                foreach (var field in fields)
-                    context.Budget.ReserveCloneStorage(field.Value);
                 var result = new JsonObject();
                 foreach (var field in fields)
-                    result.Add(field.Key, field.Value?.DeepClone());
+                    result.Add(field.Key, context.Budget.CopyValue(field.Value, 1, false));
                 yield return result;
                 yield break;
             }
@@ -1483,7 +1467,6 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
         {
             context.Budget.CheckCancellation();
             context.Budget.CheckStringLength(key.Length);
-            context.Budget.CheckValueStructure(value);
             bool existed = fields.TryGetValue(key, out JsonNode? previous);
             fields[key] = value;
             return (existed, previous);
@@ -1821,7 +1804,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     // Selection passes the input through like path-mode select
                     // and upstream DUP. Downstream updates clone their spines;
                     // retain the existing reference without cloning here.
-                    context.Budget.CheckValueStructure(input);
                     yield return input;
                 }
             yield break;

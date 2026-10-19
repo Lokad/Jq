@@ -137,7 +137,7 @@ internal static class JqCommandLineParser
             }
 
             var namedArguments = new JsonObject();
-            var argsObject = new JsonObject { ["positional"] = new JsonArray(special.Positional.Select(runtime.Clone).ToArray()), ["named"] = namedArguments };
+            var argsObject = new JsonObject { ["positional"] = new JsonArray(special.Positional.Select(value => runtime.Clone(value)).ToArray()), ["named"] = namedArguments };
             foreach (var (key, value) in special.Variables)
                 namedArguments[key] = runtime.Clone(value);
             special.Variables["ARGS"] = argsObject;

@@ -111,8 +111,7 @@ internal static class JqExecutor
         {
             foreach (var entry in invocation.Variables)
             {
-                budget.ReserveCloneStorage(entry.Value);
-                executionVariables[entry.Key] = entry.Value?.DeepClone();
+                executionVariables[entry.Key] = budget.CopyValue(entry.Value, 0, false);
             }
             var filterText = invocation.Filter ?? ".";
             if (invocation.FilterFile is { } filterFile)
@@ -394,7 +393,6 @@ internal static class JqExecutor
                     value = ReadSlurpfileValue(bytes, context);
                 }
                 variables[name] = value;
-                context.Budget.CheckValueStructure(value);
                 if (variables.TryGetValue("ARGS", out JsonNode? args)
                     && args is JsonObject argsObject
                     && argsObject.TryGetPropertyValue("named", out JsonNode? named)

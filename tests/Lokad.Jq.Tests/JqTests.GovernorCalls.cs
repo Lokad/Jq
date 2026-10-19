@@ -497,7 +497,7 @@ public sealed partial class JqTests
             budget.ReserveBytes(3);
             MemoryCallCounts initial = memory.Counts;
             budget.ReserveBytes(0);
-            budget.ReserveCloneStorage(JsonValue.Create(1));
+            budget.CopyValue(JsonValue.Create(1), 0, false);
             Assert.Equal(initial, memory.Counts);
             budget.ReserveBytes(2);
             Assert.Throws<JqQuotaException>(() => budget.ReserveBytes(2));

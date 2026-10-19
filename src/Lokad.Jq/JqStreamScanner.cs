@@ -77,6 +77,8 @@ internal sealed class JqStreamScanner : IDisposable
     private JsonNode? _next;
     private bool _hasNext;
     private JsonNode? _stashed;
+    private long _stashedBytes;
+    private long _pathKeyBytes;
     private byte[] _token = [];
     private int _tokenLength;
     private bool _inString;
@@ -111,16 +113,11 @@ internal sealed class JqStreamScanner : IDisposable
         return false;
     }
 
-    internal long RetainedValueBytes
-    {
-        get
-        {
-            long bytes = JqBudget.EstimateTreeStorage(_next) + JqBudget.EstimateTreeStorage(_stashed);
-            foreach (Segment segment in _path)
-                if (segment.Key is { } key) bytes += 2L * key.Length;
-            return bytes;
-        }
-    }
+    // Pending leaves are scalars; close events cache their known flat path
+    // size while copying it. No retained DOM requires an accounting walk.
+    internal long RetainedValueBytes =>
+        (_next is null ? 0 : 64 + (JqRuntime.TryGetString(_next, out string text) ? 2L * text.Length : 0))
+        + (_stashed is null ? 0 : _stashedBytes) + _pathKeyBytes;
 
     public void Dispose()
     {
@@ -128,6 +125,7 @@ internal sealed class JqStreamScanner : IDisposable
         _next = null;
         _stashed = null;
         _path.Clear();
+        _pathKeyBytes = 0;
         _tokenMemory.Dispose();
     }
 
@@ -352,6 +350,7 @@ internal sealed class JqStreamScanner : IDisposable
                     return Blame(consumed, "Object keys must be strings", midResync: false);
                 if (_lastSeen != LastSeen.Value)
                     return Blame(consumed, "':' should follow a key", midResync: false);
+                _pathKeyBytes += 2L * name.Length;
                 _path[^1] = Segment.AtKey(name);
                 _next = null;
                 _hasNext = false;
@@ -388,6 +387,7 @@ internal sealed class JqStreamScanner : IDisposable
                     JsonNode? leaf = _next;
                     _next = null;
                     _hasNext = false;
+                    _pathKeyBytes -= 2L * (_path[^1].Key?.Length ?? 0);
                     _path[^1] = Segment.Pending();
                     _lastSeen = LastSeen.Comma;
                     if (haveLeaf)
@@ -428,7 +428,7 @@ internal sealed class JqStreamScanner : IDisposable
             _next = null;
             _hasNext = false;
             JsonArray path = CopyPath();
-            _path.RemoveAt(_path.Count - 1);
+            PopPath();
             _lastSeen = _path.Count == 0 ? LastSeen.None : LastSeen.Value;
             _budget.CheckCancellation();
             var emitted = new JsonArray { path, leaf };
@@ -449,22 +449,36 @@ internal sealed class JqStreamScanner : IDisposable
                     return Blame(consumed, "Unmatched '}'", midResync: false);
             }
             JsonArray path = CopyPath();
-            _path.RemoveAt(_path.Count - 1);
+            PopPath();
             _lastSeen = _path.Count == 0 ? LastSeen.None : LastSeen.Value;
             _budget.CheckCancellation();
             return StreamScanOutcome.WithEvent(consumed, new JsonArray { path });
         }
-        _path.RemoveAt(_path.Count - 1);
+        PopPath();
         _lastSeen = _path.Count == 0 ? LastSeen.None : LastSeen.Value;
         JsonNode? empty = isArray ? (JsonNode?)new JsonArray() : new JsonObject();
         return StreamScanOutcome.WithEvent(consumed, LeafEvent(CopyPath(), empty));
     }
 
-    private static JsonArray StashClose(JsonArray path)
+    private JsonArray StashClose(JsonArray path)
     {
-        JsonNode? clone = path.DeepClone();
-        JsonArray snapshot = clone is JsonArray array ? array : new JsonArray();
+        _budget.ReserveBytes(88);
+        var snapshot = new JsonArray();
+        _budget.ReserveBytes(64 + 88L * path.Count);
+        long bytes = 152 + 88L * path.Count;
+        foreach (JsonNode? segment in path)
+        {
+            if (JqRuntime.TryGetString(segment, out string key)) bytes += 2L * key.Length;
+            snapshot.Add(_budget.CopyValue(segment, 0, false));
+        }
+        _stashedBytes = bytes;
         return new JsonArray { snapshot };
+    }
+
+    private void PopPath()
+    {
+        _pathKeyBytes -= 2L * (_path[^1].Key?.Length ?? 0);
+        _path.RemoveAt(_path.Count - 1);
     }
 
     private JsonArray LeafEvent(JsonArray path, JsonNode? leaf)
@@ -546,6 +560,7 @@ internal sealed class JqStreamScanner : IDisposable
     private void ResetRecordState()
     {
         _path.Clear();
+        _pathKeyBytes = 0;
         _lastSeen = LastSeen.None;
         _next = null;
         _hasNext = false;

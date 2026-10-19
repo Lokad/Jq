@@ -18,11 +18,10 @@ namespace Lokad.Jq;
 // and are never closed, and every other operand opens lazily on first
 // demand so early termination never touches later files. File descriptors
 // obtained here are owned until the source is exhausted, the pull fails,
-// or the cursor is disposed; stdin is always borrowed. Bytes read through
-// the cursor charge the shared input budget cumulatively across sources.
+// or the cursor is disposed; stdin is always borrowed.
 //
 // Reads are chunked (8 KiB): JSON values and raw lines may span chunk
-// boundaries and very long scalars accumulate within the input limit. JSON
+// boundaries; staging buffers and individual scalars remain bounded. JSON
 // decoding retains reader state and completed DOM nodes across reads. Extended
 // literals and invalid input reuse the whole-buffer reader for compatibility.
 // Failures at end-of-source surface as input errors. Slurp stays an explicit
@@ -67,7 +66,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private bool _seqDone;
     private int _scanLine = 1;
     private int _scanCol;
-    private readonly Queue<JsonNode?> _seqQueue = new();
+    private readonly Queue<(JsonNode? Value, long Bytes)> _seqQueue = new();
+    private long _seqQueuedBytes;
     private JqSeqResyncException? _seqError;
 
     private sealed record Source(string Name, bool IsStdin, JqPath? Path, string Display);
@@ -119,9 +119,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     internal void ReleaseCompletedRecordStorage()
     {
-        long retained = (_scanner?.RetainedValueBytes ?? 0) + 24L * _seqQueue.Count;
-        foreach (JsonNode? queued in _seqQueue)
-            retained += JqBudget.EstimateTreeStorage(queued);
+        long retained = (_scanner?.RetainedValueBytes ?? 0) + _seqQueuedBytes;
         if (_seqError is { } error) retained += 2L * error.Message.Length;
         _retainedValues.ReconcileCursor(retained);
     }
@@ -193,6 +191,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 await FillAsync().ConfigureAwait(false);
                 continue;
             }
+            long before = _retainedValues.UsedBytes;
             JsonNode? value;
             int consumed;
             try
@@ -557,8 +556,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
         while (true)
         {
             _budget.CheckCancellation();
-            if (_seqQueue.TryDequeue(out JsonNode? queued))
-                return (true, queued);
+            if (_seqQueue.TryDequeue(out var queued))
+            {
+                _seqQueuedBytes -= queued.Bytes;
+                return (true, queued.Value);
+            }
             if (_seqError is not null)
             {
                 JqSeqResyncException stashed = _seqError;
@@ -812,6 +814,16 @@ internal sealed class JqInputCursor : IAsyncDisposable
             && !double.IsInfinity(value);
     }
 
+    // Preserve the construction estimate with each queued record. Completed
+    // records release this demand without scanning the remaining value trees.
+    private void EnqueueSequenceValue(JsonNode? value, long before)
+    {
+        _budget.ReserveBytes(32);
+        long bytes = _retainedValues.UsedBytes - before;
+        _seqQueue.Enqueue((value, bytes));
+        _seqQueuedBytes += bytes;
+    }
+
     private void DecodeSeqPrefix(ReadOnlySpan<byte> prefix, ReadOnlySpan<byte> record, int originLine, int originCol, bool positionErrors)
     {
         int pos = 0;
@@ -821,6 +833,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 pos++;
             if (pos >= prefix.Length)
                 return;
+            long before = _retainedValues.UsedBytes;
             JsonNode? value;
             int consumed;
             try
@@ -833,8 +846,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 return;
             }
             pos += consumed;
-            _budget.ReserveBytes(24);
-            _seqQueue.Enqueue(value);
+            EnqueueSequenceValue(value, before);
         }
     }
 
@@ -847,6 +859,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 pos++;
             if (pos >= stripped.Length)
                 return;
+            long before = _retainedValues.UsedBytes;
             JsonNode? value;
             int consumed;
             try
@@ -859,8 +872,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 return;
             }
             pos += consumed;
-            _budget.ReserveBytes(24);
-            _seqQueue.Enqueue(value);
+            EnqueueSequenceValue(value, before);
         }
     }
 
@@ -934,11 +946,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
             }
             if (IsCompleteSeqLiteral(run))
             {
+                long before = _retainedValues.UsedBytes;
                 JsonNode? literal = _runtime.ReadJsonValue(run, out _);
                 Advance(length);
                 _seqDone = true;
-                _budget.ReserveBytes(24);
-                _seqQueue.Enqueue(literal);
+                EnqueueSequenceValue(literal, before);
                 return;
             }
             Advance(length);

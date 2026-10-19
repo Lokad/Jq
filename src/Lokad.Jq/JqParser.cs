@@ -165,8 +165,7 @@ internal sealed class JqParser(
         ArgumentNullException.ThrowIfNull(filter);
         if (filter is LiteralFilter literal)
         {
-            _budget.ReserveCloneStorage(literal.Value);
-            value = literal.Value?.DeepClone();
+            value = _budget.CopyValue(literal.Value, 0, false);
             return true;
         }
         if (filter is ArrayFilter array)
@@ -177,8 +176,7 @@ internal sealed class JqParser(
                 foreach (var item in items)
                 {
                     _budget.ReserveArrayItem(item);
-                    _budget.ReserveCloneStorage(item);
-                    result.Add(item?.DeepClone());
+                    result.Add(_budget.CopyValue(item, 1, false));
                 }
                 value = result;
                 return true;
@@ -222,8 +220,7 @@ internal sealed class JqParser(
         if (TryGetConstant(filter, out JsonNode? value))
         {
             _budget.ReserveBytes(24);
-            _budget.ReserveCloneStorage(value);
-            collected.Add(value?.DeepClone());
+            collected.Add(_budget.CopyValue(value, 0, false));
             return true;
         }
         return false;
@@ -246,8 +243,7 @@ internal sealed class JqParser(
                 return false;
             }
             _budget.ReserveObjectItem(value);
-            _budget.ReserveCloneStorage(value);
-            result[property.StaticKey] = value?.DeepClone();
+            result[property.StaticKey] = _budget.CopyValue(value, 1, false);
         }
         built = result;
         return true;

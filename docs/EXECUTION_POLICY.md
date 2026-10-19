@@ -36,7 +36,7 @@ with 64 MiB backing buffers. Every substantial allocation preflights its storage
 Downstream closure stops production before later reads or output.
 
 JSON strings and object keys check decoded UTF-16 length and admit storage before
-materialization, including escaped input. Parser/value/evaluation stack limits
+materialization, including escaped input. Recursive-copy/parser/evaluation stack limits
 and regex workspace bounds remain independent of cumulative work.
 
 `Jq.TryParse` recognizes a command name and borrows an immutable invocation.
@@ -196,7 +196,12 @@ automatically reparented.
 
 ## Fixed safety ceilings
 
-JSON/value/parser/module depth remains 64; evaluation depth remains 256. Filter
+JSON, recursive-copy, parser and module depth remain 64; evaluation depth remains
+256. Heap-based path construction and traversal retain their separate 10,000-
+segment path bound. Identity, variable and child reads return existing values
+without a tree scan. Recursive copies admit backing slots and stored scalar
+wrappers while copying, checking cancellation and depth in that same traversal.
+Cursor queues retain construction estimates instead of recounting DOM trees. Filter
 length remains 1 Mi characters, with 4,096 tokens/arguments. A serialized JSON
 value is bounded to 32 MiB with a 64 MiB buffer ceiling. Regex patterns are
 bounded to 16,384 UTF-16 code units; the engine receives a 256 KiB working-memory

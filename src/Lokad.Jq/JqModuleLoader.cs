@@ -73,7 +73,6 @@ internal sealed class JqModuleLoader(
             JsonNode? data = await TryLoadDataAsync(import, importerDir, cancellationToken).ConfigureAwait(false);
             if (data is null)
                 return env;
-            budget.CheckValueStructure(data);
             string alias = import.Alias ?? string.Empty;
             env = env.Extend(alias, data);
             env = env.Extend(alias + "::" + alias, data);
@@ -192,8 +191,7 @@ internal sealed class JqModuleLoader(
                 JsonNode? node = runtime.ReadJsonValue(content.Span[offset..], out int consumed);
                 offset += consumed;
                 budget.ReserveArrayItem(node);
-                budget.ReserveCloneStorage(node);
-                array.Add(node?.DeepClone());
+                array.Add(budget.CopyValue(node, 1, false));
             }
             return array;
         }
@@ -439,22 +437,17 @@ internal sealed class JqModuleLoader(
     {
         ArgumentNullException.ThrowIfNull(loaded);
         budget.ReserveBytes(192);
-        budget.ReserveCloneStorage(loaded.Metadata);
         JsonObject baseObject = loaded.Metadata is not null
-            ? (JsonObject)loaded.Metadata.DeepClone()
+            ? (JsonObject)budget.CopyValue(loaded.Metadata, 0, false)
             : new JsonObject();
         var deps = new JsonArray();
         foreach (JqModuleImport import in loaded.Imports)
         {
             budget.CheckCancellation();
             budget.ReserveBytes(64 + 160 * 3);
-            budget.ReserveCloneStorage(import.Metadata);
-            var dep = new JsonObject();
-            if (import.Metadata is not null)
-            {
-                foreach (var kv in import.Metadata)
-                    dep[kv.Key] = kv.Value?.DeepClone();
-            }
+            JsonObject dep = import.Metadata is not null
+                ? (JsonObject)budget.CopyValue(import.Metadata, 2, false)
+                : new JsonObject();
             dep["relpath"] = JsonValue.Create(import.RelPath);
             if (import.Alias is not null)
                 dep["as"] = JsonValue.Create(import.Alias);
@@ -475,7 +468,6 @@ internal sealed class JqModuleLoader(
         }
         baseObject["deps"] = deps;
         baseObject["defs"] = defs;
-        budget.CheckValueStructure(baseObject);
         return baseObject;
     }
 }

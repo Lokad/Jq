@@ -84,6 +84,21 @@ governor cost, upstream speedup or process-memory bound. The older performance
 receipts below do not qualify these memory changes. See EXECUTION_POLICY.md for
 bounded charged credit, idle retention, terminal refusal and lifetime rules.
 
+The 2026-10-19 simplification count-only rerun passes all 96 one/four-worker
+rows with unchanged independent stdout/stderr digests, complete refunds, zero
+counter reads, same-target resizes or refusals. Reservation counts are unchanged.
+Copy construction now reserves during its actual traversal; resize counts gain
+two setup calls in most cases, with additional shape-dependent calls. Single-
+worker peaks are unchanged in 43/48 cases; the five increases are at most 448
+bytes from sequence-entry estimates and admitted scanner close copies. The
+84-character sequence boundary rises from 7 to 29 resizes per 1,000 records;
+this does not justify larger retained credit without broader measurements.
+Raw/JSON record lanes remain six reservations each, and the 33-result serializer
+warm-up retains 36 reservations/38 resizes. Existing buffer, result, diagnostic
+and regex reuse regressions pass. These are call-count and estimated-peak checks,
+with no new timing or managed-allocation claim. Raw evidence is under the ignored
+`tmp/simplification-catalog/` directory.
+
 The 2026-10-16 terminal-refusal change preserves the no-refusal accounting
 policy. At runtime revision `6dd780e`, a count-only rerun of all 48 maintained
 cases with one/four workers passes 96 rows with unchanged calls, independent

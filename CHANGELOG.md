@@ -7,9 +7,15 @@
   Cancellation, shared admission, construction limits and bounded regex searches
   remain; no replacement fuel or compatibility switch is introduced.
 
-- Breaking: remove cumulative input/output policy properties and byte counters.
+- Breaking: remove MaximumInputBytes and MaximumOutputBytes and their counters.
   Streams continue through bounded 8 KiB reads and awaited writes, with 64 MiB
   per-buffer safeguards, shared admission, cancellation and downstream closure.
+- Return existing values from identity, variable, selection and child reads without
+  accounting scans. Fuse copy admission and depth checks into actual construction;
+  retain cursor construction estimates instead of recounting DOM trees.
+- Cover 300,000-record JSON, raw, sequence and streaming commands beyond 32 MiB
+  of output under a fixed 128 KiB shared allowance, plus cancellation, closure,
+  owned cleanup, deep reads, constructor depth and finite former-fuel workloads.
 - Remove verified-unused qualified-lookup, stream-leaf, calendar and deletion
   helpers, plus internal path-confinement machinery; keep hosted normalization.
 - Extend the detached package consumer to 18 checks, including terminal padded
@@ -113,7 +119,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,897 tests pass,
+- Validation on Windows: warning-free Release build and all 3,923 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 18 detached consumer checks with isolated cache, exact package hash and
   locked restore.

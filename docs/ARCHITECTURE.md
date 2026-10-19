@@ -39,7 +39,11 @@ allocation and bounded file reads use the same terminal quota path.
 `ExecuteAsync` accepts an immutable `JqExecutionPolicy` for stricter allowances.
 Execution has no cumulative fuel or byte counters. String-construction limits
 and regex work/time limits remain configurable; structural and regex workspace
-ceilings stay fixed. Binding and evaluation share the execution memory scope. Utf8Regex 0.3.0 lacks cancellation-token overloads;
+ceilings stay fixed. Identity, variable and child reads share existing values
+without walking their trees. Copies admit storage and check depth during their
+actual traversal; cursor queues carry construction estimates. Iterative deep-path
+operations retain their separate path-length bound. Binding and evaluation share
+the execution memory scope. Utf8Regex 0.3.0 lacks cancellation-token overloads;
 cancellation is checked before and after bounded synchronous regex calls.
 See [REGEX.md](REGEX.md) for the engine profile and cancellation limits.
 See [EXECUTION_POLICY.md](EXECUTION_POLICY.md) for the exact accounting contract.

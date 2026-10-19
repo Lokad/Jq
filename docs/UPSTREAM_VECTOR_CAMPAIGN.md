@@ -61,9 +61,11 @@ Every current miss maps to an already-recorded profile or policy class:
 - Uncatchable quota and depth policy (compatibility matrix, resource
   policy): oversized string repeats, the depth-64 nesting family
   (`Containment/Object-merge/Equality/Comparison too deep`,
-  `Exceeds depth limit for parsing`), and the cumulative value-budget
-  vectors. The budget vectors are additionally pinned as staged exit-5
-  cases in `JqTests.Memory`.
+  `Exceeds depth limit for parsing`). These campaign receipts predate the
+  execution simplification. Cumulative-fuel classifications no longer describe
+  current behavior; finite sparse-update and calendar-loop cases now have
+  successful behavioral regressions. A new oracle campaign is needed to
+  refresh the historical match totals.
 ## Corrections from earlier campaigns
 
 - `map(abs)` over negative zero diverged (`-0` kept instead of

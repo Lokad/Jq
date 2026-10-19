@@ -47,15 +47,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     private JsonNode? PrepareJson(JsonNode? node, bool sorted)
     {
-        budget.CheckValueStructure(node);
-        if (sorted) budget.ReserveCloneStorage(node);
-        JsonNode? shaped = sorted ? SortedClone(node) : node;
-        if (sorted)
-            budget.CheckValueStructure(shaped);
+        JsonNode? shaped = sorted ? budget.CopyValue(node, 0, true) : node;
         // The JSON writer rejects non-finite doubles while the reference
         // renders NaN as null and clamps infinities to the finite
         // extremes. Sanitize a charged clone only when needed.
-        return ContainsNonFinite(shaped) ? SanitizeNonFinite(shaped) : shaped;
+        return ContainsNonFinite(shaped, 0) ? SanitizeNonFinite(shaped) : shaped;
     }
 
     private static JsonWriterOptions CreateWriterOptions(bool ascii, int? indent, bool tabs) => new()
@@ -122,29 +118,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return lowered;
     }
 
-    // Deep clone with object keys in ordinal order for `--sort-keys`.
-    // Scalars and arrays keep their shape; only key order changes.
-    internal static JsonNode? SortedClone(JsonNode? node)
-    {
-        switch (node)
-        {
-            case null:
-                return null;
-            case JsonObject obj:
-                var sorted = new JsonObject();
-                foreach (var property in obj.OrderBy(property => property.Key, StringComparer.Ordinal))
-                    sorted.Add(property.Key, SortedClone(property.Value));
-                return sorted;
-            case JsonArray array:
-                var copy = new JsonArray();
-                foreach (JsonNode? item in array)
-                    copy.Add(SortedClone(item));
-                return copy;
-            default:
-                return node.DeepClone();
-        }
-    }
-
     // The JSON writer emits platform newlines for indentation; jq output is
     // LF-only. Raw carriage returns cannot appear inside JSON string
     // literals (controls stay escaped), so dropping `\r` before `\n` only
@@ -175,21 +148,23 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return normalized;
     }
 
-    private static bool ContainsNonFinite(JsonNode? node)
+    private bool ContainsNonFinite(JsonNode? node, int depth)
     {
+        budget.CheckCancellation();
+        JqBudget.CheckValueDepth(node, depth);
         if (node is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
             return true;
         if (node is JsonArray array)
         {
             foreach (JsonNode? child in array)
-                if (ContainsNonFinite(child))
+                if (ContainsNonFinite(child, depth + 1))
                     return true;
             return false;
         }
         if (node is JsonObject obj)
         {
             foreach (var property in obj)
-                if (ContainsNonFinite(property.Value))
+                if (ContainsNonFinite(property.Value, depth + 1))
                     return true;
             return false;
         }
@@ -205,8 +180,9 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return copy;
     }
 
-    private static void SanitizeInPlace(JsonNode? node)
+    private void SanitizeInPlace(JsonNode? node)
     {
+        budget.CheckCancellation();
         if (node is JsonArray array)
         {
             for (var index = 0; index < array.Count; index++)
@@ -236,9 +212,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode? Clone(JsonNode? node)
     {
-        budget.ReserveCloneStorage(node);
-        return node?.DeepClone();
+        return budget.CopyValue(node, 0, false);
     }
+
+    internal JsonNode? Clone(JsonNode? node, int depth) => budget.CopyValue(node, depth, false);
 
     // Embeds a possibly-shared node into a fresh container. Pass-through
     // evaluation can now yield live references (identity shares its input
@@ -250,8 +227,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (node is null || node.Parent is null)
             return node;
-        budget.ReserveCloneStorage(node);
-        return node.DeepClone();
+        return budget.CopyValue(node, 0, false);
     }
 
     // Single-pass decode: builds values while charging, so duplicate object
@@ -1008,9 +984,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal bool JsonEquals(JsonNode? l, JsonNode? r)
     {
-        budget.CheckValueStructure(l);
-        budget.CheckValueStructure(r);
-        return EqualsValue(l, r);
+        budget.CheckCancellation();
+        return EqualsValue(l, r, 0);
     }
 
     // Structural intactness for path tracking: mirrors value equality
@@ -1019,13 +994,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // indistinguishable, matching the double-domain projection.
     internal bool IntactEquals(JsonNode? l, JsonNode? r)
     {
-        budget.CheckValueStructure(l);
-        budget.CheckValueStructure(r);
-        return IntactValue(l, r, 0);
+        budget.CheckCancellation();
+        return ReferenceEquals(l, r) || IntactValue(l, r, 0);
     }
 
-    private static bool IntactValue(JsonNode? left, JsonNode? right, int depth)
+    private bool IntactValue(JsonNode? left, JsonNode? right, int depth)
     {
+        budget.CheckCancellation();
         if (depth > JqBudget.MaximumDepth)
             throw new JqQuotaException("value nesting limit exceeded");
         if (left is null || right is null)
@@ -1066,12 +1041,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // Mirrors the reference value equality: kind-sensitive, objects
     // order-insensitive, arrays ordered, numbers by double value with
     // NaN unequal to everything including itself.
-    private static bool EqualsValue(JsonNode? left, JsonNode? right) => EqualsValue(left, right, 0);
-
-    // Depth-bounded like the budget tree walk: values deeper than the policy
+    // Depth-bounded to protect recursive comparison: values deeper than the policy
     // fail cleanly instead of consuming CLR frames.
-    private static bool EqualsValue(JsonNode? left, JsonNode? right, int depth)
+    private bool EqualsValue(JsonNode? left, JsonNode? right, int depth)
     {
+        budget.CheckCancellation();
         if (depth > JqBudget.MaximumDepth)
             throw new JqQuotaException("value nesting limit exceeded");
         if (left is null || right is null)
@@ -1116,7 +1090,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // never equals anything, matching the reference.
     internal static int Compare(JsonNode? l, JsonNode? r) => Compare(l, r, 0);
 
-    // Depth-bounded like the budget tree walk: values deeper than the policy
+    // Depth-bounded to protect recursive comparison: values deeper than the policy
     // fail cleanly instead of consuming CLR frames. Every ordering path
     // (operators, sort, unique, min/max, bsearch, group) funnels through here.
     private static int Compare(JsonNode? l, JsonNode? r, int depth)
@@ -1533,7 +1507,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     private bool ContainsSameKind(JsonNode? container, JsonNode? contained) => ContainsSameKind(container, contained, 0);
 
-    // Depth-bounded like the budget tree walk: values deeper than the policy
+    // Depth-bounded to protect recursive comparison: values deeper than the policy
     // fail cleanly instead of consuming CLR frames.
     private bool ContainsSameKind(JsonNode? container, JsonNode? contained, int depth)
     {

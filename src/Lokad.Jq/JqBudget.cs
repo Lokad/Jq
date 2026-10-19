@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -139,57 +140,42 @@ internal sealed class JqBudget : IDisposable
     // Managed scalar clones share immutable payloads. Their small standalone
     // wrappers are untracked; container clones account for all stored wrappers
     // and backing slots, without charging borrowed strings a second time.
-    internal void ReserveCloneStorage(JsonNode? value)
+    [return: NotNullIfNotNull(nameof(value))]
+    internal JsonNode? CopyValue(JsonNode? value, int depth, bool sortKeys)
     {
-        ReserveBytes(Estimate(value, 0));
-
-        long Estimate(JsonNode? value, int depth)
+        CheckCancellation();
+        CheckValueDepth(value, depth);
+        if (value is JsonArray array)
         {
-            CheckCancellation();
-            CheckValueDepth(value, depth);
-            if (value is JsonArray array)
+            ReserveBytes(64 + 24L * array.Count);
+            var copy = new JsonArray();
+            foreach (JsonNode? child in array)
             {
-                long bytes = 64 + 24L * array.Count;
-                foreach (JsonNode? child in array)
-                    bytes += child is JsonValue ? 64 : Estimate(child, depth + 1);
-                return bytes;
+                if (child is JsonValue) ReserveBytes(64);
+                copy.Add(CopyValue(child, depth + 1, sortKeys));
             }
-            if (value is JsonObject obj)
-            {
-                long bytes = 64 + 96L * obj.Count;
-                foreach (var entry in obj)
-                    bytes += entry.Value is JsonValue ? 64 : Estimate(entry.Value, depth + 1);
-                return bytes;
-            }
-            return 0;
+            return copy;
         }
+        if (value is JsonObject obj)
+        {
+            ReserveBytes(64 + 96L * obj.Count);
+            if (sortKeys) ReserveBytes(32L * obj.Count);
+            IEnumerable<KeyValuePair<string, JsonNode?>> entries = sortKeys
+                ? obj.OrderBy(property => property.Key, StringComparer.Ordinal) : obj;
+            var copy = new JsonObject();
+            foreach (var entry in entries)
+            {
+                if (entry.Value is JsonValue) ReserveBytes(64);
+                copy.Add(entry.Key, CopyValue(entry.Value, depth + 1, sortKeys));
+            }
+            return copy;
+        }
+        return value?.DeepClone();
     }
 
     internal void ReserveArrayItem(JsonNode? value) => ReserveBytes(value is JsonValue ? 88 : 24);
 
     internal void ReserveObjectItem(JsonNode? value) => ReserveBytes(value is JsonValue ? 160 : 96);
-
-    internal static long EstimateTreeStorage(JsonNode? value)
-    {
-        if (value is null) return 0;
-        long bytes = 64;
-        if (value is JsonArray array)
-        {
-            bytes += 24L * array.Count;
-            foreach (JsonNode? child in array) bytes += EstimateTreeStorage(child);
-        }
-        else if (value is JsonObject obj)
-        {
-            bytes += 96L * obj.Count;
-            foreach (var entry in obj)
-                bytes += 2L * entry.Key.Length + EstimateTreeStorage(entry.Value);
-        }
-        else if (value is JsonValue scalar && scalar.TryGetValue<string>(out string? text))
-        {
-            bytes += 2L * text.Length;
-        }
-        return bytes;
-    }
 
     public void Dispose()
     {
@@ -231,26 +217,6 @@ internal sealed class JqBudget : IDisposable
     {
         ReserveString(builder.Length);
         return builder.ToString();
-    }
-
-    internal void CheckValueStructure(JsonNode? node) => Visit(node, 0);
-
-    private void Visit(JsonNode? value, int depth)
-    {
-        CheckCancellation();
-        CheckValueDepth(value, depth);
-        switch (value)
-        {
-            case JsonArray array:
-                foreach (var item in array) Visit(item, depth + 1);
-                break;
-            case JsonObject obj:
-                foreach (var property in obj)
-                {
-                    Visit(property.Value, depth + 1);
-                }
-                break;
-        }
     }
 
     internal static void CheckValueDepth(JsonNode? value, int depth)
