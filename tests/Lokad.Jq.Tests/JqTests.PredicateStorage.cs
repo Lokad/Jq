@@ -5,6 +5,19 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Fact]
+    public async Task Jq_CaughtPredicateErrorsDoNotOutliveOuterRecordOwners()
+    {
+        var memory = new TestMemoryBudget(64 * 1024);
+        var host = new MockFileSystem();
+        host.SetStandardInput(string.Concat(Enumerable.Repeat("0\n", 10000)));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "try all(1; error(\"x\" * 128)) catch empty")));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
     [Theory]
     [InlineData("all", "==", "true\n")]
     [InlineData("any", "!=", "false\n")]

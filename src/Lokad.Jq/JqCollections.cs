@@ -838,40 +838,32 @@ internal sealed class AllFilter(JqFilter Generator, JqFilter Condition) : JqFilt
     }
 }
 
-// Only a boolean escapes a successful predicate fold. Sources remain under the
-// parent owner; predicate temporaries end after their enumerator is disposed.
+// Only a boolean escapes a completed predicate. Source allocations precede its
+// checkpoint; its temporary demand ends after the enumerator is disposed.
 internal static class JqPredicateFold
 {
     internal static bool Evaluate(JqFilter generator, JqFilter condition, JsonNode? input,
         JqContext context, JqEnvironment environment, bool all)
     {
-        JqStorage temporary = context.Budget.CreateStorageOwner();
-        bool completed = false;
-        try
+        foreach (JsonNode? generated in generator.Evaluate(input, context, environment))
         {
-            bool result = Fold();
-            completed = true;
-            return result;
-        }
-        finally
-        {
-            // An exception may carry a constructed value into an outer handler.
-            // Keep that owner's admission through execution cleanup on failure.
-            if (completed) context.Budget.ReleaseStorageOwner(temporary);
-        }
-
-        bool Fold()
-        {
-            foreach (JsonNode? generated in generator.Evaluate(input, context, environment))
+            JqStorage? storage = context.Budget.TemporaryStorage;
+            long before = storage?.UsedBytes ?? 0;
+            bool decided = false;
+            using (var probes = condition.Evaluate(generated, context, environment).GetEnumerator())
             {
-                temporary.ReuseForNextRecord();
-                using var selection = context.Budget.UseStorage(temporary);
-                foreach (JsonNode? probe in condition.Evaluate(generated, context, environment))
+                while (probes.MoveNext())
                 {
-                    if (Truthy(probe) != all) return !all;
+                    if (Truthy(probes.Current) == all) continue;
+                    decided = true;
+                    break;
                 }
             }
-            return all;
+            // Failure, including enumerator disposal, bypasses reconciliation:
+            // its payload may escape to a handler under the existing owner.
+            if (storage is not null) storage.DiscardBytes(storage.UsedBytes - before);
+            if (decided) return !all;
         }
+        return all;
     }
 }

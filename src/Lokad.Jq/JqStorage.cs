@@ -18,9 +18,16 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
     // Keep existing bounded credit, never a copied root balance or new allowance.
     internal void DiscardBytes(long bytes)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (bytes < 0 || bytes > _used)
             throw new InvalidOperationException("Released demand exceeds its storage owner.");
-        if (bytes != 0) ReconcileCursor(_used - bytes);
+        if (bytes == 0) return;
+        long retained = _used - bytes;
+        long admitted = _memory.LastAdmittedBytes;
+        long credit = Math.Min(BlockBytes, admitted - retained);
+        long target = retained + credit;
+        if (admitted != target) _memory.Resize(target);
+        _used = retained;
     }
 
     internal void ReserveBytes(long bytes)

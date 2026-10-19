@@ -55,13 +55,13 @@ and active output/regex leases stay charged through their users. Discarded
 single-evaluation temporaries may remain conservatively charged until its boundary.
 A long loop inside one record can therefore refuse despite a bounded live set;
 this retention gap is separate from the removed cumulative fuel policies.
-Successful `any`/`all` predicates reuse one temporary owner after each predicate
-finishes; source state remains charged under its parent. A failure retains the
-owner because its payload can escape to a handler. No per-object reservation or
-alias-graph system is introduced. Scalar-to-scalar `reduce` updates reconcile
-only their own completed demand; shared string backing keeps its charge, while
-containers and opaque backing retain conservative ownership. Sources, collected
+Successful `any`/`all` predicates reconcile completed demand in the existing
+record owner after disposing their enumerators. Sources remain charged; failure
+keeps payload storage through the enclosing lifetime. Scalar-to-scalar `reduce`
+updates reconcile only their own completed demand; shared strings keep their
+charge, while containers and opaque backing stay conservative. Sources, collected
 answers and persistent caches remain charged; failed updates never reclaim early.
+No per-object reservation or alias-graph system is introduced.
 
 Estimates cover major storage; small objects, metadata and minor temporaries may
 remain untracked. Roughly 20% unaccounted memory is intentional, without a
