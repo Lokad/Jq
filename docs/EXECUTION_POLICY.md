@@ -68,8 +68,8 @@ single-evaluation temporaries may remain conservatively charged until its bounda
 No per-object reservation or alias-graph system is introduced.
 
 Estimates cover major storage; small objects, metadata and minor temporaries may
-remain untracked. Roughly 20% unaccounted memory is intentional, without a per-
-workload coverage guarantee. Hosts need headroom for runtime/native memory and
+remain untracked. Roughly 20% unaccounted memory is intentional, without a
+coverage guarantee for each workload. Hosts need headroom for runtime/native memory and
 delayed collection. Admission is separate from managed-allocation measurements
 and does not establish a hard process-memory cap.
 

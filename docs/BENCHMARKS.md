@@ -112,7 +112,7 @@ Timing qualification requires a clean committed Release checkout whose assembly
 revision matches HEAD. Background CPU must stay below 3% median and 5% maximum.
 Each lane warms for at least 32 calls and one second, then calibrates with two
 consecutive batches of at least 40 ms. Eleven alternating pairs are the default
-(`--pairs` accepts 9–31). Each call has a 15-second deadline, each case 120 seconds.
+(`--pairs` accepts 9-31). Each call has a 15-second deadline, each case 120 seconds.
 
 Published ratios require samples of at least 20 ms, lane interquartile spread and
 order effects within 10%, and a 95% bootstrap interval no wider than 15%.

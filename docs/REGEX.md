@@ -26,12 +26,10 @@ Unicode properties are enabled, newline convention is LF, and duplicate capture
 names are accepted. The byte-splitting `\C` escape is forbidden to keep offsets
 and extracted strings on Unicode boundaries. Neither jq's literal interpretation
 of that escape nor its longest-match behavior is emulated. In particular, jq's
-`m`/`s`/`p` meanings differ from the mapping above. Engine-admitted syntax, such
-as `(?<1>a)`, is not additionally restricted to mimic PCRE.NET. In version
-0.3.0 this defines numbered capture 1 without a name-table entry; `capture`
-therefore returns `{}`. Sparse numeric definitions such as `(?<100>a)` are
-also accepted but their capture is currently missing from the detailed result;
-this engine limitation has been handed off for correction.
+`m`/`s`/`p` meanings differ from the mapping above. Numeric capture definitions such as
+`(?<1>a)` have no name-table entry in 0.3.0, so `capture` returns `{}`. Sparse
+numeric definitions such as `(?<100>a)` are accepted but missing from detailed
+results in that engine version.
 Invalid syntax and unsupported constructs remain catchable jq language errors.
 
 ## Results and replacement filters
@@ -42,7 +40,7 @@ scalar-based offsets and lengths, unmatched capture nulls, and numbered capture
 order are retained. Duplicate names fold in numbered order, last wins, including
 nulls for non-participating groups.
 
-After an empty global match the adapter advances one Unicode scalar; an empty
+After an empty global match Jq advances one Unicode scalar; an empty
 match at the end is the last match. Detailed capture searches are separate
 engine operations. `sub`/`gsub` still evaluate jq replacement filters and align
 their result streams; they do not interpret native replacement templates.
