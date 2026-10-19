@@ -1,263 +1,7 @@
 # Benchmarks
 
-The reference comparison and BenchmarkDotNet catalog cover non-regex workloads.
-Governor diagnostics also sample regex adapter ownership costs; regex engine
-performance comparisons remain separate. Semantic and resource tests remain in Jq.
-The latest reference campaign matches jq in all 38 cases and qualifies
-all 36 workload measurements, each favoring Lokad.Jq in the declared comparison.
-The two startup/latency controls remain unqualified:
-their managed batches are shorter than the 20 ms acceptance floor at the iteration
-ceiling, so no ratios are published for them. See the generated comparison below.
-
-The machine is an Azure `Standard_F4as_v7` with four full AMD cores, 16 GiB RAM and
-Ubuntu 24.04.4 LTS. Small-input ratios include jq CLI launch costs and must not be
-read as pure evaluator speedups. Results apply to this bounded catalog and measured
-revision; no overall speedup is calculated.
-
-## Local measurements and correctness
-
-BenchmarkDotNet reports managed allocations and local execution timings:
-
-```text
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --filter '*'
-```
-
-The twelve local cases validate status, separate stderr, output length and
-SHA-256 on every execution. A correctness-only smoke command avoids timing:
-
-```text
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --smoke
-```
-
-Command recognition has a separate local benchmark. Reusing a command binds
-options/JSON arguments and compiles its filter on every execution. Output
-consumption and checksum costs are included. Historical reports below identify
-their measured revisions; they do not qualify the governed-memory changes.
-The verified-consumption host replaces earlier discard/capture hosts, so older
-timings are not directly comparable to measurements with this harness.
-
-## Governor interface cost diagnostics
-
-Run the explicit shared-budget lane separately from historical timings:
-
-```text
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --governor --iterations 128 --workers 1,4
-```
-
-The 48 bounded cases cover tiny commands, raw/JSON/sequence/stream records,
-numeric/string mapping, HTML text, implode, growing output/regex subjects,
-diagnostics, serialization and regex subject/result retention boundaries. Text
-events, queued diagnostic bursts, serializer warm-up and alternating sizes also
-exercise boundaries that fixed-size scalar runs miss. Every
-execution checks status and separate stdout/stderr SHA-256 digests against
-independently generated expected bytes. `--case NAME` selects
-one case; `--output artifacts/PATH` chooses an ignored JSON checkpoint.
-Stderr remains separately captured; known governor bursts may raise its 1 MiB
-host bound to their expected byte count, within a 32 MiB ceiling. That capture
-cost is included in both lanes and can dominate large-burst allocation totals.
-
-The governed lane forwards one shared 256 MiB allowance across workers. A
-development-only lock-based host tracks active owners rather than historical
-reservations; tests and the detached consumer reuse that implementation through
-a thin adapter. It adds no runtime package dependency or production governor.
-Counts are collected in a separate instrumented pass, including reserve/resize,
-counter reads, same-target changes, refunds, disposal, scopes and refusal.
-
-Timing/allocation lanes omit that counter decorator and compare the explicit
-execution hook with no hook. Both bind and compile afresh, consume/checksum all
-output and use linked 15-second cancellation deadlines. Caller-owned snapshots,
-input generation and recognition are outside both lanes. Each lane warms for at
-least eight executions per worker and one second, then records three alternating
-pairs. JSON preserves every elapsed-time, process-wide managed-allocation and GC
-sample, the requested worker count, library hash and runtime/OS/architecture.
-Admission peaks and zero final charges are recorded separately from GC bytes.
-Peak live governed scopes record observed overlap in each batch. Requested
-workers do not prove full simultaneous occupancy, and scope overlap does not
-measure lock wait or tail latency; controlled lifetime tests establish combined
-demand and complete refunds.
-
-These local cost probes are unqualified diagnostics. Scheduling, shared-root
-contention, GC and tiered compilation can affect ratios, especially tiny batches.
-Keep other builds/tests/tools idle during a probe; retain all samples and inspect
-their spread. A representative lock-based host does not establish another host's
-governor cost, upstream speedup or process-memory bound. The older performance
-receipts below do not qualify these memory changes. See EXECUTION_POLICY.md for
-bounded charged credit, idle retention, terminal refusal and lifetime rules.
-
-The 2026-10-19 simplification count-only rerun passes all 96 one/four-worker
-rows with unchanged independent stdout/stderr digests, complete refunds, zero
-counter reads, same-target resizes or refusals. Reservation counts are unchanged.
-Copy construction now reserves during its actual traversal; resize counts gain
-two setup calls in most cases, with additional shape-dependent calls. Single-
-worker peaks are unchanged in 43/48 cases; the five increases are at most 448
-bytes from sequence-entry estimates and admitted scanner close copies. The
-84-character sequence boundary rises from 7 to 29 resizes per 1,000 records;
-this does not justify larger retained credit without broader measurements.
-Raw/JSON record lanes remain six reservations each, and the 33-result serializer
-warm-up retains 36 reservations/38 resizes. Existing buffer, result, diagnostic
-and regex reuse regressions pass. These are call-count and estimated-peak checks,
-with no new timing or managed-allocation claim. Raw evidence is under the ignored
-`tmp/simplification-catalog/` directory.
-
-The 2026-10-16 terminal-refusal change preserves the no-refusal accounting
-policy. At runtime revision `6dd780e`, a count-only rerun of all 48 maintained
-cases with one/four workers passes 96 rows with unchanged calls, independent
-output digests and single-worker estimated peaks. All executions refund fully,
-with zero counter reads, unchanged resizes or refusals. Four-worker aggregate
-peaks differ in 28 rows as overlap varies; 47 rows observe four live scopes.
-Separate 94- and 193-row boundary matrices also preserve accounting and peaks;
-17 stack-attribution labels in the latter vary with inlining. The two former
-pressure-recovery scenarios are replaced by terminal-refusal regressions.
-Raw count-only evidence is in `tmp/refusal-catalog-review/results.json` and the
-`refusal-final.jsonl` files under the ignored granularity-review directories.
-These checks add no new elapsed-time or allocation-cost measurement.
-
-The 2026-10-15 local Windows diagnostic compares the 48-case catalog before the
-latest changes (`dcf2a74`) and after them (`2d94dab`): one/four workers, 128
-iterations per worker, 96 rows and 576 samples in each report. Independent
-stdout/stderr digests pass; all batches refund completely, with zero reservation
-counter reads, same-target resizes or unexpected refusals. Mixed-size serializer
-reuse, diagnostic credit and hot cursor credit reduce the targeted call counts;
-large-copy and oversized-owner policies remain unchanged. The targeted mixed
-serializer probe lowers governed managed allocation by about 2.16 MB per
-1,032-result execution. Diagnostic sample peaks rise by at most 255 bytes and
-sequence-text peaks by 256 bytes. Shared aggregate peaks vary with phase overlap;
-observing four live scopes does not prove four simultaneous allocation-heavy
-phases. The existing 4 KiB serializer ceiling remains, but newly reusable fitting
-buffers can retain admission where they previously released it.
-
-Raw ignored reports: `artifacts/benchmarks/governor-mixed-baseline.json` and
-`governor-mixed-final.json`. The final report's SHA-256 is
-`a6175b83d715f5eff8defb9a49ca01d631887c6f5c0f2addbe412fe7511d3e5b`.
-This receipt records bounded local cost/accounting evidence; timing is mixed and
-does not establish a general speedup, another host's contention cost or tail
-latency. Cold serializer cases still pay their deliberate immediate-refund floor.
-
-## Upstream comparison
-
-Supply an independently installed jq 1.8.2 executable explicitly. The tool records
-its version, binary SHA-256 and build configuration. It never downloads jq and
-rejects paths under `external/`. Ordinary tests and CI do not require jq.
-
-```text
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ --case reduce --scale small
-```
-
-These commands check correctness only and collect no timings. The initial catalog
-has twelve families at three bounded sizes, plus `startup-empty` and
-`small-request` controls: identity (compact/pretty), NDJSON projection/selection,
-construction, reduction, foreach, sort/group, entries/updates, walk/paths,
-Unicode strings and JSON round trips. All inputs are generated deterministically.
-Windows and the AMD Linux VM agree with jq in all 38 cases under default
-execution limits. This is a bounded catalog, not a full compatibility claim.
-
-Small cases use 16 records/elements and medium cases use 256. Large identity,
-NDJSON, reduce and foreach cases use 4,096; Unicode uses 1,024; construction,
-sort/group, updates, walk/paths and JSON round trips use 512. The retained comparison catalog uses bounded construction-heavy probes.
-Historical receipts predate the removal of cumulative execution fuel; larger
-comparison sizes require a fresh correctness and measurement campaign. Each artifact
-records the actual size and input digest. Small eligible sizes can still expose
-CLI launch costs; the throughput boundary remains explicit.
-
-Rendering cases compare exact output bytes. Value cases compare the complete
-ordered JSON stream with exact numeric comparison and decoded string identity;
-JSON spelling and object key order may differ. Duplicate keys are rejected by
-the comparison helper. Nonzero status, stderr, quota exhaustion, timeout and
-mismatched output cannot become successful performance measurements.
-
-Both lanes receive the same arguments, including `-b` for Windows LF output and
-`-M` for monochrome output. The reference process uses an absent home directory
-and no `JQ_LIBRARY_PATH`, preventing automatic home-module content from affecting
-the catalog. All input/output is handled as bytes; stdout and stderr are drained
-concurrently with bounds, and cancelled/timed-out children are killed and reaped.
-
-The intended timing boundary is warm embedded Lokad.Jq versus invoking the jq
-CLI: binding, compilation, parsing, evaluation, rendering and output consumption
-are included; CLI launch and pipe costs are also included for jq. Input generation
-and full result comparisons occur before timing. This measures application
-throughput, not pure evaluator speed. Startup controls are reported separately
-and never subtracted. Managed GC allocations do not measure jq process memory.
-
-Verification JSON defaults to ignored `artifacts/benchmarks/verification.json`;
-`--output PATH` selects another destination under `artifacts/`. Raw measurements and
-traces stay ignored. Timing qualification requires a quiet machine and a clean,
-committed Release checkout; correctness verification can run on a busy machine.
-
-## Timing qualification
-
-Actual managed allocations can also be collected without a reference process:
-
-```text
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --allocations
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --allocations --case wide-object --scale diagnostic
-```
-
-This records process-wide `GC.GetTotalAllocatedBytes(true)` deltas and generation
-collection counts in three warmed batches of eight executions, validating every
-status, stderr and complete output digest. Binding, compilation, execution, host
-consumption and a linked per-call deadline are included; input generation,
-preflight and artifact serialization are excluded. Run without other work in the
-benchmark process. These are actual managed bytes, separate from estimated live-storage
-execution-policy allowances, native memory and qualified CPU timing. Small batch
-variation can include runtime bookkeeping. Source/build provenance, library and
-benchmark hashes, inputs, outputs and every batch stay in the ignored artifact.
-
-Six `diagnostic` workloads supplement the unchanged 38-case comparison catalog:
-eight-field objects, a small function/filter, long raw strings, sorted ASCII JSON,
-a scalar pipeline and buffered scalar inputs. They are bounded probes for
-allocation attribution; they do not expand the public jq comparison results.
-The command accepts `--case`, `--scale` and `--output artifacts/PATH`.
-
-Start with a targeted case on the dedicated machine, then select the full catalog:
-
-```text
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --check-machine
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ --mode qualify --case reduce --scale large --output artifacts/benchmarks/qualification-smoke.json
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ --mode qualify --output artifacts/benchmarks/qualification.json
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --render-report artifacts/benchmarks/qualification.json
-```
-
-Commit changes and rebuild before qualification. Assembly build revisions must
-match HEAD, and the checkout must be clean apart from the generated benchmark
-documentation. Qualification pauses before timing if five one-second CPU samples
-exceed 3% median or 5% maximum background load. It checks again during idle gaps
-between pairs, using a one-second accounting window after 500 ms of settling,
-and stops if the machine becomes busy. This gate uses Windows system
-CPU accounting or Linux `/proc/stat`; other systems cannot currently qualify.
-CPU quietness is a necessary check, not proof that IO or virtualization is noise-free.
-
-Each lane warms for at least 32 invocations and one second, then independently
-calibrates sample batches using two consecutive runs of at least 40 ms.
-The default is eleven alternating
-pairs; `--pairs` accepts 9 through 31. Samples include complete output consumption,
-SHA-256 and successful status/stderr validation against each lane's preflight.
-Calibration/warmup are outside reported sample times. Each invocation is bounded
-by 15 seconds and each case by 120 seconds; Ctrl+C cancels and reaps active children.
-
-The paired ratio is jq time divided by Lokad.Jq time per invocation. A fixed-seed
-10,000-resample bootstrap supplies a 95% median-log-ratio interval. Cases are
-unqualified if samples are shorter than 20 ms, lane interquartile spread exceeds
-10%, the ratio changes by more than 10% with order, or its confidence interval is
-wider than 15%. Intervals crossing parity claim no winner. Startup/latency controls
-keep their launch costs; no overall mixed-workload speedup is calculated.
-
-JSON checkpoints include source/build revision, checkout state, benchmark assembly
-hash, SDK/runtime, OS/CPU, jq identity, default limits, filter/input digests, output
-digests, warmup counts, quiet checks and every raw paired sample. Completed rows
-are saved atomically, so interrupted runs retain previous complete checkpoints.
-The report renderer updates only its marked generated section. Verification,
-paused, mismatched and unqualified rows cannot publish ratios.
-
-Bounded stress checks run separately without timing or an upstream executable:
-
-```text
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --stress
-```
-
-They cover depth, wide construction and output/string expansion with small explicit
-policies, preserving complete output prefixes. Existing ordinary tests cover
-cancellation, downstream closure and owned-descriptor cleanup.
+Recorded measurements from 2026-10-05. Later memory-governor and execution
+simplifications require fresh timing measurements.
 
 <!-- BEGIN GENERATED COMPARISON -->
 ## Recorded comparison
@@ -315,59 +59,11 @@ Ratio is jq time divided by Lokad.Jq time; above 1 favors Lokad.Jq. CI is a pair
 
 <!-- END GENERATED COMPARISON -->
 
-## Earlier optimization campaign
+## Managed allocations
 
-The initial baseline used revision `ccf2dd317538dda12ea3d0b952667c495e857bac` on
-the same AMD Linux VM, SDK/runtime and jq executable. The first follow-up at
-`38fc923` included stateful ordinary JSON input, reusable JSON output storage and shared surviving
-`select` inputs. Parser progress avoids rebuilding incomplete document prefixes;
-output still uses one awaited host append per result. Numeric/regex policies,
-execution ceilings, workloads and the timing boundary remain unchanged.
-
-The five original jq-faster cases are compared below. These are historical
-medians from the initial and first follow-up campaigns. The generated table
-above and allocation campaign below report the latest accepted runtime.
-
-| Large case (4,096 items) | Initial Lokad.Jq ms | First follow-up Lokad.Jq ms | First follow-up jq ms | First follow-up result |
-| --- | ---: | ---: | ---: | --- |
-| identity-compact | 13.674 | 2.608 | 5.731 | Lokad.Jq faster |
-| identity-pretty | 13.753 | 2.599 | 6.424 | Lokad.Jq faster |
-| ndjson-project | 6.761 | 6.812 | 6.633 | jq faster |
-| ndjson-select | 5.451 | 5.047 | 4.658 | jq faster |
-| foreach | 3.520 | 3.061 | 2.913 | jq faster |
-
-That campaign matched all 38 cases and qualified 36 workload measurements.
-Lokad.Jq was faster in 33 measured workloads and jq in three. Both controls were
-unqualified because their managed sample batches fell below the duration floor. The original
-baseline calibrated with one 40 ms batch; the current protocol confirms that
-target with two consecutive batches, retaining the 20 ms eligibility floor and
-all noise/deadline thresholds. An initial undersized calibration checkpoint and
-all diagnostic/profiling runs are excluded from the published performance claims.
-
-## Measured allocation campaign
-
-The second campaign delivered object construction without repeated prefix
-clones, one lazy iterator for identity/literal/variable leaves, main-program
-token reuse and reusable raw UTF-8 output storage. Each runtime increment
-earned its commit through repeated before/after measurements, correctness
-checks and regression guards. Public API, numerical policies, resource
-allowances and the JsonNode model remain unchanged.
-
-Final runtime: `9f223bf83648dfc637ebe7eaa21658274a67bb64`; allocation baseline:
-`df5336598efbb21202544b2d34fb0c04ca7c912a`. SDK 10.0.204, .NET 10.0.8,
-the same four-core AMD Linux VM. All 44 frozen allocation checks preserve
-exact output digests and input hashes. The final clean committed checkout
-also passes 3,727 tests, Release build/pack, benchmark smoke and stress checks.
-
-The table reports median actual managed bytes per execution, including
-binding, compilation, execution, SHA-256 consumption and a per-call deadline.
-Generation collection counts and individual samples remain in the artifacts.
-Three warmed batches of eight are used; the added buffered-scalar baseline
-comes from eleven calibrated batches with the same counter and execution
-boundary. Input generation, preflight and artifact serialization are excluded.
-The maintained `--allocations` command uses a linked deadline; small fixed
-bookkeeping differences from the frozen diagnostic driver are possible.
-These are allocation totals, not peak heap, native jq memory or policy charges.
+Median managed bytes per execution, from baseline `df53365` to `9f223bf` on
+the same machine. Includes binding, compilation, execution, output checksums and
+a per-call deadline; excludes input generation and report serialization.
 
 | Case / scale | Before bytes | After bytes | Reduction |
 | --- | ---: | ---: | ---: |
@@ -390,49 +86,86 @@ These are allocation totals, not peak heap, native jq memory or policy charges.
 | scalar-pipeline/diagnostic | 9,883,450 | 9,324,750 | 5.7% |
 | buffered-scalars/diagnostic | 3,188,810 | 2,893,716 | 9.3% |
 
-The final jq 1.8.2 qualification matches all 38 cases and qualifies all 36
-workload timings, each favoring Lokad.Jq in the declared comparison of the
-embedded runtime with the CLI. Both startup controls remain unqualified. In this campaign,
-the three previously jq-faster large cases now favor Lokad.Jq: projection
-6.495 versus 6.941 ms, selection 4.766 versus 4.888 ms, and foreach 2.848
-versus 2.896 ms. Their paired intervals exclude parity; the latter margins
-are small. The generated table supplies the full intervals and provenance.
+These totals measure managed allocation, rather than peak heap or jq process
+memory. All 44 allocation cases preserve input hashes and exact output digests.
+Most cases use three warmed batches of eight; the buffered-scalar baseline uses
+eleven calibrated batches. Raw samples and collection counts stay in artifacts.
 
-Withheld experiments are part of the record:
+## Scope and method
 
-- Broad input ValueTask conversion saved 5.35% on selection and 22.65% on
-  scalar-input allocations against the accepted runtime, but timing varied
-  across ordinary and reversed lanes, including an 8.6% scalar slowdown.
-  The unresolved regression prevents acceptance. Existing input Tasks remain.
-- Stack-span `implode` variants saved 5.3% allocations but showed slower or
-  inconsistent timing. That campaign retained the original implementation;
-  later governor work added bulk capacity admission independently of this trial.
-- An early object prototype and an alternative owned-builder variant were
-  superseded by the stronger measured implementation that borrows fields privately.
-- CPU-affinity trials changed runtime behavior and failed quietness checks;
-  their incomplete results support no performance claim. Controls using the same
-  binary exposed timing variation between processes; failed/inconclusive runs are retained.
+The machine was an Azure `Standard_F4as_v7`: four AMD cores, 16 GiB RAM,
+Ubuntu 24.04.4 LTS, .NET 10.0.8 and SDK 10.0.204. All 38 non-regex comparisons
+match jq 1.8.2; 36 workload timings qualify and both startup controls remain
+unqualified. Small inputs include CLI launch costs. No overall speedup is calculated.
 
-Direct input staging, sorted writer changes, property-name caches and broader
-Unicode/sorting rewrites remain deferred pending focused attribution and
-equivalent quota/ordering evidence. The sorted diagnostic retains a real clone
-cost; its ASCII-only strings do not exercise Unicode escape normalization.
-Linux results cannot justify changing Windows newline normalization.
+The catalog covers twelve families at three sizes plus two controls. Small and
+medium sizes are 16 and 256. Large identity, NDJSON, reduction and foreach cases
+use 4,096; Unicode uses 1,024; construction, sorting, updates, paths and round
+trips use 512. These bounded inputs do not establish full jq compatibility.
 
-Raw artifacts remain ignored. SHA-256 receipts:
+Rendering checks compare exact bytes; other checks compare the complete ordered
+JSON stream. Errors, stderr, timeouts and mismatches reject a measurement.
+Both lanes consume and checksum output; jq also pays process and pipe costs.
+Reference execution uses an isolated home and no `JQ_LIBRARY_PATH`.
 
-- Allocation baseline (43 original/frozen cases):
-  `9a6d4fb6a24e5532fee4c07830b9b5c027bf425543587d201f617a2e0d56dc68`.
-- Final allocation checks (44 cases):
-  `13909dee06ee774485c8e55822e3a3807a47838f0b40dff0d936a1605a6cf76b`.
-- Final reference qualification:
-  `14f76df94f63310b935c863d67b4752ed4a5726f77c64213022f9ada8a943cba`.
+Timing qualification requires a clean committed Release checkout whose assembly
+revision matches HEAD. Background CPU must stay below 3% median and 5% maximum.
+Each lane warms for at least 32 calls and one second, then calibrates with two
+consecutive batches of at least 40 ms. Eleven alternating pairs are the default
+(`--pairs` accepts 9–31). Each call has a 15-second deadline, each case 120 seconds.
 
-## Workload direction
+Published ratios require samples of at least 20 ms, lane interquartile spread and
+order effects within 10%, and a 95% bootstrap interval no wider than 15%.
+Intervals crossing parity claim no winner. Checkpoints retain provenance, input/
+output digests, quiet checks and every sample. Unqualified rows publish no ratio.
 
-The family selection is informed by the public
-[jaq catalog](https://github.com/01mf02/jaq/blob/main/examples/benches.json) and
-[jq-jit suite](https://github.com/m5d215/jq-jit/blob/main/bench/comprehensive.sh).
-Filters, input generators and tooling are self-contained; neither suite nor its
-datasets is vendored or required. Our bounded sizes and measurement method do
-not establish equivalence to their published timings.
+## Run the tools
+
+Use an independently installed jq 1.8.2 for reference comparisons. The runner
+never downloads jq and rejects executables under `external/`. Ordinary tests
+and CI need no reference executable. Run timing probes on an otherwise idle machine.
+
+```text
+# Local BenchmarkDotNet timings, or correctness-only smoke/stress checks
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --filter '*'
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --smoke
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --stress
+
+# Correctness, timing qualification, and report generation
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --check-machine
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ --mode qualify
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --render-report artifacts/benchmarks/qualification.json
+
+# Managed allocations and shared-governor diagnostics
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --allocations
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --governor --iterations 128 --workers 1,4
+```
+
+`--case NAME`, `--scale small|medium|large` and `--output artifacts/PATH`
+filter comparison/allocation runs; governor diagnostics accept `--case` and
+`--output`. Reports and traces remain ignored. The renderer replaces only the
+marked comparison section above.
+
+## Governor diagnostics
+
+The 48-case catalog checks separate stdout/stderr digests and complete refunds
+under a shared 256 MiB allowance with one/four workers. Instrumented call counts
+are separate from uninstrumented timing/allocation lanes, which warm for at least
+eight calls and one second, then collect three alternating pairs. These local
+probes do not qualify general speedups or another host's contention costs.
+
+The 2026-10-19 count-only rerun passes all 96 rows with unchanged reservation
+counts and output digests, full refunds, and zero counter reads, same-target
+resizes or refusals. Copies add two setup resizes in most cases. Single-worker
+peaks stay unchanged in 43/48 cases; five rise by at most 448 bytes. The
+84-character sequence case rises from 7 to 29 resizes per 1,000 records. Larger
+credit would require broader evidence. Raw evidence: ignored
+`tmp/simplification-catalog/`. No new timing claim follows from those counts.
+See [execution policy](EXECUTION_POLICY.md) for ownership and retained-credit bounds.
+
+## Recorded artifact checksums
+
+- Allocation baseline: `9a6d4fb6a24e5532fee4c07830b9b5c027bf425543587d201f617a2e0d56dc68`.
+- Final allocations: `13909dee06ee774485c8e55822e3a3807a47838f0b40dff0d936a1605a6cf76b`.
+- Reference qualification: `14f76df94f63310b935c863d67b4752ed4a5726f77c64213022f9ada8a943cba`.
