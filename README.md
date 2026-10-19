@@ -74,8 +74,7 @@ Compatibility with upstream jq is incomplete; Lokad.Jq is not yet a drop-in
 replacement. Regex uses the managed `Lokad.Utf8Regex.Pcre2` package and follows
 its supported PCRE2 profile; see [regex behavior](docs/REGEX.md).
 
-- [Compatibility](docs/COMPATIBILITY.md): supported scope and intentional differences.
-- [Compatibility matrix](docs/COMPATIBILITY_MATRIX.md): feature coverage, tests and known gaps.
+- [Compatibility](docs/COMPATIBILITY.md): feature inventory, tests, supported scope and differences.
 - [Reference comparisons](docs/UPSTREAM_VECTOR_CAMPAIGN.md): differential results and evidence limits.
 - [Architecture](docs/ARCHITECTURE.md): execution model, host contract and I/O ownership.
 - [Regex behavior](docs/REGEX.md): engine syntax, flags, captures and cancellation boundaries.

@@ -134,7 +134,7 @@ dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --stress
 # Correctness, timing qualification, and report generation
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --check-machine
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ --mode qualify
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ --mode qualify --output artifacts/benchmarks/qualification.json
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --render-report artifacts/benchmarks/qualification.json
 
 # Managed allocations and shared-governor diagnostics
@@ -142,7 +142,7 @@ dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --allocations
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --governor --iterations 128 --workers 1,4
 ```
 
-`--case NAME`, `--scale small|medium|large` and `--output artifacts/PATH`
+`--case NAME`, `--scale SCALE` and `--output artifacts/PATH`
 filter comparison/allocation runs; governor diagnostics accept `--case` and
 `--output`. Reports and traces remain ignored. The renderer replaces only the
 marked comparison section above.
