@@ -21,14 +21,17 @@ internal static class JqTime
     }
 
     // Days since 1970-01-01 from civil fields; month is 1-12.
-    internal static long DaysFromCivil(long year, int month, int day)
+    internal static long DaysFromCivil(long year, int month, int day) =>
+        checked((long)DaysFromCivil((Int128)year, month, day));
+
+    private static Int128 DaysFromCivil(Int128 year, int month, int day)
     {
-        long y = month <= 2 ? year - 1 : year;
-        long era = (y >= 0 ? y : y - 399) / 400;
-        long yoe = y - era * 400;
+        Int128 y = month <= 2 ? year - 1 : year;
+        Int128 era = (y >= 0 ? y : y - 399) / 400;
+        Int128 yoe = y - era * 400;
         int mp = month > 2 ? month - 3 : month + 9;
         long doy = ((153L * mp) + 2) / 5 + day - 1;
-        long doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy;
+        Int128 doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy;
         return (era * 146097) + doe - 719468;
     }
 
@@ -65,18 +68,17 @@ internal static class JqTime
     // Broken-down UTC civil fields with fractional seconds, mirroring tm2jv order.
     internal sealed record BrokenDown(long Year, int Month, int Day, int Hour, int Minute, double Second, int Weekday, int YearDay);
 
-    // Normalizes field overflow like timegm; years beyond a hundred billion
-    // report the upstream out-of-range diagnostic instead of wrapping.
+    // All long field combinations fit the wide intermediates. Normalize first,
+    // then check the actual epoch domain, including partial extreme days.
     internal static long ToEpochSeconds(long year, long month0, long day, long hour, long minute, long second)
     {
-        if (year > 100000000000L || year < -100000000000L)
-            throw new JqException("invalid gmtime representation");
-        long adjustedYear = year + DivFloor(month0, 12);
+        Int128 adjustedYear = (Int128)year + DivFloor(month0, 12);
         int month = (int)ModPositive(month0, 12) + 1;
-        long days = DaysFromCivil(adjustedYear, month, 1) + (day - 1);
-        if (days > long.MaxValue / 86400L || days < long.MinValue / 86400L)
+        Int128 days = DaysFromCivil(adjustedYear, month, 1) + ((Int128)day - 1);
+        Int128 total = days * 86400 + (Int128)hour * 3600 + (Int128)minute * 60 + second;
+        if (total > long.MaxValue || total < long.MinValue)
             throw new JqException("invalid gmtime representation");
-        return (days * 86400L) + (hour * 3600L) + (minute * 60L) + second;
+        return (long)total;
     }
 
     internal static BrokenDown FromEpochUtc(long whole, double frac)

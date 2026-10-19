@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Remove the arbitrary civil-year cutoff. Normalize UTC fields with wide integer
+  intermediates and validate the final signed 64-bit epoch before conversion,
+  preserving partial extreme days and rejecting arithmetic overflow. Retain the
+  existing public parsed-field clamping and diagnostics.
+
 - Admit eager regex match/capture DOMs, scan/list backing and substitution builder
   metadata before construction. Batch small headers through existing coarse
   credit. Split incrementally without an input-sized scalar-offset table.
