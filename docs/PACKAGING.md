@@ -103,6 +103,18 @@ is explicit, opt-in development tooling and does not run in ordinary tests or CI
 
 ## Local source and package evidence
 
+The execution simplification at committed runtime revision `ec06566` was checked
+on Windows on 2026-10-19 in a fresh checkout without `PLAN.md` or `external/`:
+locked restore, warning-free Release build, all 3,923 tests and Release pack.
+The package passes all 18 detached consumer checks with an isolated cache,
+verified artifact identity and locked restore. Its symbols pass assembly identity,
+public commit mappings and SHA-256 checksums for 70 committed and three embedded
+documents. Dependencies and lock files are unchanged. The removed cumulative
+policy properties have no compatibility aliases. Hosted source downloads and
+publication were not requested; this receipt adds no new hosted-source or timing
+claim. Packages and logs remain under the ignored
+`artifacts/simplification-runtime-qualified/` directory.
+
 The terminal-refusal follow-up at committed revision `4611381` was checked on
 Windows on 2026-10-16 in a fresh checkout without `PLAN.md` or `external/`:
 locked restore, warning-free Release build, all 3,919 tests and Release pack.
