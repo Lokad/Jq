@@ -6,6 +6,30 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Fact]
+    public void Jq_GovernedCaptureReplacementDoesNotAdmitDiscardedScratchTwice()
+    {
+        var root = new TestMemoryBudget(1024 * 1024);
+        var counted = new Lokad.Jq.Benchmarking.CountingMemoryBudget(root);
+        using var budget = new JqBudget(JqExecutionPolicy.Default, counted, CancellationToken.None);
+        using var regexes = new JqRegexCache(budget);
+        var small = regexes.Get("x", JqRegexCompileOptions.None);
+        var large = regexes.Get(new string('x', 62), JqRegexCompileOptions.None);
+        using var subject = regexes.EncodeSubject("x");
+        for (int index = 0; index < 100; index++)
+        {
+            using (var match = regexes.Match(small, subject.Value, 0, JqRegexMatchOptions.None))
+                Assert.True(match.Value.Success);
+            using (var match = regexes.Match(large, subject.Value, 0, JqRegexMatchOptions.None))
+                Assert.False(match.Value.Success);
+        }
+        Assert.Equal(100, counted.Counts.Resizes);
+        Assert.Equal(0, counted.Counts.SameSizeResizes);
+        regexes.Dispose();
+        subject.Dispose();
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
     public void Jq_GovernedRegexSubjectGrowthAmortizesCallsAndKeepsItsIdleBound()
     {
         var root = new TestMemoryBudget(16 * 1024);

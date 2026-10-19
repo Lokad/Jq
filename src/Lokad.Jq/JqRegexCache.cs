@@ -204,14 +204,12 @@ internal sealed class JqRegexCache : IDisposable
         {
             if (slots > Captures.Length)
             {
-                long previous = _memory.LastAdmittedBytes;
-                // The estimate includes producer results and the destination array.
-                // Replacing scratch temporarily keeps its old backing array live.
-                _memory.Resize(checked(Math.Max(previous, bytes) + 24L * Captures.Length));
-                try { Captures = new JqRegexCapture[slots]; }
-                catch { _memory.Resize(previous); throw; }
-                if (Captures.Length != 0 && _memory.LastAdmittedBytes > Math.Max(previous, bytes))
-                    _memory.Resize(Math.Max(previous, bytes));
+                // A returned result has ended its borrow. Scratch needs no copy,
+                // so end its old storage lifetime before allocating a replacement.
+                // Keep admitted credit; refusal still fails without retry/eviction.
+                Captures = [];
+                if (bytes > _memory.LastAdmittedBytes) _memory.Resize(bytes);
+                Captures = new JqRegexCapture[slots];
             }
             else if (bytes > _memory.LastAdmittedBytes) _memory.Resize(bytes);
         }
