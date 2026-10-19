@@ -57,7 +57,8 @@ their result streams; they do not interpret native replacement templates.
 
 Jq imposes no regex work allowance or search deadline. The default adapter uses
 unlimited engine work and an infinite timeout, retaining depth 256, a 256 KiB
-workspace bound and a 16,384-character pattern guard.
+workspace bound and a 16,384-character pattern guard. The latter bounds
+constructor exposure; it does not guarantee compile-depth safety or cancellation.
 
 Shared admission covers conservative pattern/workspace estimates, subject buffers
 and capture storage. Eager match/scan results, named-capture DOMs, list capacity
