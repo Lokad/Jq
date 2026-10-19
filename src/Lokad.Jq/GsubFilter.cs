@@ -37,7 +37,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                 using var ownedMatch = context.Regexes.Match(regex, subject, start, matchOptions);
                 var match = ownedMatch.Value;
                 if (!match.Success) break;
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 var end = match.Value.EndOffsetInUtf16;
                 var isEmpty = match.Value.EndOffsetInBytes == match.Value.StartOffsetInBytes;
                 if (match.Value.StartOffsetInUtf16 < previous || end < match.Value.StartOffsetInUtf16)
@@ -52,7 +52,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                 {
                     if (index == results.Count)
                     {
-                        context.Budget.ChargeNode();
+                        context.Budget.CheckCancellation();
                         results.Add(new StringBuilder());
                     }
                     var result = results[index++];

@@ -191,24 +191,22 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GovernedSerializationReusePreservesWorkAndCancellationGuards()
+    public void Jq_GovernedSerializationReusePreservesCancellationAndAdmission()
     {
         var memory = new TestMemoryBudget(4096);
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(new JqExecutionPolicy { MaximumAllocationWorkBytes = 10000 }, memory, cancellation.Token);
+        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, cancellation.Token);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 64; i++)
         {
             using var warm = runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false);
         }
         Assert.True(memory.ReservedBytes > 0);
-        Assert.Equal("allocation work allowance exceeded", Assert.Throws<JqQuotaException>(() =>
+        for (int i = 0; i < 1000; i++)
         {
-            for (int i = 0; i < 1000; i++)
-            {
-                using var result = runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false);
-            }
-        }).Message);
+            using var result = runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false);
+            Assert.InRange(memory.ReservedBytes, 1, 4096);
+        }
         cancellation.Cancel();
         Assert.Throws<OperationCanceledException>(() => runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false));
         budget.Dispose();

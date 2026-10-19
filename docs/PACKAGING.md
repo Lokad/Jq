@@ -52,7 +52,7 @@ non-finite parsing, output/regex policy, cancellation, and borrowed descriptors.
 Eight additional checks exercise governed invocation snapshots, sequential reuse,
 refusal preserving caller charges, overlapping shared demand, pending cleanup,
 cancellation/refunds, terminal padded admission, resource status after stderr
-closure and the independent allocation-work API. The fixture reuses
+closure and bounded shared admission during discarded evaluation. The fixture reuses
 the development-only deterministic host budget through the test adapter; no
 governor is included in the package.
 The original ten checks passed against the CI-built packages at `9f223bf` on

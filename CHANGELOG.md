@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Breaking: remove MaximumValueNodes, MaximumAllocationWorkBytes and the deprecated
+  MaximumAllocationBytes alias, together with their counters and fuel plumbing.
+  Cancellation, shared admission, construction limits and bounded regex searches
+  remain; no replacement fuel or compatibility switch is introduced.
+
 - Breaking: remove cumulative input/output policy properties and byte counters.
   Streams continue through bounded 8 KiB reads and awaited writes, with 64 MiB
   per-buffer safeguards, shared admission, cancellation and downstream closure.
@@ -24,7 +29,7 @@
   return while avoiding repeated pool rejection after mixed-size serialization.
 - Reuse one returned serialization buffer after 32 successful serializations,
   retaining at most 4 KiB of admitted capacity per budget. Keep cold refunds,
-  overlapping result ownership, failed-buffer cleanup and independent work guards;
+  overlapping result ownership, failed-buffer cleanup and cancellation checks;
   active byte-buffer leases retain admission after cache closure.
 - Reuse already-admitted cursor credit across safe sequence and stream boundaries,
   alongside actual retained trees: at most 256 bytes on cold owners,
@@ -62,7 +67,7 @@
   most one 4 KiB block of charged credit. Keep cold owners and known copies
   exact. Preserve real reconciliation refunds and terminal refusal.
   Preflight HTML/implode builder capacities together
-  and batch literal time-format runs while keeping work/cancellation guards.
+  and batch literal time-format runs while keeping cancellation checks.
 - Reduce governor traffic using owner-local admitted sizes, zero-charge fast
   paths and unchanged-buffer notification elision. Explicit reservation counter
   observations still reflect ancestor invalidation; direct admission calls still
@@ -88,11 +93,6 @@
   compilation. Preserve aliases, slurp aggregates, sequence queues, streaming
   paths and cached module definitions across safe record refunds. Serialization
   results and queued diagnostic bytes have explicit storage lifetimes.
-- Rename the cumulative guard to `MaximumAllocationWorkBytes` and distinguish
-  `allocation work allowance exceeded` from shared-memory refusal. Keep
-  `MaximumAllocationBytes` only as a deprecated alias until the next breaking API
-  release. Remove obsolete partial-object copy accounting; reserve completed
-  objects and update work-policy fixtures and benchmark policy provenance.
 - Govern invocation snapshots with Try-style factories and owned disposal, while
   borrowing the caller's root and immutable inputs. Command recognition borrows
   that invocation; allocating option/JSON binding now runs within each execution's
@@ -113,7 +113,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,919 tests pass,
+- Validation on Windows: warning-free Release build and all 3,897 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 18 detached consumer checks with isolated cache, exact package hash and
   locked restore.
@@ -200,8 +200,8 @@ Delivered since the scaffold baseline:
   `9f223bf` pass detached consumers, saved corpora, symbol identity and all
   hosted source checks on Windows and Ubuntu 24.04 x64. Both hosted jobs pass
   all 3,727 tests and Release pack; see `docs/PACKAGING.md`.
-- Execution policy: immutable stricter allowances for input/output, allocation,
-  values, strings, and regex work/time, with fresh counters per execution.
+- Execution policy: immutable stricter string-construction and regex work/time
+  bounds, with shared live-storage admission and cancellation.
   Regex limits and setup/file quota failures terminate outside jq handlers.
   JSON strings and object keys preflight decoded length and allocation before
   creating their managed strings.

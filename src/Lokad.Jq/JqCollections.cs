@@ -15,7 +15,7 @@ internal sealed class MapFilter(JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         var result = new JsonArray();
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         foreach (JsonNode? element in Iterate(input, context, environment))
             foreach (JsonNode? value in Body.Evaluate(element, context, environment))
             {
@@ -45,7 +45,7 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
         if (input is JsonArray array)
         {
             var result = new JsonArray();
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             foreach (JsonNode? element in array)
             {
                 using IEnumerator<JsonNode?> outputs = Body.Evaluate(element, context, environment).GetEnumerator();
@@ -61,7 +61,7 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
         if (input is JsonObject obj)
         {
             var result = new JsonObject();
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             foreach (var property in obj)
             {
                 using IEnumerator<JsonNode?> outputs = Body.Evaluate(property.Value, context, environment).GetEnumerator();
@@ -223,14 +223,14 @@ internal sealed class TransposeFilter : JqFilter
             int length = row is JsonArray present ? present.Count : 0;
             if (length > width)
                 width = length;
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
         }
         var result = new JsonArray();
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         for (int column = 0; column < width; column++)
         {
             var line = new JsonArray();
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             foreach (JsonNode? row in matrix)
                 line.Add(row is JsonArray cells && column < cells.Count ? context.Runtime.Clone(cells[column]) : null);
             result.Add(line);
@@ -293,11 +293,13 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
             // one empty combination instead of iterating.
             if (JqRuntime.Number(context.Runtime.Length(input)) == 0)
             {
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 yield return new JsonArray();
                 yield break;
             }
-            foreach (JsonNode? combo in Combos(RequireMatrix(input), context))
+            if (input is not JsonArray matrix)
+                throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
+            foreach (JsonNode? combo in Combos(matrix, context))
                 yield return combo;
             yield break;
         }
@@ -309,12 +311,12 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
                 throw new JqException("Range bounds must be numeric");
             // Like the reference [range(n)|$dot] prelude, the repetition count
             // is the number of range outputs: ceiling for positive fractionals.
-            int times = level <= 0 || double.IsNaN(level) ? 0 : (int)Math.Ceiling(level);
-            var matrix = new List<JsonNode?>();
+            int times = level <= 0 || double.IsNaN(level) ? 0 : Math.Max(0, (int)Math.Ceiling(level));
+            context.Budget.ReserveBytes(24L * times);
+            var matrix = new List<JsonNode?>(times);
             for (int index = 0; index < times; index++)
             {
                 context.Budget.CheckCancellation();
-                context.Budget.ChargeNode();
                 matrix.Add(input);
             }
             foreach (JsonNode? combo in Combos(matrix, context))
@@ -322,62 +324,50 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
         }
     }
 
-    private static List<JsonNode?> RequireMatrix(JsonNode? input)
-    {
-        if (input is JsonArray matrix)
-        {
-            var rows = new List<JsonNode?>(matrix.Count);
-            foreach (JsonNode? row in matrix)
-                rows.Add(row);
-            return rows;
-        }
-        throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
-    }
-
     // Iterative odometer over row positions. Recursion depth here would be input
-    // length, which the node budget does not bound below a CLR stack overflow, so
+    // length, which must not translate into unbounded CLR stack depth, so
     // nested enumerator frames are not an option. Row 0 stays outermost like the
     // reference recursion. Rows validate lazily left-to-right stopping after the
     // first empty row: an empty leading row yields nothing without touching later
     // rows, matching short-circuiting in the reference definition.
-    private static IEnumerable<JsonNode?> Combos(IReadOnlyList<JsonNode?> matrix, JqContext context)
+    private static IEnumerable<JsonNode?> Combos(IList<JsonNode?> matrix, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(matrix);
         ArgumentNullException.ThrowIfNull(context);
-        var rows = new List<JsonArray>();
         foreach (JsonNode? row in matrix)
         {
+            context.Budget.CheckCancellation();
             if (row is not JsonArray cells)
                 throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(row)}");
-            rows.Add(cells);
             if (cells.Count == 0)
                 yield break;
         }
-        if (rows.Count == 0)
+        if (matrix.Count == 0)
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             yield return new JsonArray();
             yield break;
         }
-        context.Budget.ReserveBytes(4L * rows.Count);
-        var positions = new int[rows.Count];
+        context.Budget.ReserveBytes(4L * matrix.Count);
+        var positions = new int[matrix.Count];
         while (true)
         {
             context.Budget.CheckCancellation();
             var combo = new JsonArray();
-            context.Budget.ChargeNode();
-            for (int index = 0; index < rows.Count; index++)
+            context.Budget.CheckCancellation();
+            for (int index = 0; index < matrix.Count; index++)
             {
-                context.Budget.ChargeNode();
-                context.Budget.ReserveArrayItem(rows[index][positions[index]]);
-                combo.Add(context.Runtime.Clone(rows[index][positions[index]]));
+                context.Budget.CheckCancellation();
+                JsonNode? value = RowAt(index)[positions[index]];
+                context.Budget.ReserveArrayItem(value);
+                combo.Add(context.Runtime.Clone(value));
             }
             yield return combo;
-            int cursor = rows.Count - 1;
+            int cursor = matrix.Count - 1;
             while (cursor >= 0)
             {
                 context.Budget.CheckCancellation();
-                if (++positions[cursor] < rows[cursor].Count)
+                if (++positions[cursor] < RowAt(cursor).Count)
                     break;
                 positions[cursor] = 0;
                 cursor--;
@@ -385,6 +375,9 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
             if (cursor < 0)
                 yield break;
         }
+
+        JsonArray RowAt(int index) => matrix[index] as JsonArray
+            ?? throw new InvalidOperationException("A validated combination row changed.");
     }
 }
 
@@ -436,7 +429,7 @@ internal static class CollectionKeys
             var collected = new JsonArray();
             foreach (JsonNode? key in keys.Evaluate(element, context, environment))
             {
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 context.Budget.ReserveArrayItem(key);
                 collected.Add(context.Runtime.Clone(key));
             }
@@ -458,10 +451,10 @@ internal sealed class SortByFilter(JqFilter Keys) : JqFilter
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         var result = new JsonArray();
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         foreach (var (element, _) in CollectionKeys.Keyed(input, Keys, context, environment).OrderBy(pair => pair.Keys, CollectionKeys.TotalOrder()))
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             context.Budget.ReserveArrayItem(element);
             result.Add(context.Runtime.Clone(element));
         }
@@ -480,7 +473,7 @@ internal sealed class GroupByFilter(JqFilter Keys) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         var ordered = CollectionKeys.Keyed(input, Keys, context, environment).OrderBy(pair => pair.Keys, CollectionKeys.TotalOrder()).ToList();
         var result = new JsonArray();
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         JsonArray? group = null;
         JsonNode? current = null;
         foreach (var (element, keys) in ordered)
@@ -488,11 +481,11 @@ internal sealed class GroupByFilter(JqFilter Keys) : JqFilter
             if (group is null || !context.Runtime.JsonEquals(current, keys))
             {
                 group = new JsonArray();
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 result.Add(group);
                 current = keys;
             }
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             context.Budget.ReserveArrayItem(element);
             group.Add(context.Runtime.Clone(element));
         }
@@ -511,14 +504,14 @@ internal sealed class UniqueByFilter(JqFilter Keys) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         var ordered = CollectionKeys.Keyed(input, Keys, context, environment).OrderBy(pair => pair.Keys, CollectionKeys.TotalOrder()).ToList();
         var result = new JsonArray();
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         JsonNode? current = null;
         bool first = true;
         foreach (var (element, keys) in ordered)
         {
             if (first || !context.Runtime.JsonEquals(current, keys))
             {
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 context.Budget.ReserveArrayItem(element);
                 result.Add(context.Runtime.Clone(element));
                 current = keys;
@@ -570,14 +563,14 @@ internal sealed class SortByImplFilter(JqFilter Keys) : JqFilter
             var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
             for (int index = 0; index < elements.Count; index++)
             {
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 pairs.Add((elements[index], keys[index]));
             }
             var result = new JsonArray();
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             foreach (var pair in pairs.OrderBy(static item => item.Key, CollectionKeys.TotalOrder()))
             {
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 context.Budget.ReserveArrayItem(pair.Element);
                 result.Add(context.Runtime.Clone(pair.Element));
             }
@@ -603,12 +596,12 @@ internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
             var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
             for (int index = 0; index < elements.Count; index++)
             {
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 pairs.Add((elements[index], keys[index]));
             }
             var ordered = pairs.OrderBy(static item => item.Key, CollectionKeys.TotalOrder()).ToList();
             var result = new JsonArray();
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             JsonArray? group = null;
             JsonNode? current = null;
             foreach (var pair in ordered)
@@ -616,11 +609,11 @@ internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
                 if (group is null || !context.Runtime.JsonEquals(current, pair.Key))
                 {
                     group = new JsonArray();
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     result.Add(group);
                     current = pair.Key;
                 }
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 context.Budget.ReserveArrayItem(pair.Element);
                 group.Add(context.Runtime.Clone(pair.Element));
             }
@@ -646,19 +639,19 @@ internal sealed class UniqueByImplFilter(JqFilter Keys) : JqFilter
             var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
             for (int index = 0; index < elements.Count; index++)
             {
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 pairs.Add((elements[index], keys[index]));
             }
             var ordered = pairs.OrderBy(static item => item.Key, CollectionKeys.TotalOrder()).ToList();
             var result = new JsonArray();
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             JsonNode? current = null;
             bool first = true;
             foreach (var pair in ordered)
             {
                 if (first || !context.Runtime.JsonEquals(current, pair.Key))
                 {
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     context.Budget.ReserveArrayItem(pair.Element);
                     result.Add(context.Runtime.Clone(pair.Element));
                     current = pair.Key;
@@ -692,7 +685,7 @@ internal sealed class MinMaxByImplFilter(JqFilter Keys, bool TakeMax) : JqFilter
             JsonNode? bestKey = keys[0];
             for (int index = 1; index < elements.Count; index++)
             {
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 int order = JqRuntime.Compare(keys[index], bestKey);
                 if (TakeMax ? order >= 0 : order < 0)
                 {
@@ -736,14 +729,14 @@ internal sealed class SqlIndexFilter(JqFilter? Stream, JqFilter IndexExpr) : JqF
         ArgumentNullException.ThrowIfNull(environment);
         IEnumerable<JsonNode?> rows = Stream is null ? MapFilter.Iterate(input, context, environment) : Stream.Evaluate(input, context, environment);
         var result = new JsonObject();
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         foreach (JsonNode? row in rows)
         {
             foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
             {
                 string name = context.Runtime.ToJqString(key);
-                context.Budget.ChargeNode();
-                context.Budget.ChargeString(name.Length);
+                context.Budget.CheckCancellation();
+                context.Budget.ReserveString(name.Length);
                 context.Budget.ReserveObjectItem(row);
                 result[name] = context.Runtime.Clone(row);
             }
@@ -764,15 +757,15 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
             if (Stream is null)
             {
                 var collected = new JsonArray();
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 foreach (JsonNode? row in MapFilter.Iterate(input, context, environment))
                 {
                     foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
                     {
                         JsonNode? lookup = LookupIndex(idx, key, context);
                         var pair = new JsonArray(context.Runtime.Clone(row), context.Runtime.Clone(lookup));
-                        context.Budget.ChargeNode();
-                        context.Budget.ChargeNode();
+                        context.Budget.CheckCancellation();
+                        context.Budget.CheckCancellation();
                         collected.Add(pair);
                     }
                 }
@@ -786,8 +779,8 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
                     {
                         JsonNode? lookup = LookupIndex(idx, key, context);
                         var pair = new JsonArray(context.Runtime.Clone(row), context.Runtime.Clone(lookup));
-                        context.Budget.ChargeNode();
-                        context.Budget.ChargeNode();
+                        context.Budget.CheckCancellation();
+                        context.Budget.CheckCancellation();
                         if (JoinExpr is null)
                         {
                             yield return pair;

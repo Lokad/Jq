@@ -139,9 +139,9 @@ execution limits. This is a bounded catalog, not a full compatibility claim.
 
 Small cases use 16 records/elements and medium cases use 256. Large identity,
 NDJSON, reduce and foreach cases use 4,096; Unicode uses 1,024; construction,
-sort/group, updates, walk/paths and JSON round trips use 512. Construction-heavy
-4,096-element probes exhausted the default cumulative accounting allowances, so
-those sizes are excluded rather than increasing the policy limits. Each artifact
+sort/group, updates, walk/paths and JSON round trips use 512. The retained comparison catalog uses bounded construction-heavy probes.
+Historical receipts predate the removal of cumulative execution fuel; larger
+comparison sizes require a fresh correctness and measurement campaign. Each artifact
 records the actual size and input digest. Small eligible sizes can still expose
 CLI launch costs; the throughput boundary remains explicit.
 
@@ -183,7 +183,7 @@ collection counts in three warmed batches of eight executions, validating every
 status, stderr and complete output digest. Binding, compilation, execution, host
 consumption and a linked per-call deadline are included; input generation,
 preflight and artifact serialization are excluded. Run without other work in the
-benchmark process. These are actual managed bytes, separate from cumulative
+benchmark process. These are actual managed bytes, separate from estimated live-storage
 execution-policy allowances, native memory and qualified CPU timing. Small batch
 variation can include runtime bookkeeping. Source/build provenance, library and
 benchmark hashes, inputs, outputs and every batch stay in the ignored artifact.

@@ -149,28 +149,19 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
-    [Fact]
-    public async Task Jq_ReduceInfiniteSourceExhaustsQuota()
+    [Theory]
+    [InlineData("def r: 1, r; reduce r as $x (0; . + $x)")]
+    [InlineData("isempty(repeat(empty))")]
+    public async Task Jq_NonEmittingIterationRemainsCancellable(string filter)
     {
+        using var cancellation = new CancellationTokenSource();
         var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "def r: 1, r; reduce r as $x (0; . + $x)")));
-
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-    }
-
-    [Fact]
-    public async Task Jq_EmptyRepeatExhaustsQuota()
-    {
-        // repeat(empty) recurses forever without emitting, like an
-        // unsatisfiable range: the budget stages the hang instead.
-        var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "isempty(repeat(empty))")));
-
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        host.BeforeByteAppend = () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(50));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "\"start\", (" + filter + ")")));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Task.Run(() => command.ExecuteAsync(host, cancellation.Token)).WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal("start\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]

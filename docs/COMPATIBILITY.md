@@ -65,7 +65,7 @@ Closed structural gaps (delivered since the scaffold baseline; see the matrix ro
 Value-model contract (binding before further expansion): UTF-8 bytes at
 the IO boundary, scalar-based string semantics, the `JsonNode` model with
 C# null as JSON null, insertion-ordered objects with last-wins duplicates,
-storage-agnostic numeric projections, independent cumulative work/I/O guards,
+storage-agnostic numeric projections, cooperative cancellation and structural safeguards,
 and shared live-storage admission when supplied by the host. Delivered identity
 fixes and explicitly scoped numeric/regex policies preceded byte-parity work.
 Further compatibility changes require focused evidence against the reference.
@@ -116,33 +116,24 @@ compatibility work. Remaining module semantics and caveats are listed in the mat
 
 ## Current resource policy
 
-Allocation-work/value-work budgets are cumulative per execution, not a
-measurement of total managed memory. Regex work/time limits apply per search.
-Input/output streams have no cumulative byte ceiling. Current constants include
-64 MiB per input/JSON buffer, 8 Mi UTF-16 code units per string, 256 MiB cumulative allocation-work
-allowance, 262,144 value nodes, JSON/parser depth 64, filter length 1 Mi characters,
-and 4,096 tokens/command arguments.
-Regex patterns and per-search engine work have additional limits in `JqRegexCache`.
+Execution has no cumulative node, allocation-work or input/output byte ceiling.
+Shared host admission accounts for live storage and cancellation stops ongoing
+commands. Structural limits remain: 8 Mi UTF-16 units per string, 32 MiB per
+serialized JSON value, 64 MiB per input/JSON buffer, JSON/parser depth 64,
+evaluation depth 256, filter length 1 Mi characters and 4,096 tokens/arguments.
+Regex patterns, workspace and each synchronous search have separate bounds.
 
-`JqExecutionPolicy` exposes stricter positive execution allowances with fresh
-counters per call; the default overload preserves these limits. Execution
-exhaustion reports status 5 and cannot be caught by jq handlers. Cancellation and
-host failures propagate separately. Command binding keeps its independent default
-work allowance during execution and shares storage admission with evaluation;
-structural and regex workspace ceilings remain fixed. See
-[EXECUTION_POLICY.md](EXECUTION_POLICY.md) for configured versus fixed limits.
+`JqExecutionPolicy` exposes stricter positive string and regex limits. Resource
+exhaustion reports status 5 outside jq handlers; cancellation, actual allocation
+failure and host failures remain distinct. See [EXECUTION_POLICY.md](EXECUTION_POLICY.md)
+for construction limits, shared ownership, approximation and conservative retention.
 Finite limits do not establish upstream conformance or excuse missing semantics.
 
-Explicit memory admission borrows one host allowance and refunds coarse owners
-at their storage lifetime boundaries. Its estimates, coverage and conservative
-retention are documented in EXECUTION_POLICY.md. The public cumulative work guard is
-`MaximumAllocationWorkBytes`; `MaximumAllocationBytes` remains only as a
-deprecated alias scheduled for removal at the next breaking API release.
 Every refusal, including padded growth, terminates with status 5. It bypasses
 jq handlers and remains a resource failure when pending stderr closes or reports
 a write failure. Cleanup preserves earlier effects and refunds relinquished
 storage; cancellation and actual allocation failure remain distinct.
-Local Windows validation passes all 3,919 tests, including governed-memory
+Local Windows validation passes all 3,897 tests, including governed-memory
 boundaries and bounded-call regressions. The detached package fixture exercises
 18 public API checks; see PACKAGING.md for the scoped artifact receipts.
 These resource/lifetime checks add no new upstream conformance claim; earlier

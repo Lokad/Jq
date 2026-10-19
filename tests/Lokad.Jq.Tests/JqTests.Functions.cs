@@ -190,15 +190,20 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
-    [Fact]
-    public async Task Jq_UnboundedRecursionExhaustsQuota()
+    [Theory]
+    [InlineData("def r: r; r")]
+    [InlineData("try (def r: r; r) catch 42")]
+    [InlineData("(def r: r; r)?")]
+    public async Task Jq_TailRecursionRemainsCancellable(string filter)
     {
+        using var cancellation = new CancellationTokenSource();
         var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "def r: r; r")));
-
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        host.BeforeByteAppend = () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(50));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "\"start\", (" + filter + ")")));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Task.Run(() => command.ExecuteAsync(host, cancellation.Token)).WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal("start\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
     [Fact]
     public async Task Jq_UserValueArgumentsCombineFirstOuter()

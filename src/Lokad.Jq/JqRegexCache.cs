@@ -36,7 +36,7 @@ internal sealed class JqRegexCache : IDisposable
         // Conservative compilation and pooled workspace reservations. These are jq
         // allocation charges, not a claim about the engine's compiled representation size.
         long estimate = 64 * 1024L + MaximumWorkingBytes + 64L * pattern.Length;
-        _budget.ChargeAllocationWork(estimate);
+        _budget.CheckCancellation();
         long previous = _memory.LastAdmittedBytes;
         _memory.Resize(checked(previous + estimate));
         bool retained = false;
@@ -56,7 +56,7 @@ internal sealed class JqRegexCache : IDisposable
                     HeapLimitInBytes = MaximumWorkingBytes
                 }, _budget.Policy.MaximumRegexTime);
             _budget.CheckCancellation();
-            _budget.ChargeAllocationWork(64L * regex.NameEntryCount);
+            _budget.CheckCancellation();
             if (regex.NameEntryCount != 0)
                 _memory.Resize(checked(_memory.LastAdmittedBytes + 64L * regex.NameEntryCount));
             var entries = new Pcre2NameEntry[regex.NameEntryCount];
@@ -87,7 +87,7 @@ internal sealed class JqRegexCache : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         long estimate = 64L + Encoding.UTF8.GetByteCount(text);
-        _budget.ChargeAllocationWork(estimate);
+        _budget.CheckCancellation();
         OperationMemory memory = Rent(subject: true);
         try
         {
@@ -113,7 +113,7 @@ internal sealed class JqRegexCache : IDisposable
         // its grammar here or treat its reserved MaxResultBytes as an enforced limit.
         ObjectDisposedException.ThrowIf(_disposed, this);
         long estimate = 128L + 64L * pattern.MaximumCaptureSlots;
-        _budget.ChargeAllocationWork(estimate);
+        _budget.CheckCancellation();
         OperationMemory memory = Rent(subject: false);
         try
         {

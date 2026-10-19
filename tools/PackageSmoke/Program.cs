@@ -219,10 +219,10 @@ int checks = 0;
 }
 {
     var host = new SmokeHost();
-    var policy = new JqExecutionPolicy { MaximumAllocationWorkBytes = 3 };
-    Check("allocation work is independent", await Command(["-n", "1"], []).ExecuteAsync(host, policy, CancellationToken.None) == 5
+    var memory = new TestMemoryBudget(64 * 1024);
+    Check("discarded evaluation keeps shared admission bounded", await Command(["-n", "range(100000) | empty"], []).ExecuteAsync(host, memory, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == ""
-        && host.Output(JqFileDescriptor.StdErr) == "jq: allocation work allowance exceeded\n");
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0 && memory.PeakBytes <= 64 * 1024);
 }
 {
     const long limit = 64 * 1024;

@@ -73,7 +73,7 @@ internal sealed class JqModuleLoader(
             JsonNode? data = await TryLoadDataAsync(import, importerDir, cancellationToken).ConfigureAwait(false);
             if (data is null)
                 return env;
-            budget.ChargeTree(data);
+            budget.CheckValueStructure(data);
             string alias = import.Alias ?? string.Empty;
             env = env.Extend(alias, data);
             env = env.Extend(alias + "::" + alias, data);
@@ -165,7 +165,7 @@ internal sealed class JqModuleLoader(
         using var ownedContent = found.Value.Content;
         ReadOnlyMemory<byte> content = ownedContent.Content;
         string canonical = found.Value.CanonicalPath;
-        budget.ChargeString(Encoding.UTF8.GetCharCount(content.Span));
+        budget.ReserveString(Encoding.UTF8.GetCharCount(content.Span));
         if (import.IsRaw)
         {
             string rawText;
@@ -215,13 +215,13 @@ internal sealed class JqModuleLoader(
         if (_cache.TryGetValue(canonicalPath, out JqLoadedModule? cached))
             return cached;
         // Cache keys must survive a record-local modulemeta search path.
-        budget.ChargeString(canonicalPath.Length);
+        budget.ReserveString(canonicalPath.Length);
         canonicalPath = new string(canonicalPath.AsSpan());
         if (!_loading.Add(canonicalPath))
             throw new JqException("circular import of " + canonicalPath);
         try
         {
-            budget.ChargeString(Encoding.UTF8.GetCharCount(content.Span));
+            budget.ReserveString(Encoding.UTF8.GetCharCount(content.Span));
             string sourceText;
             try
             {
@@ -285,7 +285,7 @@ internal sealed class JqModuleLoader(
             foreach (string candidate in candidates)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                budget.ChargeAllocation(128 + 64L * candidate.Length);
+                budget.ReserveBytes(128 + 64L * candidate.Length);
                 JqPath path;
                 try
                 {
@@ -459,8 +459,8 @@ internal sealed class JqModuleLoader(
             if (import.Alias is not null)
                 dep["as"] = JsonValue.Create(import.Alias);
             dep["is_data"] = JsonValue.Create(import.IsData);
-            budget.ChargeNode();
-            budget.ChargeString(import.RelPath.Length + (import.Alias?.Length ?? 0) + 16);
+            budget.CheckCancellation();
+            budget.ReserveString(import.RelPath.Length + (import.Alias?.Length ?? 0) + 16);
             deps.Add(dep);
         }
         var defs = new JsonArray();
@@ -469,13 +469,13 @@ internal sealed class JqModuleLoader(
             budget.CheckCancellation();
             budget.ReserveBytes(128 + 2L * (definition.Name.Length + 12));
             string entry = definition.Name + "/" + definition.Arity.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            budget.ChargeNode();
-            budget.ChargeString(entry.Length);
+            budget.CheckCancellation();
+            budget.ReserveString(entry.Length);
             defs.Add(JsonValue.Create(entry));
         }
         baseObject["deps"] = deps;
         baseObject["defs"] = defs;
-        budget.ChargeTree(baseObject);
+        budget.CheckValueStructure(baseObject);
         return baseObject;
     }
 }

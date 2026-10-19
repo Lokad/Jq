@@ -47,11 +47,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     private JsonNode? PrepareJson(JsonNode? node, bool sorted)
     {
-        budget.ChargeTree(node);
+        budget.CheckValueStructure(node);
         if (sorted) budget.ReserveCloneStorage(node);
         JsonNode? shaped = sorted ? SortedClone(node) : node;
         if (sorted)
-            budget.ChargeTree(shaped);
+            budget.CheckValueStructure(shaped);
         // The JSON writer rejects non-finite doubles while the reference
         // renders NaN as null and clamps infinities to the finite
         // extremes. Sanitize a charged clone only when needed.
@@ -77,7 +77,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         rendered = LowercaseUnicodeEscapes(rendered);
         if (indent != null || tabs)
             rendered = NormalizeNewlines(rendered);
-        budget.ChargeStringWork(Encoding.UTF8.GetCharCount(rendered.Span));
+        budget.CheckStringLength(Encoding.UTF8.GetCharCount(rendered.Span));
         return rendered;
     }
 
@@ -236,7 +236,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode? Clone(JsonNode? node)
     {
-        budget.ChargeClone(node);
+        budget.ReserveCloneStorage(node);
         return node?.DeepClone();
     }
 
@@ -250,7 +250,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (node is null || node.Parent is null)
             return node;
-        budget.ChargeClone(node);
+        budget.ReserveCloneStorage(node);
         return node.DeepClone();
     }
 
@@ -271,9 +271,9 @@ internal sealed partial class JqRuntime(JqBudget budget)
             int firstContent = SkipJsonWhitespace(text, 0);
             if (TryMatchNonFinite(text, firstContent, out double topValue, out int topEnd))
             {
-                budget.ChargeValueNode();
+                budget.ReserveValueNode();
                 consumed = topEnd;
-                budget.ChargeAllocationWork(consumed - firstContent);
+                budget.CheckCancellation();
                 return JsonValue.Create(topValue);
             }
             if (TryInvalidNonFiniteLiteral(text, firstContent, out string invalidMessage))
@@ -284,7 +284,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             int consumedBase = 0;
             JsonNode? value = ReadValue(ref reader, text, ref consumedBase, 0);
             consumed = consumedBase + (int)reader.BytesConsumed;
-            budget.ChargeAllocationWork(consumed - start);
+            budget.CheckCancellation();
             return value;
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
@@ -427,7 +427,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 if (IsValuePreceded(source, failure)
                     && TryMatchNonFinite(source, failure, out double number, out int end))
                 {
-                    budget.ChargeValueNode();
+                    budget.ReserveValueNode();
                     int resume = SkipJsonWhitespace(source, end);
                     if (consumeComma && resume < source.Length && source[resume] == (byte)',')
                         resume++;
@@ -448,7 +448,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 case JsonTokenType.StartObject:
                     if (depth >= JqBudget.MaximumDepth)
                         throw new JqQuotaException("value nesting limit exceeded");
-                    budget.ChargeValueNode();
+                    budget.ReserveValueNode();
                     var obj = new JsonObject();
                     bool expectsObjectValue = true;
                     while (true)
@@ -480,7 +480,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 case JsonTokenType.StartArray:
                     if (depth >= JqBudget.MaximumDepth)
                         throw new JqQuotaException("value nesting limit exceeded");
-                    budget.ChargeValueNode();
+                    budget.ReserveValueNode();
                     var array = new JsonArray();
                     bool expectsValue = true;
                     while (true)
@@ -511,8 +511,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
         if (reader.TokenType is not (JsonTokenType.String or JsonTokenType.Number
             or JsonTokenType.True or JsonTokenType.False or JsonTokenType.Null))
             throw new JqException("expected a JSON value");
-        if (reader.TokenType == JsonTokenType.Null) budget.ChargeNode();
-        else budget.ChargeValueNode();
+        if (reader.TokenType == JsonTokenType.Null) budget.CheckCancellation();
+        else budget.ReserveValueNode();
         switch (reader.TokenType)
         {
             case JsonTokenType.String:
@@ -556,7 +556,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
         }
         length += Encoding.UTF8.GetCharCount(remaining);
-        budget.ChargeString(length);
+        budget.ReserveString(length);
         return reader.GetString() ?? throw new JqException("expected a JSON string");
     }
 
@@ -571,7 +571,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode? ParseJson(string text)
     {
-        budget.ChargeAllocationWork(Encoding.UTF8.GetByteCount(text));
+        budget.CheckCancellation();
         budget.ReserveBytes(Encoding.UTF8.GetByteCount(text));
         var bytes = Encoding.UTF8.GetBytes(text);
         int prefix = HasBomPrefix(bytes) ? 3 : 0;
@@ -638,7 +638,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             return JsonValue.Create(Number(l) + Number(r));
         if (TryGetString(l, out var ls) && TryGetString(r, out var rs))
         {
-            budget.ChargeString((long)ls.Length + rs.Length);
+            budget.ReserveString((long)ls.Length + rs.Length);
             return JsonValue.Create(ls + rs);
         }
         if (l is JsonArray la && r is JsonArray ra)
@@ -715,7 +715,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         if (times < 0)
             return null;
         var length = (long)value.Length * times;
-        budget.ChargeString(length);
+        budget.ReserveString(length);
         if (length == 0)
             return JsonValue.Create(string.Empty);
         if (times == 1)
@@ -1008,8 +1008,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal bool JsonEquals(JsonNode? l, JsonNode? r)
     {
-        budget.ChargeTree(l);
-        budget.ChargeTree(r);
+        budget.CheckValueStructure(l);
+        budget.CheckValueStructure(r);
         return EqualsValue(l, r);
     }
 
@@ -1019,8 +1019,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // indistinguishable, matching the double-domain projection.
     internal bool IntactEquals(JsonNode? l, JsonNode? r)
     {
-        budget.ChargeTree(l);
-        budget.ChargeTree(r);
+        budget.CheckValueStructure(l);
+        budget.CheckValueStructure(r);
         return IntactValue(l, r, 0);
     }
 
@@ -1248,7 +1248,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             var keys = new JsonArray();
             foreach (string name in names)
             {
-                budget.ChargeNode();
+                budget.CheckCancellation();
                 keys.Add(JsonValue.Create(name));
             }
             return keys;
@@ -1259,7 +1259,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             var keys = new JsonArray();
             for (int index = 0; index < arr.Count; index++)
             {
-                budget.ChargeNode();
+                budget.CheckCancellation();
                 keys.Add(JsonValue.Create(index));
             }
             return keys;
@@ -1290,7 +1290,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         {
             foreach (var property in obj)
             {
-                budget.ChargeNode();
+                budget.CheckCancellation();
                 budget.ReserveBytes(248);
                 budget.ReserveObjectItem(property.Value);
                 var entry = new JsonObject();
@@ -1304,7 +1304,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         {
             for (int index = 0; index < arr.Count; index++)
             {
-                budget.ChargeNode();
+                budget.CheckCancellation();
                 budget.ReserveBytes(248);
                 budget.ReserveObjectItem(arr[index]);
                 var entry = new JsonObject();
@@ -1337,7 +1337,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
             if (key is null || !TryGetString(key, out string? keyName) || keyName is null)
                 throw new JqException($"Cannot use {TypeName(key)} ({ToJqString(key)}) as object key");
-            budget.ChargeNode();
+            budget.CheckCancellation();
             JsonNode? value = entry.TryGetPropertyValue("value", out JsonNode? direct) ? direct
                 : entry.TryGetPropertyValue("Value", out JsonNode? capitalized) ? capitalized : null;
             budget.ReserveObjectItem(value);
@@ -1359,7 +1359,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // Like the reference reduce over `.[]`, objects contribute their
         // values while other scalars (including null) fail.
         var result = new JsonArray();
-        budget.ChargeNode();
+        budget.CheckCancellation();
         if (input is JsonArray arr)
         {
             foreach (JsonNode? child in arr)
@@ -1392,7 +1392,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     pending.Add((nested[index], level - 1));
                 continue;
             }
-            budget.ChargeNode();
+            budget.CheckCancellation();
             budget.ReserveArrayItem(current);
             result.Add(Clone(current));
         }
@@ -1404,7 +1404,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JsonNode Flatten(JsonNode? input, JsonNode? depth)
     {
         var result = new JsonArray();
-        budget.ChargeNode();
+        budget.CheckCancellation();
         if (input is JsonArray arr)
         {
             foreach (JsonNode? child in arr)
@@ -1438,7 +1438,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     pending.Add((nested[index], next));
                 continue;
             }
-            budget.ChargeNode();
+            budget.CheckCancellation();
             budget.ReserveArrayItem(current);
             result.Add(Clone(current));
         }
@@ -1452,14 +1452,14 @@ internal sealed partial class JqRuntime(JqBudget budget)
         var ordered = new List<JsonNode?>(arr.Count);
         foreach (JsonNode? element in arr)
         {
-            budget.ChargeNode();
+            budget.CheckCancellation();
             ordered.Add(element);
         }
         var result = new JsonArray();
-        budget.ChargeNode();
+        budget.CheckCancellation();
         foreach (JsonNode? element in ordered.OrderBy(static element => element, Comparer<JsonNode?>.Create((left, right) => Compare(left, right))))
         {
-            budget.ChargeNode();
+            budget.CheckCancellation();
             budget.ReserveArrayItem(element);
             result.Add(Clone(element));
         }
@@ -1477,10 +1477,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 ordered.Add(element);
         }
         var result = new JsonArray();
-        budget.ChargeNode();
+        budget.CheckCancellation();
         foreach (JsonNode? element in ordered)
         {
-            budget.ChargeNode();
+            budget.CheckCancellation();
             budget.ReserveArrayItem(element);
             result.Add(Clone(element));
         }
@@ -1518,7 +1518,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
         if (Number(Length(input)) == 0)
         {
-            budget.ChargeNode();
+            budget.CheckCancellation();
             return new JsonArray();
         }
         throw new JqRuntimeException($"cannot reverse {TypeName(input)}");
@@ -1593,7 +1593,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     }
                 if (!match)
                     continue;
-                budget.ChargeNode();
+                budget.CheckCancellation();
                 yield return start;
             }
             yield break;
@@ -1618,7 +1618,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                         }
                     if (!match)
                         continue;
-                    budget.ChargeNode();
+                    budget.CheckCancellation();
                     yield return start;
                     start += Math.Max(0, pattern.Count - 1);
                 }
@@ -1627,7 +1627,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             for (var i = 0; i < values.Count; i++)
                 if (JsonEquals(values[i], needle))
                 {
-                    budget.ChargeNode();
+                    budget.CheckCancellation();
                     yield return i;
                 }
             yield break;
@@ -1651,7 +1651,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             else
                 builder.Append(ch);
         }
-        budget.ChargeStringWork(builder.Length);
+        budget.CheckStringLength(builder.Length);
         return budget.Finish(builder);
     }
 
@@ -1670,12 +1670,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
             throw new JqException((left ? "startswith" : "endswith") + "() requires string inputs");
         if (left && text.StartsWith(fix, StringComparison.Ordinal))
         {
-            budget.ChargeString(text.Length - fix.Length);
+            budget.ReserveString(text.Length - fix.Length);
             text = text[fix.Length..];
         }
         if (right && text.EndsWith(fix, StringComparison.Ordinal))
         {
-            budget.ChargeString(text.Length - fix.Length);
+            budget.ReserveString(text.Length - fix.Length);
             text = text[..^fix.Length];
         }
         return text;
@@ -1720,7 +1720,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         int start = first < units.Count ? units[first].Offset : text.Length;
         int end = last > 0 ? units[last - 1].Offset + units[last - 1].Length : 0;
         if (start == 0 && end == text.Length) return text;
-        budget.ChargeString(Math.Max(0, end - start));
+        budget.ReserveString(Math.Max(0, end - start));
         return text[start..end];
     }
 
@@ -1731,7 +1731,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         var arr = new JsonArray();
         foreach (var rune in text.EnumerateRunes())
         {
-            budget.ChargeNode();
+            budget.CheckCancellation();
             budget.ReserveBytes(88);
             arr.Add(rune.Value);
         }
@@ -1748,7 +1748,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             if ((index & 4095) == 0) budget.CheckCancellation();
             length += Scalar(arr[index]) > 0xFFFF ? 2 : 1;
         }
-        budget.ChargeString(length);
+        budget.ReserveString(length);
         var sb = new StringBuilder((int)length);
         Span<char> encoded = stackalloc char[2];
         for (int index = 0; index < arr.Count; index++)
@@ -1786,9 +1786,9 @@ internal sealed partial class JqRuntime(JqBudget budget)
             // An empty separator splits into Unicode scalars.
             foreach (var rune in text.EnumerateRunes())
             {
-                budget.ChargeNode();
+                budget.CheckCancellation();
                 budget.ReserveBytes(88);
-                budget.ChargeString(rune.Utf16SequenceLength);
+                budget.ReserveString(rune.Utf16SequenceLength);
                 arr.Add(rune.ToString());
             }
             return arr;
@@ -1798,9 +1798,9 @@ internal sealed partial class JqRuntime(JqBudget budget)
         {
             var end = text.IndexOf(delimiter, start, StringComparison.Ordinal);
             var length = (end < 0 ? text.Length : end) - start;
-            budget.ChargeNode();
+            budget.CheckCancellation();
             budget.ReserveBytes(88);
-            budget.ChargeString(length);
+            budget.ReserveString(length);
             arr.Add(text.Substring(start, length));
             if (end < 0) break;
             start = end + delimiter.Length;
@@ -1876,7 +1876,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
         for (double value = start; step > 0 ? value < end : value > end; value += step)
         {
-            budget.ChargeNode();
+            budget.CheckCancellation();
             yield return CreateNumber(value);
         }
     }
@@ -1915,8 +1915,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
             case "base64":
             {
                 var bytes = Encoding.UTF8.GetByteCount(text);
-                budget.ChargeString(4 * ((bytes + 2L) / 3));
-                budget.ChargeAllocation(bytes);
+                budget.ReserveString(4 * ((bytes + 2L) / 3));
+                budget.ReserveBytes(bytes);
                 return Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
             }
             case "base64d": return Base64Decode(text, value);
@@ -1931,7 +1931,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 var count = Math.Min(1024, text.Length - start);
                 if (start + count < text.Length && char.IsHighSurrogate(text[start + count - 1])) count--;
                 // Encoders work on bounded chunks; never split a surrogate pair at a chunk boundary.
-                budget.ChargeAllocation(24L * count);
+                budget.ReserveBytes(24L * count);
                 budget.Append(builder, encode(text.Substring(start, count)));
                 start += count;
             }
@@ -1948,7 +1948,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 if ((index & 4095) == 0) budget.CheckCancellation();
                 length += source[index] switch { '&' => 4, '<' or '>' => 3, '\'' or '"' => 5, _ => 0 };
             }
-            budget.ChargeString(length);
+            budget.ReserveString(length);
             var builder = new StringBuilder((int)length);
             for (int index = 0; index < source.Length; index++)
             {
@@ -1969,7 +1969,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // Codes: 61 is =, 65 to 90 are A-Z, 97 to 122 are a-z, 48 to 57 are 0-9, 43 is +, 47 is /.
         string Base64Decode(string source, JsonNode? original)
         {
-            budget.ChargeAllocation(2L * source.Length + 8);
+            budget.ReserveBytes(2L * source.Length + 8);
             var decoded = new List<byte>(source.Length);
             uint code = 0;
             int pending = 0;
@@ -2004,7 +2004,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") trailing base64 byte found");
             }
             byte[] bytes = decoded.ToArray();
-            budget.ChargeString(Encoding.UTF8.GetCharCount(bytes));
+            budget.ReserveString(Encoding.UTF8.GetCharCount(bytes));
             // Invalid UTF-8 becomes U+FFFD, matching the reference replacement.
             return Encoding.UTF8.GetString(bytes);
         }
@@ -2024,7 +2024,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // Code 37 is percent.
         string UriDecode(string source, JsonNode? original)
         {
-            budget.ChargeAllocation(3L * source.Length + 8);
+            budget.ReserveBytes(3L * source.Length + 8);
             var decoded = new List<byte>(source.Length);
             for (int index = 0; index < source.Length; index++)
             {
@@ -2055,7 +2055,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 }
             }
             byte[] bytes = decoded.ToArray();
-            budget.ChargeString(bytes.Length);
+            budget.ReserveString(bytes.Length);
             try
             {
                 return new UTF8Encoding(false, true).GetString(bytes);

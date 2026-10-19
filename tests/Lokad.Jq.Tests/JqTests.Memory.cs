@@ -65,41 +65,31 @@ public sealed partial class JqTests
     [InlineData("\"x\" * 300000 | indices(\"x\") | length")]
     [InlineData("\",\" * 300000 | split(\",\") | length")]
     [InlineData("{a:range(0;300000)} | length")]
-    [InlineData("range(0;100000) | empty")]
-    [InlineData("select(range(0;100000) | false)")]
     [InlineData("\"x\" * 300000 | gsub(\"x\"; \"\") | empty")]
-    // Multi-output truthy conditions duplicate the state forever; the cumulative budget stages the hang with a record-complete prefix.
-    [InlineData("5 | while((true,false); .)")]
-    // Constant multi-output updates fan out forever the same way; the prefix still streams record-complete.
-    [InlineData("0 | while(.<2; 1,2)")]
-    // Upstream day-of-week/yearday loop: cumulative node charges (no refunds) trip the value budget; staged exit 5.
-    [InlineData("last(range(365 * 67)|(\"1970-03-01T01:02:03Z\"|strptime(\"%Y-%m-%dT%H:%M:%SZ\")|mktime) + (86400 * .)|strftime(\"%Y-%m-%dT%H:%M:%SZ\")|strptime(\"%Y-%m-%dT%H:%M:%SZ\"))")]
-    // Upstream large-offset slice vector: ranging down over a 65k sparse array rebuilds per update, tripping the value budget; staged exit 5.
-    [InlineData("reduce range(65540;65536;-1) as $i ([]; .[$i] = $i)|.[65536:]")]
-    public async Task Jq_BoundsValuesAndDiscardedWork(string filter)
+    public async Task Jq_SharedAdmissionBoundsConstruction(string filter)
     {
+        var memory = new TestMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
-        // Lazy generators stream prefix results before the cumulative
-        // budget trips; every emitted record stays complete. The eager
-        // buffering that produced no output here was the bug, not the bound.
+        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        // Earlier outputs remain complete when later construction is refused.
         string stdout = host.GetOutput(JqFileDescriptor.StdOut);
         foreach (string line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             Assert.True(int.TryParse(line, out _), "Partial output must stay record-complete: " + line);
     }
 
     [Fact]
-    public async Task Jq_AllocationWorkCountsManyStringResults()
+    public async Task Jq_SharedAdmissionBoundsRetainedStringResults()
     {
+        var memory = new TestMemoryBudget(1024 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n",
             "[range(0;150) | \"x\" * 262144] | length")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("allocation work allowance exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -109,6 +99,7 @@ public sealed partial class JqTests
     public async Task Jq_BoundsJsonBeforeMaterializingInputOrArguments(bool argument)
     {
         var json = "[" + string.Join(',', Enumerable.Repeat("null", 262145)) + "]";
+        var memory = new TestMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         host.SetStandardInput(json);
         var invocation = argument
@@ -116,21 +107,21 @@ public sealed partial class JqTests
             : BuildInvocation("jq", "length");
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
-        Assert.Equal(argument ? 2 : 5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Fact]
     public async Task Jq_BoundsJsonargsBeforeMaterializingPositional()
     {
-        // Like --argjson, quota trips while parsing positional JSON report
-        // exit 2 with the budget message instead of a JSON syntax error.
+        // Refusal while parsing positional JSON remains a terminal resource failure.
         var json = "[" + string.Join(",", Enumerable.Repeat("null", 262145)) + "]";
+        var memory = new TestMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "$ARGS.positional[0] | length", "--jsonargs", json)));
-        Assert.Equal(2, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -182,8 +173,6 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("range(0;100000)")]
-    [InlineData("select(range(0;100000))")]
     [InlineData("\"a\" | gsub(\"a\"; \"x\", \"y\")")]
     public async Task Jq_EvaluationObservesCancellationBetweenResults(string filter)
     {
@@ -332,7 +321,6 @@ public sealed partial class JqTests
         }
     }
 
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -353,12 +341,13 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_BoundsSlurpAcrossManySmallInputs()
     {
+        var memory = new TestMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         host.SetStandardInput(string.Concat(Enumerable.Repeat("null\n", 262145)));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-s", "length")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -385,7 +374,6 @@ public sealed partial class JqTests
         Assert.Contains("string result exceeds", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
-
 
     [Fact]
     public async Task Jq_BoundsFilterFileAndClosesDescriptor()
@@ -568,11 +556,12 @@ public sealed partial class JqTests
             ? new[] { "-n", "-f", "filter" }
             : new[] { "-n", "empty" }.Concat(Enumerable.Repeat("file", 64)).ToArray();
         var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", args, [new JqEnvironmentVariable("PWD", directory)]);
+        var memory = new TestMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
-        Assert.Equal(2, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("allocation work allowance exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -610,7 +599,7 @@ public sealed partial class JqTests
     [InlineData("reduce range(10000) as $_ ({}; {a: .}) as $x | $x * $x | length")]
     public async Task Jq_RejectsExcessiveValueNesting(string filter)
     {
-        // Deeply nested construction trips the cumulative value policy before
+        // Deeply nested construction trips the structural depth safeguard before
         // any recursive builtin runs, so the reference deep-content checks
         // surface here as staged failures instead of caught jq errors.
         var host = new MockFileSystem();

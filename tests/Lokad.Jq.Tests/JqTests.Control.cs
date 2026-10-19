@@ -167,17 +167,6 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_TryCannotNeutralizeQuota()
-    {
-        var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "try (def r: r; r) catch 42")));
-
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-    }
-
-    [Fact]
     public async Task Jq_TryCannotNeutralizeCancellation()
     {
         var host = new MockFileSystem();

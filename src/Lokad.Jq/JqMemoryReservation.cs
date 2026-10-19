@@ -1,7 +1,7 @@
 namespace Lokad.Jq;
 
 // One coarse storage owner. Host accounting is forwarded directly; no allowance
-// or governor is copied here. Calls without a host hook retain their work policy.
+// or governor is copied here. Calls without a host hook keep cancellation and structural safeguards.
 internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDisposable
 {
     private IMemoryReservation? _reservation;

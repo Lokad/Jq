@@ -111,7 +111,7 @@ internal static class JqExecutor
         {
             foreach (var entry in invocation.Variables)
             {
-                budget.ChargeClone(entry.Value);
+                budget.ReserveCloneStorage(entry.Value);
                 executionVariables[entry.Key] = entry.Value?.DeepClone();
             }
             var filterText = invocation.Filter ?? ".";
@@ -121,7 +121,7 @@ internal static class JqExecutor
                 ReadOnlyMemory<byte> bytes = content.Content;
                 if (bytes.Span.Contains((byte)0))
                     throw new JqException("program file contains NUL bytes");
-                budget.ChargeString(Encoding.UTF8.GetCharCount(bytes.Span));
+                budget.ReserveString(Encoding.UTF8.GetCharCount(bytes.Span));
                 filterText = Utf8Text.Decode(bytes);
             }
             await LoadFileVariablesAsync(host, invocation, context, cancellationToken).ConfigureAwait(false);
@@ -141,7 +141,7 @@ internal static class JqExecutor
             // Reuse the immutable token sequence with the newly linked scope.
             // Import scanning and full parsing each consume compilation work;
             // reused token storage has only one persistent admission.
-            budget.ChargeAllocationWork(2L * filterText.Length);
+            budget.CheckCancellation();
             var filter = new JqParser(tokens, programSource, moduleEnv, budget).Parse();
             stage = 4;
             await using var cursor = new JqInputCursor(host, invocation, context, cancellationToken);
@@ -379,14 +379,14 @@ internal static class JqExecutor
             try
             {
                 long pathLength = (long)path.Length + invocation.WorkingDirectory.Path.Length + 1;
-                context.Budget.ChargeAllocation(128 + 64 * pathLength);
+                context.Budget.ReserveBytes(128 + 64 * pathLength);
                 var resolved = JqPathResolution.ResolveArgument(path, invocation.WorkingDirectory);
                 using var content = await ReadFileAsync(resolved, host, context.Budget, cancellationToken).ConfigureAwait(false);
                 ReadOnlyMemory<byte> bytes = content.Content;
                 JsonNode? value;
                 if (raw)
                 {
-                    context.Budget.ChargeString(Encoding.UTF8.GetCharCount(bytes.Span));
+                    context.Budget.ReserveString(Encoding.UTF8.GetCharCount(bytes.Span));
                     value = JsonValue.Create(Utf8Text.Decode(bytes));
                 }
                 else
@@ -394,7 +394,7 @@ internal static class JqExecutor
                     value = ReadSlurpfileValue(bytes, context);
                 }
                 variables[name] = value;
-                context.Budget.ChargeTree(value);
+                context.Budget.CheckValueStructure(value);
                 if (variables.TryGetValue("ARGS", out JsonNode? args)
                     && args is JsonObject argsObject
                     && argsObject.TryGetPropertyValue("named", out JsonNode? named)

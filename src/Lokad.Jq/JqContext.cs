@@ -60,7 +60,7 @@ internal sealed class JqContext(
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         int length = Encoding.UTF8.GetByteCount(text);
-        Budget.ChargeAllocationWork(length);
+        Budget.CheckCancellation();
         long previous = ReserveStderr(length);
         try { _stderr.Add(Utf8Text.Encode(text)); }
         catch
@@ -75,7 +75,7 @@ internal sealed class JqContext(
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         int length = checked(content.Length + (newline ? 1 : 0));
-        Budget.ChargeAllocationWork(length);
+        Budget.CheckCancellation();
         long previous = ReserveStderr(length);
         try
         {

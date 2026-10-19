@@ -68,7 +68,7 @@ internal static class JqMatch
             Utf8Pcre2MatchContext match = ownedMatch.Value;
             if (!match.Success)
                 break;
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             int utf16Start = match.Value.StartOffsetInUtf16;
             int utf16End = match.Value.EndOffsetInUtf16;
             results.Add(BuildMatch(context, text, match, names, match.CaptureSlotCount - 1));
@@ -104,18 +104,18 @@ internal static class JqMatch
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(names);
         var captures = new JsonObject();
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         for (int index = 1; index <= captureCount; index++)
         {
             if (!names.TryGetValue(index, out string? name) || name is null)
                 continue;
             if (!match.TryGetGroup(index, out Utf8Pcre2GroupContext group))
                 break;
-            context.Budget.ChargeNode();
-            context.Budget.ChargeString(name.Length);
+            context.Budget.CheckCancellation();
+            context.Budget.ReserveString(name.Length);
             if (group.Success)
             {
-                context.Budget.ChargeString(group.EndOffsetInUtf16 - group.StartOffsetInUtf16);
+                context.Budget.ReserveString(group.EndOffsetInUtf16 - group.StartOffsetInUtf16);
                 string value = group.GetValueString();
                 captures[name] = JsonValue.Create(value);
             }
@@ -129,7 +129,7 @@ internal static class JqMatch
 
     private static JsonObject BuildMatch(JqContext context, string text, Utf8Pcre2MatchContext match, Dictionary<int, string> names, int captureCount)
     {
-        context.Budget.ChargeString(match.Value.EndOffsetInUtf16 - match.Value.StartOffsetInUtf16);
+        context.Budget.ReserveString(match.Value.EndOffsetInUtf16 - match.Value.StartOffsetInUtf16);
         string whole = match.GetValueString();
         var result = new JsonObject
         {
@@ -142,7 +142,7 @@ internal static class JqMatch
         {
             if (!match.TryGetGroup(index, out Utf8Pcre2GroupContext group))
                 break;
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             var capture = new JsonObject();
             if (!group.Success)
             {
@@ -152,7 +152,7 @@ internal static class JqMatch
             }
             else
             {
-                context.Budget.ChargeString(group.EndOffsetInUtf16 - group.StartOffsetInUtf16);
+                context.Budget.ReserveString(group.EndOffsetInUtf16 - group.StartOffsetInUtf16);
                 string value = group.GetValueString();
                 capture["offset"] = JsonValue.Create(ScalarOffset(text, group.StartOffsetInUtf16));
                 capture["length"] = JsonValue.Create(ScalarOffset(text, group.EndOffsetInUtf16) - ScalarOffset(text, group.StartOffsetInUtf16));
@@ -161,7 +161,7 @@ internal static class JqMatch
             if (names.TryGetValue(index, out string? name))
             {
                 capture["name"] = JsonValue.Create(name);
-                context.Budget.ChargeString(name.Length);
+                context.Budget.ReserveString(name.Length);
             }
             else
             {
@@ -187,8 +187,8 @@ internal static class JqMatch
                     && nameValue.TryGetValue<string>(out string? name)
                     && name is not null)
                 {
-                    context.Budget.ChargeNode();
-                    context.Budget.ChargeString(name.Length);
+                    context.Budget.CheckCancellation();
+                    context.Budget.ReserveString(name.Length);
                     result[name] = context.Runtime.Clone(capture["string"]);
                 }
             }
@@ -221,7 +221,7 @@ internal static class JqMatch
             return;
         }
         string message = TypeName(value) + " not a string or array";
-        context.Budget.ChargeString(message.Length);
+        context.Budget.ReserveString(message.Length);
         throw new JqErrorException(JsonValue.Create(message), "error: " + message);
     }
 
@@ -256,7 +256,7 @@ internal static class JqMatch
                 var row = new JsonArray();
                 foreach (JsonNode? capture in captures)
                 {
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     row.Add(context.Runtime.Clone(capture is JsonObject item ? item["string"] : null));
                 }
                 results.Add(row);
@@ -301,9 +301,9 @@ internal static class JqMatch
 
     private static string SliceScalars(JqContext context, string text, List<int> starts, int from, int to)
     {
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         string piece = text.Substring(starts[from], starts[to] - starts[from]);
-        context.Budget.ChargeString(piece.Length);
+        context.Budget.ReserveString(piece.Length);
         return piece;
     }
 }

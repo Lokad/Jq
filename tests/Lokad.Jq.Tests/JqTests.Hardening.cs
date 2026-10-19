@@ -5,6 +5,19 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Fact]
+    public async Task Jq_PathMaterializationRespectsSharedAdmission()
+    {
+        var memory = new TestMemoryBudget(64 * 1024);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
+            "\"prefix\", (null | setpath([range(5000)|\"a\"]; 1) | [paths] | length)")));
+        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
     public async Task Jq_CombinationsHandlesDeepNarrowMatricesWithoutRecursion()
     {
         // Twenty thousand rows would need twenty thousand nested enumerator
@@ -16,14 +29,14 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
-
     [Fact]
     public async Task Jq_CombinationsCountBuildIsBudgetBounded()
     {
+        var memory = new TestMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1 | combinations(1000000) | length")));
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Theory]
@@ -50,16 +63,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_CombinationsExponentialStreamsHaltOnQuota()
+    public async Task Jq_CombinationsStopsWhenDownstreamCloses()
     {
         string input = "[" + string.Join(",", Enumerable.Repeat("[0, 1]", 24)) + "]";
-        var host = new MockFileSystem();
+        var host = new MockFileSystem { AppendRemainsOpen = false };
         host.SetStandardInput(input);
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "combinations | length")));
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
-        foreach (string line in host.GetOutput(JqFileDescriptor.StdOut).Split((char)10, StringSplitOptions.RemoveEmptyEntries))
-            Assert.Equal("24", line);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "combinations | length")));
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("24\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]
@@ -112,11 +124,12 @@ public sealed partial class JqTests
     {
         // The owned file stays open while evaluation trips quota; persistent
         // cleanup failures must not replace the quota error.
+        var memory = new TestMemoryBudget(64 * 1024);
         var host = new MockFileSystem { CloseFailuresRemaining = 2 };
         host.AddFile("/input", "[0]");
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "range(0;300000) | length", "/input")));
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "[range(0;300000)] | length", "/input")));
+        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]
@@ -173,11 +186,12 @@ public sealed partial class JqTests
     {
         // Collect-all fan-out grows rebuilt trees exponentially; per-output
         // budget charges fail staged instead of hanging or exhausting memory.
+        var memory = new TestMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "null | setpath([range(100)|0]; 0) | walk((.,.)) | length")));
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "null | setpath([range(12)|0]; 0) | walk((.,.)) | length")));
+        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
 [Theory]
@@ -186,7 +200,6 @@ public sealed partial class JqTests
     [InlineData("null | setpath([range(200)|\"a\"]; 1) < setpath([range(200)|\"a\"]; 1)", "value nesting limit exceeded")]
     [InlineData("null | setpath([range(200)|\"a\"]; 1) | contains(null | setpath([range(200)|\"a\"]; 1))", "value nesting limit exceeded")]
     [InlineData("null | setpath([range(5000)|\"a\"]; 1) | [..] | length", "value nesting limit exceeded")]
-    [InlineData("null | setpath([range(5000)|\"a\"]; 1) | [paths] | length", "value budget exceeded")]
     public async Task Jq_RejectsDeepTraversal(string filter, string diagnostic)
     {
         // Comparison, containment, and descent recurse structurally; beyond

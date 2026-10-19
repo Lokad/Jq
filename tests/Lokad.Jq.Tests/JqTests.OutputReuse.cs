@@ -39,30 +39,42 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_OutputReuseChargesBufferGrowthOnceWithinAnExecution()
+    public async Task Jq_OutputReuseKeepsSharedAdmissionBounded()
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "range(0;1024)")));
 
         Assert.Equal(0, await command.ExecuteAsync(host,
-            new JqExecutionPolicy { MaximumAllocationWorkBytes = 65536 }, CancellationToken.None));
+            new TestMemoryBudget(64 * 1024), CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Range(0, 1024)
             .Select(i => i.ToString(CultureInfo.InvariantCulture) + "\n")), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(1024, host.AppendCallCount);
     }
 
-
     [Fact]
-    public async Task Jq_OutputAllocationWorkFailureDoesNotEscapeDuringWriterCleanup()
+    public async Task Jq_OutputAdmissionFailureDoesNotEscapeDuringWriterCleanup()
     {
+        const long limit = 64 * 1024;
+        var memory = new TestMemoryBudget(limit);
         var host = new MockFileSystem();
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "[range(0;2000)]")));
-
-        Assert.Equal(5, await command.ExecuteAsync(host,
-            new JqExecutionPolicy { MaximumAllocationWorkBytes = 4096 }, CancellationToken.None));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: allocation work allowance exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        IMemoryReservation? pressure = null;
+        host.BeforeByteAppend = () =>
+        {
+            if (pressure is null)
+                Assert.True(memory.TryReserve(limit - memory.ReservedBytes, out pressure));
+        };
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "1, (\"x\" * 1000)")));
+        try
+        {
+            Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.NotNull(pressure);
+            Assert.Equal(pressure.Bytes, memory.ReservedBytes);
+        }
+        finally { pressure?.Dispose(); }
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Theory]

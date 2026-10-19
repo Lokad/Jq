@@ -20,8 +20,8 @@ internal abstract class JqFilter
         {
             foreach (var value in EvaluateCore(input, context, environment))
             {
-                context.Budget.ChargeNode();
-                if (TryGetString(value, out var text)) context.Budget.ChargeStringWork(text.Length);
+                context.Budget.CheckCancellation();
+                if (TryGetString(value, out var text)) context.Budget.CheckStringLength(text.Length);
                 yield return value;
             }
         }
@@ -44,7 +44,7 @@ internal abstract class JqFilter
         {
             foreach (JqValuePath path in EvaluatePathsCore(pair, context, environment))
             {
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 yield return path;
             }
         }
@@ -90,8 +90,8 @@ internal abstract class SingleValueFilter : JqFilter
         try
         {
             JsonNode? value = EvaluateValue(input, context, environment);
-            context.Budget.ChargeNode();
-            if (TryGetString(value, out var text)) context.Budget.ChargeStringWork(text.Length);
+            context.Budget.CheckCancellation();
+            if (TryGetString(value, out var text)) context.Budget.CheckStringLength(text.Length);
             yield return value;
         }
         finally
@@ -112,7 +112,7 @@ internal sealed class IdentityFilter : SingleValueFilter
 {
     protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        context.Budget.ChargeTree(input);
+        context.Budget.CheckValueStructure(input);
         return input;
     }
 
@@ -149,7 +149,7 @@ internal sealed class VariableFilter(string name) : SingleValueFilter
     {
         if (!environment.TryGetValue(name, out JsonNode? value))
             throw new JqException($"undefined variable ${name}");
-        context.Budget.ChargeTree(value);
+        context.Budget.CheckValueStructure(value);
         return value;
     }
 
@@ -195,8 +195,8 @@ internal sealed class LocFilter(string file, int line) : JqFilter
             ["file"] = JsonValue.Create(file),
             ["line"] = JsonValue.Create(line),
         };
-        context.Budget.ChargeNode();
-        context.Budget.ChargeString(file.Length + 8);
+        context.Budget.CheckCancellation();
+        context.Budget.ReserveString(file.Length + 8);
         yield return location;
     }
 }
@@ -295,11 +295,11 @@ internal sealed class AsFilter(
         switch (pattern)
         {
             case VariablePattern variable:
-                context.Budget.ChargeTree(value);
+                context.Budget.CheckValueStructure(value);
                 yield return scope.Extend(variable.Name, value);
                 break;
             case AliasPattern alias:
-                context.Budget.ChargeTree(value);
+                context.Budget.CheckValueStructure(value);
                 JqEnvironment aliased = scope.Extend(alias.Name, value);
                 foreach (JqEnvironment inner in Match(alias.Inner, value, aliased, context))
                     yield return inner;
@@ -607,7 +607,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         JqEnvironment scope = closure.Environment;
         for (int position = 0; position < frame.ValuePositions.Count; position++)
         {
-            context.Budget.ChargeTree(frame.Values[position]);
+            context.Budget.CheckValueStructure(frame.Values[position]);
             scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, frame.Values[position]);
         }
         for (int index = 0; index < frame.Filters.Length; index++)
@@ -622,7 +622,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         var combos = new List<JsonNode?[]>();
         foreach (JsonNode?[] combo in EvaluateValueCombos(signal.ValueArgs, signal.Input, context, signal.Environment))
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             combos.Add(combo);
         }
         // Tail frames restart the body against the signal input but keep
@@ -630,12 +630,12 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         // initial frames do.
         for (int index = combos.Count - 1; index >= 1; index--)
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             pending.Push(new PathCallFrame(new JqValuePath(pair.Segments, signal.Input, pair.Tracked), combos[index], signal.ValuePositions, signal.FilterArgs));
         }
         if (combos.Count == 0)
             return null;
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         return new PathCallFrame(new JqValuePath(pair.Segments, signal.Input, pair.Tracked), combos[0], signal.ValuePositions, signal.FilterArgs);
     }
 
@@ -648,7 +648,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         using IEnumerator<JsonNode?[]> combos = EvaluateValueCombos(values, input, context, environment).GetEnumerator();
         if (!combos.MoveNext())
             return false;
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         return !combos.MoveNext();
     }
 
@@ -681,7 +681,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         JqEnvironment scope = closure.Environment;
         for (int position = 0; position < frame.ValuePositions.Count; position++)
         {
-            context.Budget.ChargeTree(frame.Values[position]);
+            context.Budget.CheckValueStructure(frame.Values[position]);
             scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, frame.Values[position]);
         }
         for (int index = 0; index < frame.Filters.Length; index++)
@@ -696,17 +696,17 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         var combos = new List<JsonNode?[]>();
         foreach (JsonNode?[] combo in EvaluateValueCombos(signal.ValueArgs, signal.Input, context, signal.Environment))
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             combos.Add(combo);
         }
         for (int index = combos.Count - 1; index >= 1; index--)
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             pending.Push(new CallFrame(signal.Input, combos[index], signal.ValuePositions, signal.FilterArgs));
         }
         if (combos.Count == 0)
             return null;
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         return new CallFrame(signal.Input, combos[0], signal.ValuePositions, signal.FilterArgs);
     }
 
@@ -899,9 +899,9 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
             if (value is JsonObject obj)
             {
                 // Reads share the child reference: nothing mutates shared
-                // nodes in place downstream, so only the budget charge stays.
+                // nodes in place downstream.
                 JsonNode? field = obj.TryGetPropertyValue(name, out var child) ? child : null;
-                context.Budget.ChargeTree(field);
+                context.Budget.CheckValueStructure(field);
                 yield return field;
             }
             else if (value == null)
@@ -964,7 +964,7 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                 {
                     long resolved = ix < 0 ? arr.Count + ix : ix;
                     JsonNode? element = resolved >= 0 && resolved < arr.Count ? arr[(int)resolved] : null;
-                    context.Budget.ChargeTree(element);
+                    context.Budget.CheckValueStructure(element);
                     yield return element;
                 }
                 else if (value is JsonArray && key is JsonValue nan && nan.TryGetValue<double>(out double missing) && double.IsNaN(missing))
@@ -1000,7 +1000,7 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                 else if (value is JsonObject obj && TryGetString(key, out var name))
                 {
                     JsonNode? field = obj.TryGetPropertyValue(name, out var child) ? child : null;
-                    context.Budget.ChargeTree(field);
+                    context.Budget.CheckValueStructure(field);
                     yield return field;
                 }
                 else if (key is JsonObject objectKey && value is not null)
@@ -1104,7 +1104,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                             offset += rune.Utf16SequenceLength;
                         }
                         if (from == runeCount) first = offset;
-                        context.Budget.ChargeString(offset - first);
+                        context.Budget.ReserveString(offset - first);
                         yield return JsonValue.Create(text[first..offset]);
                     }
                     else if (value == null)
@@ -1268,7 +1268,7 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
             {
                 foreach (var child in arr)
                 {
-                    context.Budget.ChargeTree(child);
+                    context.Budget.CheckValueStructure(child);
                     yield return child;
                 }
             }
@@ -1276,7 +1276,7 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
             {
                 foreach (var child in obj)
                 {
-                    context.Budget.ChargeTree(child.Value);
+                    context.Budget.CheckValueStructure(child.Value);
                     yield return child.Value;
                 }
             }
@@ -1326,7 +1326,7 @@ internal sealed class RecursiveDescentFilter : JqFilter
         {
             context.Budget.CheckCancellation();
             JsonNode? current = stack.Pop();
-            context.Budget.ChargeTree(current);
+            context.Budget.CheckValueStructure(current);
             yield return current;
             if (current is JsonArray array)
             {
@@ -1481,9 +1481,9 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
 
         (bool Exists, JsonNode? Value) SetField(string key, JsonNode? value)
         {
-            context.Budget.ChargeNode();
-            context.Budget.ChargeStringWork(key.Length);
-            context.Budget.ChargeTree(value);
+            context.Budget.CheckCancellation();
+            context.Budget.CheckStringLength(key.Length);
+            context.Budget.CheckValueStructure(value);
             bool existed = fields.TryGetValue(key, out JsonNode? previous);
             fields[key] = value;
             return (existed, previous);
@@ -1820,8 +1820,8 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 {
                     // Selection passes the input through like path-mode select
                     // and upstream DUP. Downstream updates clone their spines;
-                    // keep the existing cumulative charge without cloning here.
-                    context.Budget.ChargeTree(input);
+                    // retain the existing reference without cloning here.
+                    context.Budget.CheckValueStructure(input);
                     yield return input;
                 }
             yield break;
@@ -1912,7 +1912,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 : TryGetString(held, out string? text) ? text
                 : context.Runtime.ToJqString(held);
             string message = "error: " + rendered;
-            context.Budget.ChargeString(message.Length);
+            context.Budget.ReserveString(message.Length);
             return new JqErrorException(held, message);
         }
 
@@ -2053,8 +2053,8 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     var array = new JsonArray();
                     foreach (var entry in names)
                     {
-                        context.Budget.ChargeNode();
-                        context.Budget.ChargeString(entry.Length);
+                        context.Budget.CheckCancellation();
+                        context.Budget.ReserveString(entry.Length);
                         array.Add(JsonValue.Create(entry));
                     }
                     yield return array;

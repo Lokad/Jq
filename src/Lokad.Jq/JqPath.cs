@@ -385,9 +385,14 @@ internal static class JqPathUpdates
             throw new JqException("Path too deep");
         if (segments.Count == 0)
             return context.Runtime.Clone(value);
+        context.Budget.ReserveBytes(24L * segments.Count);
         var normalized = new List<JqValueSegment>(segments.Count);
         foreach (JqValueSegment existing in segments)
-            normalized.Add(JqPaths.TruncateFractional(JqPaths.UpdateSegment(existing)));
+        {
+            context.Budget.CheckCancellation();
+            JqValueSegment segment = JqPaths.TruncateFractional(JqPaths.UpdateSegment(existing));
+            normalized.Add(segment);
+        }
         segments = normalized;
         var frames = new Stack<Frame>();
         JsonNode? current = root;
@@ -446,7 +451,7 @@ internal static class JqPathUpdates
                 if (current is null)
                 {
                     var fresh = new JsonArray();
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     frames.Push(new Frame(segment, fresh, 0, 0, 0));
                     return SliceCopy(fresh, 0, 0, context);
                 }
@@ -469,7 +474,7 @@ internal static class JqPathUpdates
                     if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? emptyStart, out double? emptyEnd))
                         throw new JqException("Array/string slice indices must be integers");
                     var freshRaw = new JsonArray();
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     frames.Push(new Frame(new SliceSegment(emptyStart, emptyEnd), freshRaw, 0, 0, 0));
                     return SliceCopy(freshRaw, 0, 0, context);
                 }
@@ -510,7 +515,7 @@ internal static class JqPathUpdates
                 if (leaf is not JsonArray pieces)
                     throw new JqException("A slice of an array can only be assigned another array");
                 var rebuilt = new JsonArray();
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 for (int index = 0; index < frame.From; index++)
                 {
                     context.Budget.ReserveArrayItem(arr[index]);
@@ -536,7 +541,7 @@ internal static class JqPathUpdates
     }
     private static JsonObject NewObject(JqContext context)
     {
-        context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         return new JsonObject();
     }
 
@@ -544,7 +549,7 @@ internal static class JqPathUpdates
     {
         // Charge the whole subtree like Clone does: per-level deep copies
         // would otherwise allocate quadratically against deep inputs.
-        context.Budget.ChargeClone(source);
+        context.Budget.ReserveCloneStorage(source);
         var clone = new JsonObject();
         foreach (var property in source)
             clone.Add(property.Key, property.Value?.DeepClone());
@@ -555,7 +560,7 @@ internal static class JqPathUpdates
     {
         // Charge the whole subtree like Clone does: per-level deep copies
         // would otherwise allocate quadratically against deep inputs.
-        context.Budget.ChargeClone(source);
+        context.Budget.ReserveCloneStorage(source);
         var clone = new JsonArray();
         foreach (JsonNode? child in source)
             clone.Add(child?.DeepClone());
@@ -572,17 +577,17 @@ internal static class JqPathUpdates
         {
             // Charge the whole subtree like Clone does: per-level deep copies
             // would otherwise allocate quadratically against deep inputs.
-            context.Budget.ChargeClone(source);
+            context.Budget.ReserveCloneStorage(source);
             foreach (JsonNode? child in source)
                 padded.Add(child?.DeepClone());
         }
         else
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
         }
         while (padded.Count <= resolved)
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             context.Budget.ReserveBytes(24);
             padded.Add(null);
         }
@@ -595,7 +600,7 @@ internal static class JqPathUpdates
         var slice = new JsonArray();
         // Charge the whole subtree like Clone does: per-level deep copies
         // would otherwise allocate quadratically against deep inputs.
-        context.Budget.ChargeClone(source);
+        context.Budget.ReserveCloneStorage(source);
         for (int index = from; index < to; index++)
             slice.Add(source[index]?.DeepClone());
         return slice;
@@ -824,7 +829,7 @@ internal static class JqPathDeletes
     };
 
     // Heap-allocated frame for iterative grouped deletion. Deletion depth is path
-    // length, which the value budget does not bound below a CLR stack overflow, so
+    // length, which must not translate into unbounded CLR stack depth, so
     // nested call frames are not an option. A frame resumes exactly where a child
     // call would return, preserving group order and error precedence.
     private sealed class DeleteFrame(JsonNode? node, List<IReadOnlyList<JqValueSegment>> paths, int depth)
@@ -1046,7 +1051,7 @@ internal static class JqPathDeletes
                     replaced[name.Key] = value;
             if (removed.Count == 0 && replaced.Count == 0)
                 return node;
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             var rebuilt = new JsonObject();
             foreach (var property in obj)
             {
@@ -1093,7 +1098,7 @@ internal static class JqPathDeletes
                 }
             if (removed.Count == 0 && replaced.Count == 0)
                 return node;
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             var rebuilt = new JsonArray();
             for (int position = 0; position < arr.Count; position++)
             {

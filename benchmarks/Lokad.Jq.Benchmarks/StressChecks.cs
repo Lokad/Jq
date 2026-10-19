@@ -6,12 +6,12 @@ internal static class StressChecks
 {
     public static async Task RunAsync(CancellationToken cancellationToken)
     {
-        // Small explicit policies expose cumulative failures without allocating
-        // hundreds of megabytes or turning elapsed time into a test assertion.
+        // Keep construction and structural checks bounded without turning
+        // elapsed time into a test assertion.
         await CheckAsync(["-n", "-c", "range(0;100)"], [],
             JqExecutionPolicy.Default, 0, string.Concat(Enumerable.Range(0, 100).Select(value => value + "\n"))).ConfigureAwait(false);
-        await CheckAsync(["-n", "[range(0;1000)]"], [],
-            new JqExecutionPolicy { MaximumValueNodes = 128 }, 5, "").ConfigureAwait(false);
+        await CheckAsync(["-n", "[range(0;1000)] | length"], [],
+            JqExecutionPolicy.Default, 0, "1000\n").ConfigureAwait(false);
         await CheckAsync(["-n", "-r", "\"x\" * 33"], [],
             new JqExecutionPolicy { MaximumStringLength = 32 }, 5, "").ConfigureAwait(false);
         string input = new string('[', 32) + "0" + new string(']', 32);

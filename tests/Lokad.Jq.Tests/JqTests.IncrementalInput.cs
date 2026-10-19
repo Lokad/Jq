@@ -39,14 +39,14 @@ public sealed partial class JqTests
     [InlineData(1)]
     [InlineData(17)]
     [InlineData(8192)]
-    public async Task Jq_InputNodeAllowanceDoesNotDependOnReadFragmentation(int chunk)
+    public async Task Jq_InputMaterializationDoesNotDependOnReadFragmentation(int chunk)
     {
         var inner = new MockFileSystem();
         inner.AddFile("/data", JsonSerializer.Serialize(Enumerable.Range(0, 1024).Select(i => new { id = i })));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "length", "/data")));
 
         int exit = await command.ExecuteAsync(new ChunkedHost(inner, chunk),
-            new JqExecutionPolicy { MaximumValueNodes = 4096 }, CancellationToken.None);
+            JqExecutionPolicy.Default, CancellationToken.None);
 
         Assert.Equal(0, exit);
         Assert.Equal("1024\n", inner.GetOutput(JqFileDescriptor.StdOut));
@@ -91,9 +91,9 @@ public sealed partial class JqTests
             "try inputs catch \"caught\"", "/first", "/later")));
 
         Assert.Equal(5, await command.ExecuteAsync(new ChunkedHost(inner, chunk),
-            new JqExecutionPolicy { MaximumValueNodes = 128 }, CancellationToken.None));
+            new TestMemoryBudget(32 * 1024), CancellationToken.None));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: value budget exceeded\n", inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: memory budget exceeded\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(inner.ClosedDescriptors);
         Assert.Equal(0, inner.OpenFileCount);
     }

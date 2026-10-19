@@ -252,8 +252,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
             {
                 int length = newline - _start;
                 ReadOnlyMemory<byte> line = _buffer.AsMemory(_start, length);
-                _budget.ChargeNode();
-                _budget.ChargeString(Encoding.UTF8.GetCharCount(line.Span));
+                _budget.CheckCancellation();
+                _budget.ReserveString(Encoding.UTF8.GetCharCount(line.Span));
                 string text = DecodeRawSegment(line);
                 _start = newline + 1;
                 _count -= length + 1;
@@ -269,8 +269,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
                     continue;
                 }
                 ReadOnlyMemory<byte> tail = _buffer.AsMemory(_start, _count);
-                _budget.ChargeNode();
-                _budget.ChargeString(Encoding.UTF8.GetCharCount(tail.Span));
+                _budget.CheckCancellation();
+                _budget.ReserveString(Encoding.UTF8.GetCharCount(tail.Span));
                 string tailText = DecodeRawSegment(tail);
                 _start += _count;
                 _count = 0;
@@ -983,7 +983,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private void StashSeqError(string message)
     {
         _budget.CheckCancellation();
-        _budget.ChargeString(message.Length);
+        _budget.ReserveString(message.Length);
         _seqError = new JqSeqResyncException(message);
         SetPosition(1 + _newlines);
     }
@@ -1004,7 +1004,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             throw new JqQuotaException("input buffer exceeds the 64 MiB limit");
         int capacity = (int)Math.Min(JqBudget.MaximumJsonBufferBytes,
             Math.Max(needed, _buffer.Length == 0 ? ChunkSize : 2L * _buffer.Length));
-        _budget.ChargeAllocationWork(capacity);
+        _budget.CheckCancellation();
         _bufferMemory.ReplaceBuffer(ref _buffer, capacity, _start, _count);
         _start = 0;
     }

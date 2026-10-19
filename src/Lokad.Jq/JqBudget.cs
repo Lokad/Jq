@@ -6,8 +6,8 @@ using System.Threading;
 namespace Lokad.Jq;
 
 /// <summary>
-/// Independent execution-work counters and coarse storage owners. Work charges are
-/// cumulative; admitted storage is refunded at record or execution lifetime boundaries.
+/// Cancellation, structural safeguards and coarse storage owners. Admitted
+/// storage is refunded at record or execution lifetime boundaries.
 /// </summary>
 internal sealed class JqBudget : IDisposable
 {
@@ -17,8 +17,6 @@ internal sealed class JqBudget : IDisposable
     internal const int MaximumJsonBufferBytes = 64 * 1024 * 1024;
     internal const int MaximumDepth = 64;
     private readonly CancellationToken _cancellationToken;
-    private long _remainingAllocationWork;
-    private int _remainingNodes;
     private int _evaluationDepth;
     private readonly JqStorage _executionStorage;
     private JqStorage _storage;
@@ -41,8 +39,6 @@ internal sealed class JqBudget : IDisposable
         _executionStorage = new JqStorage(memoryBudget);
         _storage = _executionStorage;
         _cancellationToken = cancellationToken;
-        _remainingAllocationWork = policy.MaximumAllocationWorkBytes;
-        _remainingNodes = policy.MaximumValueNodes;
     }
 
     internal JqExecutionPolicy Policy { get; }
@@ -135,16 +131,9 @@ internal sealed class JqBudget : IDisposable
         _storage.ReserveBytes(bytes);
     }
 
-    internal void ChargeValueNode()
+    internal void ReserveValueNode()
     {
-        ChargeNode();
         ReserveBytes(64);
-    }
-
-    internal void ChargeAllocation(long bytes)
-    {
-        ChargeAllocationWork(bytes);
-        ReserveBytes(bytes);
     }
 
     // Managed scalar clones share immutable payloads. Their small standalone
@@ -152,22 +141,24 @@ internal sealed class JqBudget : IDisposable
     // and backing slots, without charging borrowed strings a second time.
     internal void ReserveCloneStorage(JsonNode? value)
     {
-        ReserveBytes(Estimate(value));
+        ReserveBytes(Estimate(value, 0));
 
-        static long Estimate(JsonNode? value)
+        long Estimate(JsonNode? value, int depth)
         {
+            CheckCancellation();
+            CheckValueDepth(value, depth);
             if (value is JsonArray array)
             {
                 long bytes = 64 + 24L * array.Count;
                 foreach (JsonNode? child in array)
-                    bytes += child is JsonValue ? 64 : Estimate(child);
+                    bytes += child is JsonValue ? 64 : Estimate(child, depth + 1);
                 return bytes;
             }
             if (value is JsonObject obj)
             {
                 long bytes = 64 + 96L * obj.Count;
                 foreach (var entry in obj)
-                    bytes += entry.Value is JsonValue ? 64 : Estimate(entry.Value);
+                    bytes += entry.Value is JsonValue ? 64 : Estimate(entry.Value, depth + 1);
                 return bytes;
             }
             return 0;
@@ -200,12 +191,6 @@ internal sealed class JqBudget : IDisposable
         return bytes;
     }
 
-    internal void ChargeClone(JsonNode? value)
-    {
-        ChargeTree(value);
-        ReserveCloneStorage(value);
-    }
-
     public void Dispose()
     {
         if (_disposed) return;
@@ -220,22 +205,6 @@ internal sealed class JqBudget : IDisposable
 
     internal void CheckCancellation() => _cancellationToken.ThrowIfCancellationRequested();
 
-    internal void ChargeAllocationWork(long count)
-    {
-        CheckCancellation();
-        if (count < 0 || count > _remainingAllocationWork)
-            throw new JqQuotaException("allocation work allowance exceeded");
-        _remainingAllocationWork -= count;
-    }
-
-    internal void ChargeNode()
-    {
-        CheckCancellation();
-        if (_remainingNodes <= 0)
-            throw new JqQuotaException("value budget exceeded");
-        _remainingNodes--;
-    }
-
     internal void CheckStringLength(long length)
     {
         CheckCancellation();
@@ -245,41 +214,31 @@ internal sealed class JqBudget : IDisposable
                 : $"string result exceeds the {Policy.MaximumStringLength} UTF-16 code unit limit");
     }
 
-    internal void ChargeString(long length)
-    {
-        ChargeStringWork(length);
-        ReserveBytes(length * sizeof(char));
-    }
-
-    internal void ChargeStringWork(long length)
+    internal void ReserveString(long length)
     {
         CheckStringLength(length);
-        ChargeAllocationWork(length * sizeof(char));
+        ReserveBytes(length * sizeof(char));
     }
 
     internal void Append(StringBuilder builder, ReadOnlySpan<char> text)
     {
         CheckStringLength((long)builder.Length + text.Length);
-        ChargeString(text.Length);
+        ReserveString(text.Length);
         builder.Append(text);
     }
 
     internal string Finish(StringBuilder builder)
     {
-        ChargeString(builder.Length);
+        ReserveString(builder.Length);
         return builder.ToString();
     }
 
-    internal void ChargeTree(JsonNode? node)
-    {
-        Visit(node, 0);
-    }
+    internal void CheckValueStructure(JsonNode? node) => Visit(node, 0);
 
     private void Visit(JsonNode? value, int depth)
     {
-        if (depth > MaximumDepth || depth == MaximumDepth && value is JsonArray or JsonObject)
-            throw new JqQuotaException("value nesting limit exceeded");
-        ChargeNode();
+        CheckCancellation();
+        CheckValueDepth(value, depth);
         switch (value)
         {
             case JsonArray array:
@@ -288,19 +247,21 @@ internal sealed class JqBudget : IDisposable
             case JsonObject obj:
                 foreach (var property in obj)
                 {
-                    ChargeStringWork(property.Key.Length);
                     Visit(property.Value, depth + 1);
                 }
-                break;
-            case JsonValue scalar when scalar.TryGetValue<string>(out var text):
-                ChargeStringWork(text.Length);
                 break;
         }
     }
 
+    internal static void CheckValueDepth(JsonNode? value, int depth)
+    {
+        if (depth > MaximumDepth || depth == MaximumDepth && value is JsonArray or JsonObject)
+            throw new JqQuotaException("value nesting limit exceeded");
+    }
+
     internal void EnterEvaluation()
     {
-        ChargeNode();
+        CheckCancellation();
         if (_evaluationDepth >= 256)
             throw new JqQuotaException("filter nesting limit exceeded");
         _evaluationDepth++;

@@ -31,7 +31,7 @@ internal sealed class ReduceFilter(JqFilter Source, IReadOnlyList<BindingPattern
                 JsonNode? last = null;
                 foreach (var (_, updated) in AsFilter.DriveAlternatives(Alternatives, _allNames, item, environment, context, scope => Update.Evaluate(state, context, scope)))
                 {
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     produced = true;
                     last = updated;
                 }
@@ -69,7 +69,7 @@ internal sealed class ForeachFilter(JqFilter Source, IReadOnlyList<BindingPatter
                 JsonNode? last = null;
                 foreach (var (scope, updated) in AsFilter.DriveAlternatives(Alternatives, _allNames, item, environment, context, scope => Update.Evaluate(state, context, scope)))
                 {
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     produced = true;
                     last = updated;
                     if (Extract is null)
@@ -221,7 +221,7 @@ internal sealed class WhileFilter(JqFilter Condition, JqFilter Update) : JqFilte
                 yield return context.Runtime.Clone(state);
                 foreach (JsonNode? updated in Update.Evaluate(state, context, environment))
                 {
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     next.Add(updated);
                 }
             }
@@ -255,7 +255,7 @@ internal sealed class UntilFilter(JqFilter Condition, JqFilter Next) : JqFilter
                 }
                 foreach (JsonNode? updated in Next.Evaluate(state, context, environment))
                 {
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     next.Add(updated);
                 }
             }
@@ -276,7 +276,7 @@ internal sealed class RepeatFilter(JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         while (true)
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             foreach (JsonNode? value in Body.Evaluate(input, context, environment))
                 yield return value;
         }
@@ -301,7 +301,7 @@ internal sealed class RecurseFilter(JqFilter Body, JqFilter? Condition) : JqFilt
             {
                 if (Condition is not null && !FirstTruthy(Condition, expanded, context, environment))
                     continue;
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 next.Add(expanded);
             }
             for (int index = next.Count - 1; index >= 0; index--)
@@ -380,7 +380,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
     {
         if (frame.Node is JsonArray)
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             var walked = new JsonArray();
             foreach (Walklevel part in frame.Parts)
                 foreach (JsonNode? output in part.Outputs)
@@ -392,7 +392,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
         }
         if (frame.Node is JsonObject)
         {
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             var walked = new JsonObject();
             foreach (Walklevel part in frame.Parts)
                 if (part.Key is string name && part.Outputs.Count > 0)
@@ -428,7 +428,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
         foreach (JsonNode? value in Body.Evaluate(rebuilt, context, environment))
         {
             context.Budget.CheckCancellation();
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             context.Budget.ReserveBytes(24);
             outputs.Add(value);
         }

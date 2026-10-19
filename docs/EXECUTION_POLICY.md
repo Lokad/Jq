@@ -1,76 +1,51 @@
-# Execution policy
+# Execution safeguards
 
 `Jq.ExecuteAsync(host, policy, cancellationToken)` accepts an immutable
-`JqExecutionPolicy`. The existing overload uses `JqExecutionPolicy.Default`.
-Each execution gets fresh counters, including repeated or concurrent execution
-of the same command with the same policy.
+`JqExecutionPolicy`. The other overload uses `JqExecutionPolicy.Default`.
+The policy controls string construction and each synchronous regex search.
+Shared live-storage admission uses the host's `IMemoryBudget`.
 
 ```csharp
 var policy = new JqExecutionPolicy
 {
     MaximumStringLength = 1024 * 1024,
-    MaximumValueNodes = 100_000,
+    MaximumRegexWork = 1_000_000,
+    MaximumRegexTime = TimeSpan.FromSeconds(1),
 };
 var command = Jq.TryParse(invocation)
     ?? throw new InvalidOperationException("Expected a jq command.");
-int status = await command.ExecuteAsync(host, policy, cancellationToken);
+int status = await command.ExecuteAsync(host, policy, memoryBudget, cancellationToken);
 ```
 
-Allowances must be positive and no greater than the tested defaults. Invalid
-configuration throws `ArgumentOutOfRangeException` during initialization. A
-record copy, such as `policy with { MaximumStringLength = 1024 }`, leaves the
-original policy unchanged. There is no unlimited setting.
+Limits must be positive and no greater than the tested defaults. Invalid
+configuration throws `ArgumentOutOfRangeException` during initialization.
+A record copy leaves the original policy unchanged.
 
-| Allowance | Default and current ceiling | Accounting |
+| Safeguard | Default and current ceiling | Scope |
 | --- | --- | --- |
-| `MaximumAllocationWorkBytes` | 256 MiB | Cumulative conservative allocation-work charges, including intermediate and discarded work. |
-| `MaximumValueNodes` | 262,144 | Cumulative value and evaluation charges, including discarded work. |
-| `MaximumStringLength` | 8 Mi UTF-16 code units | Each charged string or text buffer, including keys, rendered JSON, and decoded filter-file text. |
-| `MaximumRegexWork` | 10,000,000 | Engine work steps per search; a fresh allowance for each `IsMatch` or `MatchDetailed` call. |
-| `MaximumRegexTime` | Five seconds | Time per engine search; excludes compilation, filter replacement evaluation and host waits. |
+| `MaximumStringLength` | 8 Mi UTF-16 code units | A constructed string, key or rendered text value. |
+| `MaximumRegexWork` | 10,000,000 | Engine steps for each search. |
+| `MaximumRegexTime` | Five seconds | Time for each engine search, excluding compilation, replacement evaluation and host waits. |
 
-Allocation-work accounting measures charged work. Its charges are not refunded
-when values are discarded. Small
-allowances can expire during variable snapshots or compilation, before any
-input is read. Queued `debug`/`stderr` bytes consume allocation work.
-Terminal diagnostics remain writable after
-exhaustion so the host can observe its cause.
+There are no cumulative node, allocation-work or input/output byte counters.
+The runtime does not replace them with execution fuel. Hosts stop commands with
+cancellation and govern shared live storage with admission. Streams can process
+arbitrary total bytes through bounded 8 KiB reads and awaited writes. Individual
+input buffers stay bounded at 64 MiB; serialized JSON values stay within 32 MiB
+with 64 MiB backing buffers. Every substantial allocation preflights its storage.
+Downstream closure stops production before later reads or output.
 
-`MaximumAllocationBytes` is a deprecated compatibility alias for
-`MaximumAllocationWorkBytes`, with the same backing value and validation. It
-introduces no separate memory balance or backend. Remove the alias in the next
-breaking API release; maintained examples, runtime consumers and ordinary tests
-use the canonical work property. Work exhaustion reports
-`allocation work allowance exceeded`; shared admission refusal reports
-`memory budget exceeded`. Both remain terminal status 5 and bypass jq handlers.
-Calls without a host memory hook enforce only the independent work/structural
-policies; they provide no shared live-storage admission.
+JSON strings and object keys check decoded UTF-16 length and admit storage before
+materialization, including escaped input. Parser/value/evaluation stack limits
+and regex workspace bounds remain independent of cumulative work.
 
-Input reads use bounded 8 KiB requests. Total input/output bytes have no cumulative
-execution ceiling. Individual input/JSON buffers are bounded at 64 MiB and
-preflight backing-capacity growth against the shared allowance. A rejected
-output allocation is not appended: complete records already emitted remain visible.
-Downstream closure ends production before subsequent outputs or charges.
-JSON strings and object keys preflight their decoded UTF-16 length and string
-allocation before materialization, including Unicode and other JSON escapes.
-
-`Jq.TryParse` recognizes a command name and borrows the immutable invocation.
-Binding options/JSON arguments happens afresh during execution, with a separate
-default work allowance and the existing exit-2 argument-error contract. Its
-storage admission uses the same execution scope as evaluation and remains live
-through parsed-variable use and cleanup. Admission refusal reports status 5,
-including `--argjson` and `--jsonargs`, rather than becoming a JSON argument error.
-Execution snapshots, compilation and IO then use the supplied work policy.
-
-`JqCommandInvocation.TryCreateWithStandardDescriptors` and `TryCreate` reserve
-copied argument/environment vectors and derived-directory estimates before
-allocation. Refusal returns false with a null invocation. The returned invocation
-owns its scope; the supplied budget and immutable input strings remain borrowed.
-Keep input owners and the invocation live through every borrowing command's
-completion, then dispose it. Disposal is idempotent and neither cancels work nor
-disposes the root. Existing execution overloads borrow its associated budget;
-explicit execution budgets must share that allowance. Legacy constructors do
-not perform shared admission for their caller-owned snapshots.
+`Jq.TryParse` recognizes a command name and borrows an immutable invocation.
+Option and JSON argument binding happens during execution and shares the active
+memory scope. Ordinary argument errors report status 2; admission refusal remains
+terminal status 5, including `--argjson` and `--jsonargs`. Try-style invocation
+factories admit snapshots before copying, return false/null on refusal, and own
+their snapshot scopes. Callers keep invocations and borrowed inputs alive until
+all concurrent or reused executions and cleanup finish.
 
 ## Cooperative memory admission
 
@@ -104,8 +79,7 @@ including padding, terminates the command without an exact-size retry.
 Reconciliation refunds discarded demand and bounds retained credit. No root
 balance is copied.
 HTML and implode builders preflight their exact capacity in bulk; literal runs
-in time formatting are charged together. Cancellation and work guards remain
-independent, including bounded checks during long text scans.
+in time formatting are charged together. Cancellation remains checked during long text scans.
 
 `TryReserve` and `TryResize` admit nonnegative estimates immediately or refuse
 without changing existing charges. Negative estimates throw; admission through
@@ -168,8 +142,7 @@ the retained admission stays charged even where it was previously discarded.
 Cold results refund immediately. Borrowed results remain distinct; failed or
 oversized buffers release, and closing the budget releases idle capacity while
 active result owners retain their own admission until returned. Output rendering
-and queued copies use separate storage. Reuse still checks work and cancellation
-on every serialization.
+and queued copies use separate storage. Reuse still checks cancellation on every serialization.
 Queued diagnostic copies have a separate owner that survives record refunds and
 all awaited appends. Cold drains refund completely. After 32 nonempty messages
 smaller than 256 bytes, drains may retain at most 256 bytes of existing credit.
@@ -210,8 +183,8 @@ Admission estimates major storage capacity rather than measuring the whole heap.
 Small objects, metadata and minor temporaries can remain uninstrumented; roughly
 20% unaccounted storage is an intentional design allowance, without a coverage
 percentage guarantee for each workload. The host needs separate headroom for
-runtime/native memory and delayed collection. The cumulative work policy above
-remains independent. Estimated reserved bytes are separate from actual managed
+runtime/native memory and delayed collection. Estimated reserved bytes are
+separate from actual managed
 allocation measurements and do not establish a hard process-memory cap.
 
 There is no returned public value stream or command-dispatch callback in the
@@ -248,8 +221,8 @@ input records and files are abandoned. Cancellation propagates as
 compilation and each bounded synchronous search, and cannot interrupt a running
 engine call. Its work/time allowances are per search rather than a cumulative
 execution deadline. A global operation can therefore take multiple allowances;
-jq value/allocation-work counters still bound produced results. Host contract
-failures propagate separately. Catchable language failures, such as invalid
+shared admission bounds retained storage and cancellation stops further work.
+Host contract failures propagate separately. Catchable language failures, such as invalid
 regex syntax, retain their jq handler behavior.
 Actual `OutOfMemoryException` propagates separately from admission refusal,
 including file-variable reads; owned admission and descriptors still unwind.

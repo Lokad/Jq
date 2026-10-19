@@ -52,7 +52,7 @@ than accumulating across searches or input records. Defaults are 10,000,000
 engine work steps and five seconds per search. The engine also receives depth
 256 and 256 KiB working-memory limits. A global operation may use several
 search allowances. Pattern length, subject buffers, capture capacity and
-extracted values also consume jq's allocation-work/value/string guards;
+extracted values preflight shared storage and obey string-construction limits;
 see [execution policy](EXECUTION_POLICY.md) for exact accounting limits.
 These charges are conservative accounting, not a bound on total process memory
 or an exact compiled-pattern size. Engine `MaxResultBytes` is reserved and is
@@ -70,11 +70,9 @@ and cache closure defers the compiled-pattern refund until active borrowers
 finish. Subject capacity starts exact, then grows geometrically within the same
 4 KiB idle-owner ceiling including metadata. Larger subjects stay exact. Any
 refused admission terminates without a smaller retry or eviction to continue.
-All growth admits
-the old-plus-new replacement peak. The estimates
-follow storage lifetimes, independently of
-the cumulative allocation-work policy; they remain approximate and do
-not enforce an engine compiled-storage cap.
+All growth admits the old-plus-new replacement peak. The estimates follow
+storage lifetimes, independently of execution duration; they remain approximate
+and do not enforce an engine compiled-storage cap.
 
 Work, time, depth and working-memory exhaustion terminate execution with status
 5, bypassing `try` and `?`. Cancellation propagates as `OperationCanceledException`.

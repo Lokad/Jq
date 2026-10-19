@@ -45,16 +45,16 @@ Pass a `JqExecutionPolicy` to `ExecuteAsync(host, policy, cancellationToken)`
 to reduce per-execution resource allowances. Existing calls retain the defaults;
 see [execution policy](docs/EXECUTION_POLICY.md) for accounting and fixed ceilings.
 
-The cumulative `MaximumAllocationWorkBytes` guard limits charged work. Shared
-storage admission uses a governed invocation or an explicit `IMemoryBudget`
+Shared storage admission uses a governed invocation or an explicit `IMemoryBudget`
 execution overload; its estimates and lifetime boundaries are described in the
 execution policy. Coarse owners batch small charges using bounded admitted
 credit; retained buffers and caches stay charged until their safe refund boundary.
 Every refused admission, including padded growth, fails the command with status 5
 without retrying. Earlier output remains; cleanup refunds relinquished storage
 so later commands can reuse the allowance.
-The old
-`MaximumAllocationBytes` spelling is a deprecated work-policy alias.
+Execution has no cumulative fuel or input/output byte ceiling. Use host
+cancellation to stop long-running commands; string, stack, buffer and bounded
+regex-search safeguards remain.
 
 ## Develop
 

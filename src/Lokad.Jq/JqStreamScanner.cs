@@ -376,7 +376,7 @@ internal sealed class JqStreamScanner : IDisposable
                     _lastSeen = LastSeen.Comma;
                     if (haveLeaf)
                     {
-                        _budget.ChargeNode();
+                        _budget.CheckCancellation();
                         return StreamScanOutcome.WithEvent(consumed, new JsonArray { path, leaf });
                     }
                     return StreamScanOutcome.NeedsMore(consumed);
@@ -392,7 +392,7 @@ internal sealed class JqStreamScanner : IDisposable
                     _lastSeen = LastSeen.Comma;
                     if (haveLeaf)
                     {
-                        _budget.ChargeNode();
+                        _budget.CheckCancellation();
                         return StreamScanOutcome.WithEvent(consumed, new JsonArray { path, leaf });
                     }
                     return StreamScanOutcome.NeedsMore(consumed);
@@ -430,7 +430,7 @@ internal sealed class JqStreamScanner : IDisposable
             JsonArray path = CopyPath();
             _path.RemoveAt(_path.Count - 1);
             _lastSeen = _path.Count == 0 ? LastSeen.None : LastSeen.Value;
-            _budget.ChargeNode();
+            _budget.CheckCancellation();
             var emitted = new JsonArray { path, leaf };
             _stashed = StashClose(path);
             return StreamScanOutcome.WithEvent(consumed, emitted);
@@ -451,7 +451,7 @@ internal sealed class JqStreamScanner : IDisposable
             JsonArray path = CopyPath();
             _path.RemoveAt(_path.Count - 1);
             _lastSeen = _path.Count == 0 ? LastSeen.None : LastSeen.Value;
-            _budget.ChargeNode();
+            _budget.CheckCancellation();
             return StreamScanOutcome.WithEvent(consumed, new JsonArray { path });
         }
         _path.RemoveAt(_path.Count - 1);
@@ -469,7 +469,7 @@ internal sealed class JqStreamScanner : IDisposable
 
     private JsonArray LeafEvent(JsonArray path, JsonNode? leaf)
     {
-        _budget.ChargeNode();
+        _budget.CheckCancellation();
         return new JsonArray { path, leaf };
     }
 
@@ -507,7 +507,7 @@ internal sealed class JqStreamScanner : IDisposable
         if (_tokenLength >= _token.Length)
         {
             int capacity = _token.Length == 0 ? 256 : _token.Length * 2;
-            _budget.ChargeAllocationWork(capacity);
+            _budget.CheckCancellation();
             _tokenMemory.ReplaceBuffer(ref _token, capacity, 0, _tokenLength);
         }
         _token[_tokenLength++] = b;
@@ -534,8 +534,8 @@ internal sealed class JqStreamScanner : IDisposable
             throw new JqException(message);
         }
         string suffixed = resync ? message + " (need RS to resync)" : message;
-        _budget.ChargeNode();
-        _budget.ChargeString(suffixed.Length);
+        _budget.CheckCancellation();
+        _budget.ReserveString(suffixed.Length);
         var errorEvent = new JsonArray { JsonValue.Create(suffixed), CopyPath() };
         ResetRecordState();
         if (resync)
@@ -587,8 +587,8 @@ internal sealed class JqStreamScanner : IDisposable
         if (_streamErrors)
         {
             string message = $"{baseMessage} at line {_line}, column {_column} (need RS to resync)";
-            _budget.ChargeNode();
-            _budget.ChargeString(message.Length);
+            _budget.CheckCancellation();
+            _budget.ReserveString(message.Length);
             var errorEvent = new JsonArray { JsonValue.Create(message), CopyPath() };
             return StreamScanOutcome.WithErrorEvent(consumed, errorEvent, dropRest: false);
         }
@@ -733,8 +733,8 @@ internal sealed class JqStreamScanner : IDisposable
         string message = $"{baseMessage} at EOF at line {_line}, column {_column}";
         if (_streamErrors)
         {
-            _budget.ChargeNode();
-            _budget.ChargeString(message.Length);
+            _budget.CheckCancellation();
+            _budget.ReserveString(message.Length);
             var errorEvent = new JsonArray { JsonValue.Create(message), errorPath };
             return StreamScanOutcome.WithErrorEvent(0, errorEvent, dropRest: false);
         }

@@ -17,7 +17,7 @@ internal sealed class TostreamFilter : JqFilter
         {
             if (input is not JsonObject obj || obj.Count == 0)
             {
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 context.Budget.ReserveBytes(176);
                 yield return new JsonArray { new JsonArray(), context.Runtime.Clone(input) };
                 yield break;
@@ -46,7 +46,7 @@ internal sealed class TostreamFilter : JqFilter
                 node = props[keys[0]];
                 continue;
             }
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             yield return StreamLeaf(segments, context.Runtime.Clone(node), context.Budget);
             while (true)
             {
@@ -65,7 +65,7 @@ internal sealed class TostreamFilter : JqFilter
                         break;
                     }
                     frames.Pop();
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     yield return StreamClose(segments, context.Budget);
                     segments.RemoveAt(segments.Count - 1);
                     node = parent;
@@ -85,7 +85,7 @@ internal sealed class TostreamFilter : JqFilter
                         break;
                     }
                     frames.Pop();
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     yield return StreamClose(segments, context.Budget);
                     segments.RemoveAt(segments.Count - 1);
                     node = objParent;
@@ -209,7 +209,7 @@ internal sealed class TruncateStreamFilter(JqFilter Stream) : JqFilter
                 context.Budget.ReserveCloneStorage(segment);
                 truncated.Add(segment?.DeepClone());
             }
-            context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             var reshaped = new JsonArray { truncated };
             for (int i = 1; i < pair.Count; i++)
             {

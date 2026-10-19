@@ -53,12 +53,12 @@ internal sealed partial class JqRuntime
                             case JsonTokenType.StartObject:
                                 if (_frames.Count >= JqBudget.MaximumDepth)
                                     throw new JqQuotaException("value nesting limit exceeded");
-                                budget.ChargeValueNode();
+                                budget.ReserveValueNode();
                                 if (_frames.Count == _frames.Capacity)
                                 {
                                     int capacity = System.Math.Min(JqBudget.MaximumDepth,
                                         System.Math.Max(4, _frames.Capacity * 2));
-                                    budget.ChargeAllocationWork(32L + capacity * 2L * System.IntPtr.Size);
+                                    budget.CheckCancellation();
                                     _frames.Capacity = capacity;
                                 }
                                 JsonNode container = reader.TokenType == JsonTokenType.StartArray
@@ -81,7 +81,7 @@ internal sealed partial class JqRuntime
                         if (_frames.Count == 0)
                         {
                             consumed = _offset + (int)reader.BytesConsumed;
-                            budget.ChargeAllocationWork(consumed);
+                            budget.CheckCancellation();
                             value = _root;
                             Reset();
                             return true;

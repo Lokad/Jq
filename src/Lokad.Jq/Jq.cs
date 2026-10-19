@@ -38,7 +38,7 @@ public sealed class Jq
         return JqExecutor.ExecuteAsync(host, _invocation, policy, _invocation.MemoryBudget, cancellationToken);
     }
 
-    /// <summary>Executes using a borrowed host memory allowance and the default work policy.</summary>
+    /// <summary>Executes using a borrowed host memory allowance and the default construction and regex safeguards.</summary>
     public Task<int> ExecuteAsync(IJqHost host, IMemoryBudget memoryBudget, CancellationToken cancellationToken) =>
         ExecuteAsync(host, JqExecutionPolicy.Default, memoryBudget, cancellationToken);
 

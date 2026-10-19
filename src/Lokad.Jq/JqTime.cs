@@ -118,8 +118,7 @@ internal static class JqTime
             JsonValue.Create(moment.Second),
             JsonValue.Create(moment.Weekday),
             JsonValue.Create(moment.YearDay));
-        for (int index = 0; index < 9; index++)
-            context.Budget.ChargeNode();
+        context.Budget.CheckCancellation();
         return array;
     }
 
@@ -537,12 +536,11 @@ internal static class JqTime
                 JsonValue.Create(second),
                 JsonValue.Create(weekday),
                 JsonValue.Create(yearday));
-            for (int index = 0; index < 9; index++)
-                context.Budget.ChargeNode();
+            context.Budget.CheckCancellation();
             if (_position < text.Length)
             {
                 string rest = text[_position..];
-                context.Budget.ChargeString(rest.Length);
+                context.Budget.ReserveString(rest.Length);
                 array.Add(JsonValue.Create(rest));
             }
             return array;

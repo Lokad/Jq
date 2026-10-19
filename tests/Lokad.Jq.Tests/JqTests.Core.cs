@@ -65,7 +65,6 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
-
     [Theory]
     [InlineData("[1,2,3,1] - [2]", "[\n  1,\n  3,\n  1\n]\n")]
     [InlineData("[1,2] - []", "[\n  1,\n  2\n]\n")]
@@ -323,11 +322,12 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_OptionalDoesNotSuppressQuota()
     {
+        var memory = new TestMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "{a:range(0;300000)}? | length")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("value budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]

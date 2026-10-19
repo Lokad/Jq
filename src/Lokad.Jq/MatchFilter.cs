@@ -50,10 +50,10 @@ internal sealed class MatchImplFilter(IReadOnlyList<JqFilter> args) : JqFilter
             else
             {
                 var array = new JsonArray();
-                context.Budget.ChargeNode();
+                context.Budget.CheckCancellation();
                 foreach (JsonObject match in matches)
                 {
-                    context.Budget.ChargeNode();
+                    context.Budget.CheckCancellation();
                     array.Add(match);
                 }
                 yield return array;

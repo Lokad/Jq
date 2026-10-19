@@ -84,8 +84,7 @@ internal static class JqCommandLineParser
         {
             if (args.Count > 4096)
                 throw new JqException("argument count exceeds the 4096 limit");
-            foreach (var argument in args)
-                budget.CheckCancellation();
+            budget.CheckCancellation();
             budget.ReserveBytes(128 + 160L * args.Count + 160L * environment.Count);
             var special = ExtractSpecialArguments(args, runtime);
             if (special.Error != null)
@@ -148,8 +147,8 @@ internal static class JqCommandLineParser
                 var environmentObject = new JsonObject();
                 foreach (JqEnvironmentVariable variable in environment)
                 {
-                    budget.ChargeNode();
-                    budget.ChargeStringWork(variable.Name.Length + variable.Value.Length);
+                    budget.CheckCancellation();
+                    budget.CheckStringLength(variable.Name.Length + variable.Value.Length);
                     environmentObject[variable.Name] = JsonValue.Create(variable.Value);
                 }
                 special.Variables["ENV"] = environmentObject;
@@ -201,7 +200,7 @@ internal static class JqCommandLineParser
             var maximumLength = (long)path.Length + (path.StartsWith('/') ? 0L : currentDirectory.Path.Length + 1L);
             // Reserve fixed path objects, combined/normalized strings, segment tables and
             // validation copies, including per-segment allocations for many short segments.
-            budget.ChargeAllocation(128 + 64 * maximumLength);
+            budget.ReserveBytes(128 + 64 * maximumLength);
         }
 
         static bool TryParseArguments(IReadOnlyList<string> arguments, out JqArgs parsed,
