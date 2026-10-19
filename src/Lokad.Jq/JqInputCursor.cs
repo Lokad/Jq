@@ -241,12 +241,14 @@ internal sealed class JqInputCursor : IAsyncDisposable
     internal async Task<(bool HasValue, string Text, bool Terminated)> PullRawSegmentAsync()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        int scanned = 0;
         while (true)
         {
             _budget.CheckCancellation();
             if (!_active && !await ActivateNextAsync().ConfigureAwait(false))
                 return (false, string.Empty, false);
-            int newline = IndexOfLf();
+            int relativeNewline = _buffer.AsSpan(_start + scanned, _count - scanned).IndexOf((byte)'\n');
+            int newline = relativeNewline < 0 ? -1 : _start + scanned + relativeNewline;
             if (newline >= 0)
             {
                 int length = newline - _start;
@@ -265,6 +267,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 if (_count == 0)
                 {
                     await CloseAndAdvanceAsync(null).ConfigureAwait(false);
+                    scanned = 0;
                     continue;
                 }
                 ReadOnlyMemory<byte> tail = _buffer.AsMemory(_start, _count);
@@ -276,6 +279,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 SetPosition(1 + _newlines);
                 return (true, tailText, false);
             }
+            scanned = _count;
             await FillAsync().ConfigureAwait(false);
         }
     }
@@ -1002,9 +1006,9 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     private void EnsureAdditional(int additional)
     {
-        if (_start + _count + additional <= _buffer.Length)
+        if ((long)_start + _count + additional <= _buffer.Length)
             return;
-        if (_count + additional <= _buffer.Length)
+        if ((long)_count + additional <= _buffer.Length)
         {
             if (_count > 0)
                 Array.Copy(_buffer, _start, _buffer, 0, _count);
@@ -1012,10 +1016,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             return;
         }
         long needed = (long)_count + additional;
-        if (needed > JqBudget.MaximumJsonBufferBytes)
-            throw new JqQuotaException("input buffer exceeds the 64 MiB limit");
-        int capacity = (int)Math.Min(JqBudget.MaximumJsonBufferBytes,
-            Math.Max(needed, _buffer.Length == 0 ? ChunkSize : 2L * _buffer.Length));
+        int capacity = JqBudget.BufferCapacity(needed, _buffer.Length == 0 ? ChunkSize : 2L * _buffer.Length);
         _budget.CheckCancellation();
         _bufferMemory.ReplaceBuffer(ref _buffer, capacity, _start, _count);
         _start = 0;

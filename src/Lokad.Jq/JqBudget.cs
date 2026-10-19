@@ -13,8 +13,6 @@ namespace Lokad.Jq;
 internal sealed class JqBudget : IDisposable
 {
     private const int MaximumIdleSerializationBytes = 4096;
-    internal const int MaximumSerializedValueBytes = 32 * 1024 * 1024;
-    internal const int MaximumJsonBufferBytes = 64 * 1024 * 1024;
     internal const int MaximumDepth = 64;
     private readonly CancellationToken _cancellationToken;
     private int _evaluationDepth;
@@ -46,6 +44,13 @@ internal sealed class JqBudget : IDisposable
     internal IMemoryBudget? MemoryBudget { get; }
 
     internal CancellationToken CancellationToken => _cancellationToken;
+
+    internal static int BufferCapacity(long required, long preferred)
+    {
+        if (required < 0 || required > Array.MaxLength)
+            throw new JqQuotaException("byte buffer cannot be represented");
+        return (int)Math.Min(Array.MaxLength, Math.Max(required, preferred));
+    }
 
     internal JqJsonBuffer RentSerializationBuffer()
     {

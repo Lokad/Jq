@@ -86,8 +86,8 @@ separate owners. Safe reconciliation never drops storage to retry a refusal.
   Iterative path operations retain the separate 10,000-segment path bound;
   reference path-length errors remain catchable language errors.
 - Filter length: 1 Mi characters; tokens/arguments: 4,096.
-- Input and JSON backing buffers: 64 MiB each; serialized JSON value: 32 MiB.
-  Host read requests are at most 8 KiB. Decoded string/key lengths and storage
+- Materialized input and JSON buffers use shared admission and CLR representation
+  bounds. Host read requests are at most 8 KiB. Decoded string/key storage
   are preflighted before materialization, including escaped JSON.
 - Regex pattern: 16,384 UTF-16 units; search depth: 256; workspace: 256 KiB.
   Compilation/storage estimates are conservative, not a hard compiled-size cap;

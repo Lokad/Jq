@@ -1,7 +1,15 @@
 # Changelog
 
 ## Unreleased
-
++
++- Remove the fixed 32 MiB serialized-value and 64 MiB materialized-buffer ceilings.
++  Preflight checked capacities and replacement peaks against shared admission;
++  retain 8 KiB reads, backpressure, closure and owned cleanup. Raw input scans
++  only newly read bytes when looking for LF, avoiding repeated whole-line scans.
++- Remove the one-million array-index policy. Admit actual padding before copying
++  or mutation; existing indices need no padding charge. Preserve catchable errors
++  for indices outside CLR representation and terminal admission refusal.
++
 - Breaking: remove MaximumStringLength and its fixed UTF-16 cap, validation,
   read-time checks and diagnostics. String construction/decoding uses shared
   storage admission and checked representability; borrowed reads require no new
@@ -27,8 +35,8 @@
   remain; no replacement fuel or compatibility switch is introduced.
 
 - Breaking: remove MaximumInputBytes and MaximumOutputBytes and their counters.
-  Streams continue through bounded 8 KiB reads and awaited writes, with 64 MiB
-  per-buffer safeguards, shared admission, cancellation and downstream closure.
+  Streams continue through bounded 8 KiB reads and awaited writes, with shared
+  admission, cancellation and downstream closure.
 - Return existing values from identity, variable, selection and child reads without
   accounting scans. Fuse copy admission and depth checks into actual construction;
   retain cursor construction estimates instead of recounting DOM trees.

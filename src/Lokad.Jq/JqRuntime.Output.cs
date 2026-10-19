@@ -31,7 +31,7 @@ internal sealed partial class JqRuntime
                 invocation.Indent, invocation.UseTabs, buffer, writer);
             int prefix = invocation.Seq ? 1 : 0;
             byte? terminator = invocation.RawOutput0 ? (byte)0 : invocation.JoinOutput ? null : (byte)'\n';
-            int length = body.Length + prefix + (terminator.HasValue ? 1 : 0);
+            int length = JqBudget.BufferCapacity((long)body.Length + prefix + (terminator.HasValue ? 1 : 0), 0);
             budget.CheckCancellation();
 
             // Reset keeps the bytes, so the common case copies onto the same
@@ -53,12 +53,11 @@ internal sealed partial class JqRuntime
             if (invocation.RawOutput0 && text.Contains((char)0))
                 throw new JqException("Cannot dump a string containing NUL with --raw-output0 option");
             byte? terminator = invocation.RawOutput0 ? (byte)0 : invocation.JoinOutput ? null : (byte)'\n';
-            int length = Encoding.UTF8.GetByteCount(text) + (terminator.HasValue ? 1 : 0);
+            int length = JqBudget.BufferCapacity((long)Encoding.UTF8.GetByteCount(text) + (terminator.HasValue ? 1 : 0), 0);
             budget.CheckCancellation();
             if (_rawBuffer.Length < length)
             {
-                int capacity = _rawBuffer.Length == 0 ? length
-                    : Math.Max(length, Math.Min(JqBudget.MaximumJsonBufferBytes, _rawBuffer.Length * 2));
+                int capacity = JqBudget.BufferCapacity(length, 2L * _rawBuffer.Length);
                 _rawMemory.ReplaceBuffer(ref _rawBuffer, capacity);
             }
             int written = Utf8Text.Encode(text, _rawBuffer);

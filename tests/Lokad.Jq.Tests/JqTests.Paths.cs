@@ -574,7 +574,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("null", "try (.foo[-1] = 0) catch .", "\"Out of bounds negative array index\"\n")]
-    [InlineData("null", "try (.[999999999] = 0) catch .", "\"Array index too large\"\n")]
+    [InlineData("null", "try (.[2147483647] = 0) catch .", "\"Array index too large\"\n")]
     [InlineData("null", "try ([range(3)] | .[(-1 | sqrt)] = 9) catch .", "\"Cannot set array element at NaN index\"\n")]
     [InlineData("null", "try (\"foobar\" | .[1.5:3.5] = \"xyz\") catch .", "\"Cannot update string slices\"\n")]
     [InlineData("[{\"a\": 0}, {\"a\": 1}]", "try ((reverse | .[].b) = 10) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1},{\\\"a\\\":0}]\"\n")]

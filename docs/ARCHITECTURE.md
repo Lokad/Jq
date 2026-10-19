@@ -106,8 +106,8 @@ separate storage.
 
 Input flows through a shared pull cursor (`JqInputCursor`) using chunked 8 KiB
 requests. Total input and output bytes have no cumulative execution ceiling.
-Individual staging/materialization buffers stay bounded at 64 MiB, with shared
-admission ahead of growth. Implicit outer iteration and explicit
+Materialized buffers use checked CLR sizes and shared admission ahead of growth,
+without a fixed byte ceiling. Implicit outer iteration and explicit
 `input`/`inputs` calls draw from the same cursor, so values interleave; `-`
 operands reuse borrowed stdin at its current position and are never closed,
 while file operands open lazily and close when exhausted, abandoned, or

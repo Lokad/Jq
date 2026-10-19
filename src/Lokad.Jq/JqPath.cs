@@ -67,7 +67,6 @@ internal sealed record JqValuePath(IReadOnlyList<JqValueSegment> Segments, JsonN
 internal static class JqPaths
 {
     internal const int MaxPathDepth = 10000;
-    internal const int MaxArrayPad = 1_000_000;
 
     internal static string InvalidResult(JsonNode? value, JqContext context)
     {
@@ -432,7 +431,7 @@ internal static class JqPathUpdates
                 {
                     if (index.Index < 0)
                         throw new JqException("Out of bounds negative array index");
-                    if (index.Index > JqPaths.MaxArrayPad)
+                    if (index.Index >= Array.MaxLength)
                         throw new JqException("Array index too large");
                     frames.Push(new Frame(segment, PaddedArray(null, index.Index, context), (int)index.Index, 0, 0));
                     return null;
@@ -442,7 +441,7 @@ internal static class JqPathUpdates
                     long resolved = index.Index < 0 ? arr.Count + index.Index : index.Index;
                     if (resolved < 0)
                         throw new JqException("Out of bounds negative array index");
-                    if (resolved > JqPaths.MaxArrayPad)
+                    if (resolved >= Array.MaxLength)
                         throw new JqException("Array index too large");
                     frames.Push(new Frame(segment, PaddedArray(arr, resolved, context), (int)resolved, 0, 0));
                     return resolved < arr.Count ? arr[(int)resolved] : null;
@@ -559,6 +558,10 @@ internal static class JqPathUpdates
     // in range; every pad element is budget-charged.
     private static JsonArray PaddedArray(JsonArray? source, long resolved, JqContext context)
     {
+        long padding = Math.Max(0, resolved + 1 - (source?.Count ?? 0));
+        // Admit all additional backing slots before copying or adding any padding.
+        // An in-range update still admits its copy, with no padding charge.
+        context.Budget.ReserveBytes(checked(24L * padding));
         JsonArray padded;
         if (source is not null)
             padded = (JsonArray)context.Budget.CopyValue(source, 0, false);
@@ -570,7 +573,6 @@ internal static class JqPathUpdates
         while (padded.Count <= resolved)
         {
             context.Budget.CheckCancellation();
-            context.Budget.ReserveBytes(24);
             padded.Add(null);
         }
         return padded;

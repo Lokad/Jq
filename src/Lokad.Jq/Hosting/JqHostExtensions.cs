@@ -56,14 +56,11 @@ internal static class JqHostExtensions
                 cancellationToken.ThrowIfCancellationRequested();
                 if (read.IsError)
                     return new BoundedReadResult.Failed(read);
-                if (read.BytesRead > JqBudget.MaximumJsonBufferBytes - output.Length)
-                    throw new JqQuotaException("input buffer exceeds the 64 MiB limit");
-                int required = (int)output.Length + read.BytesRead;
+                int required = JqBudget.BufferCapacity(output.Length + read.BytesRead, 0);
                 if (required > output.Capacity)
                 {
                     int previous = output.Capacity;
-                    int capacity = (int)Math.Min(JqBudget.MaximumJsonBufferBytes,
-                        Math.Max(required, Math.Max(256, 2L * previous)));
+                    int capacity = JqBudget.BufferCapacity(required, Math.Max(256, 2L * previous));
                     outputMemory.Resize((long)previous + capacity);
                     try { output.Capacity = capacity; }
                     catch
