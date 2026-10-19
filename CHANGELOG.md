@@ -205,7 +205,7 @@ Delivered since the scaffold baseline:
   option to download and verify every hosted source. CI-built packages at
   `9f223bf` pass detached consumers, saved corpora, symbol identity and all
   hosted source checks on Windows and Ubuntu 24.04 x64. Both hosted jobs pass
-  all 3,727 tests and Release pack; see `docs/PACKAGING.md`.
+  all 3,727 tests and Release pack. Package verification commands are in README.md.
 - Execution policy: immutable stricter string-construction and regex work/time
   bounds, with shared live-storage admission and cancellation.
   Regex limits and setup/file quota failures terminate outside jq handlers.

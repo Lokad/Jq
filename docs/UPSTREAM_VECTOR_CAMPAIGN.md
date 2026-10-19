@@ -2,7 +2,7 @@
 
 Scope: the value-output vectors in `tests/jq.test`, `tests/man.test`,
 `tests/onig.test`, and `tests/manonig.test` of
-the jq 1.8.2 inspection checkout (see `docs/PROVENANCE.md`). Each vector is
+[upstream jq 1.8.2](https://github.com/jqlang/jq/tree/jq-1.8.2). Each vector is
 a (program, single JSON input, expected JSON values) triple. This campaign
 executes every triple through the public packaged library API and compares
 parsed values with JsonNode.DeepEquals, preserving decimal precision. It follows
@@ -171,7 +171,8 @@ consumer outside the repository and restores the exact packed artifact into a
 fresh isolated cache. Its optional vector mode reads caller-supplied JSONL triples
 with `prog` (filter text), `input` (JSON text), and `expected` (array of JSON texts).
 The expected miss count gates the recorded total; every reported miss still needs
-triage. A matching total is not a conformance certificate. See `PACKAGING.md`.
+triage. A matching total is not a conformance certificate. See the
+[package verification command](../README.md#develop).
 
 The extracted corpus remains ignored local evidence, not a build dependency or a
 bulk fixture committed to this repository. No vector mode runs in ordinary tests

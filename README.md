@@ -68,6 +68,15 @@ dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --filter '*'
 
 The SDK version is pinned in [global.json](global.json). Benchmarks are opt-in.
 
+Release packages and symbols go to `artifacts/nuget/`. Verify package contents,
+dependencies and public API behavior in an isolated consumer:
+
+```powershell
+./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0.nupkg
+```
+
+The script also supports symbol, hosted-source and caller-supplied corpus checks.
+
 ## Documentation
 
 Compatibility with upstream jq is incomplete; Lokad.Jq is not yet a drop-in
@@ -81,7 +90,5 @@ its supported PCRE2 profile; see [regex behavior](docs/REGEX.md).
 - [Execution policy](docs/EXECUTION_POLICY.md): resource allowances and fixed limits.
 - [Benchmarks](docs/BENCHMARKS.md): workloads, governor cost diagnostics and opt-in upstream comparisons.
 - [Numeric profile](docs/NUMERIC_PROFILE.md): number semantics, precision and rendering.
-- [Packaging](docs/PACKAGING.md): builds, CI, package verification and release checks.
 - [Changelog](CHANGELOG.md): changes and validation history.
-- [Provenance](docs/PROVENANCE.md): source origins and dependency/reference distinctions.
 - [License](LICENSE.txt): MIT.
