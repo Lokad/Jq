@@ -304,8 +304,7 @@ internal sealed class UntilFilter(JqFilter Condition, JqFilter Next) : JqFilter
 }
 
 // `repeat(filter)`: re-evaluates the argument against the original input
-// forever, yielding a constant stream per round. Long runs obey the value
-// budget through per-round charges.
+// forever. Cancellation stops iteration; body construction uses shared storage.
 internal sealed class RepeatFilter(JqFilter Body) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)

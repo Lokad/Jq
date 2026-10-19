@@ -14,7 +14,7 @@ modules, environment, clock and timezone inputs come from the embedding host.
 
 - **Numbers:** double-domain semantics with integral storage. Decimal-literal
   fidelity, large-number comparisons and exponent spelling can differ from
-  decimal-enabled jq builds. High-order Bessel accuracy remains limited. See
+  decimal-enabled jq builds. Special-function accuracy remains approximate. See
   [numeric profile](NUMERIC_PROFILE.md).
 - **Regex:** the managed PCRE2 profile differs from jq's Oniguruma semantics;
   flags `m`/`s`/`p`, longest matching and `\C` differ. Sparse numeric captures

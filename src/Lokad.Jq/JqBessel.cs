@@ -4,17 +4,16 @@ namespace Lokad.Jq;
 
 // Managed Bessel functions matching the reference libm behavior verified
 // against jq 1.8.2: J for every real x, Y for x > 0 with the pole at zero
-// and NaN outside the domain. Orders truncate toward zero like the
-// reference dtoi mapping with reflection for negative orders; recurrences
-// run at most MaxOrder steps with periodic cancellation checks, and larger
-// or non-finite orders take documented boundary values. Small arguments
-// use ascending series (Y1 via termwise differentiation of the Y0 series)
+// and NaN outside the domain. Orders truncate toward zero with reflection
+// for negative orders. Recurrences use
+// signed 64-bit integer indices and cooperative cancellation, without a work
+// cutoff. Orders outside index representation use only proven boundary results;
+// otherwise they return NaN. Small arguments use ascending series (Y1 via termwise differentiation of the Y0 series)
 // and large arguments use Hankel asymptotics; Jn/Yn for higher orders use
 // Miller backward recurrence (J) and forward recurrence (Y).
 internal static class JqBessel
 {
     private const double EulerMascheroni = 0.5772156649015329;
-    private const long MaxOrder = 100000;
     private const int CancelStride = 4096;
 
     internal static double J0(double x)
@@ -55,83 +54,158 @@ internal static class JqBessel
     internal static double Jn(JqBudget budget, double order, double x)
     {
         ArgumentNullException.ThrowIfNull(budget);
+        budget.CheckCancellation();
         if (double.IsNaN(order))
             return double.NaN;
         if (double.IsNaN(x) || double.IsInfinity(x))
             return double.NaN;
-        if (Math.Abs(order) > MaxOrder)
-            return 0.0;
-        long n = (long)Math.Truncate(order);
-        if (n < 0)
+        if (double.IsInfinity(order)) return 0.0;
+        double magnitude = Math.Truncate(Math.Abs(order));
+        double point = Math.Abs(x);
+        bool negative = magnitude % 2.0 != 0.0 && ((order < 0.0) != (x < 0.0));
+        if (point == 0.0) return magnitude == 0.0 ? 1.0 : negative ? -0.0 : 0.0;
+        if (magnitude >= 2.0 && point < magnitude && Underflows(magnitude, point))
+            return negative ? -0.0 : 0.0;
+        // The loop index must actually represent the integer order. No smaller
+        // execution allowance is imposed; unsupported index values are numeric NaN.
+        if (magnitude >= -(double)long.MinValue) return double.NaN;
+        long n = (long)magnitude;
+        double value = Positive(n, point);
+        return negative ? -value : value;
+
+        double Positive(long n, double x)
         {
-            double inner = Jn(budget, -n, x);
-            return double.IsNaN(inner) ? inner : (n % 2 == 0 ? inner : -inner);
+            if (n == 0) return J0(x);
+            if (n == 1) return J1(x);
+            if (x < n) return Backward(n, x);
+            double previous = J0(x);
+            double current = J1(x);
+            for (long k = 1; k < n; k++)
+            {
+                if ((k & (CancelStride - 1)) == 0)
+                    budget.CheckCancellation();
+                double next = (2.0 * k / x) * current - previous;
+                previous = current;
+                current = next;
+            }
+            return current;
         }
-        if (x < 0.0)
+
+        // DLMF 10.10.1 supplies Jn/J(n-1) with a converged continued
+        // fraction. Backward recurrence then uses J0/J1 normalization; rescale
+        // before multiplication so tiny arguments cannot overflow intermediate state.
+        double Backward(long n, double x)
         {
-            double inner = Jn(budget, n, -x);
-            return double.IsNaN(inner) ? inner : (n % 2 == 0 ? inner : -inner);
+            double fraction = 2.0 * n / x;
+            if (double.IsPositiveInfinity(fraction)) return 0.0;
+            double c = fraction;
+            double d = 0.0;
+            long terms = 0;
+            while (true)
+            {
+                if ((terms & (CancelStride - 1)) == 0) budget.CheckCancellation();
+                terms++;
+                double b = 2.0 * (n + (double)terms) / x;
+                d = 1.0 / (b - d);
+                c = b - 1.0 / c;
+                double delta = c * d;
+                fraction *= delta;
+                if (Math.Abs(delta - 1.0) <= 8.881784197001252e-16) break;
+            }
+            double atN = 1.0 / fraction;
+            double higher = atN;
+            double lower = 1.0;
+            int scale = 0;
+            for (long k = n - 1; k >= 1; k--)
+            {
+                if ((k & (CancelStride - 1)) == 0) budget.CheckCancellation();
+                double factor = 2.0 * k / x;
+                if (Math.Max(Math.Abs(lower), Math.Abs(higher)) > Math.ScaleB(1.0, 500) / factor)
+                {
+                    lower = Math.ScaleB(lower, -512);
+                    higher = Math.ScaleB(higher, -512);
+                    scale -= 512;
+                }
+                double next = factor * lower - higher;
+                higher = lower;
+                lower = next;
+            }
+            double j0 = J0(x);
+            double j1 = J1(x);
+            double normalized = Math.Abs(j0) >= Math.Abs(j1) ? atN / lower * j0 : atN / higher * j1;
+            return Math.ScaleB(normalized, scale);
         }
-        if (x == 0.0)
-            return n == 0 ? 1.0 : 0.0;
-        if (n == 0)
-            return J0(x);
-        if (n == 1)
-            return J1(x);
-        if (x < n)
-            return BesselMiller(budget, n, x);
-        double previous = J0(x);
-        double current = J1(x);
-        for (long k = 1; k < n; k++)
+
+        bool Underflows(double n, double x)
         {
-            if ((k & (CancelStride - 1)) == 0)
-                budget.CheckCancellation();
-            double next = (2.0 * k / x) * current - previous;
-            previous = current;
-            current = next;
+            // DLMF 10.14.5 bounds |Jn(x)| by exp(-n * eta) for 0 < x < n.
+            // Stay outside rounding uncertainty at half the least subnormal.
+            double z = x / n;
+            double t = Math.Sqrt(((n - x) / n) * (1.0 + z));
+            double eta;
+            if (t < 0.25)
+            {
+                // atanh(t) - t without cancellation near the transition x = n.
+                double power = t * t * t;
+                double sum = 0.0;
+                for (int k = 3; ; k += 2)
+                {
+                    double next = sum + power / k;
+                    if (next == sum) break;
+                    sum = next;
+                    power *= t * t;
+                }
+                eta = sum;
+            }
+            else eta = Math.Acosh(n / x) - t;
+            return n * eta > (Math.Log(2.0) - Math.Log(double.Epsilon)) * (1.0 + 1e-12);
         }
-        return current;
     }
 
     internal static double Yn(JqBudget budget, double order, double x)
     {
         ArgumentNullException.ThrowIfNull(budget);
+        budget.CheckCancellation();
         if (double.IsNaN(order))
             return double.NaN;
         if (double.IsNaN(x) || double.IsInfinity(x) || x < 0.0)
             return double.NaN;
         if (x == 0.0)
             return order == 0.0 ? double.NegativeInfinity : double.NaN;
-        if (Math.Abs(order) > MaxOrder)
-            return order > 0.0 ? double.NegativeInfinity : OrderParity(order) ? double.PositiveInfinity : double.NegativeInfinity;
-        long n = (long)Math.Truncate(order);
-        if (n < 0)
+        if (double.IsInfinity(order)) return double.NegativeInfinity;
+        double magnitude = Math.Truncate(Math.Abs(order));
+        if (magnitude >= -(double)long.MinValue)
         {
-            double inner = Yn(budget, -n, x);
-            return double.IsNaN(inner) ? inner : (n % 2 == 0 ? inner : -inner);
+            // For 0 < x <= 1, forward Y recurrence grows in magnitude by at
+            // least k/x per step after its first terms. At these orders the
+            // result necessarily overflows. Other unrepresentable orders are NaN.
+            return x <= 1.0 ? double.NegativeInfinity : double.NaN;
         }
-        if (n == 0)
-            return Y0(x);
-        if (n == 1)
-            return Y1(x);
-        double previous = Y0(x);
-        double current = Y1(x);
-        for (long k = 1; k < n; k++)
-        {
-            if ((k & (CancelStride - 1)) == 0)
-                budget.CheckCancellation();
-            double next = (2.0 * k / x) * current - previous;
-            if (!double.IsFinite(next))
-                return next;
-            previous = current;
-            current = next;
-        }
-        return current;
-    }
+        long n = (long)magnitude;
+        double value = Positive(n);
+        return order < 0.0 && (n & 1) != 0 ? -value : value;
 
-    // Sign of (-1)^order for huge finite orders, which are all even past 2^52.
-    private static bool OrderParity(double order) =>
-        Math.Abs(order) < 4503599627370496.0 && Math.Abs((long)order % 2) == 1;
+        double Positive(long n)
+        {
+            if (n == 0)
+                return Y0(x);
+            if (n == 1)
+                return Y1(x);
+            double previous = Y0(x);
+            double current = Y1(x);
+            for (long k = 1; k < n; k++)
+            {
+                if ((k & (CancelStride - 1)) == 0)
+                    budget.CheckCancellation();
+                double next = (2.0 * k / x) * current - previous;
+                if (!double.IsFinite(next))
+                    return next;
+                previous = current;
+                current = next;
+            }
+            return current;
+        }
+    }
 
     // Ascending J series for order 0 or 1 with term recurrence.
     private static double BesselJSeries(double x, int nu)
@@ -160,7 +234,7 @@ internal static class JqBessel
     // Y1 via termwise differentiation of the Y0 series.
     private static double BesselYSeries(double x, int nu)
     {
-        double logTerm = Math.Log(x / 2.0) + EulerMascheroni;
+        double logTerm = Math.Log(x) - Math.Log(2.0) + EulerMascheroni;
         double half = x / 2.0;
         double unit = half * half;
         if (nu == 0)
@@ -184,12 +258,12 @@ internal static class JqBessel
         double j1 = BesselJSeries(x, 1);
         double termb = unit;
         double harmonicb = 1.0;
-        double derivative = (2.0 / x) * termb;
+        double derivative = half;
         for (int k = 2; k <= 100; k++)
         {
             termb *= unit / (k * k);
             harmonicb += 1.0 / k;
-            double addition = (k % 2 == 1 ? 1.0 : -1.0) * harmonicb * (2.0 * k / x) * termb;
+            double addition = (k % 2 == 1 ? 1.0 : -1.0) * harmonicb * (2.0 * k * termb / x);
             derivative += addition;
             if (Math.Abs(addition) <= 1e-17 * Math.Abs(derivative))
                 break;
@@ -222,66 +296,4 @@ internal static class JqBessel
         return isY ? amplitude * (p * sine + q * cosine) : amplitude * (p * cosine - q * sine);
     }
 
-    // Miller backward recurrence for 0 < x < n with exact power-of-two
-    // rescaling, normalized by J0 (or J1 at J0 zeros).
-    private static double BesselMiller(JqBudget budget, long n, double x)
-    {
-        long top = n + 25;
-        double next = 0.0;
-        double current = 1.0;
-        long rescale = 0;
-        double atN = 0.0;
-        long atNScale = 0;
-        double at0 = 0.0;
-        long at0Scale = 0;
-        double at1 = 0.0;
-        long at1Scale = 0;
-        for (long k = top; k >= 1; k--)
-        {
-            if ((k & (CancelStride - 1)) == 0)
-                budget.CheckCancellation();
-            double previous = (2.0 * k / x) * current - next;
-            next = current;
-            current = previous;
-            double peak = Math.Abs(current) > Math.Abs(next) ? Math.Abs(current) : Math.Abs(next);
-            if (peak >= 1.2676506002282294E+30)
-            {
-                next *= 7.888609052210118E-31;
-                current *= 7.888609052210118E-31;
-                rescale++;
-            }
-            else if (peak > 0.0 && peak < 7.888609052210118E-31)
-            {
-                next *= 1.2676506002282294E+30;
-                current *= 1.2676506002282294E+30;
-                rescale--;
-            }
-            if (k - 1 == n)
-            {
-                atN = current;
-                atNScale = rescale;
-            }
-            if (k - 1 == 0)
-            {
-                at0 = current;
-                at0Scale = rescale;
-            }
-            if (k - 1 == 1)
-            {
-                at1 = current;
-                at1Scale = rescale;
-            }
-        }
-        double reference = BesselJSeries(x, 0);
-        double referenceValue = at0;
-        long referenceScale = at0Scale;
-        if (Math.Abs(reference) <= 1e-8)
-        {
-            reference = BesselJSeries(x, 1);
-            referenceValue = at1;
-            referenceScale = at1Scale;
-        }
-        double scaled = (atN / referenceValue) * Math.Pow(2.0, 100.0 * (atNScale - referenceScale));
-        return reference * scaled;
-    }
 }

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Remove the fixed 100,000-order Bessel cutoff. Use a converged continued fraction,
+  scaled backward J recurrence and J0/J1 normalization; prove early underflow
+  analytically. Preserve forward Y recurrence, reflection and cooperative
+  cancellation without replacement work fuel. Orders use checked signed 64-bit
+  indices; larger finite orders yield NaN unless a proven boundary applies.
+  Fix tiny-argument Y evaluation and preserve reflected zero signs. Cover finite
+  transitions through order one million, subnormals, overflow, cancellation during
+  active recurrence, downstream closure and owned cleanup. Base approximation
+  and large-argument phase accuracy remain documented limitations.
+
 - Remove the arbitrary civil-year cutoff. Normalize UTC fields with wide integer
   intermediates and validate the final signed 64-bit epoch before conversion,
   preserving partial extreme days and rejecting arithmetic overflow. Retain the

@@ -122,8 +122,17 @@ results to impose cross-platform byte identity.
 
 ## Special-function accuracy
 
-Bessel functions remain approximations: orders above 100,000 currently return
-fixed zero/infinity values, and the backward recurrence loses accuracy for some
-large arguments below the order. These are numerical gaps, not memory safeguards.
-Removing the cutoff requires a qualified recurrence and normalization across
-argument/order regimes; see [NIST's computation guidance](https://dlmf.nist.gov/10.74).
+Bessel functions remain approximations, with no order-based work cutoff. Orders
+truncate toward zero and use signed 64-bit recurrence indices, with reflection
+for negative orders/arguments. Forward recurrence handles J above the order and
+Y; J below the order uses a converged continued fraction, scaled backward
+recurrence and J0/J1 normalization. An [analytical bound](https://dlmf.nist.gov/10.14.E5)
+justifies early J underflow. Recurrences poll cancellation; no work budget applies.
+
+Finite orders outside index representation produce NaN unless analytical J
+underflow or Y overflow for `0 < x <= 1` applies. Existing non-finite/domain
+rules remain. Base approximations and large-argument phase accuracy still limit
+precision; the numerical review does not establish uniform relative accuracy.
+[Computation guidance](https://dlmf.nist.gov/10.74) describes the stable recurrence
+directions. Tests cover finite transitions above 100,000, tiny/subnormal inputs,
+reflection, overflow, index representation and cancellation during active work.
