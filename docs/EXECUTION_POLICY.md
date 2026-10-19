@@ -61,6 +61,9 @@ keeps payload storage through the enclosing lifetime. Scalar-to-scalar `reduce`
 updates reconcile only their own completed demand; shared strings keep their
 charge, while containers and opaque backing stay conservative. Sources, collected
 answers and persistent caches remain charged; failed updates never reclaim early.
+Substitutions reconcile completed capture/replacement demand after disposing
+replacement iterators; copied builder data, escaping errors and persistent caches
+stay charged. Capture scratch returns before nested replacement evaluation.
 No per-object reservation or alias-graph system is introduced.
 
 Estimates cover major storage; small objects, metadata and minor temporaries may
@@ -72,8 +75,9 @@ and does not establish a hard process-memory cap.
 ## Bounded reuse
 
 Already-admitted credit amortizes host calls and stays charged until relinquished.
-Cold small charges and known increments of at least 256 bytes stay exact; repeated
-small charges can round in 256-byte steps below 4 KiB and one 4 KiB block above it.
+Cold small charges and known large payload copies stay exact. Repeated small
+charges, including batches of DOM headers/backing slots, can round in 256-byte
+steps below 4 KiB and one 4 KiB block above it.
 Owner-local cached sizes avoid counter reads and unchanged resize notifications.
 
 | Owner | Maximum reusable admission |

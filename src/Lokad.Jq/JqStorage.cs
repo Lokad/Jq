@@ -30,20 +30,27 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
         _used = retained;
     }
 
-    internal void ReserveBytes(long bytes)
+    internal void ReserveBytes(long bytes) => ReserveBytes(bytes, 0);
+
+    // A construction batch can contain many small headers/backing slots. Count
+    // those local charges together, retaining the existing bounded credit policy.
+    internal void ReserveBytes(long bytes, int smallAllocations)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentOutOfRangeException.ThrowIfNegative(smallAllocations);
         if (bytes < 0 || bytes > long.MaxValue - _used)
             throw new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
         long required = _used + bytes;
-        int smallCharges = bytes is > 0 and < SmallIncrementBytes ? Math.Min(32, _smallCharges + 1) : _smallCharges;
+        int units = smallAllocations != 0 ? Math.Min(32, smallAllocations)
+            : bytes is > 0 and < SmallIncrementBytes ? 1 : 0;
+        int smallCharges = Math.Min(32, _smallCharges + units);
         if (required > _memory.LastAdmittedBytes)
         {
             // Cold owners and substantial known copies stay exact. Repeated
             // small charges use 256-byte credit below 4 KiB, then 4 KiB credit.
             long target = required;
             int quantum = required > BlockBytes ? BlockBytes : smallCharges == 32 ? SmallIncrementBytes : 0;
-            if (bytes < SmallIncrementBytes && quantum != 0
+            if ((bytes < SmallIncrementBytes || smallAllocations != 0) && quantum != 0
                 && required <= long.MaxValue - (BlockBytes - 1))
                 target = ((required + quantum - 1) / quantum) * quantum;
             _memory.Resize(target);

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Admit eager regex match/capture DOMs, scan/list backing and substitution builder
+  metadata before construction. Batch small headers through existing coarse
+  credit. Split incrementally without an input-sized scalar-offset table.
+  Reconcile completed substitution captures and replacement temporaries while
+  preserving builder data and escaping errors. Return capture scratch before
+  nested replacements, keeping 10,000 nested substitutions within 1 MiB and
+  bounded governor calls. Cover terminal refusal before publishing eager results,
+  exact Unicode splits, owned cleanup, cancellation and root reuse.
+
 - Reconcile completed scalar `reduce` update demand within existing coarse
   storage. Preserve shared string backing, source/initializer/collected values,
   persistent caches, container/opaque ownership and replacement peaks. Add no

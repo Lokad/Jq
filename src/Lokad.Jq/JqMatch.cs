@@ -59,6 +59,7 @@ internal static class JqMatch
         IReadOnlyDictionary<int, string> names = GroupNameMap(compiled);
         using var ownedSubject = context.Regexes.EncodeSubject(text);
         ReadOnlyMemory<byte> subject = ownedSubject.Value;
+        context.Budget.ReserveMetadata(32, 1);
         var results = new List<JsonObject>();
         int start = 0;
         while (true)
@@ -70,6 +71,14 @@ internal static class JqMatch
             context.Budget.CheckCancellation();
             int utf16Start = match.Value.StartOffsetInUtf16;
             int utf16End = match.Value.EndOffsetInUtf16;
+            if (results.Count == results.Capacity)
+            {
+                int previous = results.Capacity;
+                int capacity = JqBudget.BufferCapacity((long)results.Count + 1, Math.Max(4, 2L * previous));
+                context.Budget.ReserveBytes(8L * capacity);
+                results.EnsureCapacity(capacity);
+                context.Budget.TemporaryStorage?.DiscardBytes(8L * previous);
+            }
             results.Add(BuildMatch(context, text, match, names, match.CaptureSlotCount - 1));
             if (!global)
                 break;
@@ -102,6 +111,7 @@ internal static class JqMatch
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(names);
+        context.Budget.ReserveMetadata(64 + 224L * names.Count, (int)Math.Min(32, 1L + 2L * names.Count));
         var captures = new JsonObject();
         context.Budget.CheckCancellation();
         for (int index = 1; index <= captureCount; index++)
@@ -111,7 +121,6 @@ internal static class JqMatch
             if (!match.TryGetGroup(index, out JqRegexCapture group))
                 break;
             context.Budget.CheckCancellation();
-            context.Budget.ReserveString(name.Length);
             if (group.Success)
             {
                 context.Budget.ReserveString(group.EndOffsetInUtf16 - group.StartOffsetInUtf16);
@@ -128,6 +137,10 @@ internal static class JqMatch
 
     private static JsonObject BuildMatch(JqContext context, string text, JqRegexMatch match, IReadOnlyDictionary<int, string> names, int captureCount)
     {
+        // Retained DOM headers, dictionaries, scalar wrappers and capture slots;
+        // payload copies are admitted separately below. Keep this construction
+        // estimate with the record instead of recounting the completed tree.
+        context.Budget.ReserveMetadata(704 + 728L * captureCount, (int)Math.Min(32, 5L + 5L * captureCount));
         context.Budget.ReserveString(match.Value.EndOffsetInUtf16 - match.Value.StartOffsetInUtf16);
         string whole = text.Substring(match.Value.StartOffsetInUtf16, match.Value.EndOffsetInUtf16 - match.Value.StartOffsetInUtf16);
         var result = new JsonObject
@@ -160,7 +173,6 @@ internal static class JqMatch
             if (names.TryGetValue(index, out string? name))
             {
                 capture["name"] = JsonValue.Create(name);
-                context.Budget.ReserveString(name.Length);
             }
             else
             {
@@ -176,6 +188,7 @@ internal static class JqMatch
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(match);
+        context.Budget.ReserveMetadata(64, 1);
         var result = new JsonObject();
         if (match["captures"] is JsonArray captures)
         {
@@ -187,7 +200,7 @@ internal static class JqMatch
                     && name is not null)
                 {
                     context.Budget.CheckCancellation();
-                    context.Budget.ReserveString(name.Length);
+                    context.Budget.ReserveMetadata(224, 2);
                     result[name] = context.Runtime.Clone(capture["string"]);
                 }
             }
@@ -247,11 +260,21 @@ internal static class JqMatch
         string text = RequireText(context, input);
         string pattern = RequirePattern(context, patternNode);
         string flags = RequireModifiers(context, flagsNode);
+        context.Budget.ReserveMetadata(32, 1);
         var results = new List<JsonNode?>();
         foreach (JsonObject match in SearchText(context, text, pattern, "g" + flags))
         {
+            if (results.Count == results.Capacity)
+            {
+                int previous = results.Capacity;
+                int capacity = JqBudget.BufferCapacity((long)results.Count + 1, Math.Max(4, 2L * previous));
+                context.Budget.ReserveBytes(8L * capacity);
+                results.EnsureCapacity(capacity);
+                context.Budget.TemporaryStorage?.DiscardBytes(8L * previous);
+            }
             if (match["captures"] is JsonArray captures && captures.Count > 0)
             {
+                context.Budget.ReserveMetadata(64 + 88L * captures.Count, (int)Math.Min(32, 1L + captures.Count));
                 var row = new JsonArray();
                 foreach (JsonNode? capture in captures)
                 {
@@ -262,6 +285,7 @@ internal static class JqMatch
             }
             else
             {
+                context.Budget.ReserveMetadata(64, 1);
                 results.Add(context.Runtime.Clone(match["string"]));
             }
         }
@@ -276,19 +300,39 @@ internal static class JqMatch
         string pattern = RequirePattern(context, patternNode);
         string flags = RequireModifiers(context, flagsNode);
         List<JsonObject> matches = SearchText(context, text, pattern, flags + "g");
-        var starts = new List<int>(text.Length + 1) { 0 };
-        foreach (Rune rune in text.EnumerateRunes())
-            starts.Add(starts[starts.Count - 1] + rune.Utf16SequenceLength);
-        var pieces = new List<string>();
+        int capacity = JqBudget.BufferCapacity((long)matches.Count + 1, (long)matches.Count + 1);
+        context.Budget.ReserveMetadata(32 + 8L * capacity, 1);
+        var pieces = new List<string>(capacity);
         int previous = 0;
+        int scalar = 0;
+        int cursor = 0;
         foreach (JsonObject match in matches)
         {
             int offset = MatchField(match, "offset");
-            pieces.Add(SliceScalars(context, text, starts, previous, offset));
-            previous = offset + MatchField(match, "length");
+            int start = AdvanceTo(offset);
+            pieces.Add(Slice(previous, start));
+            previous = AdvanceTo(offset + MatchField(match, "length"));
         }
-        pieces.Add(SliceScalars(context, text, starts, previous, starts.Count - 1));
+        pieces.Add(Slice(previous, text.Length));
         return pieces;
+
+        int AdvanceTo(int target)
+        {
+            context.Budget.CheckCancellation();
+            while (scalar < target && cursor < text.Length)
+            {
+                if ((scalar & 4095) == 0) context.Budget.CheckCancellation();
+                cursor += ScalarWidth(text, cursor);
+                scalar++;
+            }
+            return cursor;
+        }
+
+        string Slice(int from, int to)
+        {
+            context.Budget.ReserveString(to - from);
+            return text.Substring(from, to - from);
+        }
     }
 
     private static int MatchField(JsonObject match, string name)
@@ -298,11 +342,4 @@ internal static class JqMatch
         throw new JqException("regex split produced a non-integer " + name);
     }
 
-    private static string SliceScalars(JqContext context, string text, List<int> starts, int from, int to)
-    {
-        context.Budget.CheckCancellation();
-        string piece = text.Substring(starts[from], starts[to] - starts[from]);
-        context.Budget.ReserveString(piece.Length);
-        return piece;
-    }
 }

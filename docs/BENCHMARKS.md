@@ -162,14 +162,14 @@ peaks stay unchanged in 43/48 cases; five rise by at most 448 bytes. The
 84-character sequence case rises from 7 to 29 resizes per 1,000 records. Larger
 credit would require broader evidence. Raw evidence: ignored
 `tmp/simplification-catalog/`. No new timing claim follows from those counts.
-The adapter/policy cleanup was checked separately with the same 96 count-only
-rows. Digests, complete refunds and zero counter reads/unchanged resizes/refusals
-are preserved. Nine single-pattern regex cases add one cache reservation/disposal
-at setup, with unchanged resize counts; the alternating-pattern case adds two
-reservations/disposals and keeps its resize count. Regex peaks rise by 128-382
-bytes; growing raw output drops two bytes. There is no new per-search owner or
-unchanged-target notification. This is count and estimated-storage evidence,
-with no new timing or managed-allocation claim.
+The adapter and retained-regex-storage review also passes all 96 count-only rows.
+Digests, refunds and zero counter reads/unchanged resizes/refusals are preserved.
+Nine single-pattern regex cases add one setup cache reservation/disposal; the
+alternating-pattern case adds two. Eager DOM/list admission raises four regex
+peaks by about 0.73-0.75 MiB and adds 165-173 resizes per 1,000 results. The other
+six regex cases keep resize counts and rise by 128-132 bytes. Growing raw output
+drops two bytes; 37 other single-worker peaks are unchanged. This records newly
+covered retained storage; it makes no timing or managed-allocation claim.
 
 See [execution policy](EXECUTION_POLICY.md) for ownership and retained-credit bounds.
 

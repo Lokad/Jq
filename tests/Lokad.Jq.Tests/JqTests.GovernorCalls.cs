@@ -223,7 +223,10 @@ public sealed partial class JqTests
             host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.InRange(memory.Counts.Reservations, 1, 16);
-        Assert.InRange(memory.Counts.Resizes, 0, 80);
+        // Detailed searches retain eager match DOMs and scan output wrappers.
+        // Their construction demand grows in coarse blocks, without an owner
+        // or admission notification for every match. Boolean search retains none.
+        Assert.InRange(memory.Counts.Resizes, 0, detailed ? 80 + count / 4 : 80);
         Assert.Equal(0, memory.Counts.BytesReads);
         Assert.Equal(0, root.ReservedBytes);
     }

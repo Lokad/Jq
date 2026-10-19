@@ -140,6 +140,12 @@ internal sealed class JqBudget : IDisposable
         _storage.ReserveBytes(bytes);
     }
 
+    internal void ReserveMetadata(long bytes, int smallAllocations)
+    {
+        CheckCancellation();
+        _storage.ReserveBytes(bytes, smallAllocations);
+    }
+
     internal void ReserveValueNode()
     {
         ReserveBytes(64);

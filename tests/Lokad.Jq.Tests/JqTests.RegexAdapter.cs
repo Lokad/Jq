@@ -14,6 +14,7 @@ public sealed partial class JqTests
     [InlineData("detailed", "match(\"x\")", 1)]
     [InlineData("detailed", "match(\"x\"; \"g\")", 2)]
     [InlineData("detailed", "gsub(\"x\"; \"y\")", 2)]
+    [InlineData("detailed", "gsub(\"x\"; \"x\" | gsub(\"x\"; \"y\"))", 2)]
     [InlineData("detailed", "sub(\"x\"; \"y\")", 1)]
     public async Task Jq_AdapterCancellationDuringWorkUnwindsOwnedInputs(string stage, string expression, int call)
     {

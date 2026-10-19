@@ -29,6 +29,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
             ReadOnlyMemory<byte> subject = ownedSubject.Value;
             var matchOptions = options.Match;
             // jq aligns replacement streams by their result index across successive matches.
+            context.Budget.ReserveMetadata(32, 1);
             var results = new List<StringBuilder>();
             var previous = 0;
             var start = 0;
@@ -39,29 +40,53 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                 if (!match.Success) break;
                 context.Budget.CheckCancellation();
                 var end = match.Value.EndOffsetInUtf16;
-                var isEmpty = match.Value.EndOffsetInBytes == match.Value.StartOffsetInBytes;
+                var endByte = match.Value.EndOffsetInBytes;
+                var isEmpty = endByte == match.Value.StartOffsetInBytes;
                 if (match.Value.StartOffsetInUtf16 < previous || end < match.Value.StartOffsetInUtf16)
                     throw new JqException("gsub requires non-overlapping forward matches");
                 var gapStart = previous;
                 var gapLength = match.Value.StartOffsetInUtf16 - previous;
+                JqStorage? storage = context.Budget.TemporaryStorage;
+                long captureBefore = storage?.UsedBytes ?? 0;
                 JsonObject captures = JqMatch.FoldNamedCaptures(context, text, match, JqMatch.GroupNameMap(regex), match.CaptureSlotCount - 1);
+                long captureDemand = storage is null ? 0 : storage.UsedBytes - captureBefore;
 
-                // Copy match positions and captures before evaluating a nested replacement filter.
+                // Positions and capture strings have been copied. End the scratch
+                // borrow before nested replacements so they can reuse this owner.
+                ownedMatch.Dispose();
                 var index = 0;
+                long bodyBefore = storage?.UsedBytes ?? 0;
+                long retainedBuilderDemand = 0;
                 foreach (var replacement in args[1].Evaluate(captures, context, environment))
                 {
+                    long builderBefore = storage?.UsedBytes ?? 0;
                     if (index == results.Count)
                     {
                         context.Budget.CheckCancellation();
+                        if (results.Count == results.Capacity)
+                        {
+                            int previousCapacity = results.Capacity;
+                            int capacity = JqBudget.BufferCapacity((long)results.Count + 1, Math.Max(4, 2L * previousCapacity));
+                            context.Budget.ReserveBytes(8L * capacity);
+                            results.EnsureCapacity(capacity);
+                            storage?.DiscardBytes(8L * previousCapacity);
+                        }
+                        context.Budget.ReserveMetadata(128, 2);
                         results.Add(new StringBuilder());
                     }
                     var result = results[index++];
                     context.Budget.Append(result, text.AsSpan(gapStart, gapLength));
                     // jq's string concatenation treats null as the identity.
                     if (replacement != null) context.Budget.Append(result, String(replacement));
+                    if (storage is not null) retainedBuilderDemand += storage.UsedBytes - builderBefore;
                 }
+                // Replacement iterators have finished. Only copied builder data
+                // escapes this match; captures and other body temporaries do not.
+                // Failure bypasses this point so escaping payloads stay charged.
+                if (storage is not null)
+                    storage.DiscardBytes(captureDemand + storage.UsedBytes - bodyBefore - retainedBuilderDemand);
                 previous = end;
-                start = match.Value.EndOffsetInBytes;
+                start = endByte;
                 if (isEmpty)
                 {
                     if (end == text.Length) break;
