@@ -42,8 +42,8 @@ overloads automatically borrow its budget. Explicit execution hooks also work
 with caller-owned invocations constructed by the legacy APIs.
 
 Pass a `JqExecutionPolicy` to `ExecuteAsync(host, policy, cancellationToken)`
-to select a borrowed regex engine or reduce the string allowance. Existing calls retain the defaults;
-see [execution policy](docs/EXECUTION_POLICY.md) for accounting and fixed ceilings.
+to select a borrowed regex engine. Existing calls retain the default adapter;
+see [execution policy](docs/EXECUTION_POLICY.md) for accounting and structural safeguards.
 
 Shared storage admission uses a governed invocation or an explicit `IMemoryBudget`
 execution overload; its estimates and lifetime boundaries are described in the
@@ -53,7 +53,8 @@ Every refused admission, including padded growth, fails the command with status 
 without retrying. Earlier output remains; cleanup refunds relinquished storage
 so later commands can reuse the allowance.
 Execution has no cumulative fuel or input/output byte ceiling. Use host
-cancellation to stop long-running commands; string, stack and buffer safeguards remain. Regex cooperation belongs to the
+cancellation to stop long-running commands; stack and buffer safeguards remain.
+String allocations use shared admission. Regex cooperation belongs to the
 selected adapter; the default engine cannot interrupt an active search.
 
 ## Develop
@@ -86,7 +87,7 @@ its supported PCRE2 profile; see [regex behavior](docs/REGEX.md).
 - [Compatibility](docs/COMPATIBILITY.md): feature inventory, tests, supported scope and differences.
 - [Architecture](docs/ARCHITECTURE.md): execution model, host contract and I/O ownership.
 - [Regex behavior](docs/REGEX.md): engine syntax, flags, captures and cancellation boundaries.
-- [Execution policy](docs/EXECUTION_POLICY.md): resource allowances and fixed limits.
+- [Execution policy](docs/EXECUTION_POLICY.md): shared admission, structural safeguards and adapter selection.
 - [Benchmarks](docs/BENCHMARKS.md): workloads, governor cost diagnostics and opt-in upstream comparisons.
 - [Numeric profile](docs/NUMERIC_PROFILE.md): number semantics, precision and rendering.
 - [Changelog](CHANGELOG.md): changes and validation history.

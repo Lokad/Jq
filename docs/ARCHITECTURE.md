@@ -36,9 +36,9 @@ terminate execution with status 5; `try` and optional suppression cannot catch
 them. Invalid regex syntax remains a catchable language error. Variable snapshot
 allocation and bounded file reads use the same terminal quota path.
 
-`ExecuteAsync` accepts an immutable `JqExecutionPolicy` for stricter allowances.
-Execution has no cumulative fuel or byte counters. String-construction limits
-and regex engine selection remain configurable; structural and regex workspace
+`ExecuteAsync` accepts an immutable `JqExecutionPolicy` to select a borrowed regex engine.
+Execution has no cumulative fuel or byte counters. String storage uses shared
+admission, with no independent length policy; structural and regex workspace
 ceilings stay fixed. Identity, variable and child reads share existing values
 without walking their trees. Copies admit storage and check depth during their
 actual traversal; cursor queues carry construction estimates. Iterative deep-path

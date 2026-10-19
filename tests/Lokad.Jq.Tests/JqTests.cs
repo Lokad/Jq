@@ -9,49 +9,49 @@ public sealed partial class JqTests
     [InlineData("\"ab\" * 4194305 | length")]
     [InlineData("(\"x\" * 8388608) + \"y\" | length")]
     [InlineData("[\"x\" * 4194304, \"y\" * 4194305] | add | length")]
-    public async Task Jq_RejectsOversizedStringArithmetic(string filter)
+    public async Task Jq_AdmissionRefusesStringArithmetic(string filter)
     {
-        // Each unguarded result would be at most 8 Mi characters plus two: keep probes bounded.
+        // Shared admission refuses before the large materialization.
         var fileSystem = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        var exitCode = await tool.ExecuteAsync(fileSystem, cancellation.Token);
+        var exitCode = await tool.ExecuteAsync(fileSystem, new TestMemoryBudget(64 * 1024), cancellation.Token);
 
         Assert.Equal(5, exitCode);
-        Assert.Equal("jq: string result exceeds the 16 MiB UTF-16 limit\n", fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: memory budget exceeded\n", fileSystem.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Fact]
-    public async Task Jq_RejectsRepeatedStringDoubling()
+    public async Task Jq_AdmissionRefusesRepeatedStringDoubling()
     {
-        // Even without the limit, 24 doublings stop at 16 Mi characters.
+        // This finite loop fails well before large allocations.
         var filter = "\"x\" | " + string.Join(" | ", Enumerable.Repeat(". + .", 24)) + " | length";
         var fileSystem = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        var exitCode = await tool.ExecuteAsync(fileSystem, cancellation.Token);
+        var exitCode = await tool.ExecuteAsync(fileSystem, new TestMemoryBudget(64 * 1024), cancellation.Token);
 
         Assert.Equal(5, exitCode);
-        Assert.Contains("string result exceeds", fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("memory budget exceeded", fileSystem.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }
 
     [Fact]
-    public async Task Jq_RejectsHugeRepeatUnderTry()
+    public async Task Jq_AdmissionRefusalBypassesTry()
     {
-        // Limit failures stage instead of surfacing as values, so try/catch cannot observe them.
+        // Admission refusal bypasses jq language handlers.
         var fileSystem = new MockFileSystem();
         fileSystem.SetStandardInput("\"abc\"\n");
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "try (. * 1000000000) catch .")));
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "try (. * 1000000) catch .")));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        var exitCode = await tool.ExecuteAsync(fileSystem, cancellation.Token);
+        var exitCode = await tool.ExecuteAsync(fileSystem, new TestMemoryBudget(64 * 1024), cancellation.Token);
 
         Assert.Equal(5, exitCode);
-        Assert.Equal("jq: string result exceeds the 16 MiB UTF-16 limit\n", fileSystem.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: memory budget exceeded\n", fileSystem.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -59,7 +59,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" * 8388608 | length", "8388608\n")]
     [InlineData("(\"ab\" * 2097152) + (\"cd\" * 2097152) | length", "8388608\n")]
     [InlineData("\"\U0001f680\" * 4194304 | length", "4194304\n")]
-    public async Task Jq_AllowsStringArithmeticAtTheLimit(string filter, string expected)
+    public async Task Jq_AllowsLargeStringArithmetic(string filter, string expected)
     {
         var fileSystem = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));

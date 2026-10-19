@@ -21,7 +21,6 @@ internal abstract class JqFilter
             foreach (var value in EvaluateCore(input, context, environment))
             {
                 context.Budget.CheckCancellation();
-                if (TryGetString(value, out var text)) context.Budget.CheckStringLength(text.Length);
                 yield return value;
             }
         }
@@ -91,7 +90,6 @@ internal abstract class SingleValueFilter : JqFilter
         {
             JsonNode? value = EvaluateValue(input, context, environment);
             context.Budget.CheckCancellation();
-            if (TryGetString(value, out var text)) context.Budget.CheckStringLength(text.Length);
             yield return value;
         }
         finally
@@ -1466,7 +1464,7 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
         (bool Exists, JsonNode? Value) SetField(string key, JsonNode? value)
         {
             context.Budget.CheckCancellation();
-            context.Budget.CheckStringLength(key.Length);
+            context.Budget.CheckCancellation();
             bool existed = fields.TryGetValue(key, out JsonNode? previous);
             fields[key] = value;
             return (existed, previous);
@@ -2225,8 +2223,8 @@ for (; i < template.Length; i++)
             {
                 foreach (var prefix in Combine(index - 1))
                 {
-                    context.Budget.ReserveBytes(2L * (prefix.Length + run.Text.Length));
-                    StringBuilder assembled = new StringBuilder(prefix.Length + run.Text.Length);
+                    context.Budget.ReserveBytes(2L * (checked(prefix.Length + run.Text.Length)));
+                    StringBuilder assembled = new StringBuilder(checked(prefix.Length + run.Text.Length));
                     assembled.Append(prefix);
                     context.Budget.Append(assembled, run.Text.AsSpan());
                     yield return context.Budget.Finish(assembled);
@@ -2240,8 +2238,8 @@ for (; i < template.Length; i++)
                     string rendered = Render(value);
                     foreach (var prefix in Combine(index - 1))
                     {
-                        context.Budget.ReserveBytes(2L * (prefix.Length + rendered.Length));
-                        StringBuilder assembled = new StringBuilder(prefix.Length + rendered.Length);
+                        context.Budget.ReserveBytes(2L * (checked(prefix.Length + rendered.Length)));
+                        StringBuilder assembled = new StringBuilder(checked(prefix.Length + rendered.Length));
                         assembled.Append(prefix);
                         context.Budget.Append(assembled, rendered.AsSpan());
                         yield return context.Budget.Finish(assembled);

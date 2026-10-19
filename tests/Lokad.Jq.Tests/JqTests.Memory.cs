@@ -15,14 +15,14 @@ public sealed partial class JqTests
     [InlineData("[\"\\t\" * 4194305] | @tsv | length")]
     [InlineData("\"\\u0000\" * 1398102 | tojson | length")]
     [InlineData("\"xx\" | gsub(\"x\"; \"y\" * 4194305) | length")]
-    public async Task Jq_RejectsStringBuilderAmplification(string filter)
+    public async Task Jq_AdmissionRefusesStringBuilderAmplification(string filter)
     {
-        // Even without limits, each result is only slightly above 8 Mi UTF-16 code units.
+        // These finite workloads are refused before their large materializations.
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("string result exceeds", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, new TestMemoryBudget(64 * 1024), CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -359,8 +359,8 @@ public sealed partial class JqTests
         host.AddFile("/b", new string('y', 4194305));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", "-s", "length", "/a", "/b")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("string result exceeds", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, new TestMemoryBudget(64 * 1024), CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.OpenFileCount);
     }
 
@@ -370,8 +370,8 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "\"\\u0000\" * 1398102")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("string result exceeds", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, new TestMemoryBudget(64 * 1024), CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -498,31 +498,8 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
-    [Theory]
-    [InlineData(0, 0)]
-    [InlineData(1, 5)]
-    public async Task Jq_DecodedJsonStringLimitHandlesMixedEscapes(int excess, int expectedExit)
-    {
-        var host = new MockFileSystem();
-        // Six decoded UTF-16 units: ASCII, UTF-8, a simple escape, a backslash and a surrogate pair.
-        host.SetStandardInput("\"" + new string('x', 8 * 1024 * 1024 - 6 + excess) + "\\u0061é\\n\\\\\\uD83D\\uDE80\"");
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "length")));
-
-        Assert.Equal(expectedExit, await tool.ExecuteAsync(host, CancellationToken.None));
-        if (expectedExit == 0)
-        {
-            Assert.Equal("8388607\n", host.GetOutput(JqFileDescriptor.StdOut));
-            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
-        }
-        else
-        {
-            Assert.Contains("string result exceeds", host.GetOutput(JqFileDescriptor.StdErr));
-            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        }
-    }
-
     [Fact]
-    public async Task Jq_RawInputAppliesStringLimitToEachLine()
+    public async Task Jq_RawInputStreamsManyLines()
     {
         var host = new MockFileSystem();
         host.SetStandardInput(string.Concat(Enumerable.Repeat(new string('x', 1023) + "\n", 9 * 1024)));
@@ -534,14 +511,14 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_RawInputStillRejectsOversizedLines()
+    public async Task Jq_RawInputRefusesUnadmittedLines()
     {
         var host = new MockFileSystem();
         host.SetStandardInput(new string('x', 8 * 1024 * 1024 + 1));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", "empty")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("string result exceeds", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(5, await tool.ExecuteAsync(host, new TestMemoryBudget(64 * 1024), CancellationToken.None));
+        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 

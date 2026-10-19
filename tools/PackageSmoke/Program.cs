@@ -98,9 +98,10 @@ int checks = 0;
 }
 {
     var host = new SmokeHost();
-    var policy = new JqExecutionPolicy { MaximumStringLength = 32 };
-    Check("string construction policy", await Command(["-nr", "\"ok\", (\"x\" * 33)"], []).ExecuteAsync(host, policy, CancellationToken.None) == 5
-        && host.Output(JqFileDescriptor.StdOut) == "ok\n" && host.Output(JqFileDescriptor.StdErr) == "jq: string result exceeds the 32 UTF-16 code unit limit\n");
+    var memory = new TestMemoryBudget(64 * 1024);
+    Check("terminal string admission", await Command(["-nr", "\"ok\", (\"x\" * 1000000)"], []).ExecuteAsync(host, memory, CancellationToken.None) == 5
+        && host.Output(JqFileDescriptor.StdOut) == "ok\n" && host.Output(JqFileDescriptor.StdErr) == "jq: memory budget exceeded\n"
+        && memory.ReservedBytes == 0);
 }
 {
     var host = new SmokeHost();

@@ -148,7 +148,7 @@ internal static class JqCommandLineParser
                 foreach (JqEnvironmentVariable variable in environment)
                 {
                     budget.CheckCancellation();
-                    budget.CheckStringLength(variable.Name.Length + variable.Value.Length);
+                    budget.CheckCancellation();
                     environmentObject[variable.Name] = JsonValue.Create(variable.Value);
                 }
                 special.Variables["ENV"] = environmentObject;

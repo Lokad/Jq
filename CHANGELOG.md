@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Breaking: remove MaximumStringLength and its fixed UTF-16 cap, validation,
+  read-time checks and diagnostics. String construction/decoding uses shared
+  storage admission and checked representability; borrowed reads require no new
+  string admission. There is no fallback allowance on ungoverned overloads.
+  Preserve cancellation during repeat construction and large ASCII transforms.
+  Cover admitted strings above the former cap and pre-materialization refusals;
+  replace cap-dependent fixtures with small shared allowances. Benchmark schema 5
+  drops the final removed policy field without a compatibility path.
+
 - Breaking: remove MaximumRegexWork and MaximumRegexTime completely. Regex engine
   selection now uses JqExecutionPolicy.RegexEngine and the engine-neutral
   IJqRegexEngine/IJqCompiledRegex contract, carrying cancellation and shared storage
@@ -10,11 +19,11 @@
   search. Handles stay owned through borrowers and admission refusal stays terminal.
 - Cover cancellation inside a cooperating adapter's compilation, boolean/detailed
   searches and later global/replacement searches, plus refusal, cleanup and reuse.
-  Remove obsolete timeout/work fixtures and benchmark provenance (schema 4).
+  Remove obsolete timeout/work fixtures and benchmark provenance.
 
 - Breaking: remove MaximumValueNodes, MaximumAllocationWorkBytes and the deprecated
   MaximumAllocationBytes alias, together with their counters and fuel plumbing.
-  Cancellation, shared admission, construction limits and regex structural protection
+  Cancellation, shared admission, structural limits and regex protection
   remain; no replacement fuel or compatibility switch is introduced.
 
 - Breaking: remove MaximumInputBytes and MaximumOutputBytes and their counters.

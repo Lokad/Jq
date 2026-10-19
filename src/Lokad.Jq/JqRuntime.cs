@@ -73,7 +73,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         rendered = LowercaseUnicodeEscapes(rendered);
         if (indent != null || tabs)
             rendered = NormalizeNewlines(rendered);
-        budget.CheckStringLength(Encoding.UTF8.GetCharCount(rendered.Span));
+        budget.CheckCancellation();
         return rendered;
     }
 
@@ -524,7 +524,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             while ((escape = remaining.IndexOf((byte)'\\')) >= 0)
             {
                 length += Encoding.UTF8.GetCharCount(remaining[..escape]) + 1;
-                budget.CheckStringLength(length);
+                budget.CheckCancellation();
                 // Each escape contributes one code unit, including each half
                 // of a surrogate pair encoded with two Unicode escapes.
                 int width = remaining[escape + 1] == (byte)'u' ? 6 : 2;
@@ -690,19 +690,24 @@ internal sealed partial class JqRuntime(JqBudget budget)
         int times = double.IsNaN(count) || count < 0 ? -1 : count > int.MaxValue ? int.MaxValue : (int)count;
         if (times < 0)
             return null;
+        budget.CheckCancellation();
         var length = (long)value.Length * times;
-        budget.ReserveString(length);
         if (length == 0)
             return JsonValue.Create(string.Empty);
         if (times == 1)
             return JsonValue.Create(value);
+        budget.ReserveString(length);
         if (value.Length == 1)
             return JsonValue.Create(new string(value[0], times));
 
-        return JsonValue.Create(string.Create((int)length, value, static (destination, text) =>
+        return JsonValue.Create(string.Create((int)length, (value, budget), static (destination, state) =>
         {
-            for (var offset = 0; offset < destination.Length; offset += text.Length)
-                text.AsSpan().CopyTo(destination[offset..]);
+            int iteration = 0;
+            for (var offset = 0; offset < destination.Length; offset += state.value.Length)
+            {
+                if ((iteration++ & 1023) == 0) state.budget.CheckCancellation();
+                state.value.AsSpan().CopyTo(destination[offset..]);
+            }
         }));
     }
 
@@ -1618,6 +1623,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         var builder = new StringBuilder(text.Length);
         foreach (char ch in text)
         {
+            if ((builder.Length & 4095) == 0) budget.CheckCancellation();
             if (lower && ch >= 'A' && ch <= 'Z')
                 builder.Append((char)(ch + 32));
             else if (!lower && ch >= 'a' && ch <= 'z')
@@ -1625,7 +1631,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             else
                 builder.Append(ch);
         }
-        budget.CheckStringLength(builder.Length);
+        budget.CheckCancellation();
         return budget.Finish(builder);
     }
 

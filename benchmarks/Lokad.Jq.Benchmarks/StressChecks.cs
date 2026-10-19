@@ -13,7 +13,7 @@ internal static class StressChecks
         await CheckAsync(["-n", "[range(0;1000)] | length"], [],
             JqExecutionPolicy.Default, 0, "1000\n").ConfigureAwait(false);
         await CheckAsync(["-n", "-r", "\"x\" * 33"], [],
-            new JqExecutionPolicy { MaximumStringLength = 32 }, 5, "").ConfigureAwait(false);
+            JqExecutionPolicy.Default, 0, new string('x', 33) + "\n").ConfigureAwait(false);
         string input = new string('[', 32) + "0" + new string(']', 32);
         await CheckAsync(["-c", "."], Encoding.UTF8.GetBytes(input), JqExecutionPolicy.Default, 0, input + "\n").ConfigureAwait(false);
         string tooDeep = new string('[', 65) + "0" + new string(']', 65);

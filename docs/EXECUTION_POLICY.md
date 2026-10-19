@@ -3,21 +3,12 @@
 `JqExecutionPolicy` is immutable. Execution overloads without a policy use
 `JqExecutionPolicy.Default`; an optional host `IMemoryBudget` governs shared storage.
 
-| Configurable limit | Default and maximum | Scope |
-| --- | --- | --- |
-| `MaximumStringLength` | 8 Mi UTF-16 code units | One constructed string, key or rendered text value. |
-
-The string limit must be positive and no larger than its default; invalid initialization
-throws `ArgumentOutOfRangeException`.
-
-```csharp
-var policy = new JqExecutionPolicy
-{
-    MaximumStringLength = 1024 * 1024,
-    RegexEngine = JqUtf8RegexEngine.Instance,
-};
-int status = await command.ExecuteAsync(host, policy, memoryBudget, cancellationToken);
-```
+Use `new JqExecutionPolicy { RegexEngine = engine }` to select a borrowed regex
+adapter. The default is `JqUtf8RegexEngine.Instance`. There are no configurable
+string-length, regex-work or regex-time allowances. Shared admission governs
+substantial string storage alongside containers, buffers and compiled handles;
+checked sizes and CLR representability still apply. Calls without a supplied
+memory budget acquire no private fallback allowance.
 
 There is no cumulative execution fuel or input/output byte ceiling. Use host
 cancellation for long-running commands. Streams use bounded buffers and awaited

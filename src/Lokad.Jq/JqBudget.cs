@@ -13,7 +13,6 @@ namespace Lokad.Jq;
 internal sealed class JqBudget : IDisposable
 {
     private const int MaximumIdleSerializationBytes = 4096;
-    internal const int MaximumStringLength = 8 * 1024 * 1024;
     internal const int MaximumSerializedValueBytes = 32 * 1024 * 1024;
     internal const int MaximumJsonBufferBytes = 64 * 1024 * 1024;
     internal const int MaximumDepth = 64;
@@ -191,24 +190,19 @@ internal sealed class JqBudget : IDisposable
 
     internal void CheckCancellation() => _cancellationToken.ThrowIfCancellationRequested();
 
-    internal void CheckStringLength(long length)
-    {
-        CheckCancellation();
-        if (length < 0 || length > Policy.MaximumStringLength)
-            throw new JqQuotaException(Policy.MaximumStringLength == MaximumStringLength
-                ? "string result exceeds the 16 MiB UTF-16 limit"
-                : $"string result exceeds the {Policy.MaximumStringLength} UTF-16 code unit limit");
-    }
-
     internal void ReserveString(long length)
     {
-        CheckStringLength(length);
-        ReserveBytes(length * sizeof(char));
+        CheckCancellation();
+        if (length < 0 || length > int.MaxValue)
+            throw new JqQuotaException("string result cannot be represented");
+        ReserveBytes(checked(length * sizeof(char)));
     }
 
     internal void Append(StringBuilder builder, ReadOnlySpan<char> text)
     {
-        CheckStringLength((long)builder.Length + text.Length);
+        CheckCancellation();
+        if (text.Length > int.MaxValue - builder.Length)
+            throw new JqQuotaException("string result cannot be represented");
         ReserveString(text.Length);
         builder.Append(text);
     }
