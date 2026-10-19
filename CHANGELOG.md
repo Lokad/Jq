@@ -2,6 +2,13 @@
 
 ## Unreleased
 +
++- Remove fixed source-length, token-count and command-argument ceilings. Preflight
++  compiler/snapshot storage and preserve cancellation, real function arity and
++  recursive depth guards. Iterate object/interpolation combinations, definition
++  continuations and constant comma metadata on the heap. Compute source positions
++  incrementally. Cover 5,000-property/interpolation/definition/argument programs,
++  large hosted source, terminal shared-pressure failures and structural rejection.
+++
 +- Remove the fixed 32 MiB serialized-value and 64 MiB materialized-buffer ceilings.
 +  Preflight checked capacities and replacement peaks against shared admission;
 +  retain 8 KiB reads, backpressure, closure and owned cleanup. Raw input scans

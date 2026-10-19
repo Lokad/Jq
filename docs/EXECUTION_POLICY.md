@@ -85,7 +85,10 @@ separate owners. Safe reconciliation never drops storage to retry a refusal.
 - JSON, recursive-copy, parser and module depth: 64; evaluator depth: 256.
   Iterative path operations retain the separate 10,000-segment path bound;
   reference path-length errors remain catchable language errors.
-- Filter length: 1 Mi characters; tokens/arguments: 4,096.
+- Source, token and argument breadth uses shared admission, without fixed count
+  caps. Function arity follows the reference closure-index representation (4,096).
+  Recursive tail rewriting retains a depth guard; object/interpolation breadth
+  and definition continuations use heap iteration.
 - Materialized input and JSON buffers use shared admission and CLR representation
   bounds. Host read requests are at most 8 KiB. Decoded string/key storage
   are preflighted before materialization, including escaped JSON.

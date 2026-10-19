@@ -215,15 +215,23 @@ internal sealed class JqParser(
     {
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(collected);
-        if (filter is CommaFilter comma)
-            return TryCollectCommaValues(comma.Left, collected) && TryCollectCommaValues(comma.Right, collected);
-        if (TryGetConstant(filter, out JsonNode? value))
+        _budget.ReserveBytes(16L * _tokens.Count);
+        var pending = new Stack<JqFilter>();
+        pending.Push(filter);
+        while (pending.TryPop(out var current))
         {
+            _budget.CheckCancellation();
+            if (current is CommaFilter comma)
+            {
+                pending.Push(comma.Right);
+                pending.Push(comma.Left);
+                continue;
+            }
+            if (!TryGetConstant(current, out JsonNode? value)) return false;
             _budget.ReserveBytes(24);
             collected.Add(_budget.CopyValue(value, 0, false));
-            return true;
         }
-        return false;
+        return true;
     }
 
     private bool TryGetConstantObject(ObjectFilter obj, out JsonObject? built)
@@ -399,33 +407,42 @@ internal sealed class JqParser(
     // nested positions keep their generic unexpected-token errors.
     private JqFilter ParseQuery(bool topLevel)
     {
-        if (!PeekIsDef())
-            return ParsePipe();
-        JqFunctionDefinition definition = ParseFuncDefHead();
-        DeclareFunction(definition);
-        EnterScope();
-        JqFilter body;
-        try
+        var definitions = new List<JqFunctionDefinition>();
+        while (PeekIsDef())
         {
-            foreach (JqFunctionParameter parameter in definition.Parameters)
+            JqFunctionDefinition definition = ParseFuncDefHead();
+            DeclareFunction(definition);
+            EnterScope();
+            JqFilter body;
+            try
             {
-                if (parameter.IsValue)
-                    Declare(parameter.Name);
-                else
-                    DeclareFilterParam(parameter.Name);
+                foreach (JqFunctionParameter parameter in definition.Parameters)
+                {
+                    if (parameter.IsValue)
+                        Declare(parameter.Name);
+                    else
+                        DeclareFilterParam(parameter.Name);
+                }
+                if (++_depth > JqBudget.MaximumDepth)
+                    throw Error("filter nesting limit exceeded", Peek().Span);
+                try { body = ParseQuery(topLevel: false); }
+                finally { _depth--; }
             }
-            body = ParseQuery(topLevel: false);
+            finally
+            {
+                ExitScope();
+            }
+            Expect(";");
+            var complete = AttachBody(definition, RewriteTailCalls(body, definition));
+            DeclareFunction(complete);
+            definitions.Add(complete);
         }
-        finally
-        {
-            ExitScope();
-        }
-        Expect(";");
-        var complete = AttachBody(definition, RewriteTailCalls(body, definition));
-        DeclareFunction(complete);
-        if (topLevel && Peek().Kind == TokenKind.End)
+        if (topLevel && definitions.Count != 0 && Peek().Kind == TokenKind.End)
             throw Error("Top-level program not given (try \".\")", Peek().Span);
-        return new DefFilter(complete, ParseQuery(topLevel));
+        JqFilter result = ParsePipe();
+        for (int index = definitions.Count - 1; index >= 0; index--)
+            result = new DefFilter(definitions[index], result);
+        return result;
     }
 
     private static JqFunctionDefinition AttachBody(JqFunctionDefinition definition, JqFilter body)
@@ -460,6 +477,10 @@ internal sealed class JqParser(
                             Token filter = Expect(TokenKind.Identifier);
                             parameters.Add(new JqFunctionParameter(filter.Text, false));
                         }
+                        // The reference closure operand has 12 index bits. This is
+                        // a function-arity rule, independent of source/token size.
+                        if (parameters.Count > 4096)
+                            throw Error("function has too many parameters (max 4096)", Peek().Span);
                     } while (Match(";"));
                     Expect(")");
                 }
@@ -484,8 +505,14 @@ internal sealed class JqParser(
     // per-value loops so sources are never abandoned. Sources, arguments,
     // collected positions, and binding bodies stay regular depth-bounded
     // calls; a nested rebinding stops the descent.
-    private static JqFilter RewriteTailCalls(JqFilter node, JqFunctionDefinition definition)
+    private JqFilter RewriteTailCalls(JqFilter node, JqFunctionDefinition definition) =>
+        RewriteTail(node, definition, 0);
+
+    private JqFilter RewriteTail(JqFilter node, JqFunctionDefinition definition, int depth)
     {
+        _budget.CheckCancellation();
+        if (depth > JqBudget.MaximumDepth)
+            throw Error("filter nesting limit exceeded", Peek().Span);
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(definition);
         if (node is UserCallFilter call
@@ -494,29 +521,29 @@ internal sealed class JqParser(
             return new TailSelfCallFilter(definition, call.CallArgs);
         if (node is PipeFilter pipe)
         {
-            JqFilter right = RewriteTailCalls(pipe.Right, definition);
+            JqFilter right = RewriteTail(pipe.Right, definition, depth + 1);
             if (right is TailSelfCallFilter tail)
                 return new PipeTailLoop(pipe.Left, tail.TailDefinition, tail.TailArgs);
             return pipe.WithRight(right);
         }
         if (node is IfFilter iff)
-            return iff.WithTails(branch => RewriteTailCalls(branch, definition));
+            return iff.WithTails(branch => RewriteTail(branch, definition, depth + 1));
         if (node is TryFilter attempted)
-            return attempted.WithOperands(operand => RewriteTailCalls(operand, definition));
+            return attempted.WithOperands(operand => RewriteTail(operand, definition, depth + 1));
         if (node is LabelFilter labeled)
-            return labeled.WithBody(RewriteTailCalls(labeled.LabelBody, definition));
+            return labeled.WithBody(RewriteTail(labeled.LabelBody, definition, depth + 1));
         if (node is CommaFilter comma)
-            return comma.WithRight(RewriteTailCalls(comma.Right, definition));
+            return comma.WithRight(RewriteTail(comma.Right, definition, depth + 1));
         if (node is AlternativeFilter alternative)
-            return alternative.WithRight(RewriteTailCalls(alternative.Right, definition));
+            return alternative.WithRight(RewriteTail(alternative.Right, definition, depth + 1));
         if (node is OptionalFilter optional)
-            return optional.WithInner(RewriteTailCalls(optional.Inner, definition));
+            return optional.WithInner(RewriteTail(optional.Inner, definition, depth + 1));
         if (node is DefFilter nested)
         {
             if (nested.FunctionDefinition.Name == definition.Name
                 && nested.FunctionDefinition.Arity == definition.Arity)
                 return nested;
-            return nested.WithContinuation(RewriteTailCalls(nested.ContinuationBody, definition));
+            return nested.WithContinuation(RewriteTail(nested.ContinuationBody, definition, depth + 1));
         }
         return node;
     }
@@ -875,7 +902,7 @@ internal sealed class JqParser(
             if (Peek().Kind != TokenKind.String)
                 return new FormatFilter(format);
             Token template = Next();
-            return new InterpolatedStringFilter(template.Text, format, template.Span, _programSource, ParseInterpolationPiece);
+            return new InterpolatedStringFilter(template.Text, format, template.Span, _programSource, ParseInterpolationPiece, _budget);
         }
         if (Match("."))
         {
@@ -992,7 +1019,7 @@ internal sealed class JqParser(
         }
         if (token.Kind == TokenKind.String)
             return Lexer.ContainsInterpolation(token.Text)
-                ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource, ParseInterpolationPiece)
+                ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource, ParseInterpolationPiece, _budget)
                 : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text)));
         if (token.Kind == TokenKind.Identifier)
         {
@@ -1077,7 +1104,7 @@ internal sealed class JqParser(
     }
 
     private JqFilter KeyFilterFor(Token token) => Lexer.ContainsInterpolation(token.Text)
-        ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource, ParseInterpolationPiece)
+        ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource, ParseInterpolationPiece, _budget)
         : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text)));
 
     private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && Lexer.ContainsInterpolation(token.Text);
@@ -1647,7 +1674,7 @@ internal sealed class JqParser(
             throw Error($"expected {text}, got {Peek().Text}", Peek().Span);
     }
 
-    private Token Peek() => _tokens[_index];
+    private Token Peek() { _budget.CheckCancellation(); return _tokens[_index]; }
 
-    private Token Next() => _tokens[_index++];
+    private Token Next() { _budget.CheckCancellation(); return _tokens[_index++]; }
 }

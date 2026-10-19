@@ -241,24 +241,6 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_RejectsDefinitionBombsAtCompileTime()
-    {
-        // Upstream issue 3458 caps parameters and local definitions at 4095; the
-        // per-program token limit trips strictly earlier (even a 4095th parameter
-        // exceeds it), so both regression shapes fail staged at compile time.
-        string manyParams = "def f(" + string.Join(";", Enumerable.Range(0, 4097).Select(i => "a" + i)) + "): .; f(" + string.Join(";", Enumerable.Repeat("0", 4097)) + ")";
-        string manyDefs = string.Join("; ", Enumerable.Range(0, 4097).Select(i => "def f" + i + ": " + i)) + "; " + string.Join(" + ", Enumerable.Range(0, 4097).Select(i => "f" + i));
-        foreach (string filter in new[] { manyParams, manyDefs })
-        {
-            var host = new MockFileSystem();
-            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-            Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
-            Assert.Contains("4096-token limit", host.GetOutput(JqFileDescriptor.StdErr));
-            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        }
-    }
-
-    [Fact]
     public async Task Jq_ExtremeExponentsDecodeBounded()
     {
         // Upstream CVE-2023-50246: giant exponents decode to bounded values
@@ -279,48 +261,6 @@ public sealed partial class JqTests
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         }
     }
-    [Fact]
-    public async Task Jq_RejectsOversizedTokenCount()
-    {
-        var host = new MockFileSystem();
-        var filter = string.Join(",", Enumerable.Repeat("1", 3000));
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("4096-token limit", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-    }
-
-    [Fact]
-    public async Task Jq_RejectsOversizedArgumentCount()
-    {
-        var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", Enumerable.Repeat(".", 4097).ToArray(), [])));
-        Assert.Equal(2, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("argument count exceeds the 4096 limit", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-    }
-
-    [Fact]
-    public async Task Jq_RejectsOversizedDefinitions()
-    {
-        // Mirrors the reference overflow guards: 4097 parameters and
-        // 4097 sibling definitions both stop at the token policy.
-        string parameters = string.Join(";", System.Linq.Enumerable.Range(0, 4097).Select(i => "a" + i));
-        string arguments = string.Join(";", System.Linq.Enumerable.Range(0, 4097));
-        foreach (string filter in new[]
-        {
-            "def f(" + parameters + "): .; f(" + arguments + ")",
-            string.Join("; ", System.Linq.Enumerable.Range(0, 4097).Select(i => "def f" + i + ": " + i)) + "; " + string.Join(" + ", System.Linq.Enumerable.Range(0, 4097).Select(i => "f" + i)),
-        })
-        {
-            var host = new MockFileSystem();
-            var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-            Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
-            Assert.Contains("4096-token limit", host.GetOutput(JqFileDescriptor.StdErr));
-            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        }
-    }
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -376,14 +316,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_BoundsFilterFileAndClosesDescriptor()
+    public async Task Jq_AdmitsLargeFilterFileAndClosesDescriptor()
     {
         var host = new MockFileSystem();
-        host.AddFile("/filter", new string(' ', 1024 * 1024 + 1));
+        host.AddFile("/filter", new string(' ', 1024 * 1024 + 1) + "42");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-f", "/filter")));
 
-        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("filter exceeds", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, await tool.ExecuteAsync(host, new TestMemoryBudget(16 * 1024 * 1024), CancellationToken.None));
+        Assert.Equal("42\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.OpenFileCount);
     }
 

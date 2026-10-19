@@ -82,11 +82,9 @@ internal static class JqCommandLineParser
         var runtime = new JqRuntime(budget);
         try
         {
-            if (args.Count > 4096)
-                throw new JqException("argument count exceeds the 4096 limit");
             budget.CheckCancellation();
             budget.ReserveBytes(128 + 160L * args.Count + 160L * environment.Count);
-            var special = ExtractSpecialArguments(args, runtime);
+            var special = ExtractSpecialArguments(args, runtime, budget);
             if (special.Error != null)
                 return Error(special.Error);
 
@@ -203,7 +201,7 @@ internal static class JqCommandLineParser
             budget.ReserveBytes(128 + 64 * maximumLength);
         }
 
-        static bool TryParseArguments(IReadOnlyList<string> arguments, out JqArgs parsed,
+        bool TryParseArguments(IReadOnlyList<string> arguments, out JqArgs parsed,
             out OutputFormat format, out bool helpFirst, out string error)
         {
             var result = new JqArgs();
@@ -232,6 +230,7 @@ internal static class JqCommandLineParser
 
             for (int i = 0; i < arguments.Count; i++)
             {
+                budget.CheckCancellation();
                 string argument = arguments[i];
                 if (optionsDone || argument == "--") break;
                 if (argument.Length < 2 || argument[0] != '-')
@@ -382,7 +381,7 @@ internal static class JqCommandLineParser
         }
     }
 
-    private static SpecialArguments ExtractSpecialArguments(IReadOnlyList<string> args, JqRuntime runtime)
+    private static SpecialArguments ExtractSpecialArguments(IReadOnlyList<string> args, JqRuntime runtime, JqBudget budget)
     {
         var variables = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
         var positional = new List<JsonNode?>();
@@ -402,6 +401,7 @@ internal static class JqCommandLineParser
 
         for (var i = 0; i < args.Count; i++)
         {
+            budget.CheckCancellation();
             var arg = args[i];
             if (!argsDone && arg == "--")
             {
@@ -519,6 +519,7 @@ internal static class JqCommandLineParser
                 bool legacy = false;
                 for (int position = 1; position < arg.Length; position++)
                 {
+                    budget.CheckCancellation();
                     char name = arg[position];
                     if (name == 'L')
                     {

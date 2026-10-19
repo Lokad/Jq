@@ -82,14 +82,14 @@ public sealed partial class JqTests
         string source = "module {data: [" + string.Join(',', Enumerable.Repeat("1", 100)) + "]}; .";
         using var lexicalBudget = new JqBudget(CancellationToken.None);
         var tokens = Lexer.Tokenize(source, JqProgramSource.Inline, lexicalBudget);
-        var memory = new TestMemoryBudget(1024);
+        var memory = new TestMemoryBudget(8192);
         using (var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None))
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline, budget))
         {
             var parser = new JqParser(tokens, JqProgramSource.Inline, context.RootEnvironment, budget);
             var failure = Assert.Throws<JqQuotaException>(() => parser.ParseImportsOnly());
             Assert.True(failure.IsMemoryAdmission);
-            Assert.InRange(memory.ReservedBytes, 1, 1024);
+            Assert.InRange(memory.ReservedBytes, 1, 8192);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }

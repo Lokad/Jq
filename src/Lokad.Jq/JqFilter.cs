@@ -424,19 +424,32 @@ internal sealed class DefFilter(JqFunctionDefinition Definition, JqFilter Contin
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        JqEnvironment extended = environment.ExtendFunction(Definition.Name, Definition.Arity, Definition);
-        foreach (JsonNode? value in Continuation.Evaluate(input, context, extended))
+        var (extended, continuation) = Bind(environment, context);
+        foreach (JsonNode? value in continuation.Evaluate(input, context, extended))
             yield return value;
     }
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        JqEnvironment extended = environment.ExtendFunction(Definition.Name, Definition.Arity, Definition);
-        foreach (JqValuePath next in Continuation.EvaluatePaths(pair, context, extended))
+        var (extended, continuation) = Bind(environment, context);
+        foreach (JqValuePath next in continuation.EvaluatePaths(pair, context, extended))
             yield return next;
     }
 
     internal JqFunctionDefinition FunctionDefinition => Definition;
+
+    private (JqEnvironment Environment, JqFilter Continuation) Bind(JqEnvironment environment, JqContext context)
+    {
+        JqFilter current = this;
+        while (current is DefFilter definition)
+        {
+            context.Budget.CheckCancellation();
+            var function = definition.FunctionDefinition;
+            environment = environment.ExtendFunction(function.Name, function.Arity, function);
+            current = definition.ContinuationBody;
+        }
+        return (environment, current);
+    }
 
     internal JqFilter ContinuationBody => Continuation;
 
@@ -1407,72 +1420,78 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
             yield return new JsonObject();
             yield break;
         }
+        context.Budget.ReserveBytes(128L * properties.Count);
         var fields = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
-        foreach (var obj in Build(0))
-            yield return obj;
-
-        IEnumerable<JsonObject> Build(int index)
+        var iterators = new IEnumerator<(string Key, JsonNode? Value)>?[properties.Count];
+        var keys = new string?[properties.Count];
+        var previous = new (bool Exists, JsonNode? Value)[properties.Count];
+        int index = 0;
+        try
         {
-            if (index == properties.Count)
+            while (index >= 0)
             {
-                // Reserve the completed copy; never attach the
-                // borrowed inputs or expose the backtracking field table.
+                context.Budget.CheckCancellation();
+                if (keys[index] is { } oldKey)
+                {
+                    RestoreField(oldKey, previous[index]);
+                    keys[index] = null;
+                }
+                var iterator = iterators[index] ??= Choices(properties[index]).GetEnumerator();
+                if (!iterator.MoveNext())
+                {
+                    iterator.Dispose();
+                    iterators[index] = null;
+                    index--;
+                    continue;
+                }
+                var choice = iterator.Current;
+                previous[index] = (fields.TryGetValue(choice.Key, out var oldValue), oldValue);
+                fields[choice.Key] = choice.Value;
+                keys[index] = choice.Key;
+                if (index + 1 < properties.Count) { index++; continue; }
                 context.Budget.ReserveBytes(64 + 96L * fields.Count);
                 context.Budget.ReserveBytes(64L * fields.Values.Count(value => value is JsonValue));
                 var result = new JsonObject();
                 foreach (var field in fields)
                     result.Add(field.Key, context.Budget.CopyValue(field.Value, 1, false));
                 yield return result;
-                yield break;
             }
+        }
+        finally
+        {
+            for (int pending = iterators.Length - 1; pending >= 0; pending--)
+                iterators[pending]?.Dispose();
+        }
 
-            ObjectProperty property = properties[index];
+        IEnumerable<(string Key, JsonNode? Value)> Choices(ObjectProperty property)
+        {
             if (property is { StaticKey: string key, KeyFilter: null })
             {
-                // Lazy cartesian: an empty value stream yields no objects.
-                foreach (var value in property.Value.Evaluate(input, context, environment))
-                {
-                    var previous = SetField(key, value);
-                    try
-                    {
-                        foreach (var obj in Build(index + 1))
-                            yield return obj;
-                    }
-                    finally { RestoreField(key, previous); }
-                }
+                foreach (var value in Values(property.Value)) yield return (key, value);
             }
             else if (property.KeyFilter is JqFilter keyFilter)
             {
-                foreach (var keyValue in keyFilter.Evaluate(input, context, environment))
+                foreach (var keyValue in Values(keyFilter))
                 {
                     if (!TryGetString(keyValue, out string keyName))
                         throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
-                    foreach (var value in property.Value.Evaluate(input, context, environment))
-                    {
-                        var previous = SetField(keyName, value);
-                        try
-                        {
-                            foreach (var obj in Build(index + 1))
-                                yield return obj;
-                        }
-                        finally { RestoreField(keyName, previous); }
-                    }
+                    foreach (var value in Values(property.Value)) yield return (keyName, value);
                 }
             }
         }
 
-        (bool Exists, JsonNode? Value) SetField(string key, JsonNode? value)
+        IEnumerable<JsonNode?> Values(JqFilter filter)
         {
-            context.Budget.CheckCancellation();
-            context.Budget.CheckCancellation();
-            bool existed = fields.TryGetValue(key, out JsonNode? previous);
-            fields[key] = value;
-            return (existed, previous);
+            // Scalar leaves need no suspended evaluator frame while later
+            // properties run. Complete their single-value iterator first.
+            if (filter is SingleValueFilter)
+                return [filter.Evaluate(input, context, environment).Single()];
+            return filter.Evaluate(input, context, environment);
         }
 
-        void RestoreField(string key, (bool Exists, JsonNode? Value) previous)
+        void RestoreField(string key, (bool Exists, JsonNode? Value) old)
         {
-            if (previous.Exists) fields[key] = previous.Value;
+            if (old.Exists) fields[key] = old.Value;
             else fields.Remove(key);
         }
     }
@@ -2140,14 +2159,14 @@ internal sealed class InterpolatedStringFilter : JqFilter
     // Splits once at construction so malformed templates fail before evaluation;
     // each interpolation is parsed once with the definition-site scopes, so unknown
     // names fail at compile time (stage 3) instead of per evaluation as stage 5.
-    internal InterpolatedStringFilter(string template, string? format, JqSourceSpan span, JqProgramSource program, Func<string, JqSourceSpan, JqFilter> parsePiece)
+    internal InterpolatedStringFilter(string template, string? format, JqSourceSpan span, JqProgramSource program, Func<string, JqSourceSpan, JqFilter> parsePiece, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(parsePiece);
         _format = format;
-        _segments = SplitTemplate(template, span, program, parsePiece);
+        _segments = SplitTemplate(template, span, program, parsePiece, budget);
     }
 
-    private static IReadOnlyList<Segment> SplitTemplate(string template, JqSourceSpan span, JqProgramSource program, Func<string, JqSourceSpan, JqFilter> parsePiece)
+    private static IReadOnlyList<Segment> SplitTemplate(string template, JqSourceSpan span, JqProgramSource program, Func<string, JqSourceSpan, JqFilter> parsePiece, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(program);
@@ -2156,6 +2175,7 @@ internal sealed class InterpolatedStringFilter : JqFilter
         var literal = new StringBuilder();
         for (var i = 0; i < template.Length; i++)
         {
+            budget.CheckCancellation();
             if (template[i] == (char)92 && i + 1 < template.Length && template[i + 1] == (char)92)
             {
                 literal.Append(template, i, 2);
@@ -2168,11 +2188,13 @@ internal sealed class InterpolatedStringFilter : JqFilter
                 i = start;
 for (; i < template.Length; i++)
                 {
+                    budget.CheckCancellation();
                     if (template[i] == '"')
                     {
                         i++;
                         while (i < template.Length && template[i] != '"')
                         {
+                            budget.CheckCancellation();
                             if (template[i] == '\\' && i + 1 < template.Length) i++;
                             i++;
                         }
@@ -2203,49 +2225,56 @@ for (; i < template.Length; i++)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (var text in Combine(_segments.Count - 1))
-            yield return JsonValue.Create(text);
+        if (_segments.Count == 0) { yield return JsonValue.Create(string.Empty); yield break; }
+        context.Budget.ReserveBytes(64L * _segments.Count);
+        var iterators = new IEnumerator<string>?[_segments.Count];
+        var pieces = new string?[_segments.Count];
+        int index = _segments.Count - 1;
+        try
+        {
+            while (index < _segments.Count)
+            {
+                context.Budget.CheckCancellation();
+                var iterator = iterators[index] ??= Pieces(_segments[index]).GetEnumerator();
+                if (!iterator.MoveNext())
+                {
+                    iterator.Dispose();
+                    iterators[index] = null;
+                    pieces[index] = null;
+                    index++;
+                    continue;
+                }
+                pieces[index] = iterator.Current;
+                if (index != 0) { index--; continue; }
+                var assembled = new StringBuilder();
+                foreach (var piece in pieces)
+                    context.Budget.Append(assembled, piece.AsSpan());
+                yield return JsonValue.Create(context.Budget.Finish(assembled));
+            }
+        }
+        finally
+        {
+            // Earlier occurrences are inner (fast); unwind in that order.
+            foreach (var iterator in iterators) iterator?.Dispose();
+        }
+
+        IEnumerable<string> Pieces(Segment segment)
+        {
+            if (segment is Literal literal) { yield return literal.Text; yield break; }
+            if (segment is Interpolation interpolation)
+            {
+                if (interpolation.Filter is SingleValueFilter)
+                {
+                    yield return Render(interpolation.Filter.Evaluate(input, context, environment).Single());
+                    yield break;
+                }
+                foreach (var value in interpolation.Filter.Evaluate(input, context, environment))
+                    yield return Render(value);
+            }
+        }
+
         string Render(JsonNode? value) => _format is null
             ? context.Runtime.ToJqString(value)
             : context.Runtime.Format(_format, value);
-
-        // Later occurrences are outer (slow); the first is inner (fast),
-        // matching nested concatenation with backtracking. An empty
-        // interpolation yields no strings.
-        IEnumerable<string> Combine(int index)
-        {
-            if (index < 0)
-            {
-                yield return "";
-                yield break;
-            }
-            if (_segments[index] is Literal run)
-            {
-                foreach (var prefix in Combine(index - 1))
-                {
-                    context.Budget.ReserveBytes(2L * (checked(prefix.Length + run.Text.Length)));
-                    StringBuilder assembled = new StringBuilder(checked(prefix.Length + run.Text.Length));
-                    assembled.Append(prefix);
-                    context.Budget.Append(assembled, run.Text.AsSpan());
-                    yield return context.Budget.Finish(assembled);
-                }
-                yield break;
-            }
-            if (_segments[index] is Interpolation interpolation)
-            {
-                foreach (var value in interpolation.Filter.Evaluate(input, context, environment))
-                {
-                    string rendered = Render(value);
-                    foreach (var prefix in Combine(index - 1))
-                    {
-                        context.Budget.ReserveBytes(2L * (checked(prefix.Length + rendered.Length)));
-                        StringBuilder assembled = new StringBuilder(checked(prefix.Length + rendered.Length));
-                        assembled.Append(prefix);
-                        context.Budget.Append(assembled, rendered.AsSpan());
-                        yield return context.Budget.Finish(assembled);
-                    }
-                }
-            }
-        }
     }
 }
