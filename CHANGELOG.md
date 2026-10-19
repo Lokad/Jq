@@ -1,22 +1,22 @@
 # Changelog
 
 ## Unreleased
-+
-+- Remove fixed source-length, token-count and command-argument ceilings. Preflight
-+  compiler/snapshot storage and preserve cancellation, real function arity and
-+  recursive depth guards. Iterate object/interpolation combinations, definition
-+  continuations and constant comma metadata on the heap. Compute source positions
-+  incrementally. Cover 5,000-property/interpolation/definition/argument programs,
-+  large hosted source, terminal shared-pressure failures and structural rejection.
-++
-+- Remove the fixed 32 MiB serialized-value and 64 MiB materialized-buffer ceilings.
-+  Preflight checked capacities and replacement peaks against shared admission;
-+  retain 8 KiB reads, backpressure, closure and owned cleanup. Raw input scans
-+  only newly read bytes when looking for LF, avoiding repeated whole-line scans.
-+- Remove the one-million array-index policy. Admit actual padding before copying
-+  or mutation; existing indices need no padding charge. Preserve catchable errors
-+  for indices outside CLR representation and terminal admission refusal.
-+
+
+- Remove fixed source-length, token-count and command-argument ceilings. Preflight
+  compiler/snapshot storage and preserve cancellation, real function arity and
+  recursive depth guards. Iterate object/interpolation combinations, definition
+  continuations and constant comma metadata on the heap. Compute source positions
+  incrementally. Cover 5,000-property/interpolation/definition/argument programs,
+  large hosted source, terminal shared-pressure failures and structural rejection.
+
+- Remove the fixed 32 MiB serialized-value and 64 MiB materialized-buffer ceilings.
+  Preflight checked capacities and replacement peaks against shared admission;
+  retain 8 KiB reads, backpressure, closure and owned cleanup. Raw input scans
+  only newly read bytes when looking for LF, avoiding repeated whole-line scans.
+- Remove the one-million array-index policy. Admit actual padding before copying
+  or mutation; existing indices need no padding charge. Preserve catchable errors
+  for indices outside CLR representation and terminal admission refusal.
+
 - Breaking: remove MaximumStringLength and its fixed UTF-16 cap, validation,
   read-time checks and diagnostics. String construction/decoding uses shared
   storage admission and checked representability; borrowed reads require no new
@@ -52,8 +52,9 @@
   owned cleanup, deep reads, constructor depth and finite former-fuel workloads.
 - Remove verified-unused qualified-lookup, stream-leaf, calendar and deletion
   helpers, plus internal path-confinement machinery; keep hosted normalization.
-- Extend the detached package consumer to 18 checks, including terminal padded
-  admission, subsequent allowance reuse and resource status after stderr closes.
+- Extend the detached package consumer to 19 checks, including terminal padded
+  admission, subsequent allowance reuse, resource status after stderr closes and a
+  caller-supplied cooperating regex engine.
 - Preserve resource status 5 when draining queued diagnostics encounters closure
   or a reported write failure. Await owned cleanup and pending borrows; keep
   cancellation distinct and preserve earlier output and caller admission.
@@ -153,9 +154,9 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,920 tests pass,
+- Validation on Windows: warning-free Release build and all 3,935 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
-  passes 18 detached consumer checks with isolated cache, exact package hash and
+  passes 19 detached consumer checks with isolated cache, exact package hash and
   locked restore.
   Dependencies and lock files are unchanged. Earlier cross-platform CI,
   differential and performance receipts apply to their recorded revisions.

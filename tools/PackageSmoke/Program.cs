@@ -279,6 +279,23 @@ int checks = 0;
     }
     if (memory.ReservedBytes != 0) throw new InvalidOperationException("Invocation storage was not refunded.");
 }
+{
+    using var cancellation = new CancellationTokenSource();
+    var engine = new SmokeCooperatingRegex(cancellation);
+    var memory = new TestMemoryBudget(64 * 1024);
+    var host = new SmokeHost();
+    host.AddFile("/data", "\"x\"\n");
+    bool cancelled = false;
+    try
+    {
+        await Command(["-r", "\"prefix\", (try test(\"x\") catch \"caught\")", "/data"], [])
+            .ExecuteAsync(host, new JqExecutionPolicy { RegexEngine = engine }, memory, cancellation.Token);
+    }
+    catch (OperationCanceledException error) { cancelled = error.CancellationToken == cancellation.Token; }
+    Check("public cooperating regex adapter", cancelled && engine.Disposed
+        && host.Output(JqFileDescriptor.StdOut) == "prefix\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 
@@ -303,6 +320,43 @@ static bool ValuesMatch(string output, string[] expected)
 sealed class EpochClock : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
+}
+
+sealed class SmokeCooperatingRegex(CancellationTokenSource cancellation) : IJqRegexEngine
+{
+    internal bool Disposed { get; private set; }
+    public bool TryCompile(string pattern, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
+        CancellationToken cancellationToken,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (memoryBudget is null) throw new InvalidOperationException("Adapter budget was not forwarded.");
+        if (!memoryBudget.TryReserve(64, out var reservation))
+            throw new JqRegexResourceException("adapter admission refused", true);
+        regex = new Compiled(this, reservation, cancellation);
+        error = null;
+        return true;
+    }
+
+    private sealed class Compiled(SmokeCooperatingRegex owner, IMemoryReservation memory,
+        CancellationTokenSource cancellation) : IJqCompiledRegex
+    {
+        public int CaptureSlotCapacity => 1;
+        public IReadOnlyDictionary<int, string> GroupNames { get; } = new Dictionary<int, string>();
+        public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
+        {
+            cancellation.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return false;
+        }
+        public int Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+            Span<JqRegexCapture> captures, CancellationToken cancellationToken)
+        {
+            IsMatch(input, options, cancellationToken);
+            return 0;
+        }
+        public void Dispose() { memory.Dispose(); owner.Disposed = true; }
+    }
 }
 
 sealed class SmokeHost : IJqHost

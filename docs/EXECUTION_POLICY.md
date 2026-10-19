@@ -53,6 +53,8 @@ Substantial allocations preflight estimated capacity, including old-plus-new
 replacement peaks. Aliases, slurp aggregates, queued records, cached definitions
 and active output/regex leases stay charged through their users. Discarded
 single-evaluation temporaries may remain conservatively charged until its boundary.
+A long loop inside one record can therefore refuse despite a bounded live set;
+this retention gap is separate from the removed cumulative fuel policies.
 No per-object reservation or alias-graph system is introduced.
 
 Estimates cover major storage; small objects, metadata and minor temporaries may

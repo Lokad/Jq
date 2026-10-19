@@ -119,3 +119,11 @@ results to impose cross-platform byte identity.
 - `tonumber` accepts the same non-finite spellings (an optional sign with
   case-insensitive `nan`, `inf`, or `infinity`, no surrounding whitespace);
   values render through the double-domain rules above.
+
+## Special-function accuracy
+
+Bessel functions remain approximations: orders above 100,000 currently return
+fixed zero/infinity values, and the backward recurrence loses accuracy for some
+large arguments below the order. These are numerical gaps, not memory safeguards.
+Removing the cutoff requires a qualified recurrence and normalization across
+argument/order regimes; see [NIST's computation guidance](https://dlmf.nist.gov/10.74).
