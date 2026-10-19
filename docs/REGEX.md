@@ -1,11 +1,13 @@
 # Regex behavior
 
-Lokad.Jq uses the published managed `Lokad.Utf8Regex.Pcre2` 0.3.0 package,
-with `Lokad.Utf8Regex` 0.3.0 transitively. Patterns are passed directly to its
-selected PCRE2 standard-matcher profile. Supported syntax and rejection of
-unadmitted constructs follow that engine; this is not full PCRE2 or jq's
-Oniguruma Perl NG compatibility. There is no native regex runtime or sibling
-checkout dependency.
+Jq's regex integration is internal: `JqRegexCache` compiles and owns patterns,
+`JqRegexOptions` maps flags, and `JqMatch` builds jq results. The runtime directly
+depends on managed `Lokad.Utf8Regex.Pcre2` 0.3.0 (and transitively
+`Lokad.Utf8Regex` 0.3.0). It exposes no replaceable regex-engine interface or
+separate adapter package.
+
+Patterns go directly to the selected PCRE2 standard-matcher profile; supported
+syntax follows that engine. There is no Oniguruma emulation or native runtime.
 
 ## Flags and syntax
 
@@ -47,36 +49,16 @@ their result streams; they do not interpret native replacement templates.
 
 ## Limits and cancellation
 
-`MaximumRegexWork` and `MaximumRegexTime` apply to each engine search rather
-than accumulating across searches or input records. Defaults are 10,000,000
-engine work steps and five seconds per search. The engine also receives depth
-256 and 256 KiB working-memory limits. A global operation may use several
-search allowances. Pattern length, subject buffers, capture capacity and
-extracted values preflight shared storage and obey string-construction limits;
-see [execution policy](EXECUTION_POLICY.md) for exact accounting limits.
-These charges are conservative accounting, not a bound on total process memory
-or an exact compiled-pattern size. Engine `MaxResultBytes` is reserved and is
-not relied on for enforcement.
+Each synchronous search has its own work/time allowance: defaults are 10,000,000
+steps and five seconds, with depth 256 and a 256 KiB workspace bound. Compilation
+is outside the search timeout. Global operations may consume multiple allowances.
 
-When execution receives an `IMemoryBudget`, the regex cache also reserves its
-compiled-pattern/workspace estimate against that shared allowance before
-compilation. Successful cached entries stay charged until context disposal;
-failed compilation refunds its admission. UTF-8 subjects and detailed capture
-contexts reserve before materialization. The cache reuses at most one idle
-subject buffer and one idle detailed-result allowance, each capped at 4 KiB of
-charged storage. Larger owners and failed operations release on return; idle
-owners release when the cache closes. Nested operations borrow separate owners,
-and cache closure defers the compiled-pattern refund until active borrowers
-finish. Subject capacity starts exact, then grows geometrically within the same
-4 KiB idle-owner ceiling including metadata. Larger subjects stay exact. Any
-refused admission terminates without a smaller retry or eviction to continue.
-All growth admits the old-plus-new replacement peak. The estimates follow
-storage lifetimes, independently of execution duration; they remain approximate
-and do not enforce an engine compiled-storage cap.
+Shared memory admission covers conservative pattern/workspace estimates, subject
+buffers and capture storage. Cached patterns and retained buffers stay charged;
+active borrowers delay refunds. Every refusal terminates the command. Reuse and
+structural ceilings are documented in [execution policy](EXECUTION_POLICY.md).
 
-Work, time, depth and working-memory exhaustion terminate execution with status
-5, bypassing `try` and `?`. Cancellation propagates as `OperationCanceledException`.
-Published version 0.3.0 has no cancellation-token overloads: checks run before
-and after compilation and each bounded synchronous search, and cannot interrupt
-an engine call already in progress. Compilation is outside the matching timeout.
-This differs from the previous PCRE.NET cumulative callback accounting.
+Work, time, depth and workspace exhaustion report status 5 outside `try`/`?`.
+Cancellation propagates separately. Version 0.3.0 has no cancellation-token API;
+checks surround compilation and each bounded search, so an active engine call
+cannot be interrupted. `MaxResultBytes` is reserved and is not an enforced guard.
