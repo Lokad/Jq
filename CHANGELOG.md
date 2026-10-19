@@ -126,7 +126,7 @@
   Dependencies and lock files are unchanged. Earlier cross-platform CI,
   differential and performance receipts apply to their recorded revisions.
 
-## 0.1.0 — pending NuGet publication
+## 0.1.0 — 2026-10-06
 
 Embeddable jq 1.8.2 runtime with host-mediated IO. Compatibility is
 incomplete; see `docs/COMPATIBILITY_MATRIX.md` for the per-row inventory
@@ -212,6 +212,6 @@ Delivered since the scaffold baseline:
   JSON strings and object keys preflight decoded length and allocation before
   creating their managed strings.
 
-Version 0.1.0 is prepared for manual publication to NuGet.org. Full upstream
-compatibility remains unproven; the supported scope and intentional differences
-are documented above. Package publication is pending.
+Version 0.1.0 is available on
+[NuGet.org](https://www.nuget.org/packages/Lokad.Jq/0.1.0). Full upstream compatibility
+remains unproven; the supported scope and intentional differences are documented above.
