@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Own and admit persistent regex keys/metadata in one coarse cache owner even
+  when a custom provider retains no pattern text. Preflight before copying and
+  compilation, roll back failed work, and defer refunds through active borrowers.
+
 - Reuse predicate temporary storage within `any`/`all`, keeping generator state
   under the parent owner. Only a successful completed predicate can refund;
   escaping error payloads retain admission through execution cleanup. Cover
@@ -162,7 +166,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,948 tests pass,
+- Validation on Windows: warning-free Release build and all 3,950 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 19 detached consumer checks with isolated cache, exact package hash and
   locked restore.

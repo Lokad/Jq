@@ -15,6 +15,7 @@ public sealed partial class JqTests
         var small = regexes.Get("x", JqRegexCompileOptions.None);
         var large = regexes.Get(new string('x', 62), JqRegexCompileOptions.None);
         using var subject = regexes.EncodeSubject("x");
+        long setupResizes = counted.Counts.Resizes;
         for (int index = 0; index < 100; index++)
         {
             using (var match = regexes.Match(small, subject.Value, 0, JqRegexMatchOptions.None))
@@ -22,7 +23,7 @@ public sealed partial class JqTests
             using (var match = regexes.Match(large, subject.Value, 0, JqRegexMatchOptions.None))
                 Assert.False(match.Value.Success);
         }
-        Assert.Equal(100, counted.Counts.Resizes);
+        Assert.Equal(setupResizes + 100, counted.Counts.Resizes);
         Assert.Equal(0, counted.Counts.SameSizeResizes);
         regexes.Dispose();
         subject.Dispose();
@@ -104,13 +105,13 @@ public sealed partial class JqTests
         using (var regexes = new JqRegexCache(budget))
         {
             var pattern = regexes.Get("x", JqRegexCompileOptions.None);
-            Assert.Equal(327744, memory.ReservedBytes);
+            Assert.Equal(327874, memory.ReservedBytes);
             Assert.Same(pattern, regexes.Get("x", JqRegexCompileOptions.None));
-            Assert.Equal(327744, memory.ReservedBytes);
+            Assert.Equal(327874, memory.ReservedBytes);
             Assert.StartsWith("invalid regex:", Assert.Throws<JqException>(() =>
                 regexes.Get("[", JqRegexCompileOptions.None)).Message, StringComparison.Ordinal);
-            Assert.Equal(327744, memory.ReservedBytes);
-            Assert.Equal(655488, memory.PeakBytes);
+            Assert.Equal(327874, memory.ReservedBytes);
+            Assert.Equal(655748, memory.PeakBytes);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -207,9 +208,9 @@ public sealed partial class JqTests
         using var regexes = new JqRegexCache(budget);
         regexes.Get("x", JqRegexCompileOptions.None);
         using (var subject = regexes.EncodeSubject("x"))
-            Assert.Equal(327744 + 65, memory.ReservedBytes);
+            Assert.Equal(327874 + 65, memory.ReservedBytes);
         Assert.Throws<JqQuotaException>(() => regexes.EncodeSubject(new string('a', 400)));
-        Assert.Equal(327744, memory.ReservedBytes);
+        Assert.Equal(327874, memory.ReservedBytes);
         using (var next = regexes.EncodeSubject("y"))
             Assert.Equal("y"u8.ToArray(), next.Value.ToArray());
         regexes.Dispose();

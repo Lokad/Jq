@@ -8,6 +8,8 @@ namespace Lokad.Jq;
 /// an independent allowance. Refused admission must throw JqRegexResourceException with
 /// IsMemoryAdmission set. Cancellation must propagate as OperationCanceledException.
 /// The host owns this engine; each successful compilation transfers a handle to Jq.
+/// Jq owns the supplied pattern text through the handle's lifetime. Its cache-key
+/// storage is already charged; implementations admit their own compiled storage.
 /// </remarks>
 public interface IJqRegexEngine
 {

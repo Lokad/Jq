@@ -9,6 +9,7 @@ namespace Lokad.Jq;
 internal sealed class JqRegexCache : IDisposable
 {
     private readonly JqBudget _budget;
+    private readonly JqMemoryReservation _keys;
     private bool _disposed;
     private const int MaximumIdleBytes = 4096;
     private OperationMemory? _idleSubject;
@@ -19,6 +20,7 @@ internal sealed class JqRegexCache : IDisposable
     internal JqRegexCache(JqBudget budget)
     {
         _budget = budget;
+        _keys = new JqMemoryReservation(budget.MemoryBudget);
     }
 
     internal Pattern Get(string pattern, JqRegexCompileOptions options)
@@ -27,24 +29,35 @@ internal sealed class JqRegexCache : IDisposable
         _budget.CheckCancellation();
         if (_patterns.TryGetValue((pattern, options), out Pattern? cached)) return cached;
         IJqCompiledRegex? compiled = null;
+        long previousKeys = _keys.LastAdmittedBytes;
         bool retained = false;
         try
         {
-            if (!_budget.Policy.RegexEngine.TryCompile(pattern, options, _budget.MemoryBudget,
+            // Own the persistent key before giving it to a borrowed engine. The
+            // provider may retain no pattern text; record-local input can expire.
+            // One coarse cache owner covers keys, entries and backing metadata.
+            _keys.Resize(checked(previousKeys + 128 + 2L * pattern.Length));
+            _budget.CheckCancellation();
+            string ownedPattern = new(pattern.AsSpan());
+            if (!_budget.Policy.RegexEngine.TryCompile(ownedPattern, options, _budget.MemoryBudget,
                 _budget.CancellationToken, out compiled, out string? error))
                 throw new JqException(error ?? "unsupported regex");
             _budget.CheckCancellation();
             if (compiled.CaptureSlotCapacity < 1)
                 throw new InvalidOperationException("The regex adapter returned an invalid capture capacity.");
             cached = new Pattern(compiled, compiled.GroupNames, compiled.CaptureSlotCapacity);
-            _patterns.Add((pattern, options), cached);
+            _patterns.Add((ownedPattern, options), cached);
             retained = true;
             return cached;
         }
         catch (JqRegexResourceException exception) { throw Terminal(exception); }
         finally
         {
-            if (!retained) compiled?.Dispose();
+            if (!retained)
+            {
+                compiled?.Dispose();
+                if (_keys.LastAdmittedBytes != previousKeys) _keys.Resize(previousKeys);
+            }
         }
     }
 
@@ -159,6 +172,7 @@ internal sealed class JqRegexCache : IDisposable
     {
         foreach (Pattern pattern in _patterns.Values) pattern.Regex.Dispose();
         _patterns.Clear();
+        _keys.Dispose();
     }
 
     // One idle subject buffer and one idle detailed-result allowance, each at

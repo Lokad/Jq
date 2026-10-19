@@ -60,7 +60,8 @@ unlimited engine work and an infinite timeout, retaining depth 256, a 256 KiB
 workspace bound and a 16,384-character pattern guard.
 
 Shared admission covers conservative pattern/workspace estimates, subject buffers
-and capture storage. Each allocation has one owner; cached handles and retained
+and capture storage. Jq owns copied keys/cache metadata; the provider owns its compiled representation.
+Each allocation has one owner; cached handles and retained
 buffers stay charged, and active borrowers delay refunds. Every refusal terminates
 the command. Reuse and structural ceilings are described in
 [execution policy](EXECUTION_POLICY.md).
