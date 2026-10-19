@@ -190,15 +190,6 @@ internal sealed class JqEnvironment
         return false;
     }
 
-    internal bool TryGetQualifiedFunction(string alias, string name, int arity, out JqUserClosure? closure)
-    {
-        if (TryGetModule(alias, out JqEnvironment? moduleScope) && moduleScope is not null)
-            return moduleScope.TryGetFunctionQualified(name, arity, out closure);
-
-        closure = null;
-        return false;
-    }
-
     internal bool TryGetFunctionQualified(string qualifiedName, int arity, out JqUserClosure? closure)
     {
         ArgumentNullException.ThrowIfNull(qualifiedName);

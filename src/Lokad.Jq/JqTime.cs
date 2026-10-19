@@ -20,16 +20,6 @@ internal static class JqTime
         return (context.Clock.Clock.GetUtcNow() - DateTimeOffset.UnixEpoch).TotalSeconds;
     }
 
-    internal static bool IsLeapYear(long year) =>
-        (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
-
-    internal static int DaysInMonth(long year, int month) => month switch
-    {
-        2 => IsLeapYear(year) ? 29 : 28,
-        4 or 6 or 9 or 11 => 30,
-        _ => 31,
-    };
-
     // Days since 1970-01-01 from civil fields; month is 1-12.
     internal static long DaysFromCivil(long year, int month, int day)
     {

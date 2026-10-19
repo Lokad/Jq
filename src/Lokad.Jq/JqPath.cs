@@ -741,8 +741,6 @@ internal static class JqPathReads
 }
 internal static class JqPathDeletes
 {
-    private sealed record Group(IReadOnlyList<JqValueSegment> Path, int Start, int End);
-
     // Sorted grouped deletion: whole keys drop at once (so array indices
     // never shift mid-run), deeper paths recurse through the shared read
     // step. Missing containers skip; mistyped reads fail staged like the

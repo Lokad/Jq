@@ -460,15 +460,6 @@ internal sealed class JqStreamScanner : IDisposable
         return StreamScanOutcome.WithEvent(consumed, LeafEvent(CopyPath(), empty));
     }
 
-    private StreamScanOutcome LeafInContainer(int consumed, JsonNode? leaf)
-    {
-        JsonArray path = CopyPath();
-        _budget.ChargeNode();
-        var emitted = new JsonArray { path, leaf };
-        _stashed = StashClose(path);
-        return StreamScanOutcome.WithEvent(consumed, emitted);
-    }
-
     private static JsonArray StashClose(JsonArray path)
     {
         JsonNode? clone = path.DeepClone();

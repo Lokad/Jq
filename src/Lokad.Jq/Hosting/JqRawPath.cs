@@ -64,17 +64,8 @@ internal sealed class JqRawPath : IParsable<JqRawPath>
     public static bool TryParse(string? s, [NotNullWhen(true)] out JqRawPath? result) =>
         TryParse(s, null, out result);
 
-    /// <summary>Resolves this path against <paramref name="current"/> without a confinement boundary.</summary>
-    public JqPath ToAbsolute(JqPath current) =>
-        ResolveAbsolute(current, JqPathConfinement.None);
-
-    /// <summary>
-    /// Resolves this path against <paramref name="current"/> and rejects results outside that directory.
-    /// </summary>
-    public JqPath ToAbsoluteWithin(JqPath current) =>
-        ResolveAbsolute(current, JqPathConfinement.CurrentDirectory);
-
-    private JqPath ResolveAbsolute(JqPath current, JqPathConfinement confinement)
+    /// <summary>Resolves this path against <paramref name="current"/>.</summary>
+    public JqPath ToAbsolute(JqPath current)
     {
         ArgumentNullException.ThrowIfNull(current);
         var combined = Raw.StartsWith('/')
@@ -160,27 +151,13 @@ internal sealed class JqRawPath : IParsable<JqRawPath>
             });
         }
 
-        var result = new JqPath(resultPath);
-
-        if (confinement is JqPathConfinement.CurrentDirectory && !current.IsEqualToOrParentOf(result))
-        {
-            throw new JqPathException(
-                $"Cannot resolve '{Raw}': result '{resultPath}' escapes jail '{current.Path}'.");
-        }
-
-        return result;
+        return new JqPath(resultPath);
     }
 
     /// <inheritdoc />
     public override string ToString() => Raw;
 
     private readonly record struct PathSegment(int Start, int Length);
-
-    private enum JqPathConfinement
-    {
-        None,
-        CurrentDirectory
-    }
 
     private readonly struct PathCreationState(
         string? source,
