@@ -520,7 +520,7 @@ internal sealed class JqStreamScanner : IDisposable
     {
         if (_tokenLength >= _token.Length)
         {
-            int capacity = _token.Length == 0 ? 256 : _token.Length * 2;
+            int capacity = JqBudget.BufferCapacity((long)_tokenLength + 1, Math.Max(256, 2L * _token.Length));
             _budget.CheckCancellation();
             _tokenMemory.ReplaceBuffer(ref _token, capacity, 0, _tokenLength);
         }

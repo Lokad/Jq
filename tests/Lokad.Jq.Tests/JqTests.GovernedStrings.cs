@@ -5,6 +5,21 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("--stream")]
+    [InlineData("--stream-errors")]
+    public async Task Jq_AdmittedStreamingTokenExceedsFormerStringPolicy(string mode)
+    {
+        var memory = new TestMemoryBudget(128 * 1024 * 1024);
+        var host = new MockFileSystem();
+        host.SetStandardInput("\"" + new string('x', 8388609) + "\"");
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", mode, ".[1] | length")));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("8388609\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData("\"ab\" * 4194305 | length", "8388610\n")]
     [InlineData("(\"x\" * 8388608) + \"y\" | length", "8388609\n")]
     [InlineData("[\"x\" * 4194304, \"y\" * 4194305] | join(\"\") | length", "8388609\n")]
