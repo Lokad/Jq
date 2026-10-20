@@ -40,6 +40,24 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData("def inc: .+1; 0 | until(. == 100000; inc)", "100000\n")]
+    [InlineData("def inc($n): .+$n; 0 | until(. == 100000; inc(1))", "100000\n")]
+    [InlineData("0 | last(limit(100000; recurse(.+1 | floor)))", "99999\n")]
+    [InlineData("0 | last(limit(100000; while(isfinite; .+1)))", "99999\n")]
+    [InlineData("0 | until(. == 100000; if .<100000 then .+1 else . end)", "100000\n")]
+    [InlineData("def f: f; 0 | first(recurse(f))", "0\n")]
+    public async Task Jq_ProvenBuiltinAndUserFunctionLoopTailsStayBounded(string source, string expected)
+    {
+        var root = new BenchmarkMemoryBudget(64 * 1024);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
+        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData("first(recurse(empty))")]
     [InlineData("first(while(true;empty))")]
     [InlineData("until(true;empty)")]

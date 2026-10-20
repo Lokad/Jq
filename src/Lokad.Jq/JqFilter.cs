@@ -48,7 +48,7 @@ internal abstract class JqFilter
 
     // Proven cardinality lets iterative traversals discard exhausted tail frames
     // without probing ahead into deferred errors or side effects.
-    internal virtual bool IsSingleValued => false;
+    internal virtual bool IsSingleValued(JqEnvironment environment, int depth) => false;
 
     protected virtual IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
@@ -73,7 +73,7 @@ internal abstract class JqFilter
 // a second iterator just to return one value. JSON null is still one result.
 internal abstract class SingleValueFilter : JqFilter
 {
-    internal sealed override bool IsSingleValued => true;
+    internal sealed override bool IsSingleValued(JqEnvironment environment, int depth) => true;
     public sealed override IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         context.Budget.EnterRecursion();
@@ -482,6 +482,11 @@ internal sealed class DefFilter(JqFunctionDefinition Definition, JqFilter Contin
 // caller's later bindings.
 internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFilter> Args) : JqFilter
 {
+    internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
+        depth < JqRecursion.MaximumDepth && Args.All(arg => arg.IsSingleValued(environment, depth + 1))
+        && TryResolve(environment, Name, Arity, out JqUserClosure? closure) && closure is not null
+        && closure.Definition.Body.IsSingleValued(closure.Environment, depth + 1);
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -819,7 +824,9 @@ internal sealed class TailSelfCallFilter(JqFunctionDefinition Definition, IReadO
 
 internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
 {
-    internal override bool IsSingleValued => left.IsSingleValued && right.IsSingleValued;
+    internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
+        depth < JqRecursion.MaximumDepth && left.IsSingleValued(environment, depth + 1)
+        && right.IsSingleValued(environment, depth + 1);
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         foreach (var value in left.Evaluate(input, context, environment))
@@ -1494,7 +1501,9 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
 
 internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : JqFilter
 {
-    internal override bool IsSingleValued => left.IsSingleValued && right.IsSingleValued;
+    internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
+        depth < JqRecursion.MaximumDepth && left.IsSingleValued(environment, depth + 1)
+        && right.IsSingleValued(environment, depth + 1);
     // Arithmetic builds fresh values and breaks path identity; boolean
     // connectives and comparisons agree with the reference through boolean
     // singletons on both sides, so they keep the default rule.
@@ -1691,7 +1700,8 @@ internal sealed class AlternativeFilter(JqFilter left, JqFilter right) : JqFilte
 }
 internal sealed class UnaryFilter(string op, JqFilter inner) : JqFilter
 {
-    internal override bool IsSingleValued => inner.IsSingleValued;
+    internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
+        depth < JqRecursion.MaximumDepth && inner.IsSingleValued(environment, depth + 1);
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         foreach (var value in inner.Evaluate(input, context, environment))
@@ -1718,6 +1728,11 @@ internal sealed class IfFilter(
     IReadOnlyList<(JqFilter Condition, JqFilter Then)> branches,
     JqFilter otherwise) : JqFilter
 {
+    internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
+        depth < JqRecursion.MaximumDepth && otherwise.IsSingleValued(environment, depth + 1)
+        && branches.All(branch => branch.Condition.IsSingleValued(environment, depth + 1)
+            && branch.Then.IsSingleValued(environment, depth + 1));
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         // Reference distribution: every condition output routes independently,
@@ -1795,6 +1810,10 @@ internal sealed class IfFilter(
 
 internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) : JqFilter
 {
+    internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
+        depth < JqRecursion.MaximumDepth && name != "inputs"
+        && args.All(arg => arg.IsSingleValued(environment, depth + 1));
+
     // Freshly computed values break path identity: only pass-through
     // selectors, unchanged abs, subvalue extrema, and stderr keep the default
     // identity rule. Everything else built here

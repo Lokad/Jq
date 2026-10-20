@@ -284,6 +284,8 @@ internal static class JqLoop
     internal static IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context,
         JqEnvironment environment, JqFilter? condition, JqFilter update, Kind kind)
     {
+        bool singleUpdate = update.IsSingleValued(environment, 0);
+        bool singleCondition = condition is null || condition.IsSingleValued(environment, 0);
         using var memory = new JqMemoryReservation(context.Budget.MemoryBudget);
         var pending = new List<IEnumerator<Step>>();
         IEnumerator<Step>? current = Steps(input).GetEnumerator();
@@ -374,11 +376,11 @@ internal static class JqLoop
                 foreach (JsonNode? expanded in update.Evaluate(state, context, environment))
                 {
                     if (condition is null)
-                        yield return new Step(expanded, true, update.IsSingleValued);
+                        yield return new Step(expanded, true, singleUpdate);
                     else
                         foreach (JsonNode? probe in condition.Evaluate(expanded, context, environment))
                             if (Truthy(probe))
-                                yield return new Step(expanded, true, update.IsSingleValued && condition.IsSingleValued);
+                                yield return new Step(expanded, true, singleUpdate && singleCondition);
                 }
                 yield break;
             }
@@ -394,7 +396,7 @@ internal static class JqLoop
                 {
                     if (kind == Kind.While) yield return new Step(state, false, false);
                     foreach (JsonNode? updated in update.Evaluate(state, context, environment))
-                        yield return new Step(updated, true, condition.IsSingleValued && update.IsSingleValued);
+                        yield return new Step(updated, true, singleCondition && singleUpdate);
                 }
             }
         }
