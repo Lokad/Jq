@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using Lokad.Jq.Benchmarking;
 using System.Text;
 using Lokad.Jq;
 
@@ -145,124 +145,21 @@ internal static class JqReferenceRunner
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        ProcessStartInfo startInfo = new ProcessStartInfo();
-        startInfo.FileName = executablePath;
-        startInfo.RedirectStandardInput = true;
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
-        startInfo.UseShellExecute = false;
-        startInfo.CreateNoWindow = true;
-        foreach (string argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using Process process = new Process();
-        process.StartInfo = startInfo;
         try
         {
-            if (!process.Start())
-            {
-                return new JqReferenceResult(-1, string.Empty, string.Empty, false, "process failed to start");
-            }
+            var result = await ReferenceProcess.RunAsync(executablePath, arguments, stdinUtf8,
+                true, timeout, false, MaximumCaptureBytes, MaximumCaptureBytes, cancellationToken).ConfigureAwait(false);
+            return new JqReferenceResult(result.ExitCode, Encoding.UTF8.GetString(result.Output),
+                Encoding.UTF8.GetString(result.Error), false, string.Empty);
         }
-        catch (Exception exception)
+        catch (TimeoutException)
         {
-            return new JqReferenceResult(-1, string.Empty, string.Empty, false, "process start failed: " + exception.Message);
-        }
-
-        async Task<byte[]> ReadBoundedAsync(Stream stream, CancellationToken readToken)
-        {
-            using MemoryStream output = new MemoryStream();
-            byte[] buffer = new byte[8192];
-            while (true)
-            {
-                int read = await stream.ReadAsync(buffer.AsMemory(), readToken).ConfigureAwait(false);
-                if (read == 0)
-                {
-                    break;
-                }
-
-                if (output.Length + read > MaximumCaptureBytes)
-                {
-                    throw new JqException("reference capture exceeds the 8 MiB limit");
-                }
-
-                output.Write(buffer, 0, read);
-            }
-
-            return output.ToArray();
-        }
-
-        Task<byte[]> stdoutTask = ReadBoundedAsync(process.StandardOutput.BaseStream, cancellationToken);
-        Task<byte[]> stderrTask = ReadBoundedAsync(process.StandardError.BaseStream, cancellationToken);
-        try
-        {
-            await process.StandardInput.BaseStream.WriteAsync(stdinUtf8.AsMemory(), cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // The reference may close stdin early; closing still signals EOF below.
-        }
-        finally
-        {
-            try
-            {
-                process.StandardInput.Close();
-            }
-            catch (InvalidOperationException)
-            {
-                // Process already exited; draining below still applies.
-            }
-        }
-
-        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(timeout);
-        try
-        {
-            await process.WaitForExitAsync(timeoutSource.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                process.Kill(true);
-            }
-            catch (Exception)
-            {
-                // The process may have exited between the timeout and the kill.
-            }
-
             return new JqReferenceResult(-1, string.Empty, string.Empty, true, "reference timed out");
         }
-
-        byte[] stdoutBytes;
-        byte[] stderrBytes;
-        try
+        catch (Exception exception) when (exception is IOException or System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            stdoutBytes = await stdoutTask.ConfigureAwait(false);
-            stderrBytes = await stderrTask.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (JqException exception)
-        {
-            try
-            {
-                process.Kill(true);
-            }
-            catch (Exception)
-            {
-            }
-
             return new JqReferenceResult(-1, string.Empty, string.Empty, false, exception.Message);
         }
-
-        string stdout = Encoding.UTF8.GetString(stdoutBytes);
-        string stderr = Encoding.UTF8.GetString(stderrBytes);
-        return new JqReferenceResult(process.ExitCode, stdout, stderr, false, string.Empty);
     }
 
     internal static bool OutputsMatch(JqProbeResult local, JqReferenceResult reference)

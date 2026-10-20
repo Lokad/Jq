@@ -12,8 +12,14 @@ internal static class ReferenceProcess
         byte[] input, bool capture, TimeSpan timeout, CancellationToken cancellationToken) =>
         RunAsync(executable, arguments, input, capture, timeout, false, cancellationToken);
 
-    public static async Task<ExecutionResult> RunAsync(string executable, IReadOnlyList<string> arguments,
+    public static Task<ExecutionResult> RunAsync(string executable, IReadOnlyList<string> arguments,
         byte[] input, bool capture, TimeSpan timeout, bool isolateHome, CancellationToken cancellationToken)
+        => RunAsync(executable, arguments, input, capture, timeout, isolateHome,
+            32 * 1024 * 1024, 1024 * 1024, cancellationToken);
+
+    internal static async Task<ExecutionResult> RunAsync(string executable, IReadOnlyList<string> arguments,
+        byte[] input, bool capture, TimeSpan timeout, bool isolateHome,
+        int maximumOutputBytes, int maximumErrorBytes, CancellationToken cancellationToken)
     {
         using var deadline = new CancellationTokenSource(timeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
@@ -31,7 +37,7 @@ internal static class ReferenceProcess
         using var process = new Process { StartInfo = start };
         cancellationToken.ThrowIfCancellationRequested();
         if (!process.Start()) throw new IOException("Reference process did not start.");
-        using var host = new BenchmarkHost([], capture);
+        using var host = new BenchmarkHost([], capture, maximumOutputBytes, maximumErrorBytes);
         Task exit = process.WaitForExitAsync(linked.Token);
         Task write = WriteInputAsync();
         Task output = DrainAsync(process.StandardOutput.BaseStream, JqFileDescriptor.StdOut);

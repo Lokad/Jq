@@ -20,6 +20,7 @@ internal sealed class BenchmarkHost : IJqHost, IDisposable
 {
     private ReadOnlyMemory<byte> _remaining;
     private readonly bool _capture;
+    private readonly long _maximumOutputBytes;
     private readonly long _maximumErrorBytes;
     private readonly MemoryStream _output = new();
     private readonly MemoryStream _error = new();
@@ -30,11 +31,17 @@ internal sealed class BenchmarkHost : IJqHost, IDisposable
         : this(input, capture, 1024 * 1024) { }
 
     internal BenchmarkHost(byte[] input, bool capture, long maximumErrorBytes)
+        : this(input, capture, 32 * 1024 * 1024, maximumErrorBytes) { }
+
+    internal BenchmarkHost(byte[] input, bool capture, long maximumOutputBytes, long maximumErrorBytes)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumOutputBytes);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maximumOutputBytes, 32 * 1024 * 1024);
         ArgumentOutOfRangeException.ThrowIfNegative(maximumErrorBytes);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(maximumErrorBytes, 32 * 1024 * 1024);
         _remaining = input;
         _capture = capture;
+        _maximumOutputBytes = maximumOutputBytes;
         _maximumErrorBytes = maximumErrorBytes;
     }
 
@@ -61,7 +68,7 @@ internal sealed class BenchmarkHost : IJqHost, IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         if (descriptor == JqFileDescriptor.StdOut)
         {
-            if (_length + content.Length > 32 * 1024 * 1024)
+            if (_length + content.Length > _maximumOutputBytes)
                 throw new InvalidOperationException("Benchmark stdout exceeds its capture/consumption bound.");
             _hash.AppendData(content.Span);
             _length += content.Length;

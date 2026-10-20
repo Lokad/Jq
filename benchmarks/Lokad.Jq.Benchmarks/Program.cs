@@ -47,6 +47,12 @@ if (args.Length > 0 && args[0] == "--compare")
     { Console.Error.WriteLine("Benchmark tool failed: " + exception.Message); Environment.ExitCode = 1; }
     return;
 }
+if (args is ["--process-fixture", "wait", var pidFile])
+{
+    await File.WriteAllTextAsync(pidFile, Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    await Task.Delay(TimeSpan.FromMinutes(5));
+    return;
+}
 if (args is ["--process-fixture", var fixture])
 {
     // Development fixture for portable subprocess lifecycle tests; never jq.

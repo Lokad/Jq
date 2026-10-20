@@ -1,4 +1,6 @@
 using System.Text;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Lokad.Jq;
 
 namespace Lokad.Jq.Tests;
@@ -106,30 +108,66 @@ public sealed class JqCompatibilityProbeTests
         Assert.Contains("{\"a\":2}", message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task Probe_ReferenceTimeoutKillsOwnedProcess()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Probe_BlockedReferenceInputIsInterruptedAndChildReaped(bool cancel)
     {
-        string executable;
-        IReadOnlyList<string> arguments;
-        if (OperatingSystem.IsWindows())
+        string pidFile = Path.Combine(Path.GetTempPath(), "jq-process-" + Guid.NewGuid().ToString("N"));
+        string executable = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(),
+            "..", "..", "..", OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"));
+        using var cancellation = new CancellationTokenSource();
+        Task<JqReferenceResult> run = JqReferenceRunner.RunCommandAsync(executable,
+            [typeof(CommandBenchmarks).Assembly.Location, "--process-fixture", "wait", pidFile],
+            new byte[16 * 1024 * 1024], TimeSpan.FromSeconds(cancel ? 30 : 5), cancellation.Token);
+        int? pid = null;
+        try
         {
-            executable = "ping";
-            arguments = ["127.0.0.1", "-n", "6"];
+            using var startup = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            while (!File.Exists(pidFile))
+            {
+                if (run.IsCompleted) await run;
+                await Task.Delay(20, startup.Token);
+            }
+            // File existence can precede the completed write.
+            string text;
+            do
+            {
+                text = await File.ReadAllTextAsync(pidFile, startup.Token);
+                if (text.Length == 0) await Task.Delay(20, startup.Token);
+            } while (text.Length == 0);
+            pid = int.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+            if (cancel)
+            {
+                cancellation.Cancel();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+            }
+            else Assert.True((await run).TimedOut);
+            Assert.False(IsRunning(pid.Value), "The owned child must be reaped before the runner returns.");
         }
-        else
+        finally
         {
-            executable = "sleep";
-            arguments = ["5"];
+            cancellation.Cancel();
+            try { await run; }
+            catch (OperationCanceledException) { }
+            if (pid is int child && IsRunning(child))
+            {
+                using var process = Process.GetProcessById(child);
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync();
+            }
+            File.Delete(pidFile);
         }
 
-        JqReferenceResult result = await JqReferenceRunner.RunCommandAsync(
-            executable,
-            arguments,
-            Array.Empty<byte>(),
-            TimeSpan.FromMilliseconds(500),
-            CancellationToken.None);
-
-        Assert.True(result.TimedOut, "expected the sleep/ping probe to time out; note: " + result.Note);
+        static bool IsRunning(int pid)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                return !process.HasExited;
+            }
+            catch (ArgumentException) { return false; }
+        }
     }
 
     [Fact]
