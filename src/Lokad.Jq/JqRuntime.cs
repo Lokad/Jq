@@ -221,7 +221,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 throw new JqException(invalidMessage);
             if (!reader.Read())
                 throw new JqException("expected a JSON value");
-            var start = (int)reader.TokenStartIndex;
             int consumedBase = 0;
             JsonNode? value = ReadValue(ref reader, text, ref consumedBase, 0);
             consumed = consumedBase + (int)reader.BytesConsumed;

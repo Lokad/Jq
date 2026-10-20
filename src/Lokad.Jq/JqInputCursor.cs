@@ -41,7 +41,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private readonly JqStreamScanner? _scanner;
     private readonly JqRuntime.InputReader? _jsonReader;
     private bool _streamEofDone;
-    private readonly List<Source> _sources;
+    private readonly IReadOnlyList<JqResolvedPath> _sources;
     private readonly CancellationToken _cancellationToken;
     private byte[] _readBuffer = [];
     private readonly JqMemoryReservation _readMemory;
@@ -69,8 +69,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private long _seqQueuedBytes;
     private JqSeqResyncException? _seqError;
 
-    private sealed record Source(string Name, bool IsStdin, JqPath? Path, string Display);
-
     internal JqInputCursor(
         IJqHost host,
         JqInvocation invocation,
@@ -94,23 +92,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _scanner = invocation.Stream ? new JqStreamScanner(context.Budget, context.Runtime, invocation.Seq, invocation.StreamErrors) : null;
         _jsonReader = !_raw && !_seq && !_stream ? new JqRuntime.InputReader(_runtime, _budget) : null;
         _cancellationToken = cancellationToken;
-        _sources = [];
-        if (invocation.InputFiles.Count == 0)
-        {
-            _sources.Add(new Source("<stdin>", true, null, "<stdin>"));
-        }
-        else
-        {
-            foreach (JqResolvedPath file in invocation.InputFiles)
-            {
-                string display = Utf8Text.Decode(file.Display);
-                if (display == "-")
-                    _sources.Add(new Source("<stdin>", true, null, "-"));
-                else
-                    _sources.Add(new Source(display, false, file.Absolute, display));
-            }
-        }
+        _sources = invocation.InputFiles;
     }
+
+    private string? CurrentName => _index < 0 || _index >= Math.Max(1, _sources.Count) ? null
+        : _sources.Count == 0 || _sources[_index].Display == "-" ? "<stdin>" : _sources[_index].Display;
 
     internal string? LastName { get; private set; }
 
@@ -150,18 +136,9 @@ internal sealed class JqInputCursor : IAsyncDisposable
     // cancellation, quotas, and language errors propagate unchanged.
     internal bool TryPullSync(out JsonNode? value)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        try
-        {
-            (bool hasValue, JsonNode? pulled) = PullAsync().GetAwaiter().GetResult();
-            value = pulled;
-            return hasValue;
-        }
-        catch (Exception exception) when (ShouldAbandonSource(exception))
-        {
-            AbandonCurrentAsync(exception).GetAwaiter().GetResult();
-            throw;
-        }
+        (bool hasValue, JsonNode? pulled) = PullAsync().GetAwaiter().GetResult();
+        value = pulled;
+        return hasValue;
     }
 
     private static bool ShouldAbandonSource(Exception exception) =>
@@ -190,7 +167,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 await FillAsync().ConfigureAwait(false);
                 continue;
             }
-            long before = _retainedValues.UsedBytes;
             JsonNode? value;
             int consumed;
             try
@@ -301,7 +277,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     {
         _budget.CheckCancellation();
         _index++;
-        if (_index >= _sources.Count)
+        if (_index >= Math.Max(1, _sources.Count))
             return false;
         if (!_seq && !_stream)
         {
@@ -312,20 +288,20 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _bomPending = true;
         _newlines = 0;
         _active = true;
-        LastName = _sources[_index].Name;
+        LastName = CurrentName;
         // Like the reference file activation, the filename is known before
         // the first value parses, so explicit-read failures report the
         // source instead of unknown; the line stays zero until pulls advance it.
         _context.InputFilename = LastName;
         _context.InputLineNumber = 0;
-        Source source = _sources[_index];
-        if (source.IsStdin)
+        if (_sources.Count == 0 || _sources[_index].Display == "-")
         {
             _owned = null;
             return true;
         }
+        JqResolvedPath source = _sources[_index];
         JqOpenedFile opened = await JqHostExtensions.GuardedOpenAsync(
-            _host, source.Path!, _cancellationToken).ConfigureAwait(false);
+            _host, source.Absolute, _cancellationToken).ConfigureAwait(false);
         if (opened.Error != null || opened.FileDescriptor == null)
             throw new JqInputException($"cannot open {source.Display}", 2);
         _owned = opened.FileDescriptor.Value;
@@ -1023,7 +999,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     private void SetPosition(int line)
     {
-        string? name = _index >= 0 && _index < _sources.Count ? _sources[_index].Name : null;
+        string? name = CurrentName;
         _context.InputFilename = name;
         _context.InputLineNumber = line;
         LastName = name;

@@ -7,6 +7,23 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Fact]
+    public async Task Jq_LongObjectComparisonStreamReusesBoundedAllowance()
+    {
+        var obj = WideObject(128);
+        string record = new JsonObject { ["left"] = obj, ["right"] = obj.DeepClone() }.ToJsonString() + "\n";
+        const int count = 300;
+        var root = new BenchmarkMemoryBudget(128 * 1024);
+        var host = new MockFileSystem();
+        host.SetStandardInput(string.Concat(Enumerable.Repeat(record, count)));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".left <= .right")));
+        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(string.Concat(Enumerable.Repeat("true\n", count)), host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, root.ReservedBytes);
+        Assert.InRange(root.PeakBytes, 1, 128 * 1024);
+    }
+
     [Theory]
     [InlineData("try (.left < .right) catch \"caught\"")]
     [InlineData("(.left < .right)?")]

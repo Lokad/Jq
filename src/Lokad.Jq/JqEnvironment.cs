@@ -212,9 +212,8 @@ internal sealed class JqEnvironment
         return false;
     }
 
-    // Collects visible user definitions for reparsed fragments (string
-    // interpolation re-enters the parser with the evaluation environment).
-    // Nearest bindings win so shadowing survives the reparse.
+    // Seeds compilation of interpolation fragments with visible module
+    // definitions. Nearest bindings win; fragments compile once at definition.
     internal void CollectFunctions(IDictionary<(string Name, int Arity), JqFunctionDefinition> definitions)
     {
         ArgumentNullException.ThrowIfNull(definitions);

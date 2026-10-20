@@ -320,8 +320,6 @@ internal sealed class JqModuleLoader(
         {
             if (searchValue is null)
                 searchNodes.Add(null);
-            else if (searchValue is JsonValue scalar && scalar.TryGetValue<string>(out string? single))
-                searchNodes.Add(searchValue);
             else if (searchValue is JsonArray array)
             {
                 foreach (JsonNode? item in array)

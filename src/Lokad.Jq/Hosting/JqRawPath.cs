@@ -126,7 +126,7 @@ internal sealed class JqRawPath
 
             resultPath = string.Create(
                 totalLen,
-                new PathCreationState(combined, segments),
+                (Source: combined, Segments: segments),
                 static (destination, state) =>
             {
                 destination[0] = '/';
@@ -151,15 +151,4 @@ internal sealed class JqRawPath
     public override string ToString() => Raw;
 
     private readonly record struct PathSegment(int Start, int Length);
-
-    private readonly struct PathCreationState(
-        string? source,
-        IReadOnlyList<PathSegment>? segments)
-    {
-        public string Source => source ??
-            throw new InvalidOperationException("The default path creation state has no source.");
-
-        public IReadOnlyList<PathSegment> Segments => segments ??
-            throw new InvalidOperationException("The default path creation state has no segments.");
-    }
 }

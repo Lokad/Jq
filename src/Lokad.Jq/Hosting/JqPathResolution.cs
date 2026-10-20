@@ -3,9 +3,10 @@ using System.Collections.Generic;
 
 namespace Lokad.Jq;
 
-internal readonly struct JqResolvedPath(ReadOnlyMemory<byte> display, JqPath? absolute)
+internal readonly struct JqResolvedPath(string display, JqPath absolute)
 {
-    public ReadOnlyMemory<byte> Display { get; } = display;
+    public string Display => display ??
+        throw new InvalidOperationException("The default resolved path has no display text.");
 
     public JqPath Absolute => absolute ??
         throw new InvalidOperationException("The default resolved path has no absolute path.");
@@ -41,7 +42,7 @@ public static class JqPathResolution
     internal static JqResolvedPath ResolveArgument(string raw, JqPath currentDirectory)
     {
         var absolute = JqRawPath.Parse(raw).ToAbsolute(currentDirectory);
-        return new JqResolvedPath(Helpers.Utf8Text.Encode(raw), absolute);
+        return new JqResolvedPath(raw, absolute);
     }
 
 }

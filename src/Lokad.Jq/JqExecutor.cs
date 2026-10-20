@@ -56,7 +56,7 @@ internal static class JqExecutor
             }
         }
         JqProgramSource programSource = invocation.FilterFile is { } programPath
-            ? JqProgramSource.File(Utf8Text.Decode(programPath.Display))
+            ? JqProgramSource.File(programPath.Display)
             : JqProgramSource.Inline;
         // Binding creates an execution-private variable table. File variables
         // and ARGS.named updates stay isolated across reused/concurrent commands.
@@ -429,7 +429,7 @@ internal static class JqExecutor
     {
         var opened = await JqHostExtensions.GuardedOpenAsync(host, path.Absolute, cancellationToken).ConfigureAwait(false);
         if (opened.Error != null || opened.FileDescriptor == null)
-            throw new JqException($"cannot open {Utf8Text.Decode(path.Display)}");
+            throw new JqException($"cannot open {path.Display}");
         Exception? failure = null;
         try
         {
