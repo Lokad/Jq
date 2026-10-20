@@ -286,7 +286,7 @@ internal sealed class JqModuleLoader(
                 {
                     continue;
                 }
-                var opened = await JqHostExtensions.GuardHostAsync(() => host.OpenReadAsync(path, cancellationToken)).ConfigureAwait(false);
+                var opened = await JqHostExtensions.GuardedOpenAsync(host, path, cancellationToken).ConfigureAwait(false);
                 if (opened.Error is not null || opened.FileDescriptor is null)
                     continue;
                 Exception? failure = null;

@@ -157,7 +157,7 @@ internal static class JqExecutor
                             lastFalseNull = output is null
                                 || (output is JsonValue negative && negative.TryGetValue<bool>(out bool flag) && !flag);
                             ReadOnlyMemory<byte> rendered = outputRenderer.Render(output);
-                            var appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdOut, rendered, cancellationToken)).ConfigureAwait(false);
+                            var appended = await JqHostExtensions.GuardedAppendAsync(host, invocation.StdOut, rendered, cancellationToken).ConfigureAwait(false);
                             if (!appended.CanAcceptMore) return appended.ExitCode;
                             if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int stopped)
                                 return stopped;
@@ -252,7 +252,7 @@ internal static class JqExecutor
                 var chunks = context.PendingStderr;
                 for (int index = 0; index < chunks.Count; index++)
                 {
-                    JqAppendResult appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdErr, chunks[index], cancellationToken)).ConfigureAwait(false);
+                    JqAppendResult appended = await JqHostExtensions.GuardedAppendAsync(host, invocation.StdErr, chunks[index], cancellationToken).ConfigureAwait(false);
                     if (!appended.CanAcceptMore)
                         return appended.ExitCode;
                 }
@@ -427,7 +427,7 @@ internal static class JqExecutor
     private static async Task<JqReadResult.Complete> ReadFileAsync(
         JqResolvedPath path, IJqHost host, JqBudget budget, CancellationToken cancellationToken)
     {
-        var opened = await JqHostExtensions.GuardHostAsync(() => host.OpenReadAsync(path.Absolute, cancellationToken)).ConfigureAwait(false);
+        var opened = await JqHostExtensions.GuardedOpenAsync(host, path.Absolute, cancellationToken).ConfigureAwait(false);
         if (opened.Error != null || opened.FileDescriptor == null)
             throw new JqException($"cannot open {Utf8Text.Decode(path.Display)}");
         Exception? failure = null;
