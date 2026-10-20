@@ -66,6 +66,9 @@ temporary work reconciles demand at proven lifetime boundaries; shared values an
 escaping errors retain their charge. Other construction within one record can
 remain conservatively charged, so a long loop may refuse despite a bounded live
 set. Identity, variable and child reads borrow existing values.
+Comparison keys also borrow values without adding JSON containers. Ordering
+owns reusable key buffers for its duration, admits their growth and replacement
+peaks, and refunds them when comparison/sorting finishes.
 
 Already-admitted credit amortizes host calls and stays charged. Cold small charges
 and large payload copies stay exact; repeated small headers can round in 256-byte
@@ -129,8 +132,8 @@ operands toward zero with saturation at signed 64-bit extremes, propagates NaN,
 returns zero for a divisor of -1 and errors on a zero divisor: `5.5 % 2` is `1`.
 
 Equality is kind-sensitive. Total order is null, NaN, false, true, other numbers,
-strings, arrays, objects. Strings compare by Unicode scalar, arrays lexically and
-objects by sorted keys followed by values. Consistent NaN ordering can differ
+strings, arrays, objects. Strings and object keys compare by Unicode scalar,
+arrays lexically and objects by sorted keys followed by values. Consistent NaN ordering can differ
 from upstream's asymmetric NaN/null sort stability.
 
 ## Math accuracy

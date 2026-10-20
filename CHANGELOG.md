@@ -19,6 +19,14 @@
   descriptor `DevNullPath`/`IsDevNull`, and error `MessageWithoutTerminator`.
 - Preserve literal backslash-u text during Unicode escape normalization. Borrow
   variable values in path mode, fixing nested path identity against jq 1.8.2.
+- Borrow comparison keys without adding JSON depth; accept depth-64 keys in
+  keyed collections. Order object keys by Unicode scalar consistently with
+  value sorting. Admit and reuse ordering scratch, poll cancellation within
+  comparisons, and preserve terminal failures through sorters.
+- Clone only retained unique results, scan extrema keys incrementally, and
+  remove scalar type-probe boxing, host task/delegate adapters and duplicate
+  input/path representations. Preserve key effects, independent outputs and I/O
+  ownership. Add ordering cases to governor diagnostics.
 - Reuse execution-private argument bindings and index names once, preserving
   first-wins semantics and concurrent command isolation. Emit LF directly from
   the JSON writer, normalize the owned sorted tree once, and format diagnostics

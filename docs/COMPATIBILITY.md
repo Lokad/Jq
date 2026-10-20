@@ -70,7 +70,7 @@ semantic gaps. References are the jq 1.8.2 manual and its parser/builtin registr
 | `--build-configuration` | intentionally different | JqTests.Output |
 | `--` | implemented | JqTests.CommandLine |
 | `--raw-output0` | implemented | JqTests.Output |
-| `-S`, `--sort-keys` | implemented | JqTests.Output |
+| `-S`, `--sort-keys` | implemented | JqTests.Output, JqTests.UnicodeOrdering |
 | `-C`, `--color-output` | intentionally different | JqTests.Output |
 | `-M`, `--monochrome-output` | intentionally different | JqTests.Output |
 | `--seq` | implemented | JqTests.Seq |
@@ -127,7 +127,7 @@ semantic gaps. References are the jq 1.8.2 manual and its parser/builtin registr
 | `paths/0..1`, `path/1`, `getpath/1`, `setpath/2`, `delpaths/1`, `del/1`, `pick/1` | implemented | JqTests.Paths, JqTests.Hardening |
 | `to_entries/0`, `from_entries/0`, `with_entries/1` | implemented | JqTests.Collections |
 | `add/0`, `add/1`, `flatten/0..1`, `reverse/0` | implemented | JqTests.Collections |
-| `sort/0`, `sort_by/1`, `group_by/1`, `unique/0`, `unique_by/1`, `min/0`, `max/0`, `min_by/1`, `max_by/1`, `bsearch/1` | implemented | JqTests.Collections |
+| `sort/0`, `sort_by/1`, `group_by/1`, `unique/0`, `unique_by/1`, `min/0`, `max/0`, `min_by/1`, `max_by/1`, `bsearch/1` | implemented | JqTests.Collections, JqTests.ComparisonKeys, JqTests.ComparisonMemory |
 | `range/1..3` | implemented | JqTests |
 | `transpose/0`, `combinations/0..1` | implemented | JqTests.Collections, JqTests.Hardening |
 | `any/0..2`, `all/0..2` | implemented | JqTests.Collections |
