@@ -3,6 +3,52 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Theory]
+    [InlineData("--arg", "\"1\"")]
+    [InlineData("--argjson", "1")]
+    [InlineData("--rawfile", "\"one\"")]
+    [InlineData("--slurpfile", "[1]")]
+    public async Task Jq_FirstBindingWinsAcrossAllArgumentKinds(string first, string expected)
+    {
+        foreach (string duplicate in new[] { "--arg", "--argjson", "--rawfile", "--slurpfile" })
+        {
+            var memory = new BenchmarkMemoryBudget(128 * 1024);
+            var host = new MockFileSystem();
+            host.AddFile("/data", first == "--rawfile" ? "one" : "1");
+            bool file = first is "--rawfile" or "--slurpfile";
+            var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", first, "v",
+                file ? "/data" : "1", duplicate, "v", duplicate == "--argjson" ? "not-json" : "/missing",
+                "[$v, $ARGS.named.v]")));
+
+            Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal("[" + expected + "," + expected + "]\n", host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal(file ? 1 : 0, host.ReadBytesCallCount);
+            Assert.Equal(file ? 1 : 0, host.ClosedDescriptors.Count);
+            Assert.Equal(0, host.OpenFileCount);
+            Assert.Equal(0, memory.ReservedBytes);
+        }
+    }
+
+    [Fact]
+    public void Jq_ArgumentBindingPreservesFiveThousandOrderedFileNames()
+    {
+        var arguments = new List<string> { "-n", "." };
+        for (int index = 0; index < 5000; index++)
+            arguments.AddRange(["--rawfile", "v" + index.ToString(System.Globalization.CultureInfo.InvariantCulture), "/data"]);
+        var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        {
+            var invocation = JqCommandLineParser.Parse(arguments, JqPath.Root, JqFileDescriptor.StdIn,
+                JqFileDescriptor.StdOut, JqFileDescriptor.StdErr, [], null, budget);
+            Assert.Null(invocation.Error);
+            Assert.Equal(5000, invocation.FileVariables.Count);
+            Assert.Equal(Enumerable.Range(0, 5000).Select(index => "v" + index.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                invocation.FileVariables.Select(binding => binding.Name));
+        }
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
     [Fact]
     public async Task Jq_BoundJsonAndArgsNamedFitWithoutAnotherExecutionCopy()
     {

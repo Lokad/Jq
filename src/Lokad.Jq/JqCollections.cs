@@ -765,7 +765,6 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
                         JsonNode? lookup = LookupIndex(idx, key, context);
                         var pair = new JsonArray(context.Runtime.Clone(row), context.Runtime.Clone(lookup));
                         context.Budget.CheckCancellation();
-                        context.Budget.CheckCancellation();
                         collected.Add(pair);
                     }
                 }
@@ -779,7 +778,6 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
                     {
                         JsonNode? lookup = LookupIndex(idx, key, context);
                         var pair = new JsonArray(context.Runtime.Clone(row), context.Runtime.Clone(lookup));
-                        context.Budget.CheckCancellation();
                         context.Budget.CheckCancellation();
                         if (JoinExpr is null)
                         {

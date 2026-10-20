@@ -462,7 +462,6 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
         foreach (JsonNode? value in Body.Evaluate(rebuilt, context, environment))
         {
             context.Budget.CheckCancellation();
-            context.Budget.CheckCancellation();
             context.Budget.ReserveBytes(24);
             outputs.Add(value);
         }

@@ -146,7 +146,6 @@ internal static class JqCommandLineParser
                 foreach (JqEnvironmentVariable variable in environment)
                 {
                     budget.CheckCancellation();
-                    budget.CheckCancellation();
                     environmentObject[variable.Name] = JsonValue.Create(variable.Value);
                 }
                 special.Variables["ENV"] = environmentObject;
@@ -387,6 +386,8 @@ internal static class JqCommandLineParser
         var options = new List<string>();
         string? fromFile = null;
         var fileVariables = new List<(string Name, string Path, bool Raw)>();
+        // Covered by the upfront argument-vector metadata admission.
+        var boundNames = new HashSet<string>(StringComparer.Ordinal);
         var libraryDirs = new List<string>();
         bool argsDone = false;
         // Mirror the reference parser: --args/--jsonargs only set a mode for
@@ -421,7 +422,7 @@ internal static class JqCommandLineParser
                     return SpecialArguments.Failure("jq: --arg expects name and value");
                 var name = args[++i];
                 var value = args[++i];
-                if (!variables.ContainsKey(name) && !fileVariables.Any(entry => entry.Name == name))
+                if (boundNames.Add(name))
                     variables[name] = JsonValue.Create(value);
                 continue;
             }
@@ -431,7 +432,7 @@ internal static class JqCommandLineParser
                 if (i + 2 >= args.Count)
                     return SpecialArguments.Failure("jq: --argjson expects name and JSON value");
                 var name = args[++i];
-                if (variables.ContainsKey(name) || fileVariables.Any(entry => entry.Name == name))
+                if (!boundNames.Add(name))
                 {
                     i++;
                     continue;
@@ -450,7 +451,7 @@ internal static class JqCommandLineParser
                     return SpecialArguments.Failure($"jq: --{which} takes two parameters (e.g. --{which} varname filename)");
                 var name = args[++i];
                 var path = args[++i];
-                if (!variables.ContainsKey(name) && !fileVariables.Any(entry => entry.Name == name))
+                if (boundNames.Add(name))
                     fileVariables.Add((name, path, raw));
                 continue;
             }
