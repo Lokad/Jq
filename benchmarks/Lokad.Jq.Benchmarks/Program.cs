@@ -49,7 +49,9 @@ if (args.Length > 0 && args[0] == "--compare")
 }
 if (args is ["--process-fixture", "wait", var pidFile])
 {
-    await File.WriteAllTextAsync(pidFile, Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    string temporary = pidFile + ".tmp";
+    await File.WriteAllTextAsync(temporary, Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    File.Move(temporary, pidFile);
     await Task.Delay(TimeSpan.FromMinutes(5));
     return;
 }
@@ -57,9 +59,9 @@ if (args is ["--process-fixture", var fixture])
 {
     // Development fixture for portable subprocess lifecycle tests; never jq.
     if (fixture == "wait") await Task.Delay(TimeSpan.FromMinutes(5));
-    else if (fixture == "overflow")
+    else if (fixture is "overflow" or "overflow-error")
     {
-        var output = Console.OpenStandardOutput();
+        var output = fixture == "overflow" ? Console.OpenStandardOutput() : Console.OpenStandardError();
         byte[] buffer = new byte[8192];
         for (int i = 0; i < 6000; i++) await output.WriteAsync(buffer);
     }

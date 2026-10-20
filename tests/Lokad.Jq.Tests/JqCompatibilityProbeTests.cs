@@ -129,13 +129,7 @@ public sealed class JqCompatibilityProbeTests
                 if (run.IsCompleted) await run;
                 await Task.Delay(20, startup.Token);
             }
-            // File existence can precede the completed write.
-            string text;
-            do
-            {
-                text = await File.ReadAllTextAsync(pidFile, startup.Token);
-                if (text.Length == 0) await Task.Delay(20, startup.Token);
-            } while (text.Length == 0);
+            string text = await File.ReadAllTextAsync(pidFile, startup.Token);
             pid = int.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
             if (cancel)
             {
@@ -157,6 +151,7 @@ public sealed class JqCompatibilityProbeTests
                 await process.WaitForExitAsync();
             }
             File.Delete(pidFile);
+            File.Delete(pidFile + ".tmp");
         }
 
         static bool IsRunning(int pid)
@@ -168,6 +163,35 @@ public sealed class JqCompatibilityProbeTests
             }
             catch (ArgumentException) { return false; }
         }
+    }
+
+    [Fact]
+    public async Task Probe_ReferencePumpPreservesExactPipesAndStatus()
+    {
+        string executable = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(),
+            "..", "..", "..", OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"));
+        byte[] input = Utf8("é🚀\r\n");
+        var result = await JqReferenceRunner.RunCommandAsync(executable,
+            [typeof(CommandBenchmarks).Assembly.Location, "--process-fixture", "pipes"],
+            input, TimeSpan.FromSeconds(30), CancellationToken.None);
+        Assert.Equal(new JqReferenceResult(7, Encoding.UTF8.GetString(input), "diagnostic", false, string.Empty), result);
+    }
+
+    [Theory]
+    [InlineData("overflow")]
+    [InlineData("overflow-error")]
+    public async Task Probe_ReferenceCapturesKeepIndependentBounds(string fixture)
+    {
+        string executable = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(),
+            "..", "..", "..", OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"));
+        var result = await JqReferenceRunner.RunCommandAsync(executable,
+            [typeof(CommandBenchmarks).Assembly.Location, "--process-fixture", fixture],
+            [], TimeSpan.FromSeconds(30), CancellationToken.None);
+        Assert.Equal(-1, result.ExitCode);
+        Assert.False(result.TimedOut);
+        Assert.NotEmpty(result.Note);
+        Assert.Empty(result.Stdout);
+        Assert.Empty(result.Stderr);
     }
 
     [Fact]
