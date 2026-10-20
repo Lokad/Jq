@@ -552,16 +552,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             return arr;
         }
         if (l is JsonObject lo && r is JsonObject ro)
-        {
-            if (Clone(lo) is not JsonObject obj)
-                throw new InvalidOperationException("Expected object clone.");
-            foreach (var entry in ro)
-            {
-                budget.ReserveObjectItem(entry.Value);
-                obj[entry.Key] = Clone(entry.Value);
-            }
-            return obj;
-        }
+            return MergeObjects(lo, ro, false, 0);
         throw new JqRuntimeException(TypeError(l, r, "cannot be added"));
     }
 
@@ -603,7 +594,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         if (TryGetString(r, out var rightText) && TypeName(l) == "number")
             return Repeat(rightText, Number(l));
         if (l is JsonObject lo && r is JsonObject ro)
-            return MergeRecursive(lo, ro, 0);
+            return MergeObjects(lo, ro, true, 0);
         throw new JqRuntimeException(TypeError(l, r, "cannot be multiplied"));
     }
 
@@ -635,21 +626,32 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }));
     }
 
-    internal JsonNode MergeRecursive(JsonObject left, JsonObject right, int depth)
+    private JsonObject MergeObjects(JsonObject left, JsonObject right, bool recursive, int depth)
     {
+        budget.CheckCancellation();
         JqRecursion.CheckValueDepth(left, depth);
         JqRecursion.CheckValueDepth(right, depth);
-        if (Clone(left) is not JsonObject merged)
-            throw new InvalidOperationException("Expected object clone.");
+        budget.ReserveBytes(64 + 96L * left.Count);
+        var merged = new JsonObject();
+        foreach (var property in left)
+        {
+            budget.CheckCancellation();
+            bool replaced = right.TryGetPropertyValue(property.Key, out JsonNode? incoming);
+            if (recursive && property.Value is JsonObject existingObject && incoming is JsonObject incomingObject)
+                merged.Add(property.Key, MergeObjects(existingObject, incomingObject, true, depth + 1));
+            else
+            {
+                JsonNode? selected = replaced ? incoming : property.Value;
+                if (selected is JsonValue) budget.ReserveBytes(64);
+                merged.Add(property.Key, budget.CopyValue(selected, depth + 1, false));
+            }
+        }
         foreach (var property in right)
         {
+            budget.CheckCancellation();
+            if (left.ContainsKey(property.Key)) continue;
             budget.ReserveObjectItem(property.Value);
-            if (merged.TryGetPropertyValue(property.Key, out JsonNode? existing)
-                && existing is JsonObject existingObject
-                && property.Value is JsonObject incomingObject)
-                merged[property.Key] = MergeRecursive(existingObject, incomingObject, depth + 1);
-            else
-                merged[property.Key] = Clone(property.Value);
+            merged.Add(property.Key, budget.CopyValue(property.Value, depth + 1, false));
         }
         return merged;
     }
