@@ -289,7 +289,7 @@ int checks = 0;
     try
     {
         await Command(["-r", "\"prefix\", (try test(\"x\") catch \"caught\")", "/data"], [])
-            .ExecuteAsync(host, new JqExecutionPolicy { RegexEngine = engine }, memory, cancellation.Token);
+            .ExecuteAsync(host, engine, memory, cancellation.Token);
     }
     catch (OperationCanceledException error) { cancelled = error.CancellationToken == cancellation.Token; }
     Check("public cooperating regex adapter", cancelled && engine.Disposed

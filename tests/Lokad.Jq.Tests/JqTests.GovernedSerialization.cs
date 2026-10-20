@@ -13,7 +13,7 @@ public sealed partial class JqTests
     {
         var root = new TestMemoryBudget(8192);
         var memory = new CountingMemoryBudget(root);
-        using (var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None))
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             JsonNode small = JsonValue.Create("a");
@@ -43,7 +43,7 @@ public sealed partial class JqTests
     public void Jq_GovernedSerializerReconciliationCannotBypassReplacementPeak()
     {
         var root = new TestMemoryBudget(4096);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, root, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 32; i++)
         {
@@ -65,7 +65,7 @@ public sealed partial class JqTests
         const int limit = 8192;
         var root = new TestMemoryBudget(limit);
         var memory = new CountingMemoryBudget(root);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 32; i++)
         {
@@ -101,7 +101,7 @@ public sealed partial class JqTests
     public void Jq_GovernedHotSerializationPreservesEncodingAndFormatting(bool ascii, bool pretty, bool tabs)
     {
         var root = new TestMemoryBudget(32 * 1024);
-        using (var budget = new JqBudget(JqExecutionPolicy.Default, root, CancellationToken.None))
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             for (int i = 0; i < 32; i++)
@@ -126,7 +126,7 @@ public sealed partial class JqTests
     public void Jq_GovernedColdSerializationRefundsImmediately()
     {
         var memory = new TestMemoryBudget(256);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 10; i++)
         {
@@ -140,7 +140,7 @@ public sealed partial class JqTests
     public void Jq_GovernedSerializationKeepsOverlappingResultsDistinctAndDefersActiveRefunds()
     {
         var memory = new TestMemoryBudget(32 * 1024);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 64; i++)
         {
@@ -170,7 +170,7 @@ public sealed partial class JqTests
     public void Jq_GovernedSerializationDropsOversizedAndFailedBuffers()
     {
         var memory = new TestMemoryBudget(32 * 1024);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 64; i++)
         {
@@ -195,7 +195,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(4096);
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, cancellation.Token);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 64; i++)
         {

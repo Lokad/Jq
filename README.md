@@ -44,7 +44,7 @@ Every refused memory admission fails the command with status 5. Earlier output
 remains; cleanup refunds relinquished storage. Use host cancellation to stop
 long-running commands.
 
-Pass a `JqExecutionPolicy` to `ExecuteAsync(host, policy, cancellationToken)`
+Pass an `IJqRegexEngine` to `ExecuteAsync(host, regexEngine, cancellationToken)`
 to select a borrowed regex engine. The default adapter checks cancellation around
 synchronous matching; an active search must finish first. See
 [runtime behavior](docs/RUNTIME.md) for host I/O, memory admission and safeguards.

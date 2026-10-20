@@ -89,16 +89,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_SharedAdapterConfigurationIsImmutableAcrossCommands()
+    public async Task Jq_SharedRegexEngineSupportsConcurrentCommands()
     {
-        var policy = new JqExecutionPolicy { RegexEngine = JqUtf8RegexEngine.Instance };
+        var regexEngine = JqUtf8RegexEngine.Instance;
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "\"x\" | test(\"x\")")));
         await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
         {
             var host = new MockFileSystem();
-            Assert.Equal(0, await command.ExecuteAsync(host, policy, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, regexEngine, CancellationToken.None));
             Assert.Equal("true\n", host.GetOutput(JqFileDescriptor.StdOut));
         }));
-        Assert.Same(JqUtf8RegexEngine.Instance, policy.RegexEngine);
     }
 }

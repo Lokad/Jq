@@ -67,7 +67,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
             "\"prefix\", (reduce range(1000) as $i (\"\"; ($i | tostring) as $p | (\"x\" | test($p)) | \"x\" * 128))")));
-        Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { RegexEngine = engine }, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, engine, memory, CancellationToken.None));
         Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.InRange(engine.Compilations, 1, 999);

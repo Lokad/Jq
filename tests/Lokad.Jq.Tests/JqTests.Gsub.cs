@@ -124,7 +124,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_RegexCacheSupportsRepeatedSearches()
     {
-        using var regexes = new JqRegexCache(new JqBudget(JqExecutionPolicy.Default, CancellationToken.None));
+        using var regexes = new JqRegexCache(new JqBudget(JqUtf8RegexEngine.Instance, CancellationToken.None));
         var pattern = regexes.Get("x", JqRegexCompileOptions.None);
         for (int i = 0; i < 100; i++)
         {

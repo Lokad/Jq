@@ -10,7 +10,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(64 * 1024);
         var engine = new FixedRegexEngine();
-        using var budget = new JqBudget(new JqExecutionPolicy { RegexEngine = engine }, memory, CancellationToken.None);
+        using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
         string text = new('x', 10000);
         var pattern = cache.Get(text, JqRegexCompileOptions.None);
@@ -33,7 +33,7 @@ public sealed partial class JqTests
         var root = new TestMemoryBudget(20127);
         var memory = new CountingMemoryBudget(root);
         var engine = new FixedRegexEngine();
-        using var budget = new JqBudget(new JqExecutionPolicy { RegexEngine = engine }, memory, CancellationToken.None);
+        using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
         Assert.True(Assert.Throws<JqQuotaException>(() => cache.Get(new string('x', 10000), JqRegexCompileOptions.None)).IsMemoryAdmission);
         Assert.Equal(0, engine.Compilations);

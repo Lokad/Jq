@@ -46,7 +46,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "length", "/data")));
 
         int exit = await command.ExecuteAsync(new ChunkedHost(inner, chunk),
-            JqExecutionPolicy.Default, CancellationToken.None);
+            JqUtf8RegexEngine.Instance, CancellationToken.None);
 
         Assert.Equal(0, exit);
         Assert.Equal("1024\n", inner.GetOutput(JqFileDescriptor.StdOut));

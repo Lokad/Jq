@@ -495,7 +495,7 @@ public sealed partial class JqTests
         var root = new TestMemoryBudget(6);
         var memory = new CountingMemoryBudget(root);
         using var cancellation = new CancellationTokenSource();
-        using (var budget = new JqBudget(JqExecutionPolicy.Default, memory, cancellation.Token))
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
         {
             budget.ReserveBytes(3);
             MemoryCallCounts initial = memory.Counts;
@@ -520,7 +520,7 @@ public sealed partial class JqTests
     {
         var root = new TestMemoryBudget(1024);
         var memory = new CountingMemoryBudget(root);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using (var buffer = new JqJsonBuffer(budget))
         {
             buffer.Reset();

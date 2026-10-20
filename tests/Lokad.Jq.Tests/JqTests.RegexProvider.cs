@@ -54,7 +54,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r",
             "\"prefix\", (try (" + expression + ") catch \"caught\")?, \"after\"", "/first", "/later")));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { RegexEngine = engine }, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, engine, memory, CancellationToken.None));
         Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: provider resource exhausted\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(1, failures);

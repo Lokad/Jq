@@ -99,8 +99,7 @@ remain catchable language errors. Copies check cancellation and depth while
 constructing. Cancellation propagates as `OperationCanceledException`; host
 contract failures and actual `OutOfMemoryException` remain distinct.
 
-Immutable `JqExecutionPolicy` selects a borrowed regex engine with
-`new JqExecutionPolicy { RegexEngine = engine }`. The default is
+Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`. The default is
 `JqUtf8RegexEngine.Instance`. The selected adapter receives the active token and
 owns cooperation within its engine. The default Utf8Regex 0.3.0 adapter checks
 only around synchronous calls and cannot interrupt an active search. Regex resource

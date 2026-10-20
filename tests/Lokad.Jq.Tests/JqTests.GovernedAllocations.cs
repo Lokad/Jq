@@ -83,7 +83,7 @@ public sealed partial class JqTests
         using var lexicalBudget = new JqBudget(CancellationToken.None);
         var tokens = Lexer.Tokenize(source, JqProgramSource.Inline, lexicalBudget);
         var memory = new TestMemoryBudget(8192);
-        using (var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None))
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), budget))
         {
             var parser = new JqParser(tokens, JqProgramSource.Inline, context.RootEnvironment, budget);

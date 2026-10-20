@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Breaking: remove `JqExecutionPolicy`. Pass a borrowed `IJqRegexEngine` directly
+  to `ExecuteAsync`; the default remains `JqUtf8RegexEngine.Instance`.
+
 - Breaking: remove unused path conveniences (`FileName`, `Parent`, `IsRoot`,
   `Tmp`, `IsParentOf`, `IsEqualToOrParentOf`, `TryChild`, `JqPathSegment`),
   descriptor `DevNullPath`/`IsDevNull`, and error `MessageWithoutTerminator`.

@@ -13,11 +13,11 @@ namespace Lokad.Jq;
 internal static class JqExecutor
 {
     public static async Task<int> ExecuteAsync(IJqHost host, JqCommandInvocation commandInvocation,
-        JqExecutionPolicy policy, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
+        IJqRegexEngine regexEngine, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var memoryScope = memoryBudget?.CreateScope();
-        using var bindingBudget = new JqBudget(JqExecutionPolicy.Default, memoryScope, cancellationToken);
+        using var bindingBudget = new JqBudget(JqUtf8RegexEngine.Instance, memoryScope, cancellationToken);
         JqInvocation invocation;
         try
         {
@@ -36,7 +36,7 @@ internal static class JqExecutor
             return await WriteErrorAsync(host, invocation, [invocation.Error], memoryScope,
                 cancellationToken).ConfigureAwait(false) ? 2 : 5;
         }
-        using var budget = new JqBudget(policy, memoryScope, cancellationToken);
+        using var budget = new JqBudget(regexEngine, memoryScope, cancellationToken);
         string? information = invocation.Help ? JqHelp.Text
             : invocation.Version ? "Lokad jq\n"
             : invocation.BuildConfiguration ? JqBuildConfiguration.Text + "\n" : null;

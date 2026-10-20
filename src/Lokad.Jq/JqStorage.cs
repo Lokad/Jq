@@ -33,7 +33,7 @@ internal sealed class JqStorage(IMemoryBudget? memoryBudget) : IDisposable
     internal void ReserveBytes(long bytes) => ReserveBytes(bytes, 0);
 
     // A construction batch can contain many small headers/backing slots. Count
-    // those local charges together, retaining the existing bounded credit policy.
+    // those local charges together, retaining the existing bounded credit.
     internal void ReserveBytes(long bytes, int smallAllocations)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

@@ -10,7 +10,7 @@ public sealed partial class JqTests
     {
         var root = new TestMemoryBudget(1024 * 1024);
         var counted = new Lokad.Jq.Benchmarking.CountingMemoryBudget(root);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, counted, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         var small = regexes.Get("x", JqRegexCompileOptions.None);
         var large = regexes.Get(new string('x', 62), JqRegexCompileOptions.None);
@@ -35,7 +35,7 @@ public sealed partial class JqTests
     {
         var root = new TestMemoryBudget(16 * 1024);
         var memory = new CountingMemoryBudget(root);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         for (int length = 1; length <= 1000; length++)
         {
@@ -59,7 +59,7 @@ public sealed partial class JqTests
         var memory = new CountingMemoryBudget(root);
         Assert.True(root.TryReserve(926, out var pressure));
         using (pressure)
-        using (var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None))
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
         using (var regexes = new JqRegexCache(budget))
         {
             using (var first = regexes.EncodeSubject("aaaa"))
@@ -80,7 +80,7 @@ public sealed partial class JqTests
     {
         var root = new TestMemoryBudget(16 * 1024);
         var memory = new CountingMemoryBudget(root);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         foreach (string text in new[] { new string('a', 4032), new string('é', 2016), string.Concat(Enumerable.Repeat("🚀", 1008)) })
         {
@@ -101,7 +101,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(1024 * 1024);
         using var scope = memory.CreateScope();
-        var budget = new JqBudget(JqExecutionPolicy.Default, scope, CancellationToken.None);
+        var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
         using (var regexes = new JqRegexCache(budget))
         {
             var pattern = regexes.Get("x", JqRegexCompileOptions.None);
@@ -121,7 +121,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(1024 * 1024);
         using var scope = memory.CreateScope();
-        var budget = new JqBudget(JqExecutionPolicy.Default, scope, CancellationToken.None);
+        var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         var pattern = regexes.Get("x", JqRegexCompileOptions.None);
         long retained = memory.ReservedBytes;
@@ -146,7 +146,7 @@ public sealed partial class JqTests
     public void Jq_GovernedRegexNestedLeasesAndCopiedResultsSurviveCacheDisposal()
     {
         var memory = new TestMemoryBudget(1024 * 1024);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         var pattern = regexes.Get("x", JqRegexCompileOptions.None);
         long compiled = memory.ReservedBytes;
@@ -176,7 +176,7 @@ public sealed partial class JqTests
     public void Jq_GovernedRegexSubjectReuseIgnoresOldDisposeAndDropsLargeOwners()
     {
         var memory = new TestMemoryBudget(2 * 1024 * 1024);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         var old = regexes.EncodeSubject("x");
         old.Dispose();
@@ -204,7 +204,7 @@ public sealed partial class JqTests
     public void Jq_GovernedRegexRefusedSubjectGrowthRefundsItsIdleOwner()
     {
         var memory = new TestMemoryBudget(327744 + 400);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         regexes.Get("x", JqRegexCompileOptions.None);
         using (var subject = regexes.EncodeSubject("x"))

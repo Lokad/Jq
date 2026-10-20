@@ -92,7 +92,7 @@ public sealed partial class JqTests
     public void Jq_EscapingPredicateErrorKeepsItsPayloadAdmission(string operation)
     {
         var memory = new TestMemoryBudget(64 * 1024);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
         var parser = new JqParser(operation + "(1; error(\"x\" * 8192))", JqProgramSource.Inline, context.RootEnvironment, budget);
         var filter = parser.Parse();

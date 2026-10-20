@@ -29,7 +29,7 @@ public sealed partial class JqTests
             if (operation == stage && ++calls == call) cancellation.Cancel();
             if (operation != "compiled") token.ThrowIfCancellationRequested();
         });
-        var policy = new JqExecutionPolicy { RegexEngine = engine };
+        var regexEngine = engine;
         var host = new MockFileSystem();
         host.AddFile("/first", "\"xx\"\n\"later\"\n");
         host.AddFile("/later", "\"later\"\n");
@@ -37,7 +37,7 @@ public sealed partial class JqTests
             "\"prefix\", (try (" + expression + ") catch \"caught\"), \"after\"", "/first", "/later")));
 
         var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            command.ExecuteAsync(host, policy, memory, cancellation.Token));
+            command.ExecuteAsync(host, regexEngine, memory, cancellation.Token));
         Assert.Equal(cancellation.Token, error.CancellationToken);
         Assert.Equal(call, calls);
         Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
@@ -72,7 +72,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
             "\"prefix\", (\"x\" | (try " + expression + " catch \"caught\")?), \"later\"")));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, new JqExecutionPolicy { RegexEngine = engine }, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, engine, memory, CancellationToken.None));
         Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(1, refusals);
@@ -85,7 +85,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(1024 * 1024);
         var engine = new ObservedRegexEngine((_, _, _) => { });
-        using var budget = new JqBudget(new JqExecutionPolicy { RegexEngine = engine }, memory, CancellationToken.None);
+        using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
         var pattern = cache.Get("x", JqRegexCompileOptions.None);
         using var subject = cache.EncodeSubject("x");

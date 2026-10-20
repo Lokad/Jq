@@ -37,7 +37,7 @@ public sealed partial class JqTests
     {
         const int length = 64 * 1024 * 1024 + 1;
         var memory = new TestMemoryBudget(256 * 1024 * 1024);
-        using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var host = new GeneratedLargeValueHost(length, 0);
         using (var content = Assert.IsType<JqReadResult.Complete>(
             await host.TryReadAllBytesAsync(JqFileDescriptor.StdIn, budget, CancellationToken.None)))

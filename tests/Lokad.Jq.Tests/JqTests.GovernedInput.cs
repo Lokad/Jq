@@ -101,7 +101,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(16 * 1024);
         using var caller = memory.CreateScope();
-        var budget = new JqBudget(JqExecutionPolicy.Default, caller, CancellationToken.None);
+        var budget = new JqBudget(JqUtf8RegexEngine.Instance, caller, CancellationToken.None);
         var host = new MockFileSystem();
         host.SetStandardInput("abc");
         host.BeforeByteRead = _ => Assert.Equal(12288, memory.ReservedBytes);
@@ -154,7 +154,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(16384);
         using var caller = memory.CreateScope();
-        var budget = new JqBudget(JqExecutionPolicy.Default, caller, CancellationToken.None);
+        var budget = new JqBudget(JqUtf8RegexEngine.Instance, caller, CancellationToken.None);
         var host = new MockFileSystem();
         host.SetStandardInput(new string('x', 10000));
 
@@ -171,7 +171,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(2048);
         using var scope = memory.CreateScope();
-        var budget = new JqBudget(JqExecutionPolicy.Default, scope, CancellationToken.None);
+        var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
         using (var scanner = new JqStreamScanner(budget, new JqRuntime(budget), false, false))
         {
             Assert.Null(scanner.Consume(Encoding.UTF8.GetBytes("\"" + new string('x', 300)), false).Event);

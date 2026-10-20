@@ -1,6 +1,6 @@
 # Regex behavior
 
-`JqExecutionPolicy.RegexEngine` selects a borrowed `IJqRegexEngine`; the default
+Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`; the default
 `JqUtf8RegexEngine.Instance` adapts managed `Lokad.Utf8Regex.Pcre2` 0.3.0
 (transitively `Lokad.Utf8Regex` 0.3.0). The default adapter ships in the runtime
 package. PCRE2-specific types stay behind the adapter.

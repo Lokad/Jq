@@ -24,21 +24,21 @@ internal sealed class JqBudget : IDisposable
     private bool _disposed;
 
     internal JqBudget(CancellationToken cancellationToken)
-        : this(JqExecutionPolicy.Default, cancellationToken) { }
+        : this(JqUtf8RegexEngine.Instance, cancellationToken) { }
 
-    internal JqBudget(JqExecutionPolicy policy, CancellationToken cancellationToken)
-        : this(policy, null, cancellationToken) { }
+    internal JqBudget(IJqRegexEngine regexEngine, CancellationToken cancellationToken)
+        : this(regexEngine, null, cancellationToken) { }
 
-    internal JqBudget(JqExecutionPolicy policy, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
+    internal JqBudget(IJqRegexEngine regexEngine, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
     {
-        Policy = policy;
+        RegexEngine = regexEngine;
         MemoryBudget = memoryBudget;
         _executionStorage = new JqStorage(memoryBudget);
         _storage = _executionStorage;
         _cancellationToken = cancellationToken;
     }
 
-    internal JqExecutionPolicy Policy { get; }
+    internal IJqRegexEngine RegexEngine { get; }
 
     internal IMemoryBudget? MemoryBudget { get; }
 

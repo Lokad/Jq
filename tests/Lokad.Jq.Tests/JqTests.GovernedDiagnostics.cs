@@ -33,7 +33,7 @@ public sealed partial class JqTests
     {
         var root = new TestMemoryBudget(8 * 1024 * 1024);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqExecutionPolicy.Default, root, CancellationToken.None)))
+            new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
         {
             byte[] message = Encoding.UTF8.GetBytes(new string('a', width));
             for (int i = 1; i <= 1000; i++)
@@ -59,7 +59,7 @@ public sealed partial class JqTests
         Assert.True(root.TryReserve(900, out var pressure));
         using (pressure)
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None)))
+            new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
         {
             for (int i = 0; i < 30; i++)
             {
@@ -159,7 +159,7 @@ public sealed partial class JqTests
         var root = new TestMemoryBudget(8);
         var memory = new CountingMemoryBudget(root);
         using var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None));
+            new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None));
         context.EmitStderr("é");
         MemoryCallCounts admitted = memory.Counts;
         context.EmitStderr("");
@@ -190,7 +190,7 @@ public sealed partial class JqTests
         var memory = new TestMemoryBudget(8);
         using var cancellation = new CancellationTokenSource();
         using var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqExecutionPolicy.Default, memory, cancellation.Token));
+            new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token));
         context.EmitStderr("x");
         cancellation.Cancel();
         Assert.Throws<OperationCanceledException>(() => context.EmitStderr(""));

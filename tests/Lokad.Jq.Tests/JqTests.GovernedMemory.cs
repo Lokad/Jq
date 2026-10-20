@@ -63,7 +63,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(1024);
         using var scope = memory.CreateScope();
-        var budget = new JqBudget(JqExecutionPolicy.Default, scope, CancellationToken.None);
+        var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
         using (var buffer = new JqJsonBuffer(budget))
         {
             "abc"u8.CopyTo(buffer.GetSpan(3));
