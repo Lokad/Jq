@@ -171,7 +171,7 @@ six regex cases keep resize counts and rise by 128-132 bytes. Growing raw output
 drops two bytes; 37 other single-worker peaks are unchanged. This records newly
 covered retained storage; it makes no timing or managed-allocation claim.
 
-See [execution policy](EXECUTION_POLICY.md) for ownership and retained-credit bounds.
+See [runtime memory rules](RUNTIME.md#memory-admission) for ownership and retained-credit bounds.
 
 ## Recorded artifact checksums
 

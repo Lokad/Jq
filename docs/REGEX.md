@@ -68,7 +68,7 @@ Jq owns copied keys/cache metadata; the provider owns its compiled representatio
 Each allocation has one owner; cached handles and retained
 buffers stay charged, and active borrowers delay refunds. Every refusal terminates
 the command. Reuse and structural ceilings are described in
-[execution policy](EXECUTION_POLICY.md).
+[runtime memory rules](RUNTIME.md#memory-admission).
 
 Depth/workspace exhaustion reports status 5 outside `try`/`?`. Syntax errors stay
 catchable; cancellation propagates as `OperationCanceledException`. Utf8Regex

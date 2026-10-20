@@ -116,7 +116,7 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 
-    // The numeric profile is double-based (see docs/NUMERIC_PROFILE.md):
+    // The numeric profile is double-based (see docs/RUNTIME.md):
     // cases marked decimal-divergence pin double behavior that differs
     // from decimal-literal builds.
     [Theory]

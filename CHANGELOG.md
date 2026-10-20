@@ -231,7 +231,7 @@ Delivered since the scaffold baseline:
   positions.
 - Numbers: double domain with integral storage locked as the permanent
   policy, with literal precision, overflow clamping, and non-finite
-  rendering pinned per `docs/NUMERIC_PROFILE.md`.
+  rendering pinned per `docs/RUNTIME.md`.
 - Regex: duplicate capture names accepted with reference-ordered folds;
   the onig/manonig sweep passes 66/66. Six additional reference comparisons
   expose flag mapping, literal-escape and longest-match gaps; these are

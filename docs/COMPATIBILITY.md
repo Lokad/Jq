@@ -15,7 +15,7 @@ modules, environment, clock and timezone inputs come from the embedding host.
 - **Numbers:** double-domain semantics with integral storage. Decimal-literal
   fidelity, large-number comparisons and exponent spelling can differ from
   decimal-enabled jq builds. Special-function accuracy remains approximate. See
-  [numeric profile](NUMERIC_PROFILE.md).
+  [runtime number semantics](RUNTIME.md#numbers).
 - **Regex:** the managed PCRE2 profile differs from jq's Oniguruma semantics;
   flags `m`/`s`/`p`, longest matching and `\C` differ. Sparse numeric captures
   have an engine limitation. See [regex behavior](REGEX.md).
@@ -37,7 +37,7 @@ modules, environment, clock and timezone inputs come from the embedding host.
 Resource safeguards are separate from jq language errors: shared memory refusal
 and structural/regex exhaustion terminate with status 5 outside `try`/`?`.
 Cancellation and host failures propagate separately. Long streams have no
-cumulative fuel or byte ceiling. See [execution policy](EXECUTION_POLICY.md) for
+cumulative fuel or byte ceiling. See [runtime safeguards](RUNTIME.md#safeguards-and-cancellation) for
 construction limits, ownership and cleanup.
 
 ## Inventory

@@ -46,13 +46,13 @@ operations retain their separate path-length bound. Binding and evaluation share
 the execution memory scope. Utf8Regex 0.3.0 lacks cancellation-token overloads;
 the default adapter checks cancellation before and after synchronous regex calls.
 See [REGEX.md](REGEX.md) for the engine profile and cancellation limits.
-See [EXECUTION_POLICY.md](EXECUTION_POLICY.md) for the exact accounting contract.
+See [runtime behavior](RUNTIME.md) for memory admission, safeguards and numbers.
 
 Explicit execution overloads borrow an `IMemoryBudget` sharing the host's root
 allowance. Memory admission owns live storage estimates with execution, record,
 buffer, result and cache lifetimes; it does not copy a remaining balance into
 per-invocation caps. Current coverage and conservative retention caveats are
-listed in EXECUTION_POLICY.md. Cancellation is checked throughout evaluation,
+listed there. Cancellation is checked throughout evaluation,
 construction and IO; it is independent of storage admission.
 
 Coarse owners separate logical storage demand from bounded, already-admitted
@@ -71,8 +71,7 @@ Diagnostic queues can reuse at most 256 bytes after 32 small nonempty messages;
 cold drains refund fully, and queued bursts stay charged through awaited appends.
 Direct buffers still admit replacement peaks and refund them after copying.
 Every refused admission, including optional growth, terminates the command
-without retrying a smaller estimate. EXECUTION_POLICY.md describes failure,
-cleanup and the retained-headroom tradeoff.
+without retrying a smaller estimate.
 
 Try-style invocation factories admit copied argument/environment vectors and
 derived directory storage before allocation. The invocation owns a scope and
