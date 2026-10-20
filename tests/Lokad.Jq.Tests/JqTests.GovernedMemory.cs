@@ -97,7 +97,7 @@ public sealed partial class JqTests
             Assert.Throws<JqQuotaException>(() => reservation.ReplaceBuffer(ref buffer, 6));
             Assert.Same(previous, buffer);
             Assert.Equal(42, buffer[0]);
-            Assert.Equal(3, reservation.Bytes);
+            Assert.Equal(3, reservation.LastAdmittedBytes);
             Assert.Equal(3, memory.ReservedBytes);
             Assert.Throws<ArgumentOutOfRangeException>(() => reservation.Resize(-1));
             reservation.Resize(0);
@@ -204,14 +204,13 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GovernedReservationForwardsAncestorInvalidation()
+    public void Jq_GovernedReservationRejectsResizeAfterAncestorDisposal()
     {
         var memory = new TestMemoryBudget(8);
         using var owner = memory.CreateScope();
         using var reservation = new JqMemoryReservation(owner);
         reservation.Resize(8);
         owner.Dispose();
-        Assert.Equal(0, reservation.Bytes);
         Assert.Equal(0, memory.ReservedBytes);
         Assert.Throws<ObjectDisposedException>(() => reservation.Resize(1));
         Assert.Throws<ObjectDisposedException>(() => reservation.Resize(8));

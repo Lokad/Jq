@@ -7,7 +7,7 @@ namespace Lokad.Jq;
 /// <summary>
 /// Well-formed but not yet canonicalized jq path.
 /// </summary>
-internal sealed class JqRawPath : IParsable<JqRawPath>
+internal sealed class JqRawPath
 {
     private JqRawPath(string raw)
     {
@@ -33,13 +33,10 @@ internal sealed class JqRawPath : IParsable<JqRawPath>
     }
 
     /// <summary>Parses a well-formed raw jq path.</summary>
-    public static JqRawPath Parse(string s) => Parse(s, null);
-
-    /// <summary>Parses a well-formed raw jq path; the format provider is ignored.</summary>
-    public static JqRawPath Parse(string s, IFormatProvider? provider)
+    public static JqRawPath Parse(string s)
     {
         ArgumentNullException.ThrowIfNull(s);
-        if (!TryParse(s, provider, out var result))
+        if (!TryParse(s, out var result))
         {
             throw new FormatException($"'{s}' is not a valid jq path.");
         }
@@ -47,8 +44,8 @@ internal sealed class JqRawPath : IParsable<JqRawPath>
         return result;
     }
 
-    /// <summary>Attempts to parse a well-formed raw jq path; the format provider is ignored.</summary>
-    public static bool TryParse(string? s, IFormatProvider? provider, [NotNullWhen(true)] out JqRawPath? result)
+    /// <summary>Attempts to parse a well-formed raw jq path.</summary>
+    public static bool TryParse(string? s, [NotNullWhen(true)] out JqRawPath? result)
     {
         if (s is not null && IsValid(s))
         {
@@ -59,10 +56,6 @@ internal sealed class JqRawPath : IParsable<JqRawPath>
         result = null;
         return false;
     }
-
-    /// <summary>Attempts to parse a well-formed raw jq path.</summary>
-    public static bool TryParse(string? s, [NotNullWhen(true)] out JqRawPath? result) =>
-        TryParse(s, null, out result);
 
     /// <summary>Resolves this path against <paramref name="current"/>.</summary>
     public JqPath ToAbsolute(JqPath current)

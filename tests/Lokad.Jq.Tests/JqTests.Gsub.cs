@@ -137,7 +137,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GsubRejectsInvalidUtf16BeforeMatching()
     {
-        using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), JqProgramSource.Inline, new JqBudget(CancellationToken.None));
+        using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), new JqBudget(CancellationToken.None));
         var filter = new JqParser("gsub(\"a\";\"x\")", JqProgramSource.Inline, context.RootEnvironment, context.Budget).Parse();
         var input = System.Text.Json.Nodes.JsonValue.Create("a\ud800");
 

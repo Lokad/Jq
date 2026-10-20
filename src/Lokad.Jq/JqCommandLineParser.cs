@@ -177,7 +177,6 @@ internal static class JqCommandLineParser
                 Filter = filter,
                 FilterFile = filterFile,
                 Variables = special.Variables,
-                PositionalArguments = special.Positional,
                 InputFiles = inputFiles,
                 FileVariables = special.FileVariables,
                 LibraryDirs = libraryDirs,

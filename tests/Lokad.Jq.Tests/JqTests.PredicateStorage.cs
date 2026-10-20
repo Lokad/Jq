@@ -93,7 +93,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(64 * 1024);
         using var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None);
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline, budget);
+        using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
         var parser = new JqParser(operation + "(1; error(\"x\" * 8192))", JqProgramSource.Inline, context.RootEnvironment, budget);
         var filter = parser.Parse();
         long compilation = memory.ReservedBytes;

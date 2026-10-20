@@ -19,9 +19,6 @@ public readonly record struct JqOperationError
     /// <summary>Gets the diagnostic including its LF terminator.</summary>
     public string Message { get; }
 
-    /// <summary>Removes only the framing LF for consumers with an unframed text contract.</summary>
-    public string MessageWithoutTerminator => Message[..^1];
-
     /// <summary>The descriptor is missing, closed, or lacks the requested access.</summary>
     public static JqOperationError BadFileDescriptor => new("Bad file descriptor\n");
 }

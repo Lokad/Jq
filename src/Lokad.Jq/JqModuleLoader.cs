@@ -12,20 +12,17 @@ namespace Lokad.Jq;
 internal sealed class JqLoadedModule
 {
     internal JqLoadedModule(
-        string canonicalPath,
         JsonObject? metadata,
         IReadOnlyList<JqModuleImport> imports,
         IReadOnlyList<JqFunctionDefinition> definitions,
         JqEnvironment moduleEnv)
     {
-        CanonicalPath = canonicalPath;
         Metadata = metadata;
         Imports = imports;
         Definitions = definitions;
         ModuleEnv = moduleEnv;
     }
 
-    internal string CanonicalPath { get; }
     internal JsonObject? Metadata { get; }
     internal IReadOnlyList<JqModuleImport> Imports { get; }
     internal IReadOnlyList<JqFunctionDefinition> Definitions { get; }
@@ -230,14 +227,15 @@ internal sealed class JqModuleLoader(
             }
             var programSource = new JqProgramSource("file \"" + canonicalPath + "\"", canonicalPath);
             // Pre-scan imports before loading dependencies.
-            var preParser = new JqParser(sourceText, programSource, rootEnvironment, budget);
+            var tokens = Lexer.Tokenize(sourceText, programSource, budget);
+            var preParser = new JqParser(tokens, programSource, rootEnvironment, budget);
             (JsonObject? metadata, IReadOnlyList<JqModuleImport> imports) = preParser.ParseImportsOnly();
             string childImporterDir = ParentDir(canonicalPath);
             JqEnvironment env = rootEnvironment;
             foreach (JqModuleImport import in imports)
                 env = await ApplyImportAsync(env, import, childImporterDir, depth + 1, cancellationToken).ConfigureAwait(false);
             // Full parse with dependencies in scope for include validation.
-            var fullParser = new JqParser(sourceText, programSource, env, budget);
+            var fullParser = new JqParser(tokens, programSource, env, budget);
             // Seed parser scopes with include-provided functions for validation.
             // The parser seeds from the environment automatically.
             (JsonObject? fullMetadata, IReadOnlyList<JqModuleImport> fullImports, IReadOnlyList<JqFunctionDefinition> definitions) = fullParser.ParseModuleFile();
@@ -246,7 +244,7 @@ internal sealed class JqModuleLoader(
                 budget.CheckCancellation();
                 env = env.ExtendFunction(definition.Name, definition.Arity, definition);
             }
-            var loaded = new JqLoadedModule(canonicalPath, fullMetadata ?? metadata, fullImports, definitions, env);
+            var loaded = new JqLoadedModule(fullMetadata ?? metadata, fullImports, definitions, env);
             _cache[canonicalPath] = loaded;
             return loaded;
         }

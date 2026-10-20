@@ -256,7 +256,7 @@ public sealed partial class JqTests
     {
         var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
         var budget = new JqBudget(CancellationToken.None);
-        using var context = new JqContext(variables, JqProgramSource.Inline, budget);
+        using var context = new JqContext(variables, budget);
         JqFilter filter = new JqParser("{\"a\":[1]}", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
 
         List<System.Text.Json.Nodes.JsonNode?> first = filter.Evaluate(null, context, context.RootEnvironment).ToList();
@@ -281,7 +281,7 @@ public sealed partial class JqTests
             System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
             var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
             var budget = new JqBudget(CancellationToken.None);
-            using var context = new JqContext(variables, JqProgramSource.Inline, budget);
+            using var context = new JqContext(variables, budget);
             JqFilter filter = new JqParser("1.5 + 2.5", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
             List<System.Text.Json.Nodes.JsonNode?> results = filter.Evaluate(null, context, context.RootEnvironment).ToList();
 

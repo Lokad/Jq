@@ -22,15 +22,11 @@ internal sealed class JqParser(
     public JqParser(string source, JqProgramSource programSource, JqEnvironment environment, JqBudget budget)
         : this(Lexer.Tokenize(source, programSource, budget), programSource, environment, budget) { }
 
-    internal IReadOnlyList<JqModuleImport> ParsedImports { get; private set; } = [];
-
-    internal JsonObject? ParsedModuleMetadata { get; private set; }
-
     public JqFilter Parse()
     {
         SeedFunctionsFromEnvironment();
-        ParsedModuleMetadata = ParseModuleHeader();
-        ParsedImports = ParseImportList();
+        ParseModuleHeader();
+        ParseImportList();
         if (Peek().Kind == TokenKind.End)
             throw Error("Top-level program not given (try \".\")", Peek().Span);
         var filter = ParseQuery(topLevel: true);
@@ -45,8 +41,6 @@ internal sealed class JqParser(
         SeedFunctionsFromEnvironment();
         var metadata = ParseModuleHeader();
         var imports = ParseImportList();
-        ParsedModuleMetadata = metadata;
-        ParsedImports = imports;
         return (metadata, imports);
     }
 
@@ -57,8 +51,6 @@ internal sealed class JqParser(
         SeedFunctionsFromEnvironment();
         var metadata = ParseModuleHeader();
         var imports = ParseImportList();
-        ParsedModuleMetadata = metadata;
-        ParsedImports = imports;
         var definitions = new List<JqFunctionDefinition>();
         while (PeekIsDef())
         {
@@ -356,7 +348,7 @@ internal sealed class JqParser(
     // instead of surfacing per evaluation as stage 5. The sub-parser shares
     // the program source, environment, and budget; scope snapshots are deep
     // copies so defs inside pieces stay local to the piece.
-    private JqFilter ParseInterpolationPiece(string source, JqSourceSpan span)
+    private JqFilter ParseInterpolationPiece(string source)
     {
         ArgumentNullException.ThrowIfNull(source);
         var piece = new JqParser(source, _programSource, _environment, _budget);

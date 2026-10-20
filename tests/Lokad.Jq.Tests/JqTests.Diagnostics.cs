@@ -447,28 +447,6 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_SourceSpanCountsLinesAndColumns()
-    {
-        JqSourceSpan first = JqSourceSpan.FromOffset("a\nbc", 0);
-        JqSourceSpan second = JqSourceSpan.FromOffset("a\nbc", 2);
-        JqSourceSpan third = JqSourceSpan.FromOffset("a\nbc", 3);
-
-        Assert.Equal(new JqSourceSpan(0, 1, 1), first);
-        Assert.Equal(new JqSourceSpan(2, 2, 1), second);
-        Assert.Equal(new JqSourceSpan(3, 2, 2), third);
-    }
-
-    [Fact]
-    public void Jq_SourceSpanCountsAstralCharactersAsTwoUtf16Units()
-    {
-        // Columns count UTF-16 code units with LF line breaks: the rocket
-        // occupies columns 2 and 3, so the following quote sits at column 4.
-        JqSourceSpan astral = JqSourceSpan.FromOffset("a\U0001F680bc", 3);
-
-        Assert.Equal(new JqSourceSpan(3, 1, 4), astral);
-    }
-
-    [Fact]
     public async Task Jq_DiagnosticColumnsCountUtf16UnitsAfterAstralText()
     {
         var host = new MockFileSystem();
@@ -480,16 +458,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_RuntimeTypeErrorCarriesStructuredPayload()
+    public void Jq_RuntimeTypeErrorHasDiagnostic()
     {
         var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
         var budget = new JqBudget(CancellationToken.None);
-        using var context = new JqContext(variables, JqProgramSource.Inline, budget);
+        using var context = new JqContext(variables, budget);
         JqFilter filter = new JqParser("1 | .foo", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
 
         JqRuntimeException error = Assert.Throws<JqRuntimeException>(() => { filter.Evaluate(null, context, context.RootEnvironment).ToList(); });
         Assert.Contains("cannot index number", error.Message);
-        Assert.Null(error.Payload);
     }
 
     private sealed class OversizedReadHost : IJqHost

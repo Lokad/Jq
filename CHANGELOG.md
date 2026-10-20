@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Breaking: remove unused path conveniences (`FileName`, `Parent`, `IsRoot`,
+  `Tmp`, `IsParentOf`, `IsEqualToOrParentOf`, `TryChild`, `JqPathSegment`),
+  descriptor `DevNullPath`/`IsDevNull`, and error `MessageWithoutTerminator`.
+  Remove unused internal metadata and test-only scaffolding. Module import
+  scanning and full parsing now share one token sequence.
+
 - Breaking: use a shared recursion depth of 64 across parsing, evaluation, value traversal,
   JSON and module loading. Evaluation now counts active advancement rather than
   suspended results; wide destructuring iterates through admitted storage.

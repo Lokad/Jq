@@ -550,7 +550,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                     }
                     catch (TailCallSignal signal) when (signal.Definition.Name == definition.Name && signal.Definition.Arity == definition.Arity)
                     {
-                        current = PushSignalFrames(signal, definition, context, pending);
+                        current = PushSignalFrames(signal, context, pending);
                         break;
                     }
                     if (!moved)
@@ -707,7 +707,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
             yield return value;
     }
 
-    private static CallFrame? PushSignalFrames(TailCallSignal signal, JqFunctionDefinition definition, JqContext context, Stack<CallFrame> pending)
+    private static CallFrame? PushSignalFrames(TailCallSignal signal, JqContext context, Stack<CallFrame> pending)
     {
         var combos = new List<JsonNode?[]>();
         foreach (JsonNode?[] combo in EvaluateValueCombos(signal.ValueArgs, signal.Input, context, signal.Environment))
@@ -2170,14 +2170,14 @@ internal sealed class InterpolatedStringFilter : JqFilter
     // Splits once at construction so malformed templates fail before evaluation;
     // each interpolation is parsed once with the definition-site scopes, so unknown
     // names fail at compile time (stage 3) instead of per evaluation as stage 5.
-    internal InterpolatedStringFilter(string template, string? format, JqSourceSpan span, JqProgramSource program, Func<string, JqSourceSpan, JqFilter> parsePiece, JqBudget budget)
+    internal InterpolatedStringFilter(string template, string? format, JqSourceSpan span, JqProgramSource program, Func<string, JqFilter> parsePiece, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(parsePiece);
         _format = format;
         _segments = SplitTemplate(template, span, program, parsePiece, budget);
     }
 
-    private static IReadOnlyList<Segment> SplitTemplate(string template, JqSourceSpan span, JqProgramSource program, Func<string, JqSourceSpan, JqFilter> parsePiece, JqBudget budget)
+    private static IReadOnlyList<Segment> SplitTemplate(string template, JqSourceSpan span, JqProgramSource program, Func<string, JqFilter> parsePiece, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(program);
@@ -2220,7 +2220,7 @@ for (; i < template.Length; i++)
                     segments.Add(new Literal(Lexer.DecodeLiterals(literal.ToString())));
                     literal.Clear();
                 }
-                segments.Add(new Interpolation(parsePiece(template[start..i], span)));
+                segments.Add(new Interpolation(parsePiece(template[start..i])));
             }
             else
             {

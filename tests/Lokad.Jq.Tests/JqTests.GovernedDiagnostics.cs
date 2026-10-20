@@ -32,7 +32,7 @@ public sealed partial class JqTests
     public void Jq_GovernedDiagnosticBurstsTrackAllQueuedBytesWithBoundedPadding(int width)
     {
         var root = new TestMemoryBudget(8 * 1024 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline,
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(JqExecutionPolicy.Default, root, CancellationToken.None)))
         {
             byte[] message = Encoding.UTF8.GetBytes(new string('a', width));
@@ -58,7 +58,7 @@ public sealed partial class JqTests
         var memory = new CountingMemoryBudget(root);
         Assert.True(root.TryReserve(900, out var pressure));
         using (pressure)
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline,
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None)))
         {
             for (int i = 0; i < 30; i++)
@@ -158,7 +158,7 @@ public sealed partial class JqTests
     {
         var root = new TestMemoryBudget(8);
         var memory = new CountingMemoryBudget(root);
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline,
+        using var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None));
         context.EmitStderr("é");
         MemoryCallCounts admitted = memory.Counts;
@@ -189,7 +189,7 @@ public sealed partial class JqTests
     {
         var memory = new TestMemoryBudget(8);
         using var cancellation = new CancellationTokenSource();
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline,
+        using var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(JqExecutionPolicy.Default, memory, cancellation.Token));
         context.EmitStderr("x");
         cancellation.Cancel();

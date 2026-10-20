@@ -113,10 +113,6 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
         }
     }
 
-    internal JqFilter TryBody => Body;
-
-    internal JqFilter? CatchHandler => Handler;
-
     internal TryFilter WithOperands(Func<JqFilter, JqFilter> rewrite)
     {
         ArgumentNullException.ThrowIfNull(rewrite);

@@ -27,9 +27,4 @@ public readonly record struct JqFileDescriptor
     /// <summary>Gets the distinguished descriptor that discards writes.</summary>
     public static JqFileDescriptor DevNull => new(int.MaxValue);
 
-    /// <summary>Gets the canonical path corresponding to the null device.</summary>
-    public static JqPath DevNullPath { get; } = new("/dev/null");
-
-    /// <summary>Gets whether this is the distinguished null-device descriptor.</summary>
-    public bool IsDevNull => this == DevNull;
 }

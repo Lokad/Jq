@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 
 namespace Lokad.Jq;
 
@@ -41,7 +40,7 @@ public static class JqPathResolution
 
     internal static JqResolvedPath ResolveArgument(string raw, JqPath currentDirectory)
     {
-        var absolute = JqRawPath.Parse(raw, CultureInfo.InvariantCulture).ToAbsolute(currentDirectory);
+        var absolute = JqRawPath.Parse(raw).ToAbsolute(currentDirectory);
         return new JqResolvedPath(Helpers.Utf8Text.Encode(raw), absolute);
     }
 

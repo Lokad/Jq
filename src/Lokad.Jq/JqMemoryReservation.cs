@@ -8,11 +8,8 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
     private long _bytes;
     private bool _disposed;
 
-    internal long Bytes => _reservation?.Bytes ?? _bytes;
-
     // Valid for owner-local accounting while its borrowers are live. Ancestor
-    // disposal is serialized with users; explicit Bytes observations still
-    // forward invalidation, and every admission still reaches the host.
+    // disposal is serialized with users; every admission reaches the host.
     internal long LastAdmittedBytes => _bytes;
 
     internal void Resize(long bytes)

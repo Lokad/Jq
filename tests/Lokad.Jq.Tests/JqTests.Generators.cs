@@ -272,7 +272,7 @@ public sealed partial class JqTests
         var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
         using var cancellation = new CancellationTokenSource();
         var budget = new JqBudget(cancellation.Token);
-        using var context = new JqContext(variables, JqProgramSource.Inline, budget);
+        using var context = new JqContext(variables, budget);
         JqFilter filter = new JqParser("(range(0;1000000), 0) + (0, 0)", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
         using IEnumerator<System.Text.Json.Nodes.JsonNode?> results = filter.Evaluate(null, context, context.RootEnvironment).GetEnumerator();
 

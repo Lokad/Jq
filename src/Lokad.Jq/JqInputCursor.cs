@@ -60,8 +60,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private bool _disposed;
 
     // JSON-text-sequence state (RFC 7464 records separated by RS 0x1E).
-    // Raw mode wins over sequence framing; plain streaming scanners arrive
-    // with the sibling `--stream` increment.
+    // Raw mode wins over sequence framing.
     private bool _seqWaiting = true;
     private bool _seqDone;
     private int _scanLine = 1;

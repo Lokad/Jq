@@ -111,7 +111,7 @@ public sealed partial class JqTests
         {
             Assert.Equal("abc"u8.ToArray(), content.Content.ToArray());
             Assert.Equal(4096, memory.ReservedBytes);
-            Assert.Equal(4096, content.Memory.Bytes);
+            Assert.Equal(4096, content.Memory.LastAdmittedBytes);
         }
         Assert.Equal(0, memory.ReservedBytes);
         Assert.Equal(12288, memory.PeakBytes);

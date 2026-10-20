@@ -84,7 +84,7 @@ public sealed partial class JqTests
         var tokens = Lexer.Tokenize(source, JqProgramSource.Inline, lexicalBudget);
         var memory = new TestMemoryBudget(8192);
         using (var budget = new JqBudget(JqExecutionPolicy.Default, memory, CancellationToken.None))
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), JqProgramSource.Inline, budget))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), budget))
         {
             var parser = new JqParser(tokens, JqProgramSource.Inline, context.RootEnvironment, budget);
             var failure = Assert.Throws<JqQuotaException>(() => parser.ParseImportsOnly());

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -64,7 +63,7 @@ internal static class JqExecutor
         // ARGS.named entries are recorded while running, so a reused command
         // must not leak them into later executions.
         var executionVariables = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
-        using var context = new JqContext(executionVariables, programSource, budget)
+        using var context = new JqContext(executionVariables, budget)
         {
             Clock = invocation.Clock,
             SortKeys = invocation.SortKeys,
@@ -148,7 +147,7 @@ internal static class JqExecutor
             Exception? unwindError = null;
             try
             {
-                await using var inputs = OuterInputsAsync(cursor, invocation, context, cancellationToken).GetAsyncEnumerator(cancellationToken);
+                await using var inputs = OuterInputsAsync(cursor, invocation, context).GetAsyncEnumerator();
                 bool sawOutput = false;
                 bool lastFalseNull = false;
                 int stickyError = 0;
@@ -270,8 +269,7 @@ internal static class JqExecutor
             return null;
         }
         static async IAsyncEnumerable<JsonNode?> OuterInputsAsync(
-            JqInputCursor cursor, JqInvocation invocation, JqContext context,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            JqInputCursor cursor, JqInvocation invocation, JqContext context)
         {
             ArgumentNullException.ThrowIfNull(cursor);
             if (invocation.NullInput)
