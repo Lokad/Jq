@@ -5,8 +5,8 @@
 - Remove the fixed 100,000-order Bessel cutoff. Use a converged continued fraction,
   scaled backward J recurrence and J0/J1 normalization; prove early underflow
   analytically. Preserve forward Y recurrence, reflection and cooperative
-  cancellation without replacement work fuel. Orders use checked signed 64-bit
-  indices; larger finite orders yield NaN unless a proven boundary applies.
+  cancellation. Orders use checked signed 64-bit indices; larger finite orders
+  yield NaN unless a proven boundary applies.
   Fix tiny-argument Y evaluation and preserve reflected zero signs. Cover finite
   transitions through order one million, subnormals, overflow, cancellation during
   active recurrence, downstream closure and owned cleanup. Base approximation
@@ -28,9 +28,9 @@
 
 - Reconcile completed scalar `reduce` update demand within existing coarse
   storage. Preserve shared string backing, source/initializer/collected values,
-  persistent caches, container/opaque ownership and replacement peaks. Add no
-  result scopes or accounting walks. Cover 100,000 bounded updates, escaping
-  errors, cancellation, terminal pressure and retained aliases.
+  persistent caches, container/opaque ownership and replacement peaks.
+  Cover 100,000 bounded updates, escaping errors, cancellation, terminal pressure
+  and retained aliases.
 
 - Own and admit persistent regex keys/metadata in one coarse cache owner even
   when a custom provider retains no pattern text. Preflight before copying and
@@ -38,8 +38,7 @@
 
 - Reconcile completed `any`/`all` predicate demand in the existing record owner,
   preserving generator state and error payloads through their enclosing lifetime.
-  Add no temporary owner/reservation or failed-owner history. Cover
-  100,000 allocating predicates under 64 KiB with bounded governor traffic,
+  Cover 100,000 allocating predicates under 64 KiB with bounded governor traffic,
   plus aliases, collected results, cancellation, refusal and payload lifetimes.
 
 - Remove fixed source-length, token-count and command-argument ceilings. Preflight
@@ -60,28 +59,28 @@
 - Breaking: remove MaximumStringLength and its fixed UTF-16 cap, validation,
   read-time checks and diagnostics. String construction/decoding uses shared
   storage admission and checked representability; borrowed reads require no new
-  string admission. There is no fallback allowance on ungoverned overloads.
+  string admission.
   Preserve cancellation during repeat construction and large ASCII transforms.
   Count UTF-8 bytes in cancellable chunks with a long result; materializing
   clients preflight CLR capacity, preserving surrogate pairs across chunks.
   Cover admitted strings above the former cap and pre-materialization refusals;
   replace cap-dependent fixtures with small shared allowances. Benchmark schema 5
-  drops the final removed policy field without a compatibility path.
+  drops the final removed policy field.
 
 - Breaking: remove MaximumRegexWork and MaximumRegexTime completely. Regex engine
   selection now uses JqExecutionPolicy.RegexEngine and the engine-neutral
   IJqRegexEngine/IJqCompiledRegex contract, carrying cancellation and shared storage
-  admission. The default managed PCRE2 adapter uses unlimited work and an infinite
-  timeout, retaining structural guards; Utf8Regex 0.3.0 cannot interrupt an active
-  search. Handles stay owned through borrowers and admission refusal stays terminal.
+  admission. The default managed PCRE2 adapter retains structural guards;
+  Utf8Regex 0.3.0 cannot interrupt an active search. Handles stay owned through
+  borrowers and admission refusal stays terminal.
 - Cover cancellation inside a cooperating adapter's compilation, boolean/detailed
   searches and later global/replacement searches, plus refusal, cleanup and reuse.
   Remove obsolete timeout/work fixtures and benchmark provenance.
 
 - Breaking: remove MaximumValueNodes, MaximumAllocationWorkBytes and the deprecated
-  MaximumAllocationBytes alias, together with their counters and fuel plumbing.
-  Cancellation, shared admission, structural limits and regex protection
-  remain; no replacement fuel or compatibility switch is introduced.
+  MaximumAllocationBytes alias, together with their counters and accounting
+  plumbing. Cancellation, shared admission, structural limits and regex protection
+  remain.
 
 - Breaking: remove MaximumInputBytes and MaximumOutputBytes and their counters.
   Streams continue through bounded 8 KiB reads and awaited writes, with shared
@@ -91,7 +90,7 @@
   retain cursor construction estimates instead of recounting DOM trees.
 - Cover 300,000-record JSON, raw, sequence and streaming commands beyond 32 MiB
   of output under a fixed 128 KiB shared allowance, plus cancellation, closure,
-  owned cleanup, deep reads, constructor depth and finite former-fuel workloads.
+  owned cleanup, deep reads, constructor depth and finite evaluation workloads.
 - Remove verified-unused qualified-lookup, stream-leaf, calendar and deletion
   helpers, plus internal path-confinement machinery; keep hosted normalization.
 - Extend the detached package consumer to 19 checks, including terminal padded
@@ -196,7 +195,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 3,960 tests pass,
+- Validation on Windows: warning-free Release build and all 4,015 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 19 detached consumer checks with isolated cache, exact package hash and
   locked restore.
@@ -215,7 +214,7 @@ Delivered since the scaffold baseline:
 
 - Replace PCRE.NET with managed `Lokad.Utf8Regex.Pcre2` 0.3.0. Use its PCRE2
   syntax and flag primitives directly, retain jq capture/replacement values, and
-  document per-search regex work/time limits and cancellation boundaries.
+  document regex semantics and cancellation boundaries.
 - Remove the Lokad.Cli dependency and source generator; bind command options
   locally while preserving the existing option and diagnostic behavior.
 - Establish the jq parser, runtime, formatter, regex support, resource

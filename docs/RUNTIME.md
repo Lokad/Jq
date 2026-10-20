@@ -1,25 +1,47 @@
 # Runtime behavior
 
-`ExecuteAsync` uses the host's I/O, cancellation token and optional shared
-`IMemoryBudget`. Immutable `JqExecutionPolicy` selects a borrowed regex engine:
-`new JqExecutionPolicy { RegexEngine = engine }`. Overloads without a policy use
-`JqExecutionPolicy.Default` and `JqUtf8RegexEngine.Instance`.
+`Jq.TryParse(JqCommandInvocation)` recognizes the command name and borrows the
+invocation. `ExecuteAsync` binds arguments, compiles the filter and streams results
+through `IJqHost`, using the supplied cancellation token and optional shared
+`IMemoryBudget`. Each execution has fresh evaluation state.
 
-Execution has no cumulative fuel, total I/O ceiling or configurable string-length,
-regex-work or regex-time budget. Calls without a memory hook acquire no private
-fallback allowance. Streams use bounded buffers, awaited writes and downstream
-closure to stop production.
+## Host I/O
+
+The embedding application supplies byte I/O, files and modules through `IJqHost`.
+Paths use Unix-style separators and resolve against the invocation's current
+directory. Its environment snapshot supplies `$ENV` and `env`; `PWD` selects the
+default current directory. `JqClock` supplies time and timezone inputs. Hosted
+module search uses `-L` and import metadata.
+
+Standard descriptors are borrowed. Successful `OpenReadAsync` calls transfer an
+owned descriptor to execution, which calls `CloseDescriptorAsync` when exhausted
+or abandoned, including on cancellation or failure. Cleanup uses
+`CancellationToken.None`, retries a reported unsuccessful close once and preserves
+an earlier failure.
+
+`ReadBytesAsync` copies at most the requested size and releases its buffer borrow
+on completion. Reads must make progress or report EOF/failure; EOF may accompany
+the last bytes. `AppendWhileOpenAsync` may stay pending to apply backpressure and
+must copy bytes retained beyond completion.
+Execution awaits writes before reusing buffers and stops production on downstream
+closure or failure. Cancellation alone does not end a pending buffer borrow.
+
+Outer iteration and `input`/`inputs` share one pull cursor. File operands open
+lazily; `-` uses borrowed stdin at its current position. UTF-8 JSON values and raw
+lines may span reads. LF splits raw input; CR is data. Slurp aggregates the cursor;
+`--stream` emits path/leaf events, and `--seq` separates records at RS and recovers
+after malformed records.
 
 ## Memory admission
 
 The host implements `IMemoryBudget`, `IMemoryScope` and `IMemoryReservation`.
-Nested and overlapping work shares its allowance; scopes start empty and have no
-independent cap. Major allocations preflight rough capacity estimates, including
-replacement peaks while old and new storage overlap. Retained buffers, caches,
-aliases and aggregates stay charged through their users. Rough estimates leave
-minor storage untracked, intentionally allowing roughly 20% unaccounted memory
-without a coverage guarantee for each workload. Hosts need headroom for
-runtime/native memory and delayed GC; admission is not a hard process-memory cap.
+Nested and overlapping work shares its allowance; scopes draw from their parent.
+Major allocations preflight rough capacity estimates, including replacement peaks
+while old and new storage overlap. Retained buffers, caches, aliases and aggregates
+stay charged through their users. Rough estimates leave minor storage untracked,
+intentionally allowing roughly 20% unaccounted memory
+with coverage varying by workload. Hosts need headroom for runtime/native memory
+and delayed GC.
 
 `TryReserve` and `TryResize` accept nonnegative estimates immediately or return
 false without changing accounting; zero is valid. Negative estimates and use of
@@ -28,16 +50,14 @@ without GC, and invalidates descendants. The host serializes owner disposal with
 active users and reservation resize/disposal operations.
 
 **Every refused admission fails the command with status 5**, including padding.
-jq `try` and `?` cannot catch it. No smaller retry, wait, streaming fallback, spill,
-eviction or dropped optional storage follows refusal. Earlier effects remain;
-closed or failed stderr cannot turn exhaustion into success. An immutable emergency
-diagnostic remains available if diagnostic admission also fails.
+jq `try` and `?` cannot catch it. Work stops, pending users and cleanup finish, and
+relinquished storage is refunded. Earlier effects remain; status 5 is preserved
+even if stderr closes or fails. An immutable emergency diagnostic reports
+exhaustion if diagnostic admission also fails.
 
 The caller owns the supplied budget. Execution disposes its scope after evaluation,
-pending I/O, enumeration and owned-descriptor cleanup finish. Cancellation alone
-does not end a borrow. Only opened, owned descriptors are closed; cleanup uses an
-uncancelled token and preserves the original failure. Governed invocation factories
-admit before copying and return false/null on refusal without publishing a snapshot.
+pending I/O, enumeration and owned-descriptor cleanup finish. Governed invocation
+factories admit before copying and return false/null on refusal.
 Keep the invocation and borrowed inputs alive through reused/concurrent executions.
 Ordinary argument errors remain status 2; admission refusal remains status 5.
 
@@ -45,12 +65,11 @@ Coarse owners track executions, records, buffers, results and caches. Completed
 temporary work reconciles demand at proven lifetime boundaries; shared values and
 escaping errors retain their charge. Other construction within one record can
 remain conservatively charged, so a long loop may refuse despite a bounded live
-set. There is no per-object reservation, alias graph or automatic reparenting.
-Identity, variable and child reads borrow values without accounting scans.
+set. Identity, variable and child reads borrow existing values.
 
 Already-admitted credit amortizes host calls and stays charged. Cold small charges
 and large payload copies stay exact; repeated small headers can round in 256-byte
-steps below 4 KiB and one 4 KiB block above it. Nothing is admitted eagerly.
+steps below 4 KiB and one 4 KiB block above it. Credit is acquired on demand.
 
 | Owner | Maximum reusable admission |
 | --- | --- |
@@ -61,12 +80,11 @@ steps below 4 KiB and one 4 KiB block above it. Nothing is admitted eagerly.
 | Diagnostics | 256 bytes after 32 nonempty messages smaller than 256 bytes. |
 
 Cold or oversized storage is refunded; overlapping borrowers keep separate owners.
-Reconciliation never releases storage to retry a refusal.
 
 ## Safeguards and cancellation
 
 Shared admission governs source/token/argument breadth, array padding, strings and
-materialized buffers. Checked CLR sizes and construction depth still apply.
+materialized buffers, subject to checked CLR sizes and construction depth.
 
 | Boundary | Limit |
 | --- | --- |
@@ -83,11 +101,14 @@ remain catchable language errors. Copies check cancellation and depth while
 constructing. Cancellation propagates as `OperationCanceledException`; host
 contract failures and actual `OutOfMemoryException` remain distinct.
 
-The selected regex adapter receives the active token and owns cooperation within
-its engine. The default Utf8Regex 0.3.0 adapter checks only around synchronous calls
-and cannot interrupt an active search. Its pattern guard bounds constructor
-exposure without guaranteeing compile-depth safety. See [regex behavior](REGEX.md)
-for engine details, including the unenforced `MaxResultBytes` setting.
+Immutable `JqExecutionPolicy` selects a borrowed regex engine with
+`new JqExecutionPolicy { RegexEngine = engine }`. The default is
+`JqUtf8RegexEngine.Instance`. The selected adapter receives the active token and
+owns cooperation within its engine. The default Utf8Regex 0.3.0 adapter checks
+only around synchronous calls and cannot interrupt an active search. Its pattern
+guard bounds constructor exposure without guaranteeing compile-depth safety.
+See [regex behavior](REGEX.md)
+for engine details.
 
 ## Numbers
 
@@ -111,22 +132,21 @@ operands toward zero with saturation at signed 64-bit extremes, propagates NaN,
 returns zero for a divisor of -1 and errors on a zero divisor: `5.5 % 2` is `1`.
 
 Equality is kind-sensitive. Total order is null, NaN, false, true, other numbers,
-strings, arrays, objects. Strings compare by Unicode
-scalar, arrays lexically and objects by sorted keys followed by values. Consistent
-NaN ordering can differ from upstream's asymmetric NaN/null sort stability.
+strings, arrays, objects. Strings compare by Unicode scalar, arrays lexically and
+objects by sorted keys followed by values. Consistent NaN ordering can differ
+from upstream's asymmetric NaN/null sort stability.
 
 ## Math accuracy
 
 Math builtins use .NET math or managed approximations. Final bits can vary by
-platform; results are not rounded to force byte identity. Recorded comparisons of
-jq 1.8.2 and Lokad.Jq rendered `27 | cbrt` as `3` on Windows amd64 and
-`3.0000000000000004` on Linux amd64.
+platform. Recorded comparisons of jq 1.8.2 and Lokad.Jq rendered `27 | cbrt` as
+`3` on Windows amd64 and `3.0000000000000004` on Linux amd64.
 
 Bessel orders truncate toward zero with signed 64-bit recurrence indices and
-reflection for negative orders/arguments. Recurrences poll cancellation without an
-order-based work cutoff. Finite orders outside index representation yield NaN unless
-analytical J underflow or Y overflow for `0 < x <= 1` applies. Base approximations
-and large-argument phase accuracy limit precision; uniform relative accuracy is
-not guaranteed. See NIST's [computation guidance](https://dlmf.nist.gov/10.74) and
+reflection for negative orders/arguments. Recurrences poll cancellation.
+Finite orders outside index representation yield NaN unless analytical J underflow
+or Y overflow for `0 < x <= 1` applies. Base approximations and large-argument phase
+accuracy limit precision; uniform relative accuracy is not guaranteed.
+See NIST's [computation guidance](https://dlmf.nist.gov/10.74) and
 [underflow bound](https://dlmf.nist.gov/10.14.E5). Focused tests are in
 `JqTests.Values`, `JqTests.Math` and `JqTests.Bessel`.

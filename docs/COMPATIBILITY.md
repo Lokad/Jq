@@ -36,8 +36,8 @@ modules, environment, clock and timezone inputs come from the embedding host.
 
 Resource safeguards are separate from jq language errors: shared memory refusal
 and structural/regex exhaustion terminate with status 5 outside `try`/`?`.
-Cancellation and host failures propagate separately. Long streams have no
-cumulative fuel or byte ceiling. See [runtime safeguards](RUNTIME.md#safeguards-and-cancellation) for
+Cancellation and host failures propagate separately.
+See [runtime safeguards](RUNTIME.md#safeguards-and-cancellation) for
 construction limits, ownership and cleanup.
 
 ## Inventory

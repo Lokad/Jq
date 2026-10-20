@@ -5,7 +5,7 @@ namespace Lokad.Jq;
 /// <summary>Immutable execution capabilities.</summary>
 /// <remarks>
 /// Shared storage admission uses IMemoryBudget. The selected borrowed regex engine
-/// implements cancellation during its own operations. Execution has no cumulative fuel.
+/// implements cancellation during its own operations.
 /// </remarks>
 public sealed record JqExecutionPolicy
 {

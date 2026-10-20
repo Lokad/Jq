@@ -1,6 +1,6 @@
 namespace Lokad.Jq;
 
-/// <summary>Supplies all byte IO for a jq command; no real filesystem host is installed by default.</summary>
+/// <summary>Supplies byte IO and descriptor operations for a jq command.</summary>
 public interface IJqHost
 {
     /// <summary>

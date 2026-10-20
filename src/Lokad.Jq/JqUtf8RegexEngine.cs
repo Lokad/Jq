@@ -3,10 +3,10 @@ using Lokad.Utf8Regex.Pcre2;
 
 namespace Lokad.Jq;
 
-/// <summary>The default managed PCRE2 adapter, preserving the existing jq regex profile.</summary>
+/// <summary>The default managed PCRE2 regex adapter.</summary>
 /// <remarks>
-/// Utf8Regex 0.3.0 checks cancellation only around synchronous engine calls.
-/// It cannot interrupt an in-progress search. No work limit or deadline is imposed here.
+/// Checks cancellation around synchronous Utf8Regex 0.3.0 calls;
+/// an active search must finish before cancellation is observed.
 /// </remarks>
 public sealed class JqUtf8RegexEngine : IJqRegexEngine
 {

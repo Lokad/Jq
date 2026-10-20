@@ -1,8 +1,7 @@
 # Lokad.Jq agent guide
 
-This repository contains an embeddable jq runtime for .NET. It starts with the
-initial partial implementation; feature-complete jq compatibility is future
-work. Read `README.md`, `docs/ARCHITECTURE.md`, and
+This repository contains an embeddable jq runtime for .NET. Read
+`README.md`, `docs/RUNTIME.md`, and
 `docs/COMPATIBILITY.md` before changing behavior. If local `PLAN.md` exists,
 read it for the detailed implementation handoff.
 
@@ -30,7 +29,7 @@ lock-file diff, then repeat locked restore. CI must work without `external/`.
 
 - All program IO is mediated through `IJqHost`. Do not add ambient filesystem,
   console, process, environment, timezone, or network access to the evaluator.
-  Future time/environment/module capabilities must be explicit host inputs.
+  Time, environment and module capabilities must be explicit host inputs.
 - Preserve borrowed/owned descriptor lifetimes, cancellation, backpressure,
   and downstream closure. Input uses UTF-8 bytes; LF splits raw input, CR is data.
 - Keep limits preflighted before allocation, mutation, and observable writes.
@@ -43,7 +42,7 @@ lock-file diff, then repeat locked restore. CI must work without `external/`.
 - The repositories under `/external/` are for inspection only. Do not vendor,
   link, compile, package, invoke, or depend on them from production, ordinary
   tests, benchmarks, or CI. An independently installed reference executable may
-  later be used by an explicit opt-in differential-test tool.
+  be used by an explicit opt-in differential-test tool.
 
 ## C# and tests
 
@@ -62,8 +61,8 @@ lock-file diff, then repeat locked restore. CI must work without `external/`.
 ## Artifacts
 
 Keep `/PLAN.md`, `/external/`, `/tmp/`, build outputs, traces, benchmark results,
-and package artifacts ignored. Public architecture, compatibility, provenance,
-and packaging documentation belongs under `docs/` and stays reviewable.
+and package artifacts ignored. Public documentation belongs under `docs/`
+and stays reviewable.
 Do not claim a release, full compatibility, or public package availability until
 the corresponding checks have actually passed.
 

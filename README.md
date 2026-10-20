@@ -1,8 +1,7 @@
 # Lokad.Jq
 
-Lokad.Jq is an embeddable jq runtime for .NET 10 with host-controlled I/O and
-bounded execution. It executes JSON filters through a caller-supplied `IJqHost`,
-which owns input, output, file access, and descriptor cleanup.
+Lokad.Jq is an embeddable jq runtime for .NET 10. It executes JSON filters through
+a caller-supplied `IJqHost`, which supplies input, output and file access.
 
 ## Use
 
@@ -28,7 +27,7 @@ static async Task<int> SelectNamesAsync(IJqHost host, IMemoryBudget memoryBudget
 Supply UTF-8 JSON on `JqFileDescriptor.StdIn`; output and diagnostics go to
 `StdOut` and `StdErr`. Explicit descriptors and a current directory can be
 passed to the `JqCommandInvocation` constructor. Arguments exclude the command
-name and are already tokenized. No shell quoting or expansion happens here.
+name and are tokenized by the embedding application.
 `TryParse` returns null for another executable name; jq argument/filter errors
 are reported when executing. Option/JSON argument binding and filter compilation
 happen during each execution. Cancellation propagates as cancellation.
@@ -37,25 +36,18 @@ The host implements `IMemoryBudget` and shares one allowance across cooperating
 consumers. A governed invocation owns admission for its copied argument/environment
 vectors and derived directory; argument strings and explicit host inputs stay
 borrowed from the caller. Keep their owners and the invocation alive through all
-reused/concurrent commands, then dispose the invocation. Existing execution
-overloads automatically borrow its budget. Explicit execution hooks also work
-with caller-owned invocations constructed by the legacy APIs.
+reused/concurrent commands, then dispose the invocation. Execution automatically
+borrows its budget; an explicit execution overload also accepts a budget for
+invocations created through the constructors.
+
+Every refused memory admission fails the command with status 5. Earlier output
+remains; cleanup refunds relinquished storage. Use host cancellation to stop
+long-running commands.
 
 Pass a `JqExecutionPolicy` to `ExecuteAsync(host, policy, cancellationToken)`
-to select a borrowed regex engine. Existing calls retain the default adapter;
-see [runtime behavior](docs/RUNTIME.md) for accounting and structural safeguards.
-
-Shared storage admission uses a governed invocation or an explicit `IMemoryBudget`
-execution overload; the runtime guide describes its estimates and lifetime
-boundaries. Coarse owners batch small charges using bounded admitted
-credit; retained buffers and caches stay charged until their safe refund boundary.
-Every refused admission, including padded growth, fails the command with status 5
-without retrying. Earlier output remains; cleanup refunds relinquished storage
-so later commands can reuse the allowance.
-Execution has no cumulative fuel or input/output byte ceiling. Use host
-cancellation to stop long-running commands; stack and buffer safeguards remain.
-String allocations use shared admission. Regex cooperation belongs to the
-selected adapter; the default engine cannot interrupt an active search.
+to select a borrowed regex engine. The default adapter checks cancellation around
+synchronous matching; an active search must finish first. See
+[runtime behavior](docs/RUNTIME.md) for host I/O, memory admission and safeguards.
 
 ## Develop
 
@@ -85,9 +77,8 @@ replacement. Regex uses the managed `Lokad.Utf8Regex.Pcre2` package and follows
 its supported PCRE2 profile; see [regex behavior](docs/REGEX.md).
 
 - [Compatibility](docs/COMPATIBILITY.md): feature inventory, tests, supported scope and differences.
-- [Architecture](docs/ARCHITECTURE.md): execution model, host contract and I/O ownership.
 - [Regex behavior](docs/REGEX.md): engine syntax, flags, captures and cancellation boundaries.
-- [Runtime behavior](docs/RUNTIME.md): memory admission, safeguards, cancellation and number semantics.
+- [Runtime behavior](docs/RUNTIME.md): host I/O, ownership, memory admission, safeguards and numbers.
 - [Benchmarks](docs/BENCHMARKS.md): workloads, governor cost diagnostics and opt-in upstream comparisons.
 - [Changelog](CHANGELOG.md): changes and validation history.
 - [License](LICENSE.txt): MIT.
