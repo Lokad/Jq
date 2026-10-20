@@ -419,11 +419,10 @@ internal sealed class BsearchFilter(JqFilter Target) : JqFilter
 // collected sequence mirrors map([f]) without adding a JSON nesting level.
 internal static class CollectionKeys
 {
-    internal static List<(JsonNode? Element, IReadOnlyList<JsonNode?> Keys)> Keyed(JsonNode? input, JqFilter keys, JqContext context, JqEnvironment environment)
+    internal static IEnumerable<(JsonNode? Element, IReadOnlyList<JsonNode?> Keys)> Keyed(JsonNode? input, JqFilter keys, JqContext context, JqEnvironment environment)
     {
         long count = input is JsonArray array ? array.Count : input is JsonObject obj ? obj.Count : 0;
         context.Budget.ReserveBytes(80L * count);
-        var keyed = new List<(JsonNode? Element, IReadOnlyList<JsonNode?> Keys)>();
         foreach (JsonNode? element in MapFilter.Iterate(input, context, environment))
         {
             var collected = new List<JsonNode?>();
@@ -433,9 +432,8 @@ internal static class CollectionKeys
                 context.Budget.ReserveBytes(32);
                 collected.Add(key);
             }
-            keyed.Add((element, collected));
+            yield return (element, collected);
         }
-        return keyed;
     }
 
     internal static bool Equal(IReadOnlyList<JsonNode?> left, IReadOnlyList<JsonNode?> right, JqRuntime runtime)

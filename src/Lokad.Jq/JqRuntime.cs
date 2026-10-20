@@ -1302,7 +1302,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
     }
 
-    internal JsonArray SortArray(JsonNode? input)
+    internal JsonArray SortArray(JsonNode? input) => OrderedArray(input, false);
+
+    internal JsonNode UniqueArray(JsonNode? input) => OrderedArray(input, true);
+
+    private JsonArray OrderedArray(JsonNode? input, bool unique)
     {
         if (input is not JsonArray arr)
             throw new JqException("cannot be sorted, as it is not an array");
@@ -1316,32 +1320,16 @@ internal sealed partial class JqRuntime(JqBudget budget)
         var result = new JsonArray();
         budget.CheckCancellation();
         using var comparer = new JqComparer(budget);
+        JsonNode? previous = null;
+        bool first = true;
         foreach (JsonNode? element in JqComparer.OrderBy(ordered, static element => element, (IComparer<JsonNode?>)comparer))
         {
             budget.CheckCancellation();
+            if (unique && !first && JsonEquals(previous, element)) continue;
             budget.ReserveArrayItem(element);
             result.Add(Clone(element));
-        }
-        return result;
-    }
-
-    internal JsonNode UniqueArray(JsonNode? input)
-    {
-        if (input is not JsonArray)
-            throw new JqException("cannot be sorted, as it is not an array");
-        var ordered = new List<JsonNode?>();
-        foreach (JsonNode? element in SortArray(input))
-        {
-            if (ordered.Count == 0 || !JsonEquals(ordered[ordered.Count - 1], element))
-                ordered.Add(element);
-        }
-        var result = new JsonArray();
-        budget.CheckCancellation();
-        foreach (JsonNode? element in ordered)
-        {
-            budget.CheckCancellation();
-            budget.ReserveArrayItem(element);
-            result.Add(Clone(element));
+            previous = element;
+            first = false;
         }
         return result;
     }

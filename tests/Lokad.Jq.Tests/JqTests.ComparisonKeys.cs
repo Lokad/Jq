@@ -72,7 +72,7 @@ public sealed partial class JqTests
         var source = new JsonArray(new JsonArray(2), new JsonArray(1));
         using var budget = new JqBudget(CancellationToken.None);
         using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
-        var keys = CollectionKeys.Keyed(source, new IdentityFilter(), context, context.RootEnvironment);
+        var keys = CollectionKeys.Keyed(source, new IdentityFilter(), context, context.RootEnvironment).ToList();
         Assert.Same(source[0], keys[0].Keys[0]);
         Assert.Same(source[1], keys[1].Keys[0]);
         var filter = new SortByFilter(new IdentityFilter());
