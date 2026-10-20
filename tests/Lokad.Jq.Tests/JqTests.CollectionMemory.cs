@@ -6,6 +6,72 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("transpose | map(length)", "[[1,2],null,[3]]", "[3,3]\n")]
+    [InlineData("JOIN(null; \"missing\") | length", "[null,null]", "2\n")]
+    [InlineData("JOIN(null; .[]; \"missing\") | .[0]", "[null,null]", "null\nnull\n")]
+    [InlineData("JOIN(null; .[]; \"missing\"; .[1])", "[null,null]", "null\nnull\n")]
+    [InlineData("getpath([\"a\"]) | length", "{\"a\":[1,2,3]}", "3\n")]
+    [InlineData(".a = .b | .a | length", "{\"a\":[],\"b\":[1,2,3]}", "3\n")]
+    [InlineData(".left + .right | .keep", "{\"left\":{\"drop\":[1,2],\"keep\":1},\"right\":{\"drop\":0}}", "1\n")]
+    [InlineData(".left * .right | .child | keys_unsorted", "{\"left\":{\"child\":{\"a\":1}},\"right\":{\"child\":{\"b\":2}}}", "[\"a\",\"b\"]\n")]
+    [InlineData("[range(0;3;1)]", "null", "[0,1,2]\n")]
+    public async Task Jq_CollectionOperationsKeepLongRecordStreamsBoundedAndStopOnClosure(string filter, string input, string expected)
+    {
+        const int records = 2500;
+        foreach (bool close in new[] { false, true })
+        {
+            var root = new BenchmarkMemoryBudget(64 * 1024);
+            var host = new MockFileSystem { AppendRemainsOpen = !close };
+            host.SetStandardInput(string.Concat(Enumerable.Repeat(input + "\n", records)));
+            var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter)));
+            Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+            Assert.Equal(close ? expected[..(expected.IndexOf('\n') + 1)] : string.Concat(Enumerable.Repeat(expected, records)),
+                host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal(close ? 1 : records * expected.Count(character => character == '\n'), host.AppendCallCount);
+            Assert.Equal(0, root.ReservedBytes);
+            Assert.InRange(root.PeakBytes, 1, 64 * 1024);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jq_JoinWaitsForPendingOutputAndCleanupBeforeRefunding(bool cancel)
+    {
+        var root = new BenchmarkMemoryBudget(128 * 1024);
+        using var cancellation = new CancellationTokenSource();
+        var inner = new MockFileSystem();
+        inner.AddFile("/input", "[null,null]");
+        var host = new MemoryBorrowHost(inner) { DelayCleanup = true };
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "JOIN(null; .[]; \"missing\")", "/input")));
+        Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
+        ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        byte[] first = "[null,null]\n"u8.ToArray();
+        long charged = root.ReservedBytes;
+        Assert.Equal(first, pending.ToArray());
+        if (cancel) cancellation.Cancel();
+        Assert.False(execution.IsCompleted);
+        Assert.Equal(charged, root.ReservedBytes);
+        Assert.Equal(first, pending.ToArray());
+        host.Release.SetResult();
+        await host.Closing.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(execution.IsCompleted);
+        Assert.True(root.ReservedBytes > 0);
+        host.CloseRelease.SetResult();
+        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
+        else
+        {
+            Assert.Equal(0, await execution);
+            Assert.Equal("[null,null]\n[null,null]\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        }
+        Assert.Empty(inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Single(inner.ClosedDescriptors);
+        Assert.Equal(0, inner.OpenFileCount);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData("try (JOIN(null; \"missing\") | length) catch \"caught\"")]
     [InlineData("(JOIN(null; \"missing\") | length)?")]
     [InlineData("try (JOIN(null; .; \"missing\") | length) catch \"caught\"")]

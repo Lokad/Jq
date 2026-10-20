@@ -212,6 +212,29 @@ internal static class GovernorRunner
         string duplicate = "[" + string.Join(',', Enumerable.Range(0, 64)) + "]";
         Add("unique-duplicate-trees", 64, ["-c", "unique | length"],
             "[" + string.Join(',', Enumerable.Repeat(duplicate, 64)) + "]", "1\n");
+        string nullRow = "[" + string.Join(',', Enumerable.Repeat("null", 128)) + "]";
+        Add("transpose-null-padding", 128, ["-c", "transpose | length"],
+            "[" + nullRow + "," + string.Join(',', Enumerable.Repeat("null", 127)) + "]", "128\n");
+        string nullRows = "[" + string.Join(',', Enumerable.Repeat("null", records)) + "]";
+        Add("join-collected-null", records, ["-c", "JOIN(null; \"missing\") | length"], nullRows, "1000\n");
+        Add("join-streamed-null", records, ["-c", "JOIN(null; .[]; \"missing\") | .[0]"], nullRows,
+            string.Concat(Enumerable.Repeat("null\n", records)));
+        string payload = "[" + string.Join(',', Enumerable.Range(0, 1000)) + "]";
+        Add("getpath-borrowed", 1000, ["-c", "getpath([\"data\"]) | length"], "{\"data\":" + payload + "}", "1000\n");
+        Add("setpath-replacement", 1000, ["-nc", "--argjson", "value", payload, "setpath([]; $value) | length"], "", "1000\n");
+        foreach (string operation in new[] { "+", "*" })
+            Add(operation == "+" ? "object-add-discarded" : "object-merge-discarded", 1000,
+                ["-c", "(. " + operation + " {drop:0}) | keys_unsorted"], "{\"drop\":" + payload + ",\"keep\":1}", "[\"drop\",\"keep\"]\n");
+        string mergeLeft = "{\"data\":" + payload + "}";
+        string mergeRight = "{}";
+        for (int depth = 1; depth < 24; depth++)
+        {
+            mergeLeft = "{\"child\":" + mergeLeft + "}";
+            mergeRight = "{\"child\":" + mergeRight + "}";
+        }
+        Add("merge-deep-spine", 24, ["-c", ".left * .right | .. | arrays | length"],
+            "{\"left\":" + mergeLeft + ",\"right\":" + mergeRight + "}", "1000\n");
+        Add("range-bound-products", 13, ["-nc", "[range((0,1);(2,3);(1,2))]"], "", "[0,1,0,0,1,2,0,2,1,1,1,2,1]\n");
         string borrowed = new('x', 1000);
         string borrowedLines = string.Concat(Enumerable.Repeat(borrowed + "\n", records));
         Add("trim-borrowed", records, ["-Rr", "trim"], borrowedLines, borrowedLines);
