@@ -17,6 +17,12 @@
 - Breaking: remove unused path conveniences (`FileName`, `Parent`, `IsRoot`,
   `Tmp`, `IsParentOf`, `IsEqualToOrParentOf`, `TryChild`, `JqPathSegment`),
   descriptor `DevNullPath`/`IsDevNull`, and error `MessageWithoutTerminator`.
+- Preserve literal backslash-u text during Unicode escape normalization. Borrow
+  variable values in path mode, fixing nested path identity against jq 1.8.2.
+- Reuse execution-private argument bindings and index names once, preserving
+  first-wins semantics and concurrent command isolation. Emit LF directly from
+  the JSON writer, normalize the owned sorted tree once, and format diagnostics
+  from borrowed values and owned UTF-8 bytes.
 - Add shared admission for invocation snapshots, compilation, construction,
   retained values and I/O buffers. Every refusal fails with status 5 outside jq
   `try`/`?`, preserving earlier output, pending borrows and owned cleanup.

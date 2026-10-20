@@ -163,9 +163,11 @@ eight calls and one second, then collect three alternating pairs. These local
 probes do not qualify general speedups or another host's contention costs.
 
 The 2026-10-20 cleanup rerun passes all 96 rows with full refunds and zero counter
-reads, same-target resizes or refusals. Against revision 3833ffd, all 48 single-worker
-cases retain their call counts and estimated peaks. Metadata compilation and
-diagnostic-queue allocation improvements are outside this catalog's workloads.
+reads, same-target resizes or refusals. Against revision 25efb46, each of the 48
+single-worker cases uses one fewer reservation/disposal and three to five fewer
+resizes; estimated peaks fall by 448-768 bytes. These counts establish no timing
+or managed-allocation claim. Separate probes cover argument, diagnostic and
+sorted non-finite tree copies outside this catalog's workloads.
 Provider storage is not estimated by Jq; Utf8Regex 0.3.0 has no shared-budget hook.
 See [runtime memory rules](RUNTIME.md#memory-admission) for ownership and credit bounds.
 
