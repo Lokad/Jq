@@ -156,19 +156,19 @@ marked comparison table and provenance sections above.
 
 ## Governor diagnostics
 
-The 53-case catalog checks separate stdout/stderr digests and complete refunds
+The 62-case catalog checks separate stdout/stderr digests and complete refunds
 under a shared 256 MiB allowance with one/four workers. Instrumented call counts
 are separate from uninstrumented timing/allocation lanes, which warm for at least
 eight calls and one second, then collect three alternating pairs. These local
 probes do not qualify general speedups or another host's contention costs.
 
-The 2026-10-20 cleanup rerun passes all 106 rows with full refunds and zero counter
-reads, same-target resizes or refusals. Added cases cover wide-object comparison,
-comparison streams, object sorting, shared large keys and duplicate-tree unique.
-The original 96 rows preserve their call counts and output digests against
-revision 6a1e2c6; their single-worker estimated peaks are unchanged. Separate
-probes measure allocation reductions in comparison keys, unique, scalar dispatch,
-host guards and input setup. These diagnostics establish no timing claim.
+The 2026-10-20 cleanup rerun passes all 124 rows with full refunds and zero counter
+reads, same-target resizes or refusals. Nine new cases cover borrowed trim, path
+slices, successful/unsuccessful search, quoted CSV, Unicode URI, base64 and escaped
+JSON. The original 106 rows preserve their call counts and independent output/error
+digests against revision 4e6e8cb; their single-worker estimated peaks are unchanged.
+Separate probes measure allocation and admission reductions. These diagnostics
+establish no timing claim.
 Provider storage is not estimated by Jq; Utf8Regex 0.3.0 has no shared-budget hook.
 See [runtime memory rules](RUNTIME.md#memory-admission) for ownership and credit bounds.
 

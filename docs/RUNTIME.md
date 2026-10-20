@@ -66,6 +66,10 @@ temporary work reconciles demand at proven lifetime boundaries; shared values an
 escaping errors retain their charge. Other construction within one record can
 remain conservatively charged, so a long loop may refuse despite a bounded live
 set. Identity, variable and child reads borrow existing values.
+String search, trimming and scalar slicing scan borrowed text without full-input
+indexes. CSV admits expanded fields before construction. JSON escape casing
+changes only inside owned buffers after writer release; URI/base64 scratch is
+admitted separately and refunded after conversion.
 Comparison keys also borrow values without adding JSON containers. Ordering
 owns reusable key buffers for its duration, admits their growth and replacement
 peaks, and refunds them when comparison/sorting finishes.

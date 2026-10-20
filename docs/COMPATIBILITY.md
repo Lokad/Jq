@@ -9,6 +9,8 @@ with C# null representing JSON null. Objects preserve insertion order and resolv
 duplicate keys last-wins. Bindings and value parameters share references; updates
 rebuild containers while preserving the tested path-identity rules. All I/O,
 modules, environment, clock and timezone inputs come from the embedding host.
+String search indices count Unicode scalars. String and array searches report
+overlapping matches.
 
 ## Known differences and limits
 
@@ -132,7 +134,7 @@ semantic gaps. References are the jq 1.8.2 manual and its parser/builtin registr
 | `transpose/0`, `combinations/0..1` | implemented | JqTests.Collections, JqTests.Hardening |
 | `any/0..2`, `all/0..2` | implemented | JqTests.Collections |
 | `first/0..1`, `last/0..1`, `nth/1..2`, `isempty/1`, `limit/2`, `skip/2`, `while/2`, `until/2`, `repeat/1`, `recurse/0..2`, `walk/1`, `rindex/1` | implemented | JqTests.Iteration, JqTests.Collections, JqTests.Inventory, JqTests.Hardening |
-| `indices/1`, `index/1`, `rindex/1` | implemented | JqTests |
+| `indices/1`, `index/1`, `rindex/1` | implemented | JqTests.Collections, JqTests.StringMemory |
 | `tojson/0`, `fromjson/0`, `tonumber/0`, `toboolean/0`, `tostring/0` | implemented | JqTests |
 | `finites/0`, `normals/0`, `_sort_by_impl/1`, `_group_by_impl/1`, `_unique_by_impl/1`, `_min_by_impl/1`, `_max_by_impl/1`, `_flatten/1` | implemented | JqTests.Inventory |
 

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Correct overlapping array searches in `indices`, `rindex` and array-key
+  `getpath`. Scan borrowed strings without rune tables; share scalar slicing
+  across value/path reads, trim at the edges and poll cancellation during scans.
+- Preflight CSV expansion without replacement strings, normalize JSON escapes
+  in exclusively owned buffers and decode URI/base64 through one admitted byte
+  buffer. Preserve encoding grammar, pending borrows, refunds and buffer reuse.
+  Extend bounded-stream, cancellation and governor diagnostics coverage.
 - Breaking: remove `JqExecutionPolicy` and its runtime ceiling options, including
   `MaximumValueNodes`, `MaximumAllocationWorkBytes`, `MaximumAllocationBytes`,
   `MaximumInputBytes`, `MaximumOutputBytes`, `MaximumStringLength`,
