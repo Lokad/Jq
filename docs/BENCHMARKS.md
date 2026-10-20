@@ -155,21 +155,17 @@ are separate from uninstrumented timing/allocation lanes, which warm for at leas
 eight calls and one second, then collect three alternating pairs. These local
 probes do not qualify general speedups or another host's contention costs.
 
-The 2026-10-19 count-only rerun passes all 96 rows with unchanged reservation
-counts and output digests, full refunds, and zero counter reads, same-target
-resizes or refusals. Copies add two setup resizes in most cases. Single-worker
-peaks stay unchanged in 43/48 cases; five rise by at most 448 bytes. The
-84-character sequence case rises from 7 to 29 resizes per 1,000 records. Larger
-credit would require broader evidence. Raw evidence: ignored
-`tmp/simplification-catalog/`. No new timing claim follows from those counts.
-The adapter and retained-regex-storage review also passes all 96 count-only rows.
-Digests, refunds and zero counter reads/unchanged resizes/refusals are preserved.
-Nine single-pattern regex cases add one setup cache reservation/disposal; the
-alternating-pattern case adds two. Eager DOM/list admission raises four regex
-peaks by about 0.73-0.75 MiB and adds 165-173 resizes per 1,000 results. The other
-six regex cases keep resize counts and rise by 128-132 bytes. Growing raw output
-drops two bytes; 37 other single-worker peaks are unchanged. This records newly
-covered retained storage; it makes no timing or managed-allocation claim.
+The 2026-10-20 rerun passes all 96 rows with unchanged stdout/stderr digests,
+full refunds and zero counter reads, same-target resizes or refusals. Compared
+with revision 0927651, ten single-worker regex cases drop 1-1,001 reservations
+and disposals; alternating capture patterns also drop 500 resizes. The other
+38 cases retain their counts and estimated peaks. Evidence: ignored
+`tmp/simplification-catalog/`.
+
+Regex peaks decline by 320-648 KiB because provider-storage estimates moved out
+of Jq. This is an accounting change, not a measured memory reduction: Utf8Regex
+0.3.0 has no shared-budget hook. These count observations make no timing or
+managed-allocation claim; the published result tables above remain unchanged.
 
 See [runtime memory rules](RUNTIME.md#memory-admission) for ownership and retained-credit bounds.
 
