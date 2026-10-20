@@ -93,7 +93,7 @@ public sealed partial class JqTests
     {
         using var cancellation = new CancellationTokenSource();
         var root = new BenchmarkMemoryBudget(failure == "refusal" ? 0 : 32 * 1024);
-        var memory = new ComparisonAdmissionBudget(root, () =>
+        var memory = new AdmissionCallbackBudget(root, () =>
         {
             if (failure == "cancellation") cancellation.Cancel();
             else if (failure == "host") throw new ArgumentException("host contract sentinel");
@@ -156,7 +156,7 @@ public sealed partial class JqTests
         return obj;
     }
 
-    private sealed class ComparisonAdmissionBudget(IMemoryBudget inner, Action onAdmission) : IMemoryBudget
+    private sealed class AdmissionCallbackBudget(IMemoryBudget inner, Action onAdmission) : IMemoryBudget
     {
         public IMemoryScope CreateScope() => inner.CreateScope();
         public bool TryReserve(long bytes, [NotNullWhen(true)] out IMemoryReservation? reservation)

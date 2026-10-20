@@ -1813,11 +1813,22 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // Codes: 61 is =, 65 to 90 are A-Z, 97 to 122 are a-z, 48 to 57 are 0-9, 43 is +, 47 is /.
         string Base64Decode(string source, JsonNode? original)
         {
-            budget.ReserveBytes(2L * source.Length + 8);
-            var decoded = new List<byte>(source.Length);
+            budget.CheckCancellation();
+            int length = 0;
+            while (length < source.Length && source[length] != '=')
+            {
+                if ((length & 4095) == 0) budget.CheckCancellation();
+                length++;
+            }
+            int capacity = JqBudget.BufferCapacity(3L * length / 4, 0);
+            using var memory = new JqMemoryReservation(budget.MemoryBudget);
+            if (capacity != 0) memory.Resize(capacity);
+            budget.CheckCancellation();
+            byte[] decoded = capacity == 0 ? [] : new byte[capacity];
+            int written = 0;
             uint code = 0;
             int pending = 0;
-            for (int index = 0; index < source.Length && source[index] != (char)61; index++)
+            for (int index = 0; index < length; index++)
             {
                 if ((index & 4095) == 0) budget.CheckCancellation();
                 int digit = Base64Value(source[index]);
@@ -1827,30 +1838,29 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 pending++;
                 if (pending == 4)
                 {
-                    decoded.Add((byte)((code >> 16) & 0xFF));
-                    decoded.Add((byte)((code >> 8) & 0xFF));
-                    decoded.Add((byte)(code & 0xFF));
+                    decoded[written++] = (byte)((code >> 16) & 0xFF);
+                    decoded[written++] = (byte)((code >> 8) & 0xFF);
+                    decoded[written++] = (byte)(code & 0xFF);
                     pending = 0;
                     code = 0;
                 }
             }
             if (pending == 3)
             {
-                decoded.Add((byte)((code >> 10) & 0xFF));
-                decoded.Add((byte)((code >> 2) & 0xFF));
+                decoded[written++] = (byte)((code >> 10) & 0xFF);
+                decoded[written++] = (byte)((code >> 2) & 0xFF);
             }
             else if (pending == 2)
             {
-                decoded.Add((byte)((code >> 4) & 0xFF));
+                decoded[written++] = (byte)((code >> 4) & 0xFF);
             }
             else if (pending == 1)
             {
                 throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") trailing base64 byte found");
             }
-            byte[] bytes = decoded.ToArray();
-            budget.ReserveString(Encoding.UTF8.GetCharCount(bytes));
+            budget.ReserveString(Encoding.UTF8.GetCharCount(decoded.AsSpan(0, written)));
             // Invalid UTF-8 becomes U+FFFD, matching the reference replacement.
-            return Encoding.UTF8.GetString(bytes);
+            return Encoding.UTF8.GetString(decoded.AsSpan(0, written));
         }
 
         int Base64Value(char ch)
@@ -1868,8 +1878,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // Code 37 is percent.
         string UriDecode(string source, JsonNode? original)
         {
-            budget.ReserveBytes(3L * source.Length + 8);
-            var decoded = new List<byte>(source.Length);
+            int capacity = JqBudget.BufferCapacity(Utf8Text.GetByteCount(source, budget.CancellationToken), 0);
+            using var memory = new JqMemoryReservation(budget.MemoryBudget);
+            if (capacity != 0) memory.Resize(capacity);
+            budget.CheckCancellation();
+            byte[] decoded = capacity == 0 ? [] : new byte[capacity];
+            int written = 0;
             for (int index = 0; index < source.Length; index++)
             {
                 if ((index & 4095) == 0) budget.CheckCancellation();
@@ -1882,27 +1896,25 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     int lo = HexValue(source[index + 2]);
                     if (hi < 0 || lo < 0)
                         throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") is not a valid uri encoding");
-                    decoded.Add((byte)((hi << 4) | lo));
+                    decoded[written++] = (byte)((hi << 4) | lo);
                     index += 2;
                 }
                 else if (ch < (char)128)
                 {
-                    decoded.Add((byte)ch);
+                    decoded[written++] = (byte)ch;
                 }
                 else
                 {
                     // Non-ASCII scalars pass through as their UTF-8 bytes.
                     int length = char.IsHighSurrogate(ch) && index + 1 < source.Length && char.IsLowSurrogate(source[index + 1]) ? 2 : 1;
-                    byte[] raw = Encoding.UTF8.GetBytes(source.Substring(index, length));
-                    decoded.AddRange(raw);
+                    written += Encoding.UTF8.GetBytes(source.AsSpan(index, length), decoded.AsSpan(written));
                     index += length - 1;
                 }
             }
-            byte[] bytes = decoded.ToArray();
-            budget.ReserveString(bytes.Length);
+            budget.ReserveString(Encoding.UTF8.GetCharCount(decoded.AsSpan(0, written)));
             try
             {
-                return new UTF8Encoding(false, true).GetString(bytes);
+                return Utf8Text.Decode(decoded.AsMemory(0, written));
             }
             catch (DecoderFallbackException)
             {

@@ -6,6 +6,85 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("urid", "é%F0%9F%9A%80+%00", "é🚀+\0")]
+    [InlineData("base64d", "w6k=ignored", "é")]
+    [InlineData("base64d", "w6k", "é")]
+    [InlineData("base64d", "/w==", "\ufffd")]
+    [InlineData("base64d", "=ignored", "")]
+    [InlineData("urid", "", "")]
+    [InlineData("base64d", "", "")]
+    public void Jq_DecodersPreserveUnicodePaddingAndReplacement(string format, string text, string expected)
+    {
+        using var budget = new JqBudget(CancellationToken.None);
+        Assert.Equal(expected, new JqRuntime(budget).Format(format, JsonValue.Create(text)));
+    }
+
+    [Theory]
+    [InlineData("urid")]
+    [InlineData("base64d")]
+    public void Jq_DecodersAdmitOneScratchBufferAndRefundItAfterConversion(string format)
+    {
+        string expected = new('é', 100000);
+        string text = format == "urid" ? expected : Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(expected));
+        var root = new BenchmarkMemoryBudget(400000);
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        {
+            Assert.Equal(expected, new JqRuntime(budget).Format(format, JsonValue.Create(text)));
+            Assert.Equal(400000, root.PeakBytes);
+            Assert.Equal(200000, root.ReservedBytes);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData("urid")]
+    [InlineData("base64d")]
+    public void Jq_DecodersCancelBeforeAllocatingAdmittedScratch(string format)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var root = new BenchmarkMemoryBudget(1024 * 1024);
+        var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
+        JsonNode input = JsonValue.Create(new string('x', 100000));
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        {
+            var runtime = new JqRuntime(budget);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var failure = Assert.Throws<OperationCanceledException>(() => runtime.Format(format, input));
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.Equal(cancellation.Token, failure.CancellationToken);
+            Assert.InRange(allocated, 0, 32 * 1024);
+            Assert.Equal(0, root.ReservedBytes);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData("try @urid catch \"caught\"")]
+    [InlineData("@urid?")]
+    [InlineData("try @base64d catch \"caught\"")]
+    [InlineData("@base64d?")]
+    public async Task Jq_DecoderRefusalPreservesPrefix(string operation)
+    {
+        const long limit = 1024 * 1024;
+        var root = new BenchmarkMemoryBudget(limit);
+        var host = new MockFileSystem();
+        host.SetStandardInput(new JsonArray(new string('x', 10000)).ToJsonString());
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "\"ready\", (.[0] | " + operation + ")")));
+        IMemoryReservation? pressure = null;
+        host.BeforeByteAppend = () =>
+        {
+            if (pressure is null) Assert.True(root.TryReserve(limit - root.ReservedBytes - 4096, out pressure));
+        };
+        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.NotNull(pressure);
+        Assert.Equal(pressure.Bytes, root.ReservedBytes);
+        pressure.Dispose();
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData(null, null, "a🚀bc")]
     [InlineData(1.0, 2.0, "🚀")]
     [InlineData(2.0, 2.0, "")]
