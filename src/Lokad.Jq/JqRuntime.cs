@@ -51,8 +51,14 @@ internal sealed partial class JqRuntime(JqBudget budget)
         JsonNode? shaped = sorted ? budget.CopyValue(node, 0, true) : node;
         // The JSON writer rejects non-finite doubles while the reference
         // renders NaN as null and clamps infinities to the finite
-        // extremes. Sanitize a charged clone only when needed.
-        return ContainsNonFinite(shaped, 0) ? SanitizeNonFinite(shaped) : shaped;
+        // extremes. Sorted containers are already private; otherwise copy only
+        // when normalization needs to change a borrowed container.
+        if (!ContainsNonFinite(shaped, 0)) return shaped;
+        if (shaped is JsonValue scalar && scalar.TryGetValue<double>(out double number))
+            return double.IsNaN(number) ? null : JsonValue.Create(number > 0 ? double.MaxValue : double.MinValue);
+        if (!sorted) shaped = Clone(shaped);
+        SanitizeInPlace(shaped);
+        return shaped;
     }
 
     private static JsonWriterOptions CreateWriterOptions(bool ascii, int? indent, bool tabs) => new()
@@ -138,15 +144,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
             return false;
         }
         return false;
-    }
-
-    private JsonNode? SanitizeNonFinite(JsonNode? node)
-    {
-        if (node is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
-            return double.IsNaN(number) ? null : JsonValue.Create(number > 0 ? double.MaxValue : double.MinValue);
-        JsonNode? copy = Clone(node);
-        SanitizeInPlace(copy);
-        return copy;
     }
 
     private void SanitizeInPlace(JsonNode? node)

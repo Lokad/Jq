@@ -1,9 +1,38 @@
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Fact]
+    public void Jq_SortedNonFiniteOutputFitsOneTreeCopyAndPreservesBorrowedInput()
+    {
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
+        var items = new JsonArray(double.NaN, double.PositiveInfinity, double.NegativeInfinity);
+        for (int index = 3; index < 1000; index++) items.Add(index);
+        var input = new JsonObject { ["z"] = items, ["a"] = "kept" };
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        {
+            using var result = new JqRuntime(budget).SerializeUtf8(input, false, null, false, true);
+            using var document = JsonDocument.Parse(result.Value);
+            Assert.Equal(new[] { "a", "z" }, document.RootElement.EnumerateObject().Select(property => property.Name));
+            var output = document.RootElement.GetProperty("z");
+            Assert.Equal(1000, output.GetArrayLength());
+            Assert.Equal(JsonValueKind.Null, output[0].ValueKind);
+            Assert.Equal(double.MaxValue, output[1].GetDouble());
+            Assert.Equal(double.MinValue, output[2].GetDouble());
+            for (int index = 3; index < 1000; index++) Assert.Equal(index, output[index].GetInt32());
+            Assert.True(double.IsNaN(items[0]?.GetValue<double>() ?? 0));
+            Assert.True(double.IsPositiveInfinity(items[1]?.GetValue<double>() ?? 0));
+            Assert.True(double.IsNegativeInfinity(items[2]?.GetValue<double>() ?? 0));
+            Assert.Equal(new[] { "z", "a" }, input.Select(property => property.Key));
+        }
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
