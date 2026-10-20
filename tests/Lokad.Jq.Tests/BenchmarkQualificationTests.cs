@@ -95,6 +95,17 @@ public sealed class BenchmarkQualificationTests
             JsonSerializer.Serialize(report, ComparisonRunner.JsonOptions), ComparisonRunner.JsonOptions));
         Assert.Equal(BenchmarkReport.Render(report), BenchmarkReport.Render(restored));
         Assert.Contains("2.00 [2.00, 2.00]", BenchmarkReport.Render(report), StringComparison.Ordinal);
+        string document = "# Benchmarks\n\n" + BenchmarkReport.BeginMarker + "\nold table\n"
+            + BenchmarkReport.EndMarker + "\n\n## Managed allocations\n\n| Allocations |\n| 123 |\n\n"
+            + BenchmarkReport.ProvenanceBeginMarker + "\nold provenance\n" + BenchmarkReport.ProvenanceEndMarker;
+        string rendered = BenchmarkReport.RenderDocument(document, report);
+        Assert.True(rendered.IndexOf("| Case / scale", StringComparison.Ordinal)
+            < rendered.IndexOf("| Allocations |", StringComparison.Ordinal));
+        Assert.True(rendered.IndexOf("| Allocations |", StringComparison.Ordinal)
+            < rendered.IndexOf("Mode:", StringComparison.Ordinal));
+        Assert.Contains("| 123 |", rendered, StringComparison.Ordinal);
+        Assert.Equal(rendered, BenchmarkReport.RenderDocument(rendered, report));
+        Assert.DoesNotContain("old provenance", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("2.00 [", BenchmarkReport.Render(report with { Mode = "verify" }), StringComparison.Ordinal);
         Assert.DoesNotContain("2.00 [", BenchmarkReport.Render(report with { Mode = "paused" }), StringComparison.Ordinal);
         Assert.DoesNotContain("2.00 [", BenchmarkReport.Render(report with { Complete = false }), StringComparison.Ordinal);

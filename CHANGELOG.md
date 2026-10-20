@@ -2,228 +2,45 @@
 
 ## Unreleased
 
-- Breaking: `IJqCompiledRegex.Match` returns a provider-owned `JqRegexMatch`
-  instead of filling caller-sized capture scratch; remove `CaptureSlotCapacity`.
-  Delegate regex validation and compiled/workspace/capture storage to the provider.
-  Keep Jq-owned cache-key, UTF-8 subject and JSON-result admission, terminal
-  provider failures, cancellation and cleanup through the last borrower.
-  Utf8Regex 0.3.0 exposes no shared-budget hook or cooperative cancellation API.
-
-- Breaking: remove `JqExecutionPolicy`. Pass a borrowed `IJqRegexEngine` directly
-  to `ExecuteAsync`; the default remains `JqUtf8RegexEngine.Instance`.
-
+- Breaking: remove `JqExecutionPolicy` and its runtime ceiling options, including
+  `MaximumValueNodes`, `MaximumAllocationWorkBytes`, `MaximumAllocationBytes`,
+  `MaximumInputBytes`, `MaximumOutputBytes`, `MaximumStringLength`,
+  `MaximumRegexWork` and `MaximumRegexTime`. Supply shared `IMemoryBudget`
+  admission and cancellation to execution; pass a borrowed `IJqRegexEngine`
+  directly when selecting a provider. Use uniform recursion protection of 64.
+- Breaking: `IJqCompiledRegex.Match` returns a provider-owned `JqRegexMatch`;
+  remove `CaptureSlotCapacity`. Providers own syntax validation, execution bounds
+  and compiled/workspace/capture storage. Jq admits its cache keys, UTF-8 subjects
+  and JSON results, retains borrowers through cleanup, and treats provider resource
+  refusal as terminal. Utf8Regex 0.3.0 has no shared-budget or cooperative
+  cancellation API; an active synchronous search must finish before cancellation.
 - Breaking: remove unused path conveniences (`FileName`, `Parent`, `IsRoot`,
   `Tmp`, `IsParentOf`, `IsEqualToOrParentOf`, `TryChild`, `JqPathSegment`),
   descriptor `DevNullPath`/`IsDevNull`, and error `MessageWithoutTerminator`.
-  Remove unused internal metadata and test-only scaffolding. Module import
-  scanning and full parsing now share one token sequence.
-
-- Breaking: use a shared recursion depth of 64 across parsing, evaluation, value traversal,
-  JSON and module loading. Evaluation now counts active advancement rather than
-  suspended results; wide destructuring iterates through admitted storage.
-
-- Delegate regex bounds and timeout settings to the provider. Keep shared storage
-  admission, terminal provider exhaustion and cancellation forwarding.
-
-- Remove the fixed 100,000-order Bessel cutoff. Use a converged continued fraction,
-  scaled backward J recurrence and J0/J1 normalization; prove early underflow
-  analytically. Preserve forward Y recurrence, reflection and cooperative
-  cancellation. Orders use checked signed 64-bit indices; larger finite orders
-  yield NaN unless a proven boundary applies.
-  Fix tiny-argument Y evaluation and preserve reflected zero signs. Cover finite
-  transitions through order one million, subnormals, overflow, cancellation during
-  active recurrence, downstream closure and owned cleanup. Base approximation
+- Add shared admission for invocation snapshots, compilation, construction,
+  retained values and I/O buffers. Every refusal fails with status 5 outside jq
+  `try`/`?`, preserving earlier output, pending borrows and owned cleanup.
+  Cancellation, host failures and actual allocation failures remain distinct.
+- Support long streams with bounded buffers, awaited writes and downstream
+  closure. Borrow existing values on identity/variable/child reads; preflight
+  construction, padding and replacement peaks against shared admission.
+- Reduce governor traffic with coarse owners and bounded charged buffer credit.
+  Reconcile completed predicates, scalar reductions and substitution temporaries;
+  retain aliases and escaping values. Reuse serialization, subject and diagnostic
+  storage, and drain diagnostics without copying the queue.
+- Parse metadata/imports once before linking program and module bodies. Remove
+  unused runtime state, helper implementations and redundant regex wrappers.
+  Consolidate reference subprocess execution so timeout and cancellation cover
+  blocked stdin and await child termination and pipe cleanup.
+- Extend Bessel evaluation with converged/scaled recurrences, analytical early
+  underflow and cooperative cancellation; fix tiny-argument Y evaluation and
+  reflected zero signs. Use checked 64-bit order indices. Base approximations
   and large-argument phase accuracy remain documented limitations.
-
-- Remove the arbitrary civil-year cutoff. Normalize UTC fields with wide integer
-  intermediates and validate the final signed 64-bit epoch before conversion,
-  preserving partial extreme days and rejecting arithmetic overflow. Retain the
-  existing public parsed-field clamping and diagnostics.
-
-- Admit eager regex match/capture DOMs, scan/list backing and substitution builder
-  metadata before construction. Batch small headers through existing coarse
-  credit. Split incrementally without an input-sized scalar-offset table.
-  Reconcile completed substitution captures and replacement temporaries while
-  preserving builder data and escaping errors. Return capture scratch before
-  nested replacements, keeping 10,000 nested substitutions within 1 MiB and
-  bounded governor calls. Cover terminal refusal before publishing eager results,
-  exact Unicode splits, owned cleanup, cancellation and root reuse.
-
-- Reconcile completed scalar `reduce` update demand within existing coarse
-  storage. Preserve shared string backing, source/initializer/collected values,
-  persistent caches, container/opaque ownership and replacement peaks.
-  Cover 100,000 bounded updates, escaping errors, cancellation, terminal pressure
-  and retained aliases.
-
-- Own and admit persistent regex keys/metadata in one coarse cache owner even
-  when a custom provider retains no pattern text. Preflight before copying and
-  compilation, roll back failed work, and defer refunds through active borrowers.
-
-- Reconcile completed `any`/`all` predicate demand in the existing record owner,
-  preserving generator state and error payloads through their enclosing lifetime.
-  Cover 100,000 allocating predicates under 64 KiB with bounded governor traffic,
-  plus aliases, collected results, cancellation, refusal and payload lifetimes.
-
-- Remove fixed source-length, token-count and command-argument ceilings. Preflight
-  compiler/snapshot storage and preserve cancellation, real function arity and
-  recursive depth guards. Iterate object/interpolation combinations, definition
-  continuations and constant comma metadata on the heap. Compute source positions
-  incrementally. Cover 5,000-property/interpolation/definition/argument programs,
-  large hosted source, terminal shared-pressure failures and structural rejection.
-
-- Remove the fixed 32 MiB serialized-value and 64 MiB materialized-buffer ceilings.
-  Preflight checked capacities and replacement peaks against shared admission;
-  retain 8 KiB reads, backpressure, closure and owned cleanup. Raw input scans
-  only newly read bytes when looking for LF, avoiding repeated whole-line scans.
-- Remove the one-million array-index policy. Admit actual padding before copying
-  or mutation; existing indices need no padding charge. Preserve catchable errors
-  for indices outside CLR representation and terminal admission refusal.
-
-- Breaking: remove MaximumStringLength and its fixed UTF-16 cap, validation,
-  read-time checks and diagnostics. String construction/decoding uses shared
-  storage admission and checked representability; borrowed reads require no new
-  string admission.
-  Preserve cancellation during repeat construction and large ASCII transforms.
-  Count UTF-8 bytes in cancellable chunks with a long result; materializing
-  clients preflight CLR capacity, preserving surrogate pairs across chunks.
-  Cover admitted strings above the former cap and pre-materialization refusals;
-  replace cap-dependent fixtures with small shared allowances. Benchmark schema 5
-  drops the final removed policy field.
-
-- Breaking: remove MaximumRegexWork and MaximumRegexTime completely. Regex engine
-  selection now uses JqExecutionPolicy.RegexEngine and the engine-neutral
-  IJqRegexEngine/IJqCompiledRegex contract, carrying cancellation and shared storage
-  admission. The default managed PCRE2 adapter retains structural guards;
-  Utf8Regex 0.3.0 cannot interrupt an active search. Handles stay owned through
-  borrowers and admission refusal stays terminal.
-- Cover cancellation inside a cooperating adapter's compilation, boolean/detailed
-  searches and later global/replacement searches, plus refusal, cleanup and reuse.
-  Remove obsolete timeout/work fixtures and benchmark provenance.
-
-- Breaking: remove MaximumValueNodes, MaximumAllocationWorkBytes and the deprecated
-  MaximumAllocationBytes alias, together with their counters and accounting
-  plumbing. Cancellation, shared admission, structural limits and regex protection
-  remain.
-
-- Breaking: remove MaximumInputBytes and MaximumOutputBytes and their counters.
-  Streams continue through bounded 8 KiB reads and awaited writes, with shared
-  admission, cancellation and downstream closure.
-- Return existing values from identity, variable, selection and child reads without
-  accounting scans. Fuse copy admission and depth checks into actual construction;
-  retain cursor construction estimates instead of recounting DOM trees.
-- Cover 300,000-record JSON, raw, sequence and streaming commands beyond 32 MiB
-  of output under a fixed 128 KiB shared allowance, plus cancellation, closure,
-  owned cleanup, deep reads, constructor depth and finite evaluation workloads.
-- Remove verified-unused qualified-lookup, stream-leaf, calendar and deletion
-  helpers, plus internal path-confinement machinery; keep hosted normalization.
-- Extend the detached package consumer to 19 checks, including terminal padded
-  admission, subsequent allowance reuse, resource status after stderr closes and a
-  caller-supplied cooperating regex engine.
-- Preserve resource status 5 when draining queued diagnostics encounters closure
-  or a reported write failure. Await owned cleanup and pending borrows; keep
-  cancellation distinct and preserve earlier output and caller admission.
-- Fail the command on every refused admission, including optional padding, without
-  retrying a smaller estimate or evicting storage to continue. Keep coarse growth,
-  charged credit, replacement peaks, earlier effects and awaited cleanup.
-- Reuse at most 256 bytes of diagnostic credit after 32 small nonempty messages,
-  with bounded hot growth.
-  Keep cold refunds, empty appends, full queued-burst charges and pending drains.
-- Reconcile finished writer replacements before handing off hot serialization
-  results whose current capacity fits the existing 4 KiB reuse ceiling. Preserve
-  replacement-peak refusal, cold refunds, overlapping results and non-throwing
-  return while avoiding repeated pool rejection after mixed-size serialization.
-- Reuse one returned serialization buffer after 32 successful serializations,
-  retaining at most 4 KiB of admitted capacity per budget. Keep cold refunds,
-  overlapping result ownership, failed-buffer cleanup and cancellation checks;
-  active byte-buffer leases retain admission after cache closure.
-- Reuse already-admitted cursor credit across safe sequence and stream boundaries,
-  alongside actual retained trees: at most 256 bytes on cold owners,
-  or 512 after 32 small storage charges. Preserve larger refunds and terminal
-  cleanup while avoiding repeated scalar/short-text grow-refund calls.
-- Expand governed cost diagnostics to 48 cases covering threshold behavior,
-  growing subjects, serialization and diagnostics. Verify independent stdout
-  and stderr digests, record observed live-scope overlap, and retain separate
-  call-count and warmed timing/allocation lanes.
-- Amortize gradually growing regex subjects with bounded geometric capacity,
-  preserving the existing 4 KiB idle-owner ceiling and old-plus-new peaks.
-  Keep large subjects exact and nested leases separate.
-- Skip zero-byte diagnostic admissions and unchanged queue refunds while keeping
-  empty host appends, cancellation, pending borrows and earlier queued bytes intact.
-  Validate disposed context use even when accounting needs no host notification.
-- Reuse bounded regex subject buffers and detailed-result allowances, keeping at
-  most one idle owner of each kind, capped at 4 KiB each. Preserve nested leases,
-  replacement peaks, immediate failure refunds and deferred cache cleanup for
-  active borrowers. Batch repeated small charges below 4 KiB with 256-byte credit
-  after a cold-owner threshold.
-- Add explicit `--governor` diagnostics comparing the execution hook with no hook
-  under single/shared-root workers. Keep call counters separate from warmed
-  timing/allocation samples, verify independent output digests and full refunds,
-  and record every sample as unqualified local cost evidence. Reuse one
-  development-only active-owner governor fixture across tests and detached
-  consumers; no fixture enters the runtime package.
-- Grow reusable raw output geometrically after its exact first allocation, while
-  keeping actual retained capacity and replacement peaks charged. Preserve exact
-  output, earlier host effects and terminal refusal.
-- Reuse one coarse outer-record reservation across safe input boundaries. Keep at
-  most 4 KiB of already-admitted credit charged, avoid eager padding for small
-  records, and refund it at execution cleanup. Preserve aliases/aggregates and
-  the separate sequence/stream retained-value owner and its real refunds.
-- Batch small value/slot charges inside their existing coarse owners using at
-  most one 4 KiB block of charged credit. Keep cold owners and known copies
-  exact. Preserve real reconciliation refunds and terminal refusal.
-  Preflight HTML/implode builder capacities together
-  and batch literal time-format runs while keeping cancellation checks.
-- Reduce governor traffic using owner-local admitted sizes, zero-charge fast
-  paths and unchanged-buffer notification elision. Explicit reservation counter
-  observations still reflect ancestor invalidation; direct admission calls still
-  validate disposed owners. A 1,000-scalar output diagnostic falls from 3,004
-  resizes and nine counter reads to four resizes and no reads, preserving its
-  estimated peak. Add shared forwarding call counters and boundary regressions;
-  this establishes call counts, not a throughput claim.
-- Add library-local cooperative memory admission interfaces and execution
-  overloads borrowing a shared host allowance. Reusable JSON/raw output capacity
-  and information output reserve before allocation, include replacement peaks,
-  and stay charged through awaited writes and descriptor cleanup. Cursor buffers,
-  streaming token capacity and hosted file reads also reserve before allocation;
-  successful read results retain their charge until decoding finishes. Coverage
-  uses coarse estimates and conservative record lifetimes, with small metadata
-  deliberately uninstrumented. Existing overloads preserve cancellation and structural protection
-  and forward a governed invocation's associated budget.
-- Govern retained regex pattern/workspace estimates and operation-owned UTF-8
-  subjects and detailed captures. Failed compilation/matching refunds admission;
-  nested replacements retain parent charges. This preserves the existing engine
-  profile and cancellation boundaries, with approximate storage sizing.
-- Add coarse record and persistent storage owners for UTF-16 materialization,
-  decoded JSON, container copies/construction, snapshots and filter/module
-  compilation. Preserve aliases, slurp aggregates, sequence queues, streaming
-  paths and cached module definitions across safe record refunds. Serialization
-  results and queued diagnostic bytes have explicit storage lifetimes.
-- Govern invocation snapshots with Try-style factories and owned disposal, while
-  borrowing the caller's root and immutable inputs. Command recognition borrows
-  that invocation; allocating option/JSON binding now runs within each execution's
-  shared scope. Keep ordinary argument errors at status 2 and admission refusal
-  at terminal status 5, including JSON arguments and positional JSON.
-- Admit path-update/deletion/slice copies and padding, collection backing slots,
-  key/sort workspaces, Unicode scratch lists/builders and module metadata copies.
-  Preserve output prefixes and exact ordering when shared demand refuses a later
-  operation; newly compiled cache keys retain persistent ownership.
-- Admit terminal diagnostic and halt UTF-8 buffers before encoding, retain them
-  through pending host writes, and avoid large intermediate message copies. A
-  refused payload reports terminal status 5 using a small immutable diagnostic,
-  preserving earlier output and the caller's existing reservations.
-- Complete the allocation-site audit with admission for generated paths/stream
-  events, walk/flatten state, constant module metadata copies, scalar array
-  wrappers, arithmetic/entry copies and affix substrings. Remove unused legacy
-  line-buffer/encoding helpers, a dead newline counter and an unnecessary clone
-  in index-error rendering. Keep useful semantic regressions and work guards.
-- Preserve actual `OutOfMemoryException` from file-variable loading as an
-  allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 4,038 tests pass,
-  including governed-memory boundary and bounded-call cases. The packed artifact
-  passes 19 detached consumer checks with isolated cache, exact package hash and
-  locked restore.
-  Dependencies and lock files are unchanged. Earlier cross-platform CI,
-  differential and performance receipts apply to their recorded revisions.
+- Normalize UTC civil fields with wide integer intermediates and validate final
+  signed 64-bit epochs, preserving partial extreme days and existing diagnostics.
+- Consolidate runtime/compatibility documentation and lead benchmarks with both
+  recorded result tables. Preserve historical measurements and their provenance;
+  governor counts are separate diagnostics, without a new performance claim.
 
 ## 0.1.0 — 2026-10-06
 

@@ -23,6 +23,8 @@ internal static class BenchmarkReport
     public const string Contract = "Warm embedded Lokad.Jq versus jq CLI; includes binding/compilation, parsing, evaluation, rendering and SHA-256 consumption; jq includes launch and pipes. No startup subtraction.";
     public const string BeginMarker = "<!-- BEGIN GENERATED COMPARISON -->";
     public const string EndMarker = "<!-- END GENERATED COMPARISON -->";
+    public const string ProvenanceBeginMarker = "<!-- BEGIN GENERATED COMPARISON PROVENANCE -->";
+    public const string ProvenanceEndMarker = "<!-- END GENERATED COMPARISON PROVENANCE -->";
 
     public static ComparisonWorkloadInfo Describe(ComparisonWorkload workload) => new(workload.Name, workload.Scale,
         workload.Size, workload.Arguments, workload.Comparison, OutputDigest.FromBytes(workload.Input),
@@ -73,14 +75,6 @@ internal static class BenchmarkReport
             && report.Complete && report.Cases.Length == report.RequestedCases;
         var text = new StringBuilder();
         text.AppendLine(BeginMarker).AppendLine("## Recorded comparison").AppendLine();
-        text.AppendLine($"Mode: {Escape(report.Mode)}. Measured revision: `{Escape(report.Host.Commit)}`. " +
-            $"jq: `{Escape(report.Reference.Version)}`, SHA-256 `{Escape(report.Reference.Sha256)}`.").AppendLine();
-        text.AppendLine(FormattableString.Invariant($"Recorded UTC: {report.CreatedUtc:O}. Completed {report.Cases.Length}/{report.RequestedCases} requested cases.")).AppendLine();
-        text.AppendLine($"{Escape(report.Host.Runtime)}; SDK {Escape(report.Host.Sdk)}; {Escape(report.Host.OperatingSystem)}; " +
-            $"{Escape(report.Host.Cpu)}; {report.Host.LogicalProcessors} logical processors.").AppendLine();
-        text.AppendLine(Contract).AppendLine();
-        text.AppendLine("Ratio is jq time divided by Lokad.Jq time; above 1 favors Lokad.Jq. CI is a paired-bootstrap 95% interval.").AppendLine();
-        if (!claim) text.AppendLine("No qualified performance claim: this artifact is verification-only, paused, incomplete, or lacks a clean quiet-machine qualification.").AppendLine();
         text.AppendLine("| Case / scale | Size | Status | Lokad.Jq ms | jq ms | Ratio / 95% CI | Interpretation |");
         text.AppendLine("| --- | ---: | --- | ---: | ---: | --- | --- |");
         foreach (var row in report.Cases)
@@ -92,11 +86,26 @@ internal static class BenchmarkReport
             text.AppendLine($"| {Escape(row.Workload.Name)}/{Escape(row.Workload.Scale)} | {row.Workload.Size} | {Escape(status)} | {times} | " +
                 $"{Escape(qualified ? timing.Interpretation : row.Verification.Reason.Length > 0 ? row.Verification.Reason : timing.Reason)} |");
         }
+        if (!claim) text.AppendLine().AppendLine("No qualified performance claim: this artifact is verification-only, paused, incomplete, or lacks a clean quiet-machine qualification.").AppendLine();
         return text.AppendLine().AppendLine(EndMarker).ToString();
-
-        static string Escape(string value) => System.Net.WebUtility.HtmlEncode(value)
-            .Replace("|", "\\|", StringComparison.Ordinal).Replace('`', '\'').Replace('\r', ' ').Replace('\n', ' ');
     }
+
+    private static string RenderProvenance(ComparisonReport report)
+    {
+        var text = new StringBuilder();
+        text.AppendLine(ProvenanceBeginMarker).AppendLine("## Comparison provenance").AppendLine();
+        text.AppendLine($"Mode: {Escape(report.Mode)}. Measured revision: `{Escape(report.Host.Commit)}`. " +
+            $"jq: `{Escape(report.Reference.Version)}`, SHA-256 `{Escape(report.Reference.Sha256)}`.").AppendLine();
+        text.AppendLine(FormattableString.Invariant($"Recorded UTC: {report.CreatedUtc:O}. Completed {report.Cases.Length}/{report.RequestedCases} requested cases.")).AppendLine();
+        text.AppendLine($"{Escape(report.Host.Runtime)}; SDK {Escape(report.Host.Sdk)}; {Escape(report.Host.OperatingSystem)}; " +
+            $"{Escape(report.Host.Cpu)}; {report.Host.LogicalProcessors} logical processors.").AppendLine();
+        text.AppendLine(Contract).AppendLine();
+        text.AppendLine("Ratio is jq time divided by Lokad.Jq time; above 1 favors Lokad.Jq. CI is a paired-bootstrap 95% interval.").AppendLine();
+        return text.AppendLine(ProvenanceEndMarker).ToString();
+    }
+
+    private static string Escape(string value) => System.Net.WebUtility.HtmlEncode(value)
+        .Replace("|", "\\|", StringComparison.Ordinal).Replace('`', '\'').Replace('\r', ' ').Replace('\n', ' ');
 
     public static async Task RenderFileAsync(string artifactPath, CancellationToken cancellationToken)
     {
@@ -104,14 +113,21 @@ internal static class BenchmarkReport
             ComparisonRunner.JsonOptions) ?? throw new InvalidOperationException("Missing benchmark artifact.");
         string path = "docs/BENCHMARKS.md";
         string content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        int begin = content.IndexOf(BeginMarker, StringComparison.Ordinal);
-        if (begin >= 0)
+        await File.WriteAllTextAsync(path, RenderDocument(content, report), cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static string RenderDocument(string content, ComparisonReport report)
+    {
+        content = ReplaceSection(content, BeginMarker, EndMarker, Render(report));
+        return ReplaceSection(content, ProvenanceBeginMarker, ProvenanceEndMarker, RenderProvenance(report));
+
+        static string ReplaceSection(string content, string beginMarker, string endMarker, string replacement)
         {
-            int end = content.IndexOf(EndMarker, begin, StringComparison.Ordinal);
+            int begin = content.IndexOf(beginMarker, StringComparison.Ordinal);
+            if (begin < 0) return content.TrimEnd() + "\n\n" + replacement;
+            int end = content.IndexOf(endMarker, begin, StringComparison.Ordinal);
             if (end < 0) throw new InvalidOperationException("Missing report end marker.");
-            content = content[..begin] + Render(report) + "\n" + content[(end + EndMarker.Length)..].TrimStart('\r', '\n');
+            return content[..begin] + replacement + "\n" + content[(end + endMarker.Length)..].TrimStart('\r', '\n');
         }
-        else content = content.TrimEnd() + "\n\n" + Render(report);
-        await File.WriteAllTextAsync(path, content, cancellationToken).ConfigureAwait(false);
     }
 }

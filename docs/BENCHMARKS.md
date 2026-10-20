@@ -6,16 +6,6 @@ simplifications require fresh timing measurements.
 <!-- BEGIN GENERATED COMPARISON -->
 ## Recorded comparison
 
-Mode: qualify. Measured revision: `9f223bf83648dfc637ebe7eaa21658274a67bb64`. jq: `jq-1.8.2`, SHA-256 `b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f`.
-
-Recorded UTC: 2026-10-05T17:50:46.7722658+00:00. Completed 38/38 requested cases.
-
-.NET 10.0.8; SDK 10.0.204; Ubuntu 24.04.4 LTS; AMD EPYC 9V45 96-Core Processor; 4 logical processors.
-
-Warm embedded Lokad.Jq versus jq CLI; includes binding/compilation, parsing, evaluation, rendering and SHA-256 consumption; jq includes launch and pipes. No startup subtraction.
-
-Ratio is jq time divided by Lokad.Jq time; above 1 favors Lokad.Jq. CI is a paired-bootstrap 95% interval.
-
 | Case / scale | Size | Status | Lokad.Jq ms | jq ms | Ratio / 95% CI | Interpretation |
 | --- | ---: | --- | ---: | ---: | --- | --- |
 | identity-compact/small | 16 | Qualified | 0.011 | 1.301 | 116.14 [115.01, 117.42] | Lokad.Jq faster |
@@ -61,10 +51,6 @@ Ratio is jq time divided by Lokad.Jq time; above 1 favors Lokad.Jq. CI is a pair
 
 ## Managed allocations
 
-Median managed bytes per execution, from baseline `df53365` to `9f223bf` on
-the same machine. Includes binding, compilation, execution, output checksums and
-a per-call deadline; excludes input generation and report serialization.
-
 | Case / scale | Before bytes | After bytes | Reduction |
 | --- | ---: | ---: | ---: |
 | identity-compact/large | 4,601,243 | 4,601,007 | 0.0% |
@@ -85,6 +71,27 @@ a per-call deadline; excludes input generation and report serialization.
 | sorted-ascii/diagnostic | 533,920 | 533,680 | 0.0% |
 | scalar-pipeline/diagnostic | 9,883,450 | 9,324,750 | 5.7% |
 | buffered-scalars/diagnostic | 3,188,810 | 2,893,716 | 9.3% |
+
+<!-- BEGIN GENERATED COMPARISON PROVENANCE -->
+## Comparison provenance
+
+Mode: qualify. Measured revision: `9f223bf83648dfc637ebe7eaa21658274a67bb64`. jq: `jq-1.8.2`, SHA-256 `b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f`.
+
+Recorded UTC: 2026-10-05T17:50:46.7722658+00:00. Completed 38/38 requested cases.
+
+.NET 10.0.8; SDK 10.0.204; Ubuntu 24.04.4 LTS; AMD EPYC 9V45 96-Core Processor; 4 logical processors.
+
+Warm embedded Lokad.Jq versus jq CLI; includes binding/compilation, parsing, evaluation, rendering and SHA-256 consumption; jq includes launch and pipes. No startup subtraction.
+
+Ratio is jq time divided by Lokad.Jq time; above 1 favors Lokad.Jq. CI is a paired-bootstrap 95% interval.
+
+<!-- END GENERATED COMPARISON PROVENANCE -->
+
+## Allocation method
+
+Median managed bytes per execution, from baseline `df53365` to `9f223bf` on
+the same machine. Includes binding, compilation, execution, output checksums and
+a per-call deadline; excludes input generation and report serialization.
 
 These totals measure managed allocation, rather than peak heap or jq process
 memory. All 44 allocation cases preserve input hashes and exact output digests.
@@ -145,7 +152,7 @@ dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --governor --i
 `--case NAME`, `--scale SCALE` and `--output artifacts/PATH`
 filter comparison/allocation runs; governor diagnostics accept `--case` and
 `--output`. Reports and traces remain ignored. The renderer replaces only the
-marked comparison section above.
+marked comparison table and provenance sections above.
 
 ## Governor diagnostics
 
@@ -155,19 +162,12 @@ are separate from uninstrumented timing/allocation lanes, which warm for at leas
 eight calls and one second, then collect three alternating pairs. These local
 probes do not qualify general speedups or another host's contention costs.
 
-The 2026-10-20 rerun passes all 96 rows with unchanged stdout/stderr digests,
-full refunds and zero counter reads, same-target resizes or refusals. Compared
-with revision 0927651, ten single-worker regex cases drop 1-1,001 reservations
-and disposals; alternating capture patterns also drop 500 resizes. The other
-38 cases retain their counts and estimated peaks. Evidence: ignored
-`tmp/simplification-catalog/`.
-
-Regex peaks decline by 320-648 KiB because provider-storage estimates moved out
-of Jq. This is an accounting change, not a measured memory reduction: Utf8Regex
-0.3.0 has no shared-budget hook. These count observations make no timing or
-managed-allocation claim; the published result tables above remain unchanged.
-
-See [runtime memory rules](RUNTIME.md#memory-admission) for ownership and retained-credit bounds.
+The 2026-10-20 cleanup rerun passes all 96 rows with full refunds and zero counter
+reads, same-target resizes or refusals. Against revision 3833ffd, all 48 single-worker
+cases retain their call counts and estimated peaks. Metadata compilation and
+diagnostic-queue allocation improvements are outside this catalog's workloads.
+Provider storage is not estimated by Jq; Utf8Regex 0.3.0 has no shared-budget hook.
+See [runtime memory rules](RUNTIME.md#memory-admission) for ownership and credit bounds.
 
 ## Recorded artifact checksums
 
