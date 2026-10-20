@@ -237,70 +237,17 @@ internal sealed class IsemptyFilter(JqFilter Body) : JqFilter
     }
 }
 
-// `while(cond; update)`: yields each state while the condition holds,
-// branching depth-first over multi-valued updates on an explicit stack.
+// Loops share a lazy depth-first traversal; each condition output is a branch.
 internal sealed class WhileFilter(JqFilter Condition, JqFilter Update) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
-        var pending = new Stack<JsonNode?>();
-        pending.Push(input);
-        while (pending.TryPop(out JsonNode? state))
-        {
-            // Reference distribution like if: every condition output counts,
-            // so repeated truthy probes duplicate the state and its updates.
-            var next = new List<JsonNode?>();
-            foreach (JsonNode? probe in Condition.Evaluate(state, context, environment))
-            {
-                if (!Truthy(probe))
-                    continue;
-                yield return context.Runtime.Clone(state);
-                foreach (JsonNode? updated in Update.Evaluate(state, context, environment))
-                {
-                    context.Budget.CheckCancellation();
-                    next.Add(updated);
-                }
-            }
-            for (int index = next.Count - 1; index >= 0; index--)
-                pending.Push(next[index]);
-        }
-    }
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        JqLoop.Evaluate(input, context, environment, Condition, Update, JqLoop.Kind.While);
 }
 
-// `until(cond; next)`: yields the first state satisfying the condition per
-// branch, depth-first over multi-valued updates.
 internal sealed class UntilFilter(JqFilter Condition, JqFilter Next) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
-        var pending = new Stack<JsonNode?>();
-        pending.Push(input);
-        while (pending.TryPop(out JsonNode? state))
-        {
-            // Reference distribution like if: truthy probes yield the state
-            // while falsy probes recurse, each independently.
-            var next = new List<JsonNode?>();
-            foreach (JsonNode? probe in Condition.Evaluate(state, context, environment))
-            {
-                if (Truthy(probe))
-                {
-                    yield return context.Runtime.Clone(state);
-                    continue;
-                }
-                foreach (JsonNode? updated in Next.Evaluate(state, context, environment))
-                {
-                    context.Budget.CheckCancellation();
-                    next.Add(updated);
-                }
-            }
-            for (int index = next.Count - 1; index >= 0; index--)
-                pending.Push(next[index]);
-        }
-    }
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        JqLoop.Evaluate(input, context, environment, Condition, Next, JqLoop.Kind.Until);
 }
 
 // `repeat(filter)`: re-evaluates the argument against the original input
@@ -320,37 +267,137 @@ internal sealed class RepeatFilter(JqFilter Body) : JqFilter
     }
 }
 
-// `recurse(filter[; condition])`: depth-first pre-order traversal, flat on
-// an explicit stack. The condition filters expanded values like select.
+// `recurse(filter[; condition])`: condition outputs filter expanded states.
 internal sealed class RecurseFilter(JqFilter Body, JqFilter? Condition) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
-        var pending = new Stack<JsonNode?>();
-        pending.Push(input);
-        while (pending.TryPop(out JsonNode? state))
-        {
-            yield return context.Runtime.Clone(state);
-            var next = new List<JsonNode?>();
-            foreach (JsonNode? expanded in Body.Evaluate(state, context, environment))
-            {
-                if (Condition is not null && !FirstTruthy(Condition, expanded, context, environment))
-                    continue;
-                context.Budget.CheckCancellation();
-                next.Add(expanded);
-            }
-            for (int index = next.Count - 1; index >= 0; index--)
-                pending.Push(next[index]);
-        }
-    }
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        JqLoop.Evaluate(input, context, environment, Condition, Body, JqLoop.Kind.Recurse);
+}
 
-    private static bool FirstTruthy(JqFilter condition, JsonNode? state, JqContext context, JqEnvironment environment)
+// Pending siblings stay lazy. Only genuinely branching continuations are retained;
+// proven single-valued tails run flat without evaluating the next sibling early.
+internal static class JqLoop
+{
+    internal enum Kind { While, Until, Recurse }
+    private readonly record struct Step(JsonNode? Value, bool Descend, bool Tail);
+
+    internal static IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context,
+        JqEnvironment environment, JqFilter? condition, JqFilter update, Kind kind)
     {
-        foreach (JsonNode? probe in condition.Evaluate(state, context, environment))
-            return Truthy(probe);
-        return false;
+        using var memory = new JqMemoryReservation(context.Budget.MemoryBudget);
+        var pending = new List<IEnumerator<Step>>();
+        IEnumerator<Step>? current = Steps(input).GetEnumerator();
+        try
+        {
+            while (Advance(out JsonNode? value)) yield return value;
+        }
+        finally { DisposeAll(true); }
+
+        bool Advance(out JsonNode? value)
+        {
+            try
+            {
+                while (current is not null)
+                {
+                    context.Budget.CheckCancellation();
+                    if (!current.MoveNext())
+                    {
+                        IEnumerator<Step> completed = current;
+                        current = null;
+                        completed.Dispose();
+                        if (pending.Count == 0) break;
+                        current = pending[^1];
+                        pending.RemoveAt(pending.Count - 1);
+                        continue;
+                    }
+                    Step step = current.Current;
+                    if (!step.Descend)
+                    {
+                        value = step.Value;
+                        return true;
+                    }
+                    if (step.Tail)
+                    {
+                        IEnumerator<Step> completed = current;
+                        current = null;
+                        completed.Dispose();
+                    }
+                    else
+                    {
+                        if (pending.Count == pending.Capacity)
+                        {
+                            int capacity = checked(Math.Max(4, pending.Capacity * 2));
+                            // Slots include suspended iterators and their filter cursors.
+                            long previous = memory.LastAdmittedBytes;
+                            memory.Resize(checked(previous + 512L * capacity));
+                            pending.Capacity = capacity;
+                            if (previous != 0) memory.Resize(512L * capacity);
+                        }
+                        pending.Add(current);
+                        current = null;
+                    }
+                    current = Steps(step.Value).GetEnumerator();
+                }
+                value = null;
+                return false;
+            }
+            catch
+            {
+                // Cleanup must not replace terminal admission or cancellation.
+                DisposeAll(false);
+                throw;
+            }
+        }
+
+        void DisposeAll(bool throwFailure)
+        {
+            Exception? failure = null;
+            Dispose(current);
+            current = null;
+            for (int index = pending.Count - 1; index >= 0; index--) Dispose(pending[index]);
+            pending.Clear();
+            if (throwFailure && failure is not null)
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+
+            void Dispose(IEnumerator<Step>? iterator)
+            {
+                try { iterator?.Dispose(); }
+                catch (Exception exception) { failure ??= exception; }
+            }
+        }
+
+        IEnumerable<Step> Steps(JsonNode? state)
+        {
+            if (kind == Kind.Recurse)
+            {
+                yield return new Step(state, false, false);
+                foreach (JsonNode? expanded in update.Evaluate(state, context, environment))
+                {
+                    if (condition is null)
+                        yield return new Step(expanded, true, update.IsSingleValued);
+                    else
+                        foreach (JsonNode? probe in condition.Evaluate(expanded, context, environment))
+                            if (Truthy(probe))
+                                yield return new Step(expanded, true, update.IsSingleValued && condition.IsSingleValued);
+                }
+                yield break;
+            }
+            if (condition is null) throw new InvalidOperationException("A loop condition is required.");
+            foreach (JsonNode? probe in condition.Evaluate(state, context, environment))
+            {
+                bool truthy = Truthy(probe);
+                if (kind == Kind.Until && truthy)
+                    yield return new Step(state, false, false);
+                else if (kind == Kind.While && !truthy)
+                    continue;
+                else
+                {
+                    if (kind == Kind.While) yield return new Step(state, false, false);
+                    foreach (JsonNode? updated in update.Evaluate(state, context, environment))
+                        yield return new Step(updated, true, condition.IsSingleValued && update.IsSingleValued);
+                }
+            }
+        }
     }
 }
 
@@ -510,7 +557,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
 }
 
 // `paths` and `paths(filter)`: non-empty descent paths, optionally keeping
-// only nodes that satisfy the filter (first-truthy, mirroring select).
+// only nodes for each truthy filter output, mirroring select.
 internal sealed class PathsFilter(JqFilter? Condition) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)

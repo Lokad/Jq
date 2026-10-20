@@ -46,6 +46,10 @@ internal abstract class JqFilter
     // even when a rebuilt container coincides with the input value.
     internal virtual bool PreservesPathIdentity => true;
 
+    // Proven cardinality lets iterative traversals discard exhausted tail frames
+    // without probing ahead into deferred errors or side effects.
+    internal virtual bool IsSingleValued => false;
+
     protected virtual IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
         foreach (JsonNode? value in Evaluate(pair.Value, context, environment))
@@ -69,6 +73,7 @@ internal abstract class JqFilter
 // a second iterator just to return one value. JSON null is still one result.
 internal abstract class SingleValueFilter : JqFilter
 {
+    internal sealed override bool IsSingleValued => true;
     public sealed override IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         context.Budget.EnterRecursion();
@@ -814,6 +819,7 @@ internal sealed class TailSelfCallFilter(JqFunctionDefinition Definition, IReadO
 
 internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
 {
+    internal override bool IsSingleValued => left.IsSingleValued && right.IsSingleValued;
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         foreach (var value in left.Evaluate(input, context, environment))
@@ -1488,6 +1494,7 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
 
 internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : JqFilter
 {
+    internal override bool IsSingleValued => left.IsSingleValued && right.IsSingleValued;
     // Arithmetic builds fresh values and breaks path identity; boolean
     // connectives and comparisons agree with the reference through boolean
     // singletons on both sides, so they keep the default rule.
@@ -1684,6 +1691,7 @@ internal sealed class AlternativeFilter(JqFilter left, JqFilter right) : JqFilte
 }
 internal sealed class UnaryFilter(string op, JqFilter inner) : JqFilter
 {
+    internal override bool IsSingleValued => inner.IsSingleValued;
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         foreach (var value in inner.Evaluate(input, context, environment))

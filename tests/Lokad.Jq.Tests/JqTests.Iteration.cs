@@ -334,7 +334,7 @@ public sealed partial class JqTests
         var duplicated = new MockFileSystem();
         var duplicate = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "[limit(4; 0 | while((true, true); . + 1))]")));
         Assert.Equal(0, await duplicate.ExecuteAsync(duplicated, CancellationToken.None));
-        Assert.Equal("[\n  0,\n  0,\n  1,\n  1\n]\n", duplicated.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\n  0,\n  1,\n  2,\n  3\n]\n", duplicated.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(duplicated.GetOutput(JqFileDescriptor.StdErr));
 
         var recursed = new MockFileSystem();
