@@ -15,6 +15,13 @@ public sealed partial class JqTests
     [InlineData(".left + .right | .keep", "{\"left\":{\"drop\":[1,2],\"keep\":1},\"right\":{\"drop\":0}}", "1\n")]
     [InlineData(".left * .right | .child | keys_unsorted", "{\"left\":{\"child\":{\"a\":1}},\"right\":{\"child\":{\"b\":2}}}", "[\"a\",\"b\"]\n")]
     [InlineData("[range(0;3;1)]", "null", "[0,1,2]\n")]
+    [InlineData("arrays | values | abs", "[1,2]", "[1,2]\n")]
+    [InlineData("add", "[[1],[2],[3]]", "[1,2,3]\n")]
+    [InlineData("walk(.)", "{\"a\":[1,2]}", "{\"a\":[1,2]}\n")]
+    [InlineData("with_entries(.value += 1)", "{\"a\":1,\"b\":2}", "{\"a\":2,\"b\":3}\n")]
+    [InlineData("limit(3; while(.<3; .+1))", "0", "0\n1\n2\n")]
+    [InlineData("until(. == 3; .+1)", "0", "3\n")]
+    [InlineData("limit(3; recurse(.+1))", "0", "0\n1\n2\n")]
     public async Task Jq_CollectionOperationsKeepLongRecordStreamsBoundedAndStopOnClosure(string filter, string input, string expected)
     {
         const int records = 2500;

@@ -235,6 +235,16 @@ internal static class GovernorRunner
         Add("merge-deep-spine", 24, ["-c", ".left * .right | .. | arrays | length"],
             "{\"left\":" + mergeLeft + ",\"right\":" + mergeRight + "}", "1000\n");
         Add("range-bound-products", 13, ["-nc", "[range((0,1);(2,3);(1,2))]"], "", "[0,1,0,0,1,2,0,2,1,1,1,2,1]\n");
+        Add("borrowed-selectors", 1000, ["-c", "arrays | values | abs | length"], payload, "1000\n");
+        Add("borrowed-extrema", 1000, ["-c", "min | length"], "[" + payload + "]", "1000\n");
+        Add("add-array-fragments", records, ["-c", "add | length"],
+            "[" + string.Join(',', Enumerable.Range(0, records).Select(value => "[" + value.ToString(CultureInfo.InvariantCulture) + "]")) + "]", "1000\n");
+        Add("walk-null-cursors", records, ["-c", "walk(.) | length"], nullRows, "1000\n");
+        Add("with-entries-borrowed", 1000, ["-c", "with_entries(.) | .data | length"], "{\"data\":" + payload + "}", "1000\n");
+        Add("while-single-tail", records, ["-nc", "0 | last(limit(1000; while(true; .+1)))"], "", "999\n");
+        Add("until-user-tail", records, ["-nc", "def inc: .+1; 0 | until(. == 1000; inc)"], "", "1000\n");
+        Add("recurse-single-tail", records, ["-nc", "0 | last(limit(1000; recurse(.+1)))"], "", "999\n");
+        Add("recurse-lazy-siblings", records, ["-nc", "0 | [limit(3; recurse((.+1,.+2))) ]"], "", "[0,1,2]\n");
         string borrowed = new('x', 1000);
         string borrowedLines = string.Concat(Enumerable.Repeat(borrowed + "\n", records));
         Add("trim-borrowed", records, ["-Rr", "trim"], borrowedLines, borrowedLines);

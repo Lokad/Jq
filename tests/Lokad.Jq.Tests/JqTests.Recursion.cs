@@ -6,6 +6,32 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("to_entries | length")]
+    [InlineData("group_by(.) | length")]
+    [InlineData("_group_by_impl([0]) | length")]
+    [InlineData(". as $x | [0] | map($x) | length")]
+    [InlineData(". as $x | [0] | map_values($x) | length")]
+    [InlineData("map(.) | length")]
+    [InlineData("[.] | length")]
+    public async Task Jq_ConstructionDepthRemainsScopedToItsBoundedConsumer(string operation)
+    {
+        foreach (int depth in new[] { 63, 64 })
+        {
+            var root = new BenchmarkMemoryBudget(4 * 1024 * 1024);
+            var host = new MockFileSystem();
+            host.AddFile("/input", new string('[', depth) + "0" + new string(']', depth));
+            var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "\"ready\", (try (" + operation + ") catch \"caught\")", "/input")));
+            bool refuses = depth == 64 && operation == "[.] | length";
+            Assert.Equal(refuses ? 5 : 0, await command.ExecuteAsync(host, root, CancellationToken.None));
+            Assert.Equal(refuses ? "ready\n" : "ready\n1\n", host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(refuses ? "jq: value nesting limit exceeded\n" : "", host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Single(host.ClosedDescriptors);
+            Assert.Equal(0, host.OpenFileCount);
+            Assert.Equal(0, root.ReservedBytes);
+        }
+    }
+
+    [Theory]
     [InlineData("json", 64, 0)]
     [InlineData("json", 65, 5)]
     [InlineData("seq", 64, 0)]
