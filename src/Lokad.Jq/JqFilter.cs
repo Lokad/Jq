@@ -141,9 +141,8 @@ internal sealed class VariableFilter(string name) : SingleValueFilter
     // is pointer equality for heap values (execute.c LOADV/STOREV with
     // path_intact; jv.c jv_identical). Bindings store references (see Match),
     // so a variable holding the current path value keeps the incoming
-    // segments and tracking exactly like the reference. Anything else keeps
-    // the previous rules: immediates compare by value, other heap values
-    // travel untracked.
+    // segments and tracking. Other immediate values compare by value;
+    // other heap values remain borrowed but travel untracked.
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
         if (!environment.TryGetValue(name, out JsonNode? value))
@@ -154,14 +153,13 @@ internal sealed class VariableFilter(string name) : SingleValueFilter
             yield break;
         }
 
-        JsonNode? clone = context.Runtime.Clone(value);
-        if (clone is null || (clone is JsonValue scalar && !TryGetString(scalar, out _)))
+        if (value is null || (value is JsonValue scalar && !TryGetString(scalar, out _)))
         {
-            yield return new JqValuePath(pair.Segments, clone, pair.Tracked && PathIntact(context.Runtime, pair.Value, clone));
+            yield return new JqValuePath(pair.Segments, value, pair.Tracked && PathIntact(context.Runtime, pair.Value, value));
             yield break;
         }
 
-        yield return new JqValuePath(pair.Segments, clone, false);
+        yield return new JqValuePath(pair.Segments, value, false);
     }
 }
 
