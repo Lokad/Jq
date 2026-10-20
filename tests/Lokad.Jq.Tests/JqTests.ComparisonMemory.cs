@@ -117,6 +117,25 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public void Jq_ComparisonScratchPreflightsOverlappingReplacementBuffers()
+    {
+        var root = new BenchmarkMemoryBudget(4 * 64 * IntPtr.Size);
+        var counted = new CountingMemoryBudget(root);
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
+        using (var comparer = new JqComparer(budget))
+        {
+            Assert.Equal(0, comparer.Compare(WideObject(64), WideObject(64)));
+            Assert.Equal(2 * 64 * IntPtr.Size, root.ReservedBytes);
+            var failure = Assert.Throws<JqQuotaException>(() => comparer.Compare(WideObject(128), WideObject(128)));
+            Assert.True(failure.IsMemoryAdmission);
+            Assert.Equal(4 * 64 * IntPtr.Size, root.PeakBytes);
+            Assert.Equal((128 + 64) * IntPtr.Size, root.ReservedBytes);
+            Assert.Equal(1, counted.Counts.Refusals);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
     public void Jq_ComparisonChecksCancellationForBorrowedArraysStringsAndMinima()
     {
         using var cancellation = new CancellationTokenSource();
