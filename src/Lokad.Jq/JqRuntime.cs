@@ -1549,29 +1549,33 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (!TryGetString(input, out string? text) || text is null)
             throw new JqException("trim input must be a string");
-        budget.ReserveBytes(36L * text.Length);
-        var units = new List<(int Offset, int Length, bool Whitespace)>();
-        int cursor = 0;
-        while (cursor < text.Length)
-        {
-            if (Rune.DecodeFromUtf16(text.AsSpan(cursor), out Rune rune, out int consumed) == System.Buffers.OperationStatus.Done)
-                units.Add((cursor, consumed, IsJqWhitespace(rune.Value)));
-            else
-                units.Add((cursor, 1, false));
-            cursor += units[units.Count - 1].Length;
-        }
-        int first = 0;
-        int last = units.Count;
+        budget.CheckCancellation();
+        int start = 0;
+        int end = text.Length;
+        int scanned = 0;
         if (left)
-            while (first < last && units[first].Whitespace)
-                first++;
+        {
+            while (start < end)
+            {
+                if ((scanned++ & 4095) == 0) budget.CheckCancellation();
+                if (Rune.DecodeFromUtf16(text.AsSpan(start, end - start), out Rune rune, out int consumed)
+                    != System.Buffers.OperationStatus.Done || !IsJqWhitespace(rune.Value)) break;
+                start += consumed;
+            }
+        }
         if (right)
-            while (last > first && units[last - 1].Whitespace)
-                last--;
-        int start = first < units.Count ? units[first].Offset : text.Length;
-        int end = last > 0 ? units[last - 1].Offset + units[last - 1].Length : 0;
+        {
+            while (end > start)
+            {
+                if ((scanned++ & 4095) == 0) budget.CheckCancellation();
+                if (Rune.DecodeLastFromUtf16(text.AsSpan(start, end - start), out Rune rune, out int consumed)
+                    != System.Buffers.OperationStatus.Done || !IsJqWhitespace(rune.Value)) break;
+                end -= consumed;
+            }
+        }
+        budget.CheckCancellation();
         if (start == 0 && end == text.Length) return text;
-        budget.ReserveString(Math.Max(0, end - start));
+        budget.ReserveString(end - start);
         return text[start..end];
     }
 

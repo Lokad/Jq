@@ -48,7 +48,6 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("try indices(\"x\") catch \"caught\"")]
-    [InlineData("try trim catch \"caught\"")]
     [InlineData("try getpath([{start: 0, end: 8000}]) catch \"caught\"")]
     [InlineData("try explode catch \"caught\"")]
     [InlineData("try split(\"\") catch \"caught\"")]

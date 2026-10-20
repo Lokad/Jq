@@ -6,6 +6,51 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("", "", "", "")]
+    [InlineData(" \t\r\n", "", "", "")]
+    [InlineData("\u2000🚀\u3000", "🚀", "🚀\u3000", "\u2000🚀")]
+    [InlineData("\u200bx\u200b", "\u200bx\u200b", "\u200bx\u200b", "\u200bx\u200b")]
+    [InlineData("\u0085\u00a0x\u2028\u202f", "x", "x\u2028\u202f", "\u0085\u00a0x")]
+    public void Jq_TrimPreservesWhitespaceAndSupplementaryCharacters(string text, string both, string left, string right)
+    {
+        using var budget = new JqBudget(CancellationToken.None);
+        var runtime = new JqRuntime(budget);
+        JsonNode input = JsonValue.Create(text);
+        Assert.Equal(both, runtime.TrimSides(input, true, true));
+        Assert.Equal(left, runtime.TrimSides(input, true, false));
+        Assert.Equal(right, runtime.TrimSides(input, false, true));
+    }
+
+    [Fact]
+    public void Jq_TrimBorrowsUnchangedInputWithoutAdmission()
+    {
+        string text = new('x', 100000);
+        var root = new BenchmarkMemoryBudget(0);
+        using var cancellation = new CancellationTokenSource();
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token);
+        var runtime = new JqRuntime(budget);
+        JsonNode input = JsonValue.Create(text);
+        Assert.Same(text, runtime.TrimSides(input, true, true));
+        Assert.Equal(0, root.ReservedBytes);
+        cancellation.Cancel();
+        Assert.Throws<OperationCanceledException>(() => runtime.TrimSides(input, true, true));
+    }
+
+    [Fact]
+    public void Jq_TrimAdmitsOnlyTheResultSubstring()
+    {
+        var root = new BenchmarkMemoryBudget(2);
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        {
+            var runtime = new JqRuntime(budget);
+            Assert.Equal("x", runtime.TrimSides(JsonValue.Create(new string(' ', 100000) + "x"), true, true));
+            Assert.Equal(2, root.ReservedBytes);
+            Assert.True(Assert.Throws<JqQuotaException>(() => runtime.TrimSides(JsonValue.Create(" xy "), true, true)).IsMemoryAdmission);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData("[1,1,1,1]", "indices([1,1])", "[0,1,2]\n")]
     [InlineData("[1,1,1]", "rindex([1,1])", "1\n")]
     [InlineData("[1,1,1,1]", "getpath([[1,1]])", "[0,1,2]\n")]
