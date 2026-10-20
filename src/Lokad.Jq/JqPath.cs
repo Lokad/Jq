@@ -374,9 +374,8 @@ internal static class JqPaths
     }
 }
 
-// Persistent path updates live beside the segment model. Every container on
-// the spine is rebuilt (children shared copy-on-write); nothing is ever
-// mutated in place, so sibling outputs can never observe one another.
+// Path updates deep-copy containers on the spine before mutation. JsonNode
+// children have one parent; source values and sibling outputs remain independent.
 internal static class JqPathUpdates
 {
     private sealed record Frame(JqValueSegment Segment, JsonNode Container, int Index, int From, int To);
@@ -1173,7 +1172,7 @@ internal sealed class SetpathBuiltinFilter(JqFilter Paths, JqFilter Values) : Jq
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? value in Values.Evaluate(input, context, environment))
             foreach (JsonNode? paths in Paths.Evaluate(input, context, environment))
-                yield return JqPathUpdates.SetPath(input, JqPaths.ParsePathValue(paths, context), context.Runtime.Clone(value), context);
+                yield return JqPathUpdates.SetPath(input, JqPaths.ParsePathValue(paths, context), value, context);
     }
 }
 
@@ -1250,19 +1249,19 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
             {
                 JsonNode? assigned = input;
                 foreach (IReadOnlyList<JqValueSegment> segments in paths)
-                    assigned = JqPathUpdates.SetPath(assigned, segments, context.Runtime.Clone(value), context);
+                    assigned = JqPathUpdates.SetPath(assigned, segments, value, context);
                 yield return assigned;
             }
             else
             {
-                yield return ModifyLoop(paths, UpdateFor(value, context), input, context, environment);
+                yield return ModifyLoop(paths, UpdateFor(value), input, context, environment);
             }
         }
     }
 
-    private JqFilter UpdateFor(JsonNode? value, JqContext context)
+    private JqFilter UpdateFor(JsonNode? value)
     {
-        var literal = new LiteralFilter(context.Runtime.Clone(value));
+        var literal = new LiteralFilter(value);
         if (Op == "//=")
             return new AlternativeFilter(new IdentityFilter(), literal);
         string symbol = Op switch
@@ -1287,7 +1286,7 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
             using IEnumerator<JsonNode?> results = update.Evaluate(JqPathReads.GetPath(state, segments, context), context, environment).GetEnumerator();
             while (results.MoveNext())
             {
-                state = JqPathUpdates.SetPath(state, segments, context.Runtime.Clone(results.Current), context);
+                state = JqPathUpdates.SetPath(state, segments, results.Current, context);
                 ran = true;
                 break;
             }

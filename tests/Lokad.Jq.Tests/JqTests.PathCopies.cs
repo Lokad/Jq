@@ -6,6 +6,51 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("setpath([]; $value)")]
+    [InlineData(". = $value")]
+    [InlineData(". |= $value")]
+    [InlineData("fromstream($events[])")]
+    public void Jq_PathWritesCopyBorrowedReplacementsAtOneBoundary(string source)
+    {
+        var value = new JsonArray();
+        for (int index = 0; index < 1000; index++) value.Add(index);
+        var variables = new Dictionary<string, JsonNode?>
+        {
+            ["value"] = value,
+            ["events"] = new JsonArray(new JsonArray(new JsonArray(), value.DeepClone()))
+        };
+        using var lexical = new JqBudget(CancellationToken.None);
+        var root = new BenchmarkMemoryBudget(100000);
+        using (var context = new JqContext(variables, new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        {
+            JqFilter filter = new JqParser(source, JqProgramSource.Inline, context.RootEnvironment, lexical).Parse();
+            var result = Assert.IsType<JsonArray>(filter.Evaluate(null, context, context.RootEnvironment).Single());
+            Assert.Equal(1000, result.Count);
+            Assert.NotSame(value, result);
+            Assert.Equal(999, result[999]?.GetValue<int>());
+            result[0] = -1;
+            Assert.Equal(0, value[0]?.GetValue<int>());
+            Assert.InRange(root.PeakBytes, 88000, 100000);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData("[1,2] | [setpath([0]; (3,4))]", "[[3,2],[4,2]]\n")]
+    [InlineData("[[1],[2]] | .[] += [3]", "[[1,3],[2,3]]\n")]
+    [InlineData("[1,2] | .[] |= (.+1, error(\"unused\"))", "[2,3]\n")]
+    [InlineData("{a:1,b:2} | .a |= empty", "{\"b\":2}\n")]
+    [InlineData("null | fromstream(([[\"a\"],1], [[\"a\"]]))", "{\"a\":1}\n")]
+    public async Task Jq_PathWriteCopyRemovalPreservesGeneratorsAndEmptyUpdates(string source, string expected)
+    {
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
     [InlineData("[1,2]")]
     [InlineData("{\"b\":1}")]
     [InlineData("\"hi\"")]
