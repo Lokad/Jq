@@ -379,22 +379,19 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
             yield return value;
     }
 
-    // Heap-allocated frame for iterative bottom-up traversal. Walk depth is value
-    // depth, which setpath-built trees push far past the ingress depth cap, so
-    // nested enumerator frames are not an option.
-    private sealed class WalkFrame(JsonNode? node, string? key, int index)
+    // Iterative frames retain child results for bottom-up rebuilding.
+    private sealed class WalkFrame(JsonNode? node, string? key)
     {
         public JsonNode? Node = node;
         public string? Key = key;
-        public int Index = index;
         public List<WalkChild> Children = new();
         public int NextChild;
         public List<Walklevel> Parts = new();
     }
 
-    private sealed record WalkChild(string? Key, int Index, JsonNode? Node);
+    private sealed record WalkChild(string? Key, JsonNode? Node);
 
-    private sealed record Walklevel(string? Key, int Index, List<JsonNode?> Outputs);
+    private sealed record Walklevel(string? Key, List<JsonNode?> Outputs);
 
     private static void FillWalkChildren(WalkFrame frame, JqBudget budget)
     {
@@ -402,14 +399,14 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
         {
             budget.ReserveBytes(144L * array.Count);
             for (int index = 0; index < array.Count; index++)
-                frame.Children.Add(new WalkChild(null, index, array[index]));
+                frame.Children.Add(new WalkChild(null, array[index]));
             return;
         }
         if (frame.Node is JsonObject obj)
         {
             budget.ReserveBytes(144L * obj.Count);
             foreach (var property in obj)
-                frame.Children.Add(new WalkChild(property.Key, -1, property.Value));
+                frame.Children.Add(new WalkChild(property.Key, property.Value));
         }
     }
 
@@ -477,7 +474,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         var stack = new Stack<WalkFrame>();
-        var root = new WalkFrame(node, null, -1);
+        var root = new WalkFrame(node, null);
         FillWalkChildren(root, context.Budget);
         stack.Push(root);
         while (stack.Count > 0)
@@ -488,7 +485,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
             {
                 WalkChild child = frame.Children[frame.NextChild];
                 frame.NextChild++;
-                WalkFrame childFrame = new WalkFrame(child.Node, child.Key, child.Index);
+                WalkFrame childFrame = new WalkFrame(child.Node, child.Key);
                 FillWalkChildren(childFrame, context.Budget);
                 stack.Push(childFrame);
                 continue;
@@ -500,13 +497,13 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
             if (stack.Peek().Node is JsonArray)
             {
                 List<JsonNode?> outputs = CollectWalkOutputs(rebuilt, context, environment);
-                stack.Peek().Parts.Add(new Walklevel(frame.Key, frame.Index, outputs));
+                stack.Peek().Parts.Add(new Walklevel(frame.Key, outputs));
             }
             else
             {
                 JsonNode? first = FirstWalkOutput(rebuilt, context, environment, out bool hasOutput);
                 if (hasOutput)
-                    stack.Peek().Parts.Add(new Walklevel(frame.Key, frame.Index, new List<JsonNode?> { first }));
+                    stack.Peek().Parts.Add(new Walklevel(frame.Key, new List<JsonNode?> { first }));
             }
         }
         throw new InvalidOperationException("Walk left no rebuilt node.");

@@ -55,7 +55,7 @@ internal static class JqHostExtensions
                 var read = await GuardedReadAsync(host, descriptor, buffer, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (read.IsError)
-                    return new JqReadResult.Failed(read);
+                    return new JqReadResult.Failed();
                 int required = JqBudget.BufferCapacity(output.Length + read.BytesRead, 0);
                 if (required > output.Capacity)
                 {

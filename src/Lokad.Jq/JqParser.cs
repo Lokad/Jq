@@ -122,7 +122,7 @@ internal sealed class JqParser(
 
     private JqModuleImport ParseImportDirective(bool isInclude)
     {
-        var head = Next();
+        Next();
         if (Peek().Kind != TokenKind.String)
             throw Error("Import path must be constant", Peek().Span);
         var pathToken = Next();
@@ -148,7 +148,7 @@ internal sealed class JqParser(
         }
         JsonObject? metadata = null;
         if (Match(";"))
-            return new JqModuleImport(relPath, alias, isData, metadata, head.Span, pathToken.Span);
+            return new JqModuleImport(relPath, alias, isData, metadata);
         var metaSpan = Peek().Span;
         JqFilter metaFilter = ParseQuery();
         Expect(";");
@@ -157,7 +157,7 @@ internal sealed class JqParser(
         if (metaValue is not JsonObject metaObj)
             throw Error("Module metadata must be an object", metaSpan);
         metadata = metaObj;
-        return new JqModuleImport(relPath, alias, isData, metadata, head.Span, pathToken.Span);
+        return new JqModuleImport(relPath, alias, isData, metadata);
     }
 
     private bool TryGetConstant(JqFilter filter, out JsonNode? value)

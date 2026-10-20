@@ -14,7 +14,7 @@ internal abstract record JqReadResult
         public void Dispose() => Memory.Dispose();
     }
 
-    /// <summary>The original descriptor failure; partial input is not published.</summary>
-    internal sealed record Failed(JqByteReadResult Failure) : JqReadResult;
+    /// <summary>Read failure; partial input is not published.</summary>
+    internal sealed record Failed : JqReadResult;
 
 }

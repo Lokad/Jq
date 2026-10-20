@@ -408,7 +408,7 @@ internal sealed class JqModuleLoader(
         string? validation = JqModulePathValidation.Validate(relPath);
         if (validation is not null)
             throw new JqException(validation);
-        var probe = new JqModuleImport(relPath, null, false, null, default, default);
+        var probe = new JqModuleImport(relPath, null, false, null);
         var found = await FindModuleFileAsync(probe, workingDirectory, ".jq", cancellationToken).ConfigureAwait(false);
         if (found is null)
             throw new JqException("module not found: " + relPath);

@@ -56,7 +56,7 @@ internal static class Lexer
                 if ((position & 4095) == 0) budget.CheckCancellation();
                 if (source[position] == '\n') { line++; lineStart = position + 1; }
             }
-            return new JqSourceSpan(offset, line, offset - lineStart + 1);
+            return new JqSourceSpan(line, offset - lineStart + 1);
         }
         void AddToken(Token token)
         {

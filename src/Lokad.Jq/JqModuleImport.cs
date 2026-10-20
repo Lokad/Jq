@@ -10,9 +10,7 @@ internal sealed record JqModuleImport(
     string RelPath,
     string? Alias,
     bool IsData,
-    JsonObject? Metadata,
-    JqSourceSpan Span,
-    JqSourceSpan PathSpan)
+    JsonObject? Metadata)
 {
     internal bool IsInclude => Alias is null && !IsData;
 
