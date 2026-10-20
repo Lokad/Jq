@@ -7,8 +7,9 @@ are 95 implemented rows, eight intentionally different and one partial (regex).
 The runtime uses UTF-8 I/O, Unicode-scalar string operations and `JsonNode` values
 with C# null representing JSON null. Objects preserve insertion order and resolve
 duplicate keys last-wins. Bindings and value parameters share references; updates
-rebuild containers while preserving the tested path-identity rules. All I/O,
-modules, environment, clock and timezone inputs come from the embedding host.
+rebuild containers while preserving the tested path-identity rules. `getpath`
+preserves root/child aliases; writes keep source values and results independent.
+All I/O, modules, environment, clock and timezone inputs come from the embedding host.
 String search indices count Unicode scalars. String and array searches report
 overlapping matches.
 
@@ -32,9 +33,10 @@ overlapping matches.
   Automatic `~/.jq`, home expansion and `$ORIGIN` lookup are excluded. Main-file
   `$__loc__` reports the file path; qualified calls use hierarchical scopes.
   `modulemeta` synchronously waits for host reads during evaluation.
-- **Other edges:** NaN `range` bounds yield no values; local-time conversion is
-  constrained by .NET's date range. Focused regression tests record accepted
-  coercions, ordering, empty-stream behavior and error shapes.
+- **Other edges:** NaN `range` bounds yield no values. Range validates numeric
+  arguments before iteration; a nonnumeric step can error where jq yields nothing.
+  Local-time conversion is constrained by .NET's date range. Focused regression
+  tests record accepted coercions, ordering, empty-stream behavior and error shapes.
 
 Resource safeguards are separate from jq language errors: shared memory refusal
 and structural/regex exhaustion terminate with status 5 outside `try`/`?`.

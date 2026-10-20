@@ -65,7 +65,10 @@ Coarse owners track executions, records, buffers, results and caches. Completed
 temporary work reconciles demand at proven lifetime boundaries; shared values and
 escaping errors retain their charge. Other construction within one record can
 remain conservatively charged, so a long loop may refuse despite a bounded live
-set. Identity, variable and child reads borrow existing values.
+set. Identity, variable, child and ordinary `getpath` reads borrow existing values.
+Path writes copy replacements at the write boundary; merges copy selected branches.
+Transpose columns/padding and JOIN pairs admit their container storage before
+construction, including null cells and missing lookups.
 String search, trimming and scalar slicing scan borrowed text without full-input
 indexes. CSV admits expanded fields before construction. JSON escape casing
 changes only inside owned buffers after writer release; URI/base64 scratch is

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Admit transpose columns/padding and JOIN pairs before construction. Preserve
+  terminal refusal, pending output borrows, cleanup and bounded record streams.
+  Group all JOIN lookups per row, preserving rows whose key stream is empty.
+- Preserve borrowed `getpath` root/child aliases. Copy path replacements and JOIN
+  lookups once, merge only selected object branches, and generate ranges without
+  combination copies or singleton-list adapters. Keep ordering, independent
+  results, cancellation and construction depth checks.
 - Correct overlapping array searches in `indices`, `rindex` and array-key
   `getpath`. Scan borrowed strings without rune tables; share scalar slicing
   across value/path reads, trim at the edges and poll cancellation during scans.
