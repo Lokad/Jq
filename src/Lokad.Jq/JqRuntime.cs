@@ -31,13 +31,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
         JqJsonBuffer buffer = budget.RentSerializationBuffer();
         try
         {
-            ReadOnlyMemory<byte> value;
             using (var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs)))
             {
-                try { value = WriteJson(clean, ascii, buffer, writer); }
+                try { WriteJson(clean, ascii, writer); }
                 finally { writer.Reset(); }
             }
-            return new JqMemoryValue<ReadOnlyMemory<byte>>(value, budget.OwnSerializationBuffer(buffer));
+            buffer.LowercaseUnicodeEscapes();
+            return new JqMemoryValue<ReadOnlyMemory<byte>>(buffer.WrittenMemory, budget.OwnSerializationBuffer(buffer));
         }
         catch
         {
@@ -71,56 +71,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
             NewLine = "\n"
         };
 
-    private ReadOnlyMemory<byte> WriteJson(JsonNode? clean, bool ascii, JqJsonBuffer buffer, Utf8JsonWriter writer)
+    private void WriteJson(JsonNode? clean, bool ascii, Utf8JsonWriter writer)
     {
         if (clean == null) writer.WriteNullValue();
         else clean.WriteTo(writer, ascii ? AsciiJson : CompactJson);
         writer.Flush();
-        ReadOnlyMemory<byte> rendered = buffer.WrittenMemory;
-        rendered = LowercaseUnicodeEscapes(rendered);
         budget.CheckCancellation();
-        return rendered;
-    }
-
-    // System.Text.Json emits uppercase hex in \uXXXX escapes while the
-    // reference uses lowercase. Skip complete escapes so a literal backslash
-    // followed by uXXXX keeps its case. Copy only when real escape digits need
-    // changing; ordinary ASCII output returns untouched.
-    private ReadOnlyMemory<byte> LowercaseUnicodeEscapes(ReadOnlyMemory<byte> body)
-    {
-        ReadOnlySpan<byte> span = body.Span;
-        bool dirty = false;
-        for (int index = 0; index + 1 < span.Length && !dirty; index++)
-        {
-            if (span[index] != (byte)'\\' || span[++index] != (byte)'u')
-                continue;
-            for (int digit = index + 1; digit < index + 5; digit++)
-            {
-                if (span[digit] >= (byte)'A' && span[digit] <= (byte)'F')
-                {
-                    dirty = true;
-                    break;
-                }
-            }
-            index += 4;
-        }
-        if (!dirty)
-            return body;
-        budget.ReserveBytes(span.Length);
-        var lowered = new byte[span.Length];
-        span.CopyTo(lowered);
-        for (int index = 0; index + 1 < lowered.Length; index++)
-        {
-            if (lowered[index] != (byte)'\\' || lowered[++index] != (byte)'u')
-                continue;
-            for (int digit = index + 1; digit < index + 5; digit++)
-            {
-                if (lowered[digit] >= (byte)'A' && lowered[digit] <= (byte)'F')
-                    lowered[digit] = (byte)(lowered[digit] + 32);
-            }
-            index += 4;
-        }
-        return lowered;
     }
 
     private bool ContainsNonFinite(JsonNode? node, int depth)

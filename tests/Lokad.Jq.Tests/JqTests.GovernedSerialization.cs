@@ -7,6 +7,75 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Jq_EscapedSerializationReusesOwnedStorageWithinOneRecord(bool ascii)
+    {
+        var root = new BenchmarkMemoryBudget(4096);
+        var memory = new CountingMemoryBudget(root);
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        {
+            budget.BeginRecord();
+            var runtime = new JqRuntime(budget);
+            JsonNode input = JsonValue.Create(new string('é', 100));
+            byte[] expected = Encoding.UTF8.GetBytes("\"" + (ascii ? string.Concat(Enumerable.Repeat("\\u00e9", 100)) : new string('é', 100)) + "\"");
+            for (int index = 0; index < 32; index++)
+            {
+                using (var warm = runtime.SerializeUtf8(input, ascii, null, false))
+                    Assert.Equal(expected, warm.Value.ToArray());
+                if (index < 31) Assert.Equal(0, root.ReservedBytes);
+            }
+            MemoryCallCounts warmed = memory.Counts;
+            for (int index = 0; index < 1000; index++)
+            {
+                using var result = runtime.SerializeUtf8(input, ascii, null, false);
+                Assert.Equal(expected, result.Value.ToArray());
+            }
+            Assert.Equal(warmed.Reservations, memory.Counts.Reservations);
+            Assert.Equal(warmed.Resizes, memory.Counts.Resizes);
+            Assert.InRange(root.ReservedBytes, 1, 4096);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Jq_EscapedOutputKeepsOwnedBytesUntilTheHostReturns(bool sequence, bool cancel)
+    {
+        var root = new BenchmarkMemoryBudget(128 * 1024);
+        using var cancellation = new CancellationTokenSource();
+        var inner = new MockFileSystem();
+        inner.AddFile("/input", (sequence ? "\u001e" : "") + "[\"é\",\"🚀\"]\n");
+        var host = new MemoryBorrowHost(inner);
+        string[] arguments = sequence ? ["-ac", "--seq", ".[]", "/input"] : ["-ac", ".[]", "/input"];
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
+        Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
+        ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        string prefix = sequence ? "\u001e" : "";
+        string first = prefix + "\"\\u00e9\"\n";
+        long charged = root.ReservedBytes;
+        Assert.Equal(Encoding.UTF8.GetBytes(first), pending.ToArray());
+        if (cancel) cancellation.Cancel();
+        Assert.False(execution.IsCompleted);
+        Assert.Equal(charged, root.ReservedBytes);
+        Assert.Equal(Encoding.UTF8.GetBytes(first), pending.ToArray());
+        host.Release.SetResult();
+        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
+        else
+        {
+            Assert.Equal(0, await execution);
+            Assert.Equal(first + prefix + "\"\\ud83d\\ude80\"\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        }
+        Assert.Empty(inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Single(inner.ClosedDescriptors);
+        Assert.Equal(0, inner.OpenFileCount);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData(100)]
     [InlineData(1000)]
     public void Jq_GovernedMixedSerializationReconcilesFinishedGrowthBeforeReuse(int count)

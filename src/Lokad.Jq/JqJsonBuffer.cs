@@ -1,11 +1,11 @@
 using System;
 using System.Buffers;
+using System.Runtime.InteropServices;
 
 namespace Lokad.Jq;
 
 /// <summary>
-/// Bounds writer reservations before ArrayBufferWriter grows. The byte builders used by shell
-/// descriptors do not implement the writable-memory contract required by Utf8JsonWriter.
+/// Owns UTF-8 serialization storage and admits growth before allocation.
 /// </summary>
 internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>, IDisposable
 {
@@ -16,6 +16,27 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>, IDisp
     internal ReadOnlyMemory<byte> WrittenMemory => _buffer.WrittenMemory;
     internal int Capacity => _buffer.Capacity;
     internal long AdmittedBytes => _memory.LastAdmittedBytes;
+
+    // Call only after the writer releases its spans and before lending the body.
+    // ArrayBufferWriter owns a writable array; this conversion stays inside its
+    // owner. Skip complete escapes so literal backslash-u text keeps its case.
+    internal void LowercaseUnicodeEscapes()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        budget.CheckCancellation();
+        Span<byte> body = MemoryMarshal.AsMemory(_buffer.WrittenMemory).Span;
+        int scanned = 0;
+        for (int index = 0; index + 1 < body.Length; index++)
+        {
+            if ((scanned++ & 4095) == 0) budget.CheckCancellation();
+            if (body[index] != (byte)'\\' || body[++index] != (byte)'u') continue;
+            for (int digit = index + 1; digit < index + 5; digit++)
+                if (body[digit] >= (byte)'A' && body[digit] <= (byte)'F')
+                    body[digit] = (byte)(body[digit] + 32);
+            index += 4;
+        }
+        budget.CheckCancellation();
+    }
 
     // The host may retain output memory only until its append completes. The
     // executor waits for that completion before resetting this storage.
