@@ -150,8 +150,15 @@ public sealed partial class JqTests
     [InlineData("[1,2]", "JOIN({\"1\":{a:1}}; tostring)", "[[1,{\"a\":1}],[2,null]]\n")]
     [InlineData("[1,2]", "JOIN({\"1\":10}; .[]; tostring)", "[1,10]\n[2,null]\n")]
     [InlineData("[1,2]", "JOIN({\"1\":10}; .[]; tostring; .[1])", "10\nnull\n")]
-    [InlineData("[1,2]", "JOIN(null; empty)", "[]\n")]
-    [InlineData("[1]", "JOIN(null; (\"a\",\"b\"))", "[[1,null],[1,null]]\n")]
+    [InlineData("[1,2]", "JOIN(null; empty)", "[[1],[2]]\n")]
+    [InlineData("[1]", "JOIN(null; (\"a\",\"b\"))", "[[1,null,null]]\n")]
+    [InlineData("[1,2]", "JOIN(null; .[]; empty)", "[1]\n[2]\n")]
+    [InlineData("[1,2]", "JOIN(null; .[]; empty; length)", "1\n1\n")]
+    [InlineData("[1,2]", "JOIN({a:3,b:4}; (\"a\",\"b\"))", "[[1,3,4],[2,3,4]]\n")]
+    [InlineData("[1,2]", "JOIN({a:3,b:4}; .[]; (\"a\",\"b\"))", "[1,3,4]\n[2,3,4]\n")]
+    [InlineData("[1,2]", "JOIN({a:3,b:4}; .[]; (\"a\",\"b\"); add)", "8\n9\n")]
+    [InlineData("null", "try first(JOIN(null; null; (\"a\",error(\"late\")))) catch .", "\"late\"\n")]
+    [InlineData("null", "try first(JOIN(null; null; (\"a\",error(\"late\")); .)) catch .", "\"late\"\n")]
     public async Task Jq_JoinPreservesCollectionAndStreamingOutputs(string input, string filter, string expected)
     {
         var root = new BenchmarkMemoryBudget(64 * 1024);
@@ -161,6 +168,20 @@ public sealed partial class JqTests
         Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_JoinCompletesEachRowsKeysBeforeEmittingItsPair()
+    {
+        var root = new BenchmarkMemoryBudget(64 * 1024);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-cn",
+            "[JOIN(null; (1,2); ((\"a\",\"b\") | debug)) | debug]")));
+        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal("[[1,null,null],[2,null,null]]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\"DEBUG:\",\"a\"]\n[\"DEBUG:\",\"b\"]\n[\"DEBUG:\",[1,null,null]]\n"
+            + "[\"DEBUG:\",\"a\"]\n[\"DEBUG:\",\"b\"]\n[\"DEBUG:\",[2,null,null]]\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
     }
 

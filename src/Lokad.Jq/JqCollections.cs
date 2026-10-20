@@ -784,13 +784,8 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
                 context.Budget.CheckCancellation();
                 foreach (JsonNode? row in MapFilter.Iterate(input, context, environment))
                 {
-                    foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
-                    {
-                        JsonNode? lookup = LookupIndex(idx, key);
-                        context.Budget.ReserveBytes(24);
-                        JsonArray pair = CreatePair(row, lookup, 1);
-                        collected.Add(pair);
-                    }
+                    context.Budget.ReserveBytes(24);
+                    collected.Add(CreatePair(idx, row, 1));
                 }
                 yield return collected;
             }
@@ -798,32 +793,34 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
             {
                 foreach (JsonNode? row in Stream.Evaluate(input, context, environment))
                 {
-                    foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
+                    JsonArray pair = CreatePair(idx, row, 0);
+                    if (JoinExpr is null)
                     {
-                        JsonNode? lookup = LookupIndex(idx, key);
-                        JsonArray pair = CreatePair(row, lookup, 0);
-                        if (JoinExpr is null)
-                        {
-                            yield return pair;
-                        }
-                        else
-                        {
-                            foreach (JsonNode? joined in JoinExpr.Evaluate(pair, context, environment))
-                                yield return joined;
-                        }
+                        yield return pair;
+                    }
+                    else
+                    {
+                        foreach (JsonNode? joined in JoinExpr.Evaluate(pair, context, environment))
+                            yield return joined;
                     }
                 }
             }
         }
 
-        JsonArray CreatePair(JsonNode? row, JsonNode? lookup, int depth)
+        JsonArray CreatePair(JsonNode? idx, JsonNode? row, int depth)
         {
-            context.Budget.ReserveBytes(112 + (row is JsonValue ? 64 : 0) + (lookup is JsonValue ? 64 : 0));
-            return new JsonArray
+            context.Budget.ReserveBytes(88 + (row is JsonValue ? 64 : 0));
+            var pair = new JsonArray
             {
-                context.Budget.CopyValue(row, depth + 1, false),
-                context.Budget.CopyValue(lookup, depth + 1, false)
+                context.Budget.CopyValue(row, depth + 1, false)
             };
+            foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
+            {
+                JsonNode? lookup = LookupIndex(idx, key);
+                context.Budget.ReserveArrayItem(lookup);
+                pair.Add(context.Budget.CopyValue(lookup, depth + 1, false));
+            }
+            return pair;
         }
     }
 
