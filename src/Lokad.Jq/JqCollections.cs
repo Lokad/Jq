@@ -87,14 +87,15 @@ internal sealed class WithEntriesFilter(JqFilter Body) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        var mapped = new JsonArray();
+        context.Budget.ReserveBytes(64);
+        var mapped = new List<JsonNode?>();
         foreach (JsonNode? entry in context.Runtime.ToEntries(input))
             foreach (JsonNode? value in Body.Evaluate(entry, context, environment))
             {
-                context.Budget.ReserveArrayItem(value);
-                mapped.Add(context.Runtime.Clone(value));
+                context.Budget.ReserveBytes(32);
+                mapped.Add(value);
             }
-        yield return context.Runtime.FromEntries(mapped);
+        yield return context.Runtime.FromEntryValues(mapped);
     }
 }
 

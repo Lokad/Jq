@@ -1170,8 +1170,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (input is not JsonArray arr)
             throw new JqRuntimeException($"cannot iterate over {TypeName(input)}");
+        return FromEntryValues(arr);
+    }
+
+    internal JsonObject FromEntryValues(IEnumerable<JsonNode?> entries)
+    {
         var result = new JsonObject();
-        foreach (JsonNode? element in arr)
+        foreach (JsonNode? element in entries)
         {
             if (element is not JsonObject entry)
                 throw new JqRuntimeException($"cannot index {TypeName(element)} with string \"key\"");
