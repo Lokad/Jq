@@ -9,7 +9,8 @@ namespace Lokad.Jq;
 /// IsMemoryAdmission set. Cancellation must propagate as OperationCanceledException.
 /// The host owns this engine; each successful compilation transfers a handle to Jq.
 /// Jq owns the supplied pattern text through the handle's lifetime. Its cache-key
-/// storage is already charged; implementations admit their own compiled storage.
+/// storage is already charged. Providers own syntax validation, resource bounds,
+/// and admission for compilation, workspace and capture results.
 /// </remarks>
 public interface IJqRegexEngine
 {
@@ -19,26 +20,23 @@ public interface IJqRegexEngine
 }
 
 /// <summary>A compiled handle owned by an execution until its last subject/result borrower finishes.</summary>
-/// <remarks>Dispose must be idempotent and non-throwing. Input and capture spans are borrowed only during calls.</remarks>
+/// <remarks>Dispose must be idempotent and non-throwing. Do not retain input spans after a call.</remarks>
 public interface IJqCompiledRegex : IDisposable
 {
-    /// <summary>An upper bound on numbered capture slots, including the whole match.</summary>
-    int CaptureSlotCapacity { get; }
-
     /// <summary>Names by capture number, stable until disposal.</summary>
     IReadOnlyDictionary<int, string> GroupNames { get; }
 
     /// <summary>Tests the complete UTF-8 subject without materializing captures.</summary>
     bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken);
 
-    /// <summary>Searches from an absolute byte offset and fills numbered captures; returns zero for no match.</summary>
+    /// <summary>Searches from an absolute byte offset and transfers an owned capture result.</summary>
     /// <remarks>
     /// Retain complete-input anchor/lookbehind context. Offsets are absolute in the original
-    /// UTF-8/UTF-16 subject; unmatched slots have Success=false. The destination has at least
-    /// CaptureSlotCapacity slots. Return the actual slot count, including slot zero.
+    /// UTF-8/UTF-16 subject; unmatched slots have Success=false. Include slot zero on success.
+    /// The provider owns capture storage and its admission until the result is disposed.
     /// </remarks>
-    int Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
-        Span<JqRegexCapture> captures, CancellationToken cancellationToken);
+    JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>Engine-neutral compilation flags used by jq modifiers.</summary>

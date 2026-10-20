@@ -7,7 +7,7 @@ package. PCRE2-specific types stay behind the adapter.
 
 The adapter receives the active cancellation token and borrowed shared memory
 budget for compilation. Compiled handles receive the token on boolean and detailed
-searches and retain their budget association. The host owns the engine; Jq owns
+searches. The host owns the engine; Jq owns
 compiled handles until all subject/result borrowers finish. Implementations must
 cooperate inside their own operations, admit substantial internal storage before
 allocation, and surface refusal as terminal `JqRegexResourceException`.
@@ -57,18 +57,19 @@ their result streams.
 The provider owns regex resource bounds. The default adapter uses Utf8Regex's
 execution settings and default match timeout.
 
-Shared admission covers conservative pattern/workspace estimates, subject buffers
-and capture storage. Eager match/scan results, named-capture DOMs, list capacity
-and substitution builders preflight construction estimates. Regex splitting
-advances through scalar boundaries. Jq owns copied keys/cache metadata; the
-provider owns its compiled representation. Cached handles and retained buffers
-stay charged, and active borrowers delay refunds. Every refusal terminates
-the command. Reuse and structural ceilings are described in
+Providers own syntax validation and admission for compiled patterns, workspace
+and capture storage. Detailed searches return actual captures with an optional
+provider owner, disposed after consumption. Compiled handles outlive their active
+results. Jq admits its own copied cache keys, encoded subjects, match/scan JSON
+values, lists and substitution builders. Regex splitting advances through scalar
+boundaries. Retained Jq buffers stay charged; every refusal terminates the command.
+Reuse and structural ceilings are described in
 [runtime memory rules](RUNTIME.md#memory-admission).
 
 Provider resource exhaustion reports status 5 outside `try`/`?`. Syntax errors stay
 catchable; cancellation propagates as `OperationCanceledException`. Utf8Regex
-0.3.0 has no cancellation-token API: the default adapter checks before and after
-engine calls and cannot interrupt a search in progress. It may therefore delay
-cancellation arbitrarily on a pathological pattern. A cooperating adapter can
-observe cancellation during work.
+0.3.0 exposes neither shared-budget nor cancellation-token APIs. Its internal
+storage is outside shared accounting, and the default adapter checks cancellation
+before and after calls. It cannot interrupt a search in progress and may delay
+cancellation arbitrarily on a pathological pattern. A cooperating provider can
+admit its storage and observe cancellation during work.

@@ -7,6 +7,7 @@ namespace Lokad.Jq;
 /// <remarks>
 /// Checks cancellation around synchronous Utf8Regex 0.3.0 calls;
 /// an active search must finish before cancellation is observed.
+/// This provider version exposes no shared memory-budget hook.
 /// </remarks>
 public sealed class JqUtf8RegexEngine : IJqRegexEngine
 {
@@ -18,13 +19,8 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
         CancellationToken cancellationToken, [NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var memory = new JqMemoryReservation(memoryBudget);
-        bool retained = false;
         try
         {
-            // One owner covers the conservative compiled representation, metadata and
-            // pooled engine workspace. Jq separately owns subject/capture scratch.
-            memory.Resize(320 * 1024L + 64L * pattern.Length);
             var flags = Pcre2CompileOptions.Ucp;
             if ((options & JqRegexCompileOptions.Caseless) != 0) flags |= Pcre2CompileOptions.Caseless;
             if ((options & JqRegexCompileOptions.Multiline) != 0) flags |= Pcre2CompileOptions.Multiline;
@@ -39,8 +35,6 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
                 },
                 default, Utf8Pcre2Regex.DefaultMatchTimeout);
             cancellationToken.ThrowIfCancellationRequested();
-            if (compiled.NameEntryCount != 0)
-                memory.Resize(checked(memory.LastAdmittedBytes + 64L * compiled.NameEntryCount));
             var entries = new Pcre2NameEntry[compiled.NameEntryCount];
             compiled.CopyNameEntries(entries, out _);
             var names = new Dictionary<int, string>();
@@ -49,15 +43,9 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
                 cancellationToken.ThrowIfCancellationRequested();
                 names[entry.Number] = entry.Name;
             }
-            int captureSlots = (int)Math.Min(int.MaxValue, 1L + pattern.Length);
-            regex = new Compiled(compiled, names, captureSlots, memory);
+            regex = new Compiled(compiled, names);
             error = null;
-            retained = true;
             return true;
-        }
-        catch (JqQuotaException exception) when (exception.IsMemoryAdmission)
-        {
-            throw new JqRegexResourceException("memory budget exceeded", true);
         }
         catch (Pcre2CompileException exception) when (IsResourceFailure(exception.ErrorKind))
         {
@@ -75,20 +63,14 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
             error = "unsupported regex: " + exception.Message;
             return false;
         }
-        finally
-        {
-            if (!retained) memory.Dispose();
-        }
     }
 
     private static bool IsResourceFailure(Pcre2ErrorKind kind) => kind is
         Pcre2ErrorKind.Timeout or Pcre2ErrorKind.MatchLimit or Pcre2ErrorKind.DepthLimit or Pcre2ErrorKind.HeapLimit;
 
-    private sealed class Compiled(Utf8Pcre2Regex regex, IReadOnlyDictionary<int, string> names,
-        int captureSlots, JqMemoryReservation memory) : IJqCompiledRegex
+    private sealed class Compiled(Utf8Pcre2Regex regex, IReadOnlyDictionary<int, string> names) : IJqCompiledRegex
     {
         private bool _disposed;
-        public int CaptureSlotCapacity => captureSlots;
         public IReadOnlyDictionary<int, string> GroupNames => names;
 
         public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
@@ -100,15 +82,16 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
             finally { cancellationToken.ThrowIfCancellationRequested(); }
         }
 
-        public int Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
-            Span<JqRegexCapture> captures, CancellationToken cancellationToken)
+        public JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+            CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 var match = regex.MatchDetailed(input, start, ConvertOptions(options));
-                if (!match.Success) return 0;
+                if (!match.Success) return default;
+                var captures = new JqRegexCapture[match.CaptureSlotCount];
                 for (int index = 0; index < match.CaptureSlotCount; index++)
                 {
                     if ((index & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
@@ -118,7 +101,7 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
                             group.StartOffsetInUtf16, group.EndOffsetInUtf16)
                         : default;
                 }
-                return match.CaptureSlotCount;
+                return new JqRegexMatch(captures, null);
             }
             catch (Pcre2MatchException exception) { throw Failure(exception); }
             finally { cancellationToken.ThrowIfCancellationRequested(); }
@@ -135,7 +118,6 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
         {
             if (_disposed) return;
             _disposed = true;
-            memory.Dispose();
         }
     }
 }

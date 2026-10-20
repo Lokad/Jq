@@ -62,19 +62,18 @@ public sealed partial class JqTests
         private sealed class Compiled(FixedRegexEngine owner) : IJqCompiledRegex
         {
             private bool _disposed;
-            public int CaptureSlotCapacity => 1;
             public IReadOnlyDictionary<int, string> GroupNames { get; } = new Dictionary<int, string>();
             public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 return input.StartsWith("x"u8);
             }
-            public int Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
-                Span<JqRegexCapture> captures, CancellationToken cancellationToken)
+            public JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+                CancellationToken cancellationToken)
             {
-                if (start != 0 || !IsMatch(input, options, cancellationToken)) return 0;
-                captures[0] = new(true, 0, 1, 0, 1);
-                return 1;
+                if (start != 0 || !IsMatch(input, options, cancellationToken)) return default;
+                JqRegexCapture[] captures = [new(true, 0, 1, 0, 1)];
+                return new JqRegexMatch(captures, null);
             }
             public void Dispose()
             {

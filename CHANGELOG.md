@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Breaking: `IJqCompiledRegex.Match` returns a provider-owned `JqRegexMatch`
+  instead of filling caller-sized capture scratch; remove `CaptureSlotCapacity`.
+  Delegate regex validation and compiled/workspace/capture storage to the provider.
+  Keep Jq-owned cache-key, UTF-8 subject and JSON-result admission, terminal
+  provider failures, cancellation and cleanup through the last borrower.
+  Utf8Regex 0.3.0 exposes no shared-budget hook or cooperative cancellation API.
+
 - Breaking: remove `JqExecutionPolicy`. Pass a borrowed `IJqRegexEngine` directly
   to `ExecuteAsync`; the default remains `JqUtf8RegexEngine.Instance`.
 

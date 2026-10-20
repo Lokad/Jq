@@ -51,8 +51,8 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                 JsonObject captures = JqMatch.FoldNamedCaptures(context, text, match, JqMatch.GroupNameMap(regex), match.CaptureSlotCount - 1);
                 long captureDemand = storage is null ? 0 : storage.UsedBytes - captureBefore;
 
-                // Positions and capture strings have been copied. End the scratch
-                // borrow before nested replacements so they can reuse this owner.
+                // Positions and capture strings have been copied. Release the
+                // provider result before evaluating nested replacements.
                 ownedMatch.Dispose();
                 var index = 0;
                 long bodyBefore = storage?.UsedBytes ?? 0;

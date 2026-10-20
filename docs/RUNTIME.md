@@ -76,7 +76,7 @@ steps below 4 KiB and one 4 KiB block above it. Credit is acquired on demand.
 | Outer record | 4 KiB after a safe boundary; retained values stay charged. |
 | Sequence/stream cursor | Retained demand plus 256 bytes; 512 after 32 small charges. |
 | Serialization | One returned buffer within 4 KiB after 32 results. |
-| Regex | One idle subject and one detailed-result owner, each within 4 KiB. |
+| Regex subject | One returned UTF-8 buffer within 4 KiB. |
 | Diagnostics | 256 bytes after 32 nonempty messages smaller than 256 bytes. |
 
 Cold or oversized storage is refunded; overlapping borrowers keep separate owners.
@@ -102,8 +102,10 @@ contract failures and actual `OutOfMemoryException` remain distinct.
 Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`. The default is
 `JqUtf8RegexEngine.Instance`. The selected adapter receives the active token and
 owns cooperation within its engine. The default Utf8Regex 0.3.0 adapter checks
-only around synchronous calls and cannot interrupt an active search. Regex resource
-bounds belong to the provider. See [regex behavior](REGEX.md) for engine details.
+only around synchronous calls and cannot interrupt an active search. Regex syntax,
+resource bounds and internal storage admission belong to the provider. Utf8Regex
+0.3.0 exposes no shared-budget hook; its internal storage is outside accounting.
+See [regex behavior](REGEX.md) for engine details.
 
 ## Numbers
 

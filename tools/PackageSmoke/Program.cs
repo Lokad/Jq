@@ -296,6 +296,17 @@ int checks = 0;
         && host.Output(JqFileDescriptor.StdOut) == "prefix\n" && host.Output(JqFileDescriptor.StdErr) == ""
         && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
 }
+{
+    using var cancellation = new CancellationTokenSource();
+    var engine = new SmokeCooperatingRegex(cancellation) { CancelOnSearch = false };
+    var memory = new TestMemoryBudget(64 * 1024);
+    var host = new SmokeHost();
+    int status = await Command(["-nr", "\"x\" | match(\"x\") | .string"], [])
+        .ExecuteAsync(host, engine, memory, CancellationToken.None);
+    Check("public provider-owned capture result", status == 0 && engine.Disposed
+        && host.Output(JqFileDescriptor.StdOut) == "x\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 
@@ -325,6 +336,7 @@ sealed class EpochClock : TimeProvider
 sealed class SmokeCooperatingRegex(CancellationTokenSource cancellation) : IJqRegexEngine
 {
     internal bool Disposed { get; private set; }
+    internal bool CancelOnSearch { get; init; } = true;
     public bool TryCompile(string pattern, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
         CancellationToken cancellationToken,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
@@ -333,27 +345,29 @@ sealed class SmokeCooperatingRegex(CancellationTokenSource cancellation) : IJqRe
         if (memoryBudget is null) throw new InvalidOperationException("Adapter budget was not forwarded.");
         if (!memoryBudget.TryReserve(64, out var reservation))
             throw new JqRegexResourceException("adapter admission refused", true);
-        regex = new Compiled(this, reservation, cancellation);
+        regex = new Compiled(this, memoryBudget, reservation, cancellation);
         error = null;
         return true;
     }
 
-    private sealed class Compiled(SmokeCooperatingRegex owner, IMemoryReservation memory,
+    private sealed class Compiled(SmokeCooperatingRegex owner, IMemoryBudget budget, IMemoryReservation memory,
         CancellationTokenSource cancellation) : IJqCompiledRegex
     {
-        public int CaptureSlotCapacity => 1;
         public IReadOnlyDictionary<int, string> GroupNames { get; } = new Dictionary<int, string>();
         public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
         {
-            cancellation.Cancel();
+            if (owner.CancelOnSearch) cancellation.Cancel();
             cancellationToken.ThrowIfCancellationRequested();
-            return false;
+            return input.SequenceEqual("x"u8);
         }
-        public int Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
-            Span<JqRegexCapture> captures, CancellationToken cancellationToken)
+        public JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+            CancellationToken cancellationToken)
         {
-            IsMatch(input, options, cancellationToken);
-            return 0;
+            if (start != 0 || !IsMatch(input, options, cancellationToken)) return default;
+            if (!budget.TryReserve(32, out var resultMemory))
+                throw new JqRegexResourceException("adapter result admission refused", true);
+            JqRegexCapture[] captures = [new(true, 0, 1, 0, 1)];
+            return new JqRegexMatch(captures, resultMemory);
         }
         public void Dispose() { memory.Dispose(); owner.Disposed = true; }
     }

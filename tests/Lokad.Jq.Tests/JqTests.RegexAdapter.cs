@@ -123,18 +123,17 @@ public sealed partial class JqTests
             ObservedRegexEngine owner, Action<string, IMemoryBudget?, CancellationToken> observe) : IJqCompiledRegex
         {
             private bool _disposed;
-            public int CaptureSlotCapacity => inner.CaptureSlotCapacity;
             public IReadOnlyDictionary<int, string> GroupNames => inner.GroupNames;
             public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
             {
                 observe("boolean", budget, cancellationToken);
                 return inner.IsMatch(input, options, cancellationToken);
             }
-            public int Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
-                Span<JqRegexCapture> captures, CancellationToken cancellationToken)
+            public JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+                CancellationToken cancellationToken)
             {
                 observe("detailed", budget, cancellationToken);
-                return inner.Match(input, start, options, captures, cancellationToken);
+                return inner.Match(input, start, options, cancellationToken);
             }
             public void Dispose()
             {

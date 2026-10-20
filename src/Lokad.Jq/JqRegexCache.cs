@@ -12,8 +12,7 @@ internal sealed class JqRegexCache : IDisposable
     private readonly JqMemoryReservation _keys;
     private bool _disposed;
     private const int MaximumIdleBytes = 4096;
-    private OperationMemory? _idleSubject;
-    private OperationMemory? _idleMatch;
+    private SubjectMemory? _idleSubject;
     private int _borrowers;
     private readonly Dictionary<(string Pattern, JqRegexCompileOptions Options), Pattern> _patterns = new();
 
@@ -43,9 +42,7 @@ internal sealed class JqRegexCache : IDisposable
                 _budget.CancellationToken, out compiled, out string? error))
                 throw new JqException(error ?? "unsupported regex");
             _budget.CheckCancellation();
-            if (compiled.CaptureSlotCapacity < 1)
-                throw new InvalidOperationException("The regex adapter returned an invalid capture capacity.");
-            cached = new Pattern(compiled, compiled.GroupNames, compiled.CaptureSlotCapacity);
+            cached = new Pattern(compiled, compiled.GroupNames);
             _patterns.Add((ownedPattern, options), cached);
             retained = true;
             return cached;
@@ -65,7 +62,7 @@ internal sealed class JqRegexCache : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _budget.CheckCancellation();
-        OperationMemory memory = Rent(subject: true);
+        SubjectMemory memory = RentSubject();
         try
         {
             return new JqMemoryValue<ReadOnlyMemory<byte>>(memory.Encode(text), memory);
@@ -85,36 +82,25 @@ internal sealed class JqRegexCache : IDisposable
     internal MatchResult Match(Pattern pattern, ReadOnlyMemory<byte> input,
         int start, JqRegexMatchOptions options)
     {
-        // The adapter supplies a capture-slot bound. Admit destination scratch and
-        // conservative producer-result storage before detailed materialization.
         ObjectDisposedException.ThrowIf(_disposed, this);
-        long estimate = 128L + 64L * pattern.MaximumCaptureSlots;
         _budget.CheckCancellation();
-        OperationMemory memory = Rent(subject: false);
+        JqRegexMatch match = default;
+        bool retained = false;
         try
         {
-            memory.PrepareMatch(estimate, pattern.MaximumCaptureSlots);
-            int count = pattern.Regex.Match(input.Span, start, options, memory.Captures, _budget.CancellationToken);
+            match = pattern.Regex.Match(input.Span, start, options, _budget.CancellationToken);
             _budget.CheckCancellation();
-            if ((uint)count > (uint)pattern.MaximumCaptureSlots)
-                throw new InvalidOperationException("The regex adapter returned an invalid capture count.");
-            return new MatchResult(new JqRegexMatch(memory.Captures.AsSpan(0, count)), memory, memory.Generation);
+            var lifetime = new MatchLifetime(this, match.Owner);
+            _borrowers++;
+            retained = true;
+            return new MatchResult(match, lifetime);
         }
-        catch (JqRegexResourceException exception)
-        {
-            memory.Reject();
-            throw Terminal(exception);
-        }
+        catch (JqRegexResourceException exception) { throw Terminal(exception); }
         catch (NotSupportedException exception)
         {
-            memory.Reject();
             throw new JqException("unsupported regex: " + exception.Message);
         }
-        catch
-        {
-            memory.Reject();
-            throw;
-        }
+        finally { if (!retained) match.Dispose(); }
     }
 
     internal bool IsMatch(Pattern pattern, ReadOnlyMemory<byte> input, JqRegexMatchOptions options)
@@ -137,34 +123,33 @@ internal sealed class JqRegexCache : IDisposable
         _disposed = true;
         _idleSubject?.Destroy();
         _idleSubject = null;
-        _idleMatch?.Destroy();
-        _idleMatch = null;
         if (_borrowers == 0) ReleaseCompiled();
     }
 
-    private OperationMemory Rent(bool subject)
+    private SubjectMemory RentSubject()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        OperationMemory memory = (subject ? _idleSubject : _idleMatch)
-            ?? new OperationMemory(this, subject, _budget.MemoryBudget);
-        if (subject) _idleSubject = null;
-        else _idleMatch = null;
+        SubjectMemory memory = _idleSubject ?? new SubjectMemory(this, _budget.MemoryBudget);
+        _idleSubject = null;
         memory.Begin();
         _borrowers++;
         return memory;
     }
 
-    private void Return(OperationMemory memory, bool keep)
+    private void Return(SubjectMemory memory, bool keep)
     {
-        _borrowers--;
         if (!keep || _disposed || memory.Capacity > MaximumIdleBytes)
             memory.Destroy();
-        else if (memory.IsSubject && _idleSubject is null)
+        else if (_idleSubject is null)
             _idleSubject = memory;
-        else if (!memory.IsSubject && _idleMatch is null)
-            _idleMatch = memory;
         else
             memory.Destroy();
+        ReleaseBorrower();
+    }
+
+    private void ReleaseBorrower()
+    {
+        _borrowers--;
         if (_disposed && _borrowers == 0) ReleaseCompiled();
     }
 
@@ -175,23 +160,18 @@ internal sealed class JqRegexCache : IDisposable
         _keys.Dispose();
     }
 
-    // One idle subject buffer and one idle detailed-result allowance, each at
-    // most 4 KiB. Nested active operations rent separate owners. Failed work
-    // drops its owner; disposal waits for borrowers instead of refunding early.
-    internal sealed class OperationMemory(JqRegexCache cache, bool subject, IMemoryBudget? budget) : IDisposable
+    // Keep one encoded subject within 4 KiB. Nested subjects have separate
+    // owners; disposal waits for borrowers instead of refunding early.
+    private sealed class SubjectMemory(JqRegexCache cache, IMemoryBudget? budget) : IDisposable
     {
         private readonly JqMemoryReservation _memory = new(budget);
         private byte[] _buffer = [];
-        internal JqRegexCapture[] Captures { get; private set; } = [];
         private bool _leased;
-        internal bool IsSubject => subject;
         internal long Capacity => _memory.LastAdmittedBytes;
-        internal long Generation { get; private set; }
 
         internal void Begin()
         {
             _leased = true;
-            Generation++;
         }
 
         internal ReadOnlyMemory<byte> Encode(string text)
@@ -214,23 +194,9 @@ internal sealed class JqRegexCache : IDisposable
             return _buffer.AsMemory(0, written);
         }
 
-        internal void PrepareMatch(long bytes, int slots)
+        public void Dispose()
         {
-            if (slots > Captures.Length)
-            {
-                // A returned result has ended its borrow. Scratch needs no copy,
-                // so end its old storage lifetime before allocating a replacement.
-                // Keep admitted credit; refusal still fails without retry/eviction.
-                Captures = [];
-                if (bytes > _memory.LastAdmittedBytes) _memory.Resize(bytes);
-                Captures = new JqRegexCapture[slots];
-            }
-            else if (bytes > _memory.LastAdmittedBytes) _memory.Resize(bytes);
-        }
-
-        internal void Return(long generation)
-        {
-            if (!_leased || generation != Generation) return;
+            if (!_leased) return;
             _leased = false;
             cache.Return(this, true);
         }
@@ -245,33 +211,29 @@ internal sealed class JqRegexCache : IDisposable
         internal void Destroy()
         {
             _buffer = [];
-            Captures = [];
             _memory.Dispose();
         }
-
-        public void Dispose() => Return(Generation);
     }
 
-    internal sealed record Pattern(IJqCompiledRegex Regex, IReadOnlyDictionary<int, string> Names, int MaximumCaptureSlots);
+    internal sealed record Pattern(IJqCompiledRegex Regex, IReadOnlyDictionary<int, string> Names);
 
-    internal readonly ref struct MatchResult(JqRegexMatch value, OperationMemory memory, long generation)
+    private sealed class MatchLifetime(JqRegexCache cache, IDisposable? owner) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            try { owner?.Dispose(); }
+            finally { cache.ReleaseBorrower(); }
+        }
+    }
+
+    internal readonly ref struct MatchResult(JqRegexMatch value, IDisposable lifetime)
     {
         internal JqRegexMatch Value { get; } = value;
 
-        public void Dispose() => memory.Return(generation);
-    }
-}
-
-internal readonly ref struct JqRegexMatch(ReadOnlySpan<JqRegexCapture> captures)
-{
-    private ReadOnlySpan<JqRegexCapture> Captures { get; } = captures;
-    internal bool Success => Captures.Length != 0 && Captures[0].Success;
-    internal JqRegexCapture Value => Captures[0];
-    internal int CaptureSlotCount => Captures.Length;
-    internal bool TryGetGroup(int index, out JqRegexCapture capture)
-    {
-        if ((uint)index < (uint)Captures.Length) { capture = Captures[index]; return true; }
-        capture = default;
-        return false;
+        public void Dispose() => lifetime.Dispose();
     }
 }
