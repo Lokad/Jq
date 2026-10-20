@@ -5,6 +5,25 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jq_IndentedOutputUsesLfAndPreservesStringCarriageReturns(bool tabs)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput("{\"v\":\"a\\r\\nb\",\"items\":[1]}");
+        string[] arguments = tabs ? ["--tab", "."] : ["--indent", "2", "."];
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
+        string indentation = tabs ? "\t" : "  ";
+        string expected = "{\n" + indentation + "\"v\": \"a\\r\\nb\",\n"
+            + indentation + "\"items\": [\n" + indentation + indentation + "1\n"
+            + indentation + "]\n}\n";
+
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(Encoding.UTF8.GetBytes(expected), host.GetOutputBytes(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
     [InlineData(1, false)]
     [InlineData(2, false)]
     [InlineData(4, false)]

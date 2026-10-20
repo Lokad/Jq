@@ -27,8 +27,7 @@ internal sealed partial class JqRuntime
                 CreateWriterOptions(invocation.AsciiOutput, invocation.Indent, invocation.UseTabs));
             buffer.Reset();
             writer.Reset(buffer);
-            ReadOnlyMemory<byte> body = runtime.WriteJson(clean, invocation.AsciiOutput,
-                invocation.Indent, invocation.UseTabs, buffer, writer);
+            ReadOnlyMemory<byte> body = runtime.WriteJson(clean, invocation.AsciiOutput, buffer, writer);
             int prefix = invocation.Seq ? 1 : 0;
             byte? terminator = invocation.RawOutput0 ? (byte)0 : invocation.JoinOutput ? null : (byte)'\n';
             int length = JqBudget.BufferCapacity((long)body.Length + prefix + (terminator.HasValue ? 1 : 0), 0);

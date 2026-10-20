@@ -34,7 +34,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             ReadOnlyMemory<byte> value;
             using (var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs)))
             {
-                try { value = WriteJson(clean, ascii, indent, tabs, buffer, writer); }
+                try { value = WriteJson(clean, ascii, buffer, writer); }
                 finally { writer.Reset(); }
             }
             return new JqMemoryValue<ReadOnlyMemory<byte>>(value, budget.OwnSerializationBuffer(buffer));
@@ -61,19 +61,17 @@ internal sealed partial class JqRuntime(JqBudget budget)
             Indented = indent != null || tabs,
             IndentCharacter = tabs ? '\t' : ' ',
             IndentSize = tabs ? 1 : indent ?? 2,
-            MaxDepth = JqRecursion.MaximumDepth
+            MaxDepth = JqRecursion.MaximumDepth,
+            NewLine = "\n"
         };
 
-    private ReadOnlyMemory<byte> WriteJson(JsonNode? clean, bool ascii, int? indent, bool tabs,
-        JqJsonBuffer buffer, Utf8JsonWriter writer)
+    private ReadOnlyMemory<byte> WriteJson(JsonNode? clean, bool ascii, JqJsonBuffer buffer, Utf8JsonWriter writer)
     {
         if (clean == null) writer.WriteNullValue();
         else clean.WriteTo(writer, ascii ? AsciiJson : CompactJson);
         writer.Flush();
         ReadOnlyMemory<byte> rendered = buffer.WrittenMemory;
         rendered = LowercaseUnicodeEscapes(rendered);
-        if (indent != null || tabs)
-            rendered = NormalizeNewlines(rendered);
         budget.CheckCancellation();
         return rendered;
     }
@@ -117,36 +115,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
             index += 4;
         }
         return lowered;
-    }
-
-    // The JSON writer emits platform newlines for indentation; jq output is
-    // LF-only. Raw carriage returns cannot appear inside JSON string
-    // literals (controls stay escaped), so dropping `\r` before `\n` only
-    // touches structural newlines.
-    private ReadOnlyMemory<byte> NormalizeNewlines(ReadOnlyMemory<byte> body)
-    {
-        ReadOnlySpan<byte> span = body.Span;
-        int pairs = 0;
-        for (var i = 0; i + 1 < span.Length; i++)
-        {
-            if (span[i] == (byte)13 && span[i + 1] == (byte)10)
-            {
-                pairs++;
-                i++;
-            }
-        }
-        if (pairs == 0)
-            return body;
-        budget.ReserveBytes(span.Length - pairs);
-        var normalized = new byte[span.Length - pairs];
-        int written = 0;
-        for (var i = 0; i < span.Length; i++)
-        {
-            if (span[i] == (byte)13 && i + 1 < span.Length && span[i + 1] == (byte)10)
-                continue;
-            normalized[written++] = span[i];
-        }
-        return normalized;
     }
 
     private bool ContainsNonFinite(JsonNode? node, int depth)
