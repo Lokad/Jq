@@ -561,7 +561,7 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
                 empty = false;
             }
         }
-        yield return empty ? null : context.Runtime.Clone(best);
+        yield return empty ? null : best;
     }
 }
 
@@ -716,7 +716,7 @@ internal sealed class MinMaxByImplFilter(JqFilter Keys, bool TakeMax) : JqFilter
                     bestKey = keys[index];
                 }
             }
-            yield return context.Runtime.Clone(best);
+            yield return best;
         }
     }
 }

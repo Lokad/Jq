@@ -199,7 +199,7 @@ internal static class JqMath
         }
         if (TypeName(input) == "number" && Number(input) == 0.0 && double.IsNegative(Number(input)))
             return JsonValue.Create(0.0);
-        return context.Runtime.Clone(input);
+        return input;
     }
 
     internal static bool Classify(string name, JsonNode? input)

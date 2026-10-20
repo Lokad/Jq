@@ -532,8 +532,9 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode? Add(JsonNode? l, JsonNode? r)
     {
-        if (l == null) return Clone(r);
-        if (r == null) return Clone(l);
+        budget.CheckCancellation();
+        if (l == null) return r;
+        if (r == null) return l;
         if (TypeName(l) == "number" && TypeName(r) == "number")
             return JsonValue.Create(Number(l) + Number(r));
         if (TryGetString(l, out var ls) && TryGetString(r, out var rs))
@@ -1326,6 +1327,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode? MinMax(JsonNode? input, bool max)
     {
+        budget.CheckCancellation();
         if (input is not JsonArray arr)
             throw new JqException("cannot be iterated over");
         if (arr.Count == 0) return null;
@@ -1338,7 +1340,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             if (max ? order >= 0 : order < 0)
                 best = item;
         }
-        return Clone(best);
+        return best;
     }
 
     internal JsonNode Reverse(JsonNode? input)

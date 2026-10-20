@@ -1788,11 +1788,11 @@ internal sealed class IfFilter(
 internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) : JqFilter
 {
     // Freshly computed values break path identity: only pass-through
-    // selectors (upstream definitions over select), subvalue extrema, and
-    // stderr keep the default value-based rule. Everything else built here
+    // selectors, unchanged abs, subvalue extrema, and stderr keep the default
+    // identity rule. Everything else built here
     // (conversions, string operations, math, search predicates, formats,
     // dates, and the remaining rebuilt containers) travels untracked.
-    internal override bool PreservesPathIdentity => name is ("stderr" or "min" or "max" or "arrays" or "objects" or "iterables" or "booleans" or "numbers" or "strings" or "nulls" or "values" or "scalars" or "finites" or "normals");
+    internal override bool PreservesPathIdentity => name is ("abs" or "stderr" or "min" or "max" or "arrays" or "objects" or "iterables" or "booleans" or "numbers" or "strings" or "nulls" or "values" or "scalars" or "finites" or "normals");
 
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -1905,9 +1905,9 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
         }
 
         // Like the reference indices definition, only array inputs and
-        // string haystacks with string needles use the search tables; every
+        // string haystacks with string needles use substring search; every
         // other combination falls through to a plain .[$i] index read.
-        static bool UsesSearchTables(JsonNode? input, JsonNode? needle) =>
+        static bool UsesSubstringSearch(JsonNode? input, JsonNode? needle) =>
             input is JsonArray || (TryGetString(input, out _) && TryGetString(needle, out _));
 
         static JqFilter FallthroughGet(JsonNode? needle) =>
@@ -1937,7 +1937,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                         using var bytes = context.Runtime.SerializeUtf8(input, false, null, false);
                         context.EmitStderr(bytes.Value, false);
                     }
-                    yield return context.Runtime.Clone(input);
+                    yield return input;
                     break;
                 case "tonumber": yield return context.Runtime.ToJsonNumber(input); break;
                 case "toboolean": yield return JsonValue.Create(context.Runtime.ToJsonBoolean(input)); break;
@@ -1954,17 +1954,17 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "keys_unsorted": yield return context.Runtime.Keys(input, false); break;
                 case "to_entries": yield return context.Runtime.ToEntries(input); break;
                 case "from_entries": yield return context.Runtime.FromEntries(input); break;
-                case "arrays": if (TypeName(input) == "array") yield return context.Runtime.Clone(input); break;
-                case "objects": if (TypeName(input) == "object") yield return context.Runtime.Clone(input); break;
-                case "iterables": if (TypeName(input) is "array" or "object") yield return context.Runtime.Clone(input); break;
-                case "booleans": if (TypeName(input) == "boolean") yield return context.Runtime.Clone(input); break;
-                case "numbers": if (TypeName(input) == "number") yield return context.Runtime.Clone(input); break;
-                case "strings": if (TypeName(input) == "string") yield return context.Runtime.Clone(input); break;
+                case "arrays": if (TypeName(input) == "array") yield return input; break;
+                case "objects": if (TypeName(input) == "object") yield return input; break;
+                case "iterables": if (TypeName(input) is "array" or "object") yield return input; break;
+                case "booleans": if (TypeName(input) == "boolean") yield return input; break;
+                case "numbers": if (TypeName(input) == "number") yield return input; break;
+                case "strings": if (TypeName(input) == "string") yield return input; break;
                 case "nulls": if (input is null) yield return null; break;
-                case "values": if (input is not null) yield return context.Runtime.Clone(input); break;
-                case "scalars": if (TypeName(input) is not ("array" or "object")) yield return context.Runtime.Clone(input); break;
-                case "finites": if (JqMath.Classify("isfinite", input)) yield return context.Runtime.Clone(input); break;
-                case "normals": if (JqMath.Classify("isnormal", input)) yield return context.Runtime.Clone(input); break;
+                case "values": if (input is not null) yield return input; break;
+                case "scalars": if (TypeName(input) is not ("array" or "object")) yield return input; break;
+                case "finites": if (JqMath.Classify("isfinite", input)) yield return input; break;
+                case "normals": if (JqMath.Classify("isnormal", input)) yield return input; break;
                 case "_negate": if (TypeName(input) != "number") throw new JqRuntimeException(context.Runtime.UnaryTypeError(input, "cannot be negated")); yield return JsonValue.Create(-Number(input)); break;
                 case "_strindices":
                     if (!TryGetString(input, out string? strHaystack) || strHaystack is null)
@@ -1984,14 +1984,14 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "inside": yield return JsonValue.Create(context.Runtime.Contains(Arg(0), input)); break;
                 case "has": yield return JsonValue.Create(context.Runtime.Has(input, Arg(0))); break;
                 case "indices":
-                    if (UsesSearchTables(input, Arg(0)))
+                    if (UsesSubstringSearch(input, Arg(0)))
                         yield return context.Runtime.Indices(input, Arg(0));
                     else
                         foreach (JsonNode? got in FallthroughGet(Arg(0)).Evaluate(input, context, environment))
                             yield return got;
                     break;
                 case "index":
-                    if (UsesSearchTables(input, Arg(0)))
+                    if (UsesSubstringSearch(input, Arg(0)))
                         yield return context.Runtime.Index(input, Arg(0));
                     else
                         foreach (JsonNode? got in new IndexFilter(FallthroughGet(Arg(0)), new LiteralFilter(JsonValue.Create(0)), false).Evaluate(input, context, environment))

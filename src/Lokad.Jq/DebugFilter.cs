@@ -15,12 +15,12 @@ internal sealed class DebugFilter(IReadOnlyList<JqFilter> args) : JqFilter
         if (args.Count == 0)
         {
             EmitDebug(context, input);
-            yield return context.Runtime.Clone(input);
+            yield return input;
             yield break;
         }
         foreach (JsonNode? message in args[0].Evaluate(input, context, environment))
             EmitDebug(context, message);
-        yield return context.Runtime.Clone(input);
+        yield return input;
     }
 
     private static void EmitDebug(JqContext context, JsonNode? value)
