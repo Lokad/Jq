@@ -483,7 +483,8 @@ internal sealed class DefFilter(JqFunctionDefinition Definition, JqFilter Contin
 internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFilter> Args) : JqFilter
 {
     internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
-        depth < JqRecursion.MaximumDepth && Args.All(arg => arg.IsSingleValued(environment, depth + 1))
+        // Prove a directly called simple definition, without expanding its call graph.
+        depth == 0 && Args.All(arg => arg.IsSingleValued(environment, depth + 1))
         && TryResolve(environment, Name, Arity, out JqUserClosure? closure) && closure is not null
         && closure.Definition.Body.IsSingleValued(closure.Environment, depth + 1);
 
@@ -1810,6 +1811,7 @@ internal sealed class IfFilter(
 
 internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) : JqFilter
 {
+    // Other operations in this dispatcher yield at most once per argument tuple.
     internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
         depth < JqRecursion.MaximumDepth && name != "inputs"
         && args.All(arg => arg.IsSingleValued(environment, depth + 1));

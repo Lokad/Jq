@@ -57,6 +57,20 @@ public sealed partial class JqTests
         Assert.Equal(0, root.ReservedBytes);
     }
 
+    [Fact]
+    public async Task Jq_LoopProofDoesNotExpandARepeatedFunctionCallGraph()
+    {
+        string definitions = "def f0: .; " + string.Concat(Enumerable.Range(1, 24)
+            .Select(index => $"def f{index}: f{index - 1} + f{index - 1}; "));
+        var root = new BenchmarkMemoryBudget(256 * 1024);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", definitions + "0 | first(recurse(f24))")));
+        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal("0\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
     [Theory]
     [InlineData("first(recurse(empty))")]
     [InlineData("first(while(true;empty))")]
@@ -159,6 +173,47 @@ public sealed partial class JqTests
         Assert.Equal(1, host.AppendCallCount);
         Assert.Single(host.ClosedDescriptors);
         Assert.Equal(0, host.OpenFileCount);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData("recurse((.+1,.+2)) | select(.>0)", "1\n", false)]
+    [InlineData("recurse((.+1,.+2)) | select(.>0)", "1\n", true)]
+    [InlineData("while(.<3; (.+1,.+2)) | select(.>0)", "1\n", false)]
+    [InlineData("while(.<3; (.+1,.+2)) | select(.>0)", "1\n", true)]
+    [InlineData("until(.>1; (.+1,.+2))", "2\n", false)]
+    [InlineData("until(.>1; (.+1,.+2))", "2\n", true)]
+    public async Task Jq_TraversalKeepsPendingOutputAndCleanupAdmitted(string source, string expected, bool cancel)
+    {
+        var root = new BenchmarkMemoryBudget(64 * 1024);
+        using var cancellation = new CancellationTokenSource();
+        var inner = new MockFileSystem { AppendRemainsOpen = false };
+        inner.AddFile("/input", "0");
+        var host = new MemoryBorrowHost(inner) { DelayCleanup = true };
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", source, "/input")));
+        Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
+        ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        byte[] first = System.Text.Encoding.UTF8.GetBytes(expected);
+        long charged = root.ReservedBytes;
+        Assert.Equal(first, pending.ToArray());
+        if (cancel) cancellation.Cancel();
+        Assert.False(execution.IsCompleted);
+        Assert.Equal(charged, root.ReservedBytes);
+        Assert.Equal(first, pending.ToArray());
+        host.Release.SetResult();
+        await host.Closing.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(execution.IsCompleted);
+        Assert.True(root.ReservedBytes > 0);
+        host.CloseRelease.SetResult();
+        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
+        else
+        {
+            Assert.Equal(0, await execution);
+            Assert.Equal(expected, inner.GetOutput(JqFileDescriptor.StdOut));
+        }
+        Assert.Empty(inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Single(inner.ClosedDescriptors);
+        Assert.Equal(0, inner.OpenFileCount);
         Assert.Equal(0, root.ReservedBytes);
     }
 
