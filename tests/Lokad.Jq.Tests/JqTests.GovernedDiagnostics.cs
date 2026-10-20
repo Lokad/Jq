@@ -41,7 +41,7 @@ public sealed partial class JqTests
                 context.EmitStderr(message, false);
                 Assert.InRange(root.ReservedBytes, (long)i * width, (long)i * width + 255);
             }
-            var pending = context.TakePendingStderr();
+            var pending = context.PendingStderr;
             Assert.Equal(1000, pending.Count);
             foreach (ReadOnlyMemory<byte> chunk in pending) Assert.Equal(message, chunk.ToArray());
             Assert.True(root.ReservedBytes >= 1000L * width);
@@ -64,7 +64,6 @@ public sealed partial class JqTests
             for (int i = 0; i < 30; i++)
             {
                 context.EmitStderr("a");
-                context.TakePendingStderr();
                 context.ReleaseDrainedStderr();
                 Assert.Equal(900, root.ReservedBytes);
             }
@@ -76,7 +75,7 @@ public sealed partial class JqTests
             Assert.Equal(before.Resizes + 1, memory.Counts.Resizes);
             Assert.Equal(1, memory.Counts.Refusals);
             Assert.Equal(901, root.ReservedBytes);
-            var pending = context.TakePendingStderr();
+            var pending = context.PendingStderr;
             Assert.Equal("a"u8.ToArray(), Assert.Single(pending).ToArray());
             context.ReleaseDrainedStderr();
             Assert.Equal(pressure.Bytes, root.ReservedBytes);
@@ -166,7 +165,7 @@ public sealed partial class JqTests
         context.EmitStderr(ReadOnlyMemory<byte>.Empty, false);
         Assert.Equal(admitted, memory.Counts);
         Assert.Equal(2, root.ReservedBytes);
-        var chunks = context.TakePendingStderr();
+        var chunks = context.PendingStderr;
         Assert.Equal(3, chunks.Count);
         Assert.Equal("é"u8.ToArray(), chunks[0].ToArray());
         Assert.True(chunks[1].IsEmpty);
@@ -174,6 +173,8 @@ public sealed partial class JqTests
         Assert.Equal(2, root.ReservedBytes);
         context.ReleaseDrainedStderr();
         Assert.Equal(0, root.ReservedBytes);
+        Assert.Empty(chunks);
+        Assert.False(context.HasPendingStderr);
         MemoryCallCounts refunded = memory.Counts;
         context.EmitStderr("");
         context.ReleaseDrainedStderr();
@@ -182,6 +183,7 @@ public sealed partial class JqTests
         Assert.Throws<ObjectDisposedException>(() => context.EmitStderr(""));
         Assert.Throws<ObjectDisposedException>(() => context.EmitStderr(ReadOnlyMemory<byte>.Empty, false));
         Assert.Throws<ObjectDisposedException>(() => context.ReleaseDrainedStderr());
+        Assert.Throws<ObjectDisposedException>(() => context.PendingStderr);
     }
 
     [Fact]
@@ -196,7 +198,6 @@ public sealed partial class JqTests
         Assert.Throws<OperationCanceledException>(() => context.EmitStderr(""));
         Assert.Throws<OperationCanceledException>(() => context.EmitStderr(ReadOnlyMemory<byte>.Empty, false));
         Assert.Equal(1, memory.ReservedBytes);
-        context.TakePendingStderr();
         context.ReleaseDrainedStderr();
         Assert.Equal(0, memory.ReservedBytes);
     }

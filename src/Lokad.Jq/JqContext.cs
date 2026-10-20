@@ -115,17 +115,22 @@ internal sealed class JqContext(
     internal void ReleaseDrainedStderr()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        _stderr.Clear();
         long previous = _stderrMemory.LastAdmittedBytes;
         long retained = _smallStderrMessages == 32 ? Math.Min(previous, StderrCreditBytes) : 0;
         if (previous != retained) _stderrMemory.Resize(retained);
         _stderrBytes = 0;
     }
 
-    internal List<ReadOnlyMemory<byte>> TakePendingStderr()
+    // Evaluation and drains are serialized. The queue and its byte owners stay
+    // live through every pending host write; clear only when the drain ends.
+    internal IReadOnlyList<ReadOnlyMemory<byte>> PendingStderr
     {
-        var taken = new List<ReadOnlyMemory<byte>>(_stderr);
-        _stderr.Clear();
-        return taken;
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _stderr;
+        }
     }
 
     public void Dispose()

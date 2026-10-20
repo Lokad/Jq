@@ -256,9 +256,10 @@ internal static class JqExecutor
                 return null;
             try
             {
-                foreach (ReadOnlyMemory<byte> chunk in context.TakePendingStderr())
+                var chunks = context.PendingStderr;
+                for (int index = 0; index < chunks.Count; index++)
                 {
-                    JqAppendResult appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdErr, chunk, cancellationToken)).ConfigureAwait(false);
+                    JqAppendResult appended = await JqHostExtensions.GuardHostAsync(() => host.AppendWhileOpenAsync(invocation.StdErr, chunks[index], cancellationToken)).ConfigureAwait(false);
                     if (!appended.CanAcceptMore)
                         return appended.ExitCode;
                 }
