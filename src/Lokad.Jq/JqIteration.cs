@@ -293,7 +293,7 @@ internal static class JqLoop
         {
             while (Advance(out JsonNode? value)) yield return value;
         }
-        finally { DisposeAll(true); }
+        finally { DisposeAll(null); }
 
         bool Advance(out JsonNode? value)
         {
@@ -343,28 +343,33 @@ internal static class JqLoop
                 value = null;
                 return false;
             }
-            catch
+            catch (Exception exception)
             {
-                // Cleanup must not replace terminal admission or cancellation.
-                DisposeAll(false);
+                DisposeAll(exception);
                 throw;
             }
         }
 
-        void DisposeAll(bool throwFailure)
+        void DisposeAll(Exception? primary)
         {
-            Exception? failure = null;
+            Exception? failure = primary;
             Dispose(current);
             current = null;
             for (int index = pending.Count - 1; index >= 0; index--) Dispose(pending[index]);
             pending.Clear();
-            if (throwFailure && failure is not null)
+            if (failure is not null && !ReferenceEquals(failure, primary))
                 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
 
             void Dispose(IEnumerator<Step>? iterator)
             {
                 try { iterator?.Dispose(); }
-                catch (Exception exception) { failure ??= exception; }
+                catch (Exception exception)
+                {
+                    // Retain an earlier terminal failure, but never hide terminal
+                    // refusal/cancellation behind a catchable language error.
+                    if (failure is null || JqErrors.IsCatchable(failure) && !JqErrors.IsCatchable(exception))
+                        failure = exception;
+                }
             }
         }
 

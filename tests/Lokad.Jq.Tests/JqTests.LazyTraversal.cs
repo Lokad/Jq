@@ -225,6 +225,43 @@ public sealed partial class JqTests
         }
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Jq_TraversalCleanupPreservesTerminalFailures(bool primaryTerminal, bool cancellation)
+    {
+        Exception terminal = cancellation ? new OperationCanceledException()
+            : new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
+        var language = new JqException("language");
+        var body = new TraversalFailureFilter(primaryTerminal ? terminal : language, primaryTerminal ? language : terminal);
+        var root = new BenchmarkMemoryBudget(16 * 1024);
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        {
+            var filter = new RecurseFilter(body, null);
+            Exception? thrown = Record.Exception(() => filter.Evaluate(JsonValue.Create(0), context, context.RootEnvironment).ToList());
+            Assert.Same(terminal, thrown);
+            Assert.Equal(1, body.Disposals);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    private sealed class TraversalFailureFilter(Exception primary, Exception cleanup) : JqFilter
+    {
+        public int Disposals { get; private set; }
+        protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+        {
+            if (input is null) throw primary;
+            try { yield return null; }
+            finally
+            {
+                Disposals++;
+                throw cleanup;
+            }
+        }
+    }
+
     private sealed class TraversalSourceFilter(Action onPull) : JqFilter
     {
         public int Pulls { get; private set; }
