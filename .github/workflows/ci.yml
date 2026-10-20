@@ -22,8 +22,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
       - name: Restore locked dependencies
@@ -36,13 +36,13 @@ jobs:
         run: dotnet pack src/Lokad.Jq/Lokad.Jq.csproj -c Release --no-build --no-restore
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-${{ matrix.os }}
           path: artifacts/test-results/
           if-no-files-found: ignore
       - name: Upload packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: packages-${{ matrix.os }}
           path: artifacts/nuget/
