@@ -17,13 +17,13 @@ internal static class JqExecutor
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var memoryScope = memoryBudget?.CreateScope();
-        using var bindingBudget = new JqBudget(JqUtf8RegexEngine.Instance, memoryScope, cancellationToken);
+        using var budget = new JqBudget(regexEngine, memoryScope, cancellationToken);
         JqInvocation invocation;
         try
         {
             invocation = JqCommandLineParser.Parse(commandInvocation.Arguments,
                 commandInvocation.CurrentDirectory, commandInvocation.StdIn, commandInvocation.StdOut,
-                commandInvocation.StdErr, commandInvocation.Environment, commandInvocation.Clock, bindingBudget);
+                commandInvocation.StdErr, commandInvocation.Environment, commandInvocation.Clock, budget);
         }
         catch (JqQuotaException exception) when (exception.IsMemoryAdmission)
         {
@@ -36,7 +36,6 @@ internal static class JqExecutor
             return await WriteErrorAsync(host, invocation, [invocation.Error], memoryScope,
                 cancellationToken).ConfigureAwait(false) ? 2 : 5;
         }
-        using var budget = new JqBudget(regexEngine, memoryScope, cancellationToken);
         string? information = invocation.Help ? JqHelp.Text
             : invocation.Version ? "Lokad jq\n"
             : invocation.BuildConfiguration ? JqBuildConfiguration.Text + "\n" : null;
@@ -59,11 +58,9 @@ internal static class JqExecutor
         JqProgramSource programSource = invocation.FilterFile is { } programPath
             ? JqProgramSource.File(Utf8Text.Decode(programPath.Display))
             : JqProgramSource.Inline;
-        // Variable tables are snapshotted per execution. File variables and
-        // ARGS.named entries are recorded while running, so a reused command
-        // must not leak them into later executions.
-        var executionVariables = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
-        using var context = new JqContext(executionVariables, budget)
+        // Binding creates an execution-private variable table. File variables
+        // and ARGS.named updates stay isolated across reused/concurrent commands.
+        using var context = new JqContext(invocation.Variables, budget)
         {
             Clock = invocation.Clock,
             SortKeys = invocation.SortKeys,
@@ -108,10 +105,6 @@ internal static class JqExecutor
         var stage = 2;
         try
         {
-            foreach (var entry in invocation.Variables)
-            {
-                executionVariables[entry.Key] = budget.CopyValue(entry.Value, 0, false);
-            }
             var filterText = invocation.Filter ?? ".";
             if (invocation.FilterFile is { } filterFile)
             {
@@ -365,8 +358,7 @@ internal static class JqExecutor
     {
         if (invocation.FileVariables.Count == 0)
             return;
-        if (context.Variables is not Dictionary<string, JsonNode?> variables)
-            throw new InvalidOperationException("File variables need a mutable variable table.");
+        var variables = invocation.Variables;
         foreach (var (name, path, raw) in invocation.FileVariables)
         {
             if (variables.ContainsKey(name))

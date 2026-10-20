@@ -3,6 +3,61 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Fact]
+    public async Task Jq_BoundJsonAndArgsNamedFitWithoutAnotherExecutionCopy()
+    {
+        var memory = new BenchmarkMemoryBudget(256 * 1024);
+        string json = "[" + string.Join(',', Enumerable.Repeat("1", 1000)) + "]";
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
+            "--argjson", "data", json, "[($data | length), ($ARGS.named.data | length)]")));
+        var host = new MockFileSystem();
+
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("[1000,1000]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_BoundVariablesAndFileArgumentsRemainPrivateAcrossCommandReuse()
+    {
+        var memory = new BenchmarkMemoryBudget(256 * 1024);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
+            "--argjson", "data", "[1,2]", "--rawfile", "note", "/note",
+            "[($data | .[0] = 9), $data, $ARGS.named.data, $note, $ARGS.named.note]")));
+
+        for (int round = 0; round < 2; round++)
+        {
+            var hosts = new[] { new MockFileSystem(), new MockFileSystem() };
+            hosts[0].AddFile("/note", "first");
+            hosts[1].AddFile("/note", "second");
+            var delayed = hosts.Select(host => new MemoryBorrowHost(host)).ToArray();
+            Task<int>[] executions = delayed.Select(host =>
+                command.ExecuteAsync(host, memory, CancellationToken.None)).ToArray();
+            try
+            {
+                await Task.WhenAll(delayed.Select(host => host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10))));
+                Assert.All(executions, execution => Assert.False(execution.IsCompleted));
+            }
+            finally
+            {
+                foreach (var host in delayed) host.Release.TrySetResult();
+                await Task.WhenAll(executions);
+            }
+            Assert.All(executions, execution => Assert.Equal(0, execution.Result));
+            for (int index = 0; index < hosts.Length; index++)
+            {
+                string note = index == 0 ? "first" : "second";
+                Assert.Equal("[[9,2],[1,2],[1,2],\"" + note + "\",\"" + note + "\"]\n",
+                    hosts[index].GetOutput(JqFileDescriptor.StdOut));
+                Assert.Empty(hosts[index].GetOutput(JqFileDescriptor.StdErr));
+                Assert.Single(hosts[index].ClosedDescriptors);
+                Assert.Equal(0, hosts[index].OpenFileCount);
+            }
+            Assert.Equal(0, memory.ReservedBytes);
+        }
+    }
+
     [Theory]
     [InlineData("--rawfile")]
     [InlineData("--slurpfile")]

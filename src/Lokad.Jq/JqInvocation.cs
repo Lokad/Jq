@@ -28,7 +28,7 @@ internal sealed class JqInvocation
     public bool BuildConfiguration { get; init; }
     public string? Filter { get; init; }
     public JqResolvedPath? FilterFile { get; init; }
-    public IReadOnlyDictionary<string, JsonNode?> Variables { get; init; } = new Dictionary<string, JsonNode?>();
+    public Dictionary<string, JsonNode?> Variables { get; init; } = new(StringComparer.Ordinal);
     public IReadOnlyList<JqResolvedPath> InputFiles { get; init; } = [];
     public IReadOnlyList<(string Name, string Path, bool Raw)> FileVariables { get; init; } = [];
     public string? Error { get; init; }
