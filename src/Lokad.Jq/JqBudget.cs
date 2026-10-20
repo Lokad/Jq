@@ -173,8 +173,9 @@ internal sealed class JqBudget : IDisposable
         {
             ReserveBytes(64 + 96L * obj.Count);
             if (sortKeys) ReserveBytes(32L * obj.Count);
-            IEnumerable<KeyValuePair<string, JsonNode?>> entries = sortKeys
-                ? obj.OrderBy(property => property.Key, StringComparer.Ordinal) : obj;
+            using var comparer = sortKeys ? new JqComparer(this) : null;
+            IEnumerable<KeyValuePair<string, JsonNode?>> entries = comparer is null
+                ? obj : JqComparer.OrderBy(obj, static property => property.Key, (IComparer<string>)comparer);
             var copy = new JsonObject();
             foreach (var entry in entries)
             {

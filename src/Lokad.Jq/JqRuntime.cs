@@ -1096,11 +1096,15 @@ internal sealed partial class JqRuntime(JqBudget budget)
             budget.ReserveBytes(112L * obj.Count);
             var names = new List<string>();
             foreach (var property in obj)
+            {
+                budget.CheckCancellation();
                 names.Add(property.Key);
-            if (sorted)
-                names.Sort(StringComparer.Ordinal);
+            }
+            using var comparer = sorted ? new JqComparer(budget) : null;
+            IEnumerable<string> ordered = comparer is null ? names
+                : JqComparer.OrderBy(names, static name => name, (IComparer<string>)comparer);
             var keys = new JsonArray();
-            foreach (string name in names)
+            foreach (string name in ordered)
             {
                 budget.CheckCancellation();
                 keys.Add(JsonValue.Create(name));
