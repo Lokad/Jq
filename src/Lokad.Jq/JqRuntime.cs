@@ -887,7 +887,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal static bool TryGetString(JsonNode? node, out string value)
     {
         value = string.Empty;
-        if (node is JsonValue v && v.TryGetValue<string>(out var s))
+        if (node is JsonValue v && v.GetValueKind() == JsonValueKind.String && v.TryGetValue<string>(out var s))
         {
             value = s;
             return true;
@@ -1062,104 +1062,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // and before every number (like the reference kind difference for null
     // versus NaN, with null substituted elsewhere per jv_aux.c jvp_cmp) but
     // never equals anything, matching the reference.
-    internal static int Compare(JsonNode? l, JsonNode? r) => Compare(l, r, 0);
-
-    // Depth-bounded to protect recursive comparison: values deeper than the shared guard
-    // fail cleanly instead of consuming CLR frames. Every ordering path
-    // (operators, sort, unique, min/max, bsearch, group) funnels through here.
-    private static int Compare(JsonNode? l, JsonNode? r, int depth)
-    {
-        JqRecursion.CheckValueDepth(l, depth);
-        JqRecursion.CheckValueDepth(r, depth);
-        if (l is null && IsNaNNumber(r))
-            return -1;
-        if (r is null && IsNaNNumber(l))
-            return 1;
-        int leftRank = ValueRank(l);
-        int rightRank = ValueRank(r);
-        if (leftRank != rightRank)
-            return leftRank.CompareTo(rightRank);
-        if (l is JsonArray leftArray && r is JsonArray rightArray)
-        {
-            int shared = Math.Min(leftArray.Count, rightArray.Count);
-            for (var index = 0; index < shared; index++)
-            {
-                int order = Compare(leftArray[index], rightArray[index], depth + 1);
-                if (order != 0)
-                    return order;
-            }
-            return leftArray.Count.CompareTo(rightArray.Count);
-        }
-        if (l is JsonObject leftObject && r is JsonObject rightObject)
-        {
-            List<string> leftKeys = new List<string>(leftObject.Count);
-            foreach (var property in leftObject)
-                leftKeys.Add(property.Key);
-            List<string> rightKeys = new List<string>(rightObject.Count);
-            foreach (var property in rightObject)
-                rightKeys.Add(property.Key);
-            leftKeys.Sort(CompareScalars);
-            rightKeys.Sort(CompareScalars);
-            int shared = Math.Min(leftKeys.Count, rightKeys.Count);
-            for (var index = 0; index < shared; index++)
-            {
-                int order = CompareScalars(leftKeys[index], rightKeys[index]);
-                if (order != 0)
-                    return order;
-            }
-            if (leftKeys.Count != rightKeys.Count)
-                return leftKeys.Count.CompareTo(rightKeys.Count);
-            foreach (string key in leftKeys)
-            {
-                int order = Compare(leftObject[key], rightObject[key], depth + 1);
-                if (order != 0)
-                    return order;
-            }
-            return 0;
-        }
-        if (TryGetString(l, out string leftText) && TryGetString(r, out string rightText))
-            return CompareScalars(leftText, rightText);
-        if (TypeName(l) == "number" && TypeName(r) == "number")
-            return Number(l).CompareTo(Number(r));
-        return 0;
-    }
-
-    private static int ValueRank(JsonNode? node)
-    {
-        if (node is null || IsNaNNumber(node))
-            return 0;
-        if (node is JsonValue scalar && scalar.TryGetValue<bool>(out bool boolean))
-            return boolean ? 2 : 1;
-        if (TypeName(node) == "number")
-            return 3;
-        if (TryGetString(node, out _))
-            return 4;
-        if (node is JsonArray)
-            return 5;
-        return 6;
-    }
+    internal int Compare(JsonNode? left, JsonNode? right) => JqComparer.CompareValues(left, right, budget);
 
     private static bool IsNaNNumber(JsonNode? node) =>
-        node is JsonValue scalar && scalar.TryGetValue<double>(out double number) && double.IsNaN(number);
-
-    // Ordinal comparison by Unicode scalar value, matching byte order
-    // for valid UTF-8. UTF-16 unit order would misorder BMP suffix
-    // characters against supplementary characters.
-    private static int CompareScalars(string left, string right)
-    {
-        ReadOnlySpan<char> first = left.AsSpan();
-        ReadOnlySpan<char> second = right.AsSpan();
-        while (!first.IsEmpty && !second.IsEmpty)
-        {
-            System.Text.Rune.DecodeFromUtf16(first, out System.Text.Rune leftRune, out int leftLength);
-            System.Text.Rune.DecodeFromUtf16(second, out System.Text.Rune rightRune, out int rightLength);
-            if (leftRune.Value != rightRune.Value)
-                return leftRune.Value.CompareTo(rightRune.Value);
-            first = first[leftLength..];
-            second = second[rightLength..];
-        }
-        return first.IsEmpty && second.IsEmpty ? 0 : (first.IsEmpty ? -1 : 1);
-    }
+        node?.GetValueKind() == JsonValueKind.Number && double.IsNaN(Number(node));
 
     internal JsonNode? Length(JsonNode? node) => node switch
     {
@@ -1173,15 +1079,15 @@ internal sealed partial class JqRuntime(JqBudget budget)
         _ => throw new JqException($"{TypeName(node)} ({Serialize(node, false, null, false)}) has no length"),
     };
 
-    internal static string TypeName(JsonNode? node)
+    internal static string TypeName(JsonNode? node) => (node?.GetValueKind() ?? JsonValueKind.Null) switch
     {
-        if (node == null) return "null";
-        if (node is JsonObject) return "object";
-        if (node is JsonArray) return "array";
-        if (node is JsonValue v && v.TryGetValue<bool>(out _)) return "boolean";
-        if (node is JsonValue s && s.TryGetValue<string>(out _)) return "string";
-        return "number";
-    }
+        JsonValueKind.Null => "null",
+        JsonValueKind.Object => "object",
+        JsonValueKind.Array => "array",
+        JsonValueKind.True or JsonValueKind.False => "boolean",
+        JsonValueKind.String => "string",
+        _ => "number"
+    };
 
     internal JsonNode Keys(JsonNode? input, bool sorted)
     {
@@ -1405,7 +1311,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
         var result = new JsonArray();
         budget.CheckCancellation();
-        foreach (JsonNode? element in ordered.OrderBy(static element => element, Comparer<JsonNode?>.Create((left, right) => Compare(left, right))))
+        using var comparer = new JqComparer(budget);
+        foreach (JsonNode? element in JqComparer.OrderBy(ordered, static element => element, (IComparer<JsonNode?>)comparer))
         {
             budget.CheckCancellation();
             budget.ReserveArrayItem(element);
@@ -1441,9 +1348,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
             throw new JqException("cannot be iterated over");
         if (arr.Count == 0) return null;
         var best = arr[0];
-        foreach (var item in arr.Skip(1))
+        using var comparer = new JqComparer(budget);
+        for (int index = 1; index < arr.Count; index++)
         {
-            if ((max && Compare(item, best) >= 0) || (!max && Compare(item, best) < 0))
+            JsonNode? item = arr[index];
+            int order = comparer.Compare(item, best);
+            if (max ? order >= 0 : order < 0)
                 best = item;
         }
         return Clone(best);

@@ -191,7 +191,7 @@ internal static class JqMath
     private static JsonNode? Abs(JqContext context, JsonNode? input)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (Compare(input, JsonValue.Create(0)) < 0)
+        if (context.Runtime.Compare(input, JsonValue.Create(0)) < 0)
         {
             if (TypeName(input) == "number")
                 return JsonValue.Create(-Number(input));

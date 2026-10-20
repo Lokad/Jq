@@ -1565,10 +1565,10 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
                 "%" => Modulo(l, r),
                 "==" => JsonValue.Create(context.Runtime.JsonEquals(l, r)),
                 "!=" => JsonValue.Create(!context.Runtime.JsonEquals(l, r)),
-                "<" => JsonValue.Create(Compare(l, r) < 0),
-                "<=" => JsonValue.Create(Compare(l, r) <= 0),
-                ">" => JsonValue.Create(Compare(l, r) > 0),
-                ">=" => JsonValue.Create(Compare(l, r) >= 0),
+                "<" => JsonValue.Create(context.Runtime.Compare(l, r) < 0),
+                "<=" => JsonValue.Create(context.Runtime.Compare(l, r) <= 0),
+                ">" => JsonValue.Create(context.Runtime.Compare(l, r) > 0),
+                ">=" => JsonValue.Create(context.Runtime.Compare(l, r) >= 0),
                 _ => throw new JqException($"unsupported operator {op}")
             };
 

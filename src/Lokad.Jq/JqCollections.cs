@@ -392,13 +392,14 @@ internal sealed class BsearchFilter(JqFilter Target) : JqFilter
             throw new JqException($"{JqRuntime.TypeName(input)} ({context.Runtime.Serialize(input, false, null, false)}) cannot be searched from");
         foreach (JsonNode? target in Target.Evaluate(input, context, environment))
         {
+            using var comparer = new JqComparer(context.Budget);
             int low = 0;
             int high = sorted.Count;
             int found = -1;
             while (low < high)
             {
                 int middle = low + ((high - low) / 2);
-                int order = JqRuntime.Compare(target, sorted[middle]);
+                int order = comparer.Compare(target, sorted[middle]);
                 if (order == 0)
                 {
                     found = middle;
@@ -437,21 +438,6 @@ internal static class CollectionKeys
         return keyed;
     }
 
-    internal static IComparer<IReadOnlyList<JsonNode?>> KeyOrder(JqContext context) =>
-        Comparer<IReadOnlyList<JsonNode?>>.Create((left, right) => Compare(left, right, context));
-
-    internal static int Compare(IReadOnlyList<JsonNode?> left, IReadOnlyList<JsonNode?> right, JqContext context)
-    {
-        int shared = Math.Min(left.Count, right.Count);
-        for (int index = 0; index < shared; index++)
-        {
-            context.Budget.CheckCancellation();
-            int order = JqRuntime.Compare(left[index], right[index]);
-            if (order != 0) return order;
-        }
-        return left.Count.CompareTo(right.Count);
-    }
-
     internal static bool Equal(IReadOnlyList<JsonNode?> left, IReadOnlyList<JsonNode?> right, JqRuntime runtime)
     {
         if (left.Count != right.Count) return false;
@@ -460,7 +446,6 @@ internal static class CollectionKeys
         return true;
     }
 
-    internal static IComparer<JsonNode?> TotalOrder() => Comparer<JsonNode?>.Create(static (left, right) => JqRuntime.Compare(left, right));
 }
 
 // `sort_by(f)`: stable ordering by collected keys.
@@ -474,7 +459,9 @@ internal sealed class SortByFilter(JqFilter Keys) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         var result = new JsonArray();
         context.Budget.CheckCancellation();
-        foreach (var (element, _) in CollectionKeys.Keyed(input, Keys, context, environment).OrderBy(pair => pair.Keys, CollectionKeys.KeyOrder(context)))
+        using var comparer = new JqComparer(context.Budget);
+        foreach (var (element, _) in JqComparer.OrderBy(CollectionKeys.Keyed(input, Keys, context, environment),
+            static pair => pair.Keys, (IComparer<IReadOnlyList<JsonNode?>>)comparer))
         {
             context.Budget.CheckCancellation();
             context.Budget.ReserveArrayItem(element);
@@ -493,7 +480,9 @@ internal sealed class GroupByFilter(JqFilter Keys) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        var ordered = CollectionKeys.Keyed(input, Keys, context, environment).OrderBy(pair => pair.Keys, CollectionKeys.KeyOrder(context));
+        using var comparer = new JqComparer(context.Budget);
+        var ordered = JqComparer.OrderBy(CollectionKeys.Keyed(input, Keys, context, environment),
+            static pair => pair.Keys, (IComparer<IReadOnlyList<JsonNode?>>)comparer);
         var result = new JsonArray();
         context.Budget.CheckCancellation();
         JsonArray? group = null;
@@ -524,7 +513,9 @@ internal sealed class UniqueByFilter(JqFilter Keys) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        var ordered = CollectionKeys.Keyed(input, Keys, context, environment).OrderBy(pair => pair.Keys, CollectionKeys.KeyOrder(context));
+        using var comparer = new JqComparer(context.Budget);
+        var ordered = JqComparer.OrderBy(CollectionKeys.Keyed(input, Keys, context, environment),
+            static pair => pair.Keys, (IComparer<IReadOnlyList<JsonNode?>>)comparer);
         var result = new JsonArray();
         context.Budget.CheckCancellation();
         IReadOnlyList<JsonNode?> current = Array.Empty<JsonNode?>();
@@ -554,9 +545,10 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
         JsonNode? best = null;
         IReadOnlyList<JsonNode?> bestKeys = Array.Empty<JsonNode?>();
         bool empty = true;
+        using var comparer = new JqComparer(context.Budget);
         foreach (var (element, keys) in CollectionKeys.Keyed(input, Keys, context, environment))
         {
-            int order = empty ? 0 : CollectionKeys.Compare(keys, bestKeys, context);
+            int order = empty ? 0 : comparer.CompareKeys(keys, bestKeys);
             if (empty || (TakeMax ? order >= 0 : order < 0))
             {
                 best = element;
@@ -590,7 +582,8 @@ internal sealed class SortByImplFilter(JqFilter Keys) : JqFilter
             }
             var result = new JsonArray();
             context.Budget.CheckCancellation();
-            foreach (var pair in pairs.OrderBy(static item => item.Key, CollectionKeys.TotalOrder()))
+            using var comparer = new JqComparer(context.Budget);
+            foreach (var pair in JqComparer.OrderBy(pairs, static item => item.Key, (IComparer<JsonNode?>)comparer))
             {
                 context.Budget.CheckCancellation();
                 context.Budget.ReserveArrayItem(pair.Element);
@@ -621,7 +614,8 @@ internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
                 context.Budget.CheckCancellation();
                 pairs.Add((elements[index], keys[index]));
             }
-            var ordered = pairs.OrderBy(static item => item.Key, CollectionKeys.TotalOrder()).ToList();
+            using var comparer = new JqComparer(context.Budget);
+            var ordered = JqComparer.OrderBy(pairs, static item => item.Key, (IComparer<JsonNode?>)comparer);
             var result = new JsonArray();
             context.Budget.CheckCancellation();
             JsonArray? group = null;
@@ -664,7 +658,8 @@ internal sealed class UniqueByImplFilter(JqFilter Keys) : JqFilter
                 context.Budget.CheckCancellation();
                 pairs.Add((elements[index], keys[index]));
             }
-            var ordered = pairs.OrderBy(static item => item.Key, CollectionKeys.TotalOrder()).ToList();
+            using var comparer = new JqComparer(context.Budget);
+            var ordered = JqComparer.OrderBy(pairs, static item => item.Key, (IComparer<JsonNode?>)comparer);
             var result = new JsonArray();
             context.Budget.CheckCancellation();
             JsonNode? current = null;
@@ -703,12 +698,13 @@ internal sealed class MinMaxByImplFilter(JqFilter Keys, bool TakeMax) : JqFilter
                 yield return null;
                 continue;
             }
+            using var comparer = new JqComparer(context.Budget);
             JsonNode? best = elements[0];
             JsonNode? bestKey = keys[0];
             for (int index = 1; index < elements.Count; index++)
             {
                 context.Budget.CheckCancellation();
-                int order = JqRuntime.Compare(keys[index], bestKey);
+                int order = comparer.Compare(keys[index], bestKey);
                 if (TakeMax ? order >= 0 : order < 0)
                 {
                     best = elements[index];
