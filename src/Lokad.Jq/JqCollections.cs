@@ -200,24 +200,12 @@ internal sealed class TransposeFilter : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        var matrix = new List<JsonNode?>();
-        if (input is JsonObject fields)
-        {
-            foreach (var property in fields)
-                matrix.Add(property.Value);
-        }
-        else if (input is JsonArray rows)
-        {
-            foreach (JsonNode? row in rows)
-                matrix.Add(row);
-        }
-        else
-        {
-            throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
-        }
+        int height = input is JsonArray array ? array.Count : input is JsonObject fields ? fields.Count
+            : throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
         int width = 0;
-        foreach (JsonNode? row in matrix)
+        foreach (JsonNode? row in Rows())
         {
+            context.Budget.CheckCancellation();
             if (row is not JsonArray && row is not null)
                 throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(row)}");
             int length = row is JsonArray present ? present.Count : 0;
@@ -225,17 +213,30 @@ internal sealed class TransposeFilter : JqFilter
                 width = length;
             context.Budget.CheckCancellation();
         }
+        context.Budget.ReserveBytes(64 + 24L * width);
         var result = new JsonArray();
-        context.Budget.CheckCancellation();
         for (int column = 0; column < width; column++)
         {
+            context.Budget.ReserveBytes(64 + 24L * height);
             var line = new JsonArray();
-            context.Budget.CheckCancellation();
-            foreach (JsonNode? row in matrix)
-                line.Add(row is JsonArray cells && column < cells.Count ? context.Runtime.Clone(cells[column]) : null);
+            foreach (JsonNode? row in Rows())
+            {
+                context.Budget.CheckCancellation();
+                JsonNode? cell = row is JsonArray cells && column < cells.Count ? cells[column] : null;
+                if (cell is JsonValue) context.Budget.ReserveBytes(64);
+                line.Add(context.Budget.CopyValue(cell, 2, false));
+            }
             result.Add(line);
         }
         yield return result;
+
+        IEnumerable<JsonNode?> Rows()
+        {
+            if (input is JsonArray rows)
+                foreach (JsonNode? row in rows) yield return row;
+            else if (input is JsonObject properties)
+                foreach (var property in properties) yield return property.Value;
+        }
     }
 }
 
