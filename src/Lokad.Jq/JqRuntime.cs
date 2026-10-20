@@ -1071,12 +1071,45 @@ internal sealed partial class JqRuntime(JqBudget budget)
         null => JsonValue.Create(0),
         JsonArray arr => JsonValue.Create(arr.Count),
         JsonObject obj => JsonValue.Create(obj.Count),
-        JsonValue v when v.TryGetValue<string>(out var s) => JsonValue.Create(s.EnumerateRunes().Count()),
+        JsonValue v when v.TryGetValue<string>(out var s) => JsonValue.Create(CountStringScalars(s)),
         // Like the reference number branch, the length of a number is its
         // absolute value; anything else has no length.
         JsonValue v when TypeName(v) == "number" => JsonValue.Create(Math.Abs(Number(v))),
         _ => throw new JqException($"{TypeName(node)} ({Serialize(node, false, null, false)}) has no length"),
     };
+
+    private int CountStringScalars(string text)
+    {
+        budget.CheckCancellation();
+        int count = 0;
+        for (var runes = text.EnumerateRunes(); runes.MoveNext();)
+        {
+            if ((count & 4095) == 0) budget.CheckCancellation();
+            count++;
+        }
+        budget.CheckCancellation();
+        return count;
+    }
+
+    internal string SliceString(string text, double? start, double? end)
+    {
+        JqPaths.ResolveSlice(CountStringScalars(text), start, end, out int from, out int to);
+        int first = 0;
+        int last = 0;
+        int scalar = 0;
+        foreach (Rune rune in text.EnumerateRunes())
+        {
+            if ((scalar & 4095) == 0) budget.CheckCancellation();
+            if (scalar == from) first = last;
+            if (scalar++ == to) break;
+            last += rune.Utf16SequenceLength;
+        }
+        if (from == to) first = last;
+        budget.CheckCancellation();
+        if (first == 0 && last == text.Length) return text;
+        budget.ReserveString(last - first);
+        return text[first..last];
+    }
 
     internal static string TypeName(JsonNode? node) => (node?.GetValueKind() ?? JsonValueKind.Null) switch
     {

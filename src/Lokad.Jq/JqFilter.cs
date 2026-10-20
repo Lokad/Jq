@@ -1102,20 +1102,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                     }
                     else if (TryGetString(value, out var text))
                     {
-                        var runeCount = text.EnumerateRunes().Count();
-                        JqPaths.ResolveSlice(runeCount, startBound, endBound, out int from, out int to);
-                        var offset = 0;
-                        var first = 0;
-                        var index = 0;
-                        foreach (var rune in text.EnumerateRunes())
-                        {
-                            if (index == from) first = offset;
-                            if (index++ == to) break;
-                            offset += rune.Utf16SequenceLength;
-                        }
-                        if (from == runeCount) first = offset;
-                        context.Budget.ReserveString(offset - first);
-                        yield return JsonValue.Create(text[first..offset]);
+                        yield return JsonValue.Create(context.Runtime.SliceString(text, startBound, endBound));
                     }
                     else if (value == null)
                     {
@@ -1212,15 +1199,8 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                     }
                     else if (pair.Value is JsonValue scalar && scalar.TryGetValue<string>(out string? text) && text is not null)
                     {
-                        context.Budget.ReserveBytes(12L * text.Length);
-                        var runes = new List<System.Text.Rune>();
-                        foreach (var rune in text.EnumerateRunes())
-                            runes.Add(rune);
-                        JqPaths.ResolveSlice(runes.Count, lower, upper, out int from, out int to);
-                        var builder = new System.Text.StringBuilder();
-                        for (int position = from; position < to; position++)
-                            context.Budget.Append(builder, runes[position].ToString());
-                        yield return new JqValuePath(Extend(pair.Segments, segment, context.Budget), JsonValue.Create(context.Budget.Finish(builder)), true);
+                        yield return new JqValuePath(Extend(pair.Segments, segment, context.Budget),
+                            JsonValue.Create(context.Runtime.SliceString(text, lower, upper)), true);
                     }
                     else if (pair.Value == null)
                         yield return new JqValuePath(Extend(pair.Segments, segment, context.Budget), null, true);

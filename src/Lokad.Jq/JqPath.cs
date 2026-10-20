@@ -656,15 +656,7 @@ internal static class JqPathReads
                     }
                     else if (current is JsonValue scalar && scalar.TryGetValue<string>(out string? text) && text is not null)
                     {
-                        context.Budget.ReserveBytes(12L * text.Length);
-                        var runes = new List<System.Text.Rune>();
-                        foreach (var rune in text.EnumerateRunes())
-                            runes.Add(rune);
-                        JqPaths.ResolveSlice(runes.Count, slice.Start, slice.End, out int from, out int to);
-                        var builder = new System.Text.StringBuilder();
-                        for (int position = from; position < to; position++)
-                            context.Budget.Append(builder, runes[position].ToString());
-                        current = JsonValue.Create(context.Budget.Finish(builder));
+                        current = JsonValue.Create(context.Runtime.SliceString(text, slice.Start, slice.End));
                     }
                     else if (current is null)
                         current = null;
@@ -690,15 +682,7 @@ internal static class JqPathReads
                     {
                         if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? rawStart, out double? rawEnd))
                             throw new JqException("Array/string slice indices must be integers");
-                        context.Budget.ReserveBytes(12L * rawText.Length);
-                        var rawRunes = new List<System.Text.Rune>();
-                        foreach (var rune in rawText.EnumerateRunes())
-                            rawRunes.Add(rune);
-                        JqPaths.ResolveSlice(rawRunes.Count, rawStart, rawEnd, out int rawFrom, out int rawTo);
-                        var rawBuilder = new System.Text.StringBuilder();
-                        for (int position = rawFrom; position < rawTo; position++)
-                            context.Budget.Append(rawBuilder, rawRunes[position].ToString());
-                        current = JsonValue.Create(context.Budget.Finish(rawBuilder));
+                        current = JsonValue.Create(context.Runtime.SliceString(rawText, rawStart, rawEnd));
                     }
                     else if (current is null)
                         current = null;

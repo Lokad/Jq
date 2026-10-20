@@ -52,7 +52,7 @@ public sealed partial class JqTests
     [InlineData("try explode catch \"caught\"")]
     [InlineData("try split(\"\") catch \"caught\"")]
     [InlineData("try ltrimstr(\"x\") catch \"caught\"")]
-    public async Task Jq_GovernedUnicodeScratchAdmissionPrecedesLargeLists(string operation)
+    public async Task Jq_GovernedStringConstructionRefusalPreservesPrefix(string operation)
     {
         const long limit = 1024 * 1024;
         var memory = new BenchmarkMemoryBudget(limit);
