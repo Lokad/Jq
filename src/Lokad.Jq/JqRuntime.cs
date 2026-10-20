@@ -1198,8 +1198,27 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JsonNode? AddValues(IEnumerable<JsonNode?> values)
     {
         JsonNode? result = null;
+        bool ownsArray = false;
         foreach (JsonNode? value in values)
-            result = Add(result, value);
+        {
+            budget.CheckCancellation();
+            if (ownsArray && result is JsonArray accumulated && value is JsonArray incoming)
+            {
+                // This accumulator was constructed here and has never escaped.
+                foreach (JsonNode? item in incoming)
+                {
+                    budget.ReserveArrayItem(item);
+                    accumulated.Add(Clone(item));
+                }
+            }
+            else
+            {
+                bool retainsOwnedArray = ownsArray && value is null;
+                bool concatenatesArrays = result is JsonArray && value is JsonArray;
+                result = Add(result, value);
+                ownsArray = retainsOwnedArray || concatenatesArrays;
+            }
+        }
         return result;
     }
 
