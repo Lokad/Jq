@@ -55,13 +55,28 @@ if (args is ["--process-fixture", "wait", var pidFile])
     await Task.Delay(TimeSpan.FromMinutes(5));
     return;
 }
+if (args is ["--process-fixture", "capture", var pipe, var length])
+{
+    int remaining = int.Parse(length, System.Globalization.CultureInfo.InvariantCulture);
+    var stdout = Console.OpenStandardOutput();
+    var stderr = Console.OpenStandardError();
+    byte[] buffer = Enumerable.Repeat((byte)'x', 8192).ToArray();
+    while (remaining > 0)
+    {
+        int count = Math.Min(remaining, buffer.Length);
+        if (pipe is "stdout" or "both") await stdout.WriteAsync(buffer.AsMemory(0, count));
+        if (pipe is "stderr" or "both") await stderr.WriteAsync(buffer.AsMemory(0, count));
+        remaining -= count;
+    }
+    return;
+}
 if (args is ["--process-fixture", var fixture])
 {
     // Development fixture for portable subprocess lifecycle tests; never jq.
     if (fixture == "wait") await Task.Delay(TimeSpan.FromMinutes(5));
-    else if (fixture is "overflow" or "overflow-error")
+    else if (fixture == "overflow")
     {
-        var output = fixture == "overflow" ? Console.OpenStandardOutput() : Console.OpenStandardError();
+        var output = Console.OpenStandardOutput();
         byte[] buffer = new byte[8192];
         for (int i = 0; i < 6000; i++) await output.WriteAsync(buffer);
     }

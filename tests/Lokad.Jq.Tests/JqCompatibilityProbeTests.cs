@@ -178,20 +178,35 @@ public sealed class JqCompatibilityProbeTests
     }
 
     [Theory]
-    [InlineData("overflow")]
-    [InlineData("overflow-error")]
-    public async Task Probe_ReferenceCapturesKeepIndependentBounds(string fixture)
+    [InlineData("stdout", 8, true)]
+    [InlineData("stderr", 8, true)]
+    [InlineData("both", 8, true)]
+    [InlineData("stdout", 9, false)]
+    [InlineData("stderr", 9, false)]
+    public async Task Probe_ReferenceCapturesKeepIndependentBounds(string pipe, int mebibytes, bool accepted)
     {
         string executable = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(),
             "..", "..", "..", OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"));
         var result = await JqReferenceRunner.RunCommandAsync(executable,
-            [typeof(CommandBenchmarks).Assembly.Location, "--process-fixture", fixture],
+            [typeof(CommandBenchmarks).Assembly.Location, "--process-fixture", "capture", pipe,
+                (mebibytes * 1024 * 1024).ToString(System.Globalization.CultureInfo.InvariantCulture)],
             [], TimeSpan.FromSeconds(30), CancellationToken.None);
-        Assert.Equal(-1, result.ExitCode);
         Assert.False(result.TimedOut);
-        Assert.NotEmpty(result.Note);
-        Assert.Empty(result.Stdout);
-        Assert.Empty(result.Stderr);
+        if (accepted)
+        {
+            Assert.Equal(0, result.ExitCode);
+            Assert.Empty(result.Note);
+            string expected = new('x', mebibytes * 1024 * 1024);
+            Assert.Equal(pipe is "stdout" or "both" ? expected : string.Empty, result.Stdout);
+            Assert.Equal(pipe is "stderr" or "both" ? expected : string.Empty, result.Stderr);
+        }
+        else
+        {
+            Assert.Equal(-1, result.ExitCode);
+            Assert.NotEmpty(result.Note);
+            Assert.Empty(result.Stdout);
+            Assert.Empty(result.Stderr);
+        }
     }
 
     [Fact]
