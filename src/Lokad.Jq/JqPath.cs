@@ -164,6 +164,7 @@ internal static class JqPaths
         var segments = new List<JqValueSegment>();
         foreach (JsonNode? element in array)
         {
+            context.Budget.CheckCancellation();
             if (TryGetString(element, out string? key))
                 segments.Add(new KeySegment(key));
             else if (TryGetFractional(element, out double fractional))
@@ -608,13 +609,18 @@ internal static class JqPathReads
     {
         ArgumentNullException.ThrowIfNull(segments);
         ArgumentNullException.ThrowIfNull(context);
+        context.Budget.CheckCancellation();
         var normalized = new List<JqValueSegment>(segments.Count);
         foreach (JqValueSegment existing in segments)
+        {
+            context.Budget.CheckCancellation();
             normalized.Add(JqPaths.TruncateFractional(JqPaths.UpdateSegment(existing, context.Budget)));
+        }
         segments = normalized;
         JsonNode? current = root;
         foreach (JqValueSegment segment in segments)
         {
+            context.Budget.CheckCancellation();
             switch (segment)
             {
                 case KeySegment key:
@@ -1126,7 +1132,7 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? paths in Paths.Evaluate(input, context, environment))
-            yield return context.Runtime.Clone(JqPathReads.GetPath(input, JqPaths.ParsePathValue(paths, context), context));
+            yield return JqPathReads.GetPath(input, JqPaths.ParsePathValue(paths, context), context);
     }
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
