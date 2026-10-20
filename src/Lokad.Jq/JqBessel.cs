@@ -6,8 +6,8 @@ namespace Lokad.Jq;
 // against jq 1.8.2: J for every real x, Y for x > 0 with the pole at zero
 // and NaN outside the domain. Orders truncate toward zero with reflection
 // for negative orders. Recurrences use
-// signed 64-bit integer indices and cooperative cancellation, without a work
-// cutoff. Orders outside index representation use only proven boundary results;
+// signed 64-bit integer indices and cooperative cancellation.
+// Orders outside index representation use only proven boundary results;
 // otherwise they return NaN. Small arguments use ascending series (Y1 via termwise differentiation of the Y0 series)
 // and large arguments use Hankel asymptotics; Jn/Yn for higher orders use
 // Miller backward recurrence (J) and forward recurrence (Y).

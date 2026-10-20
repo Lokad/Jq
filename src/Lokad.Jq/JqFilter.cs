@@ -15,18 +15,11 @@ internal abstract class JqFilter
 {
     public virtual IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        context.Budget.EnterEvaluation();
-        try
+        using IEnumerator<JsonNode?> values = EvaluateCore(input, context, environment).GetEnumerator();
+        while (context.Budget.MoveNext(values))
         {
-            foreach (var value in EvaluateCore(input, context, environment))
-            {
-                context.Budget.CheckCancellation();
-                yield return value;
-            }
-        }
-        finally
-        {
-            context.Budget.LeaveEvaluation();
+            context.Budget.CheckCancellation();
+            yield return values.Current;
         }
     }
 
@@ -38,18 +31,11 @@ internal abstract class JqFilter
         ArgumentNullException.ThrowIfNull(pair);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        context.Budget.EnterEvaluation();
-        try
+        using IEnumerator<JqValuePath> paths = EvaluatePathsCore(pair, context, environment).GetEnumerator();
+        while (context.Budget.MoveNext(paths))
         {
-            foreach (JqValuePath path in EvaluatePathsCore(pair, context, environment))
-            {
-                context.Budget.CheckCancellation();
-                yield return path;
-            }
-        }
-        finally
-        {
-            context.Budget.LeaveEvaluation();
+            context.Budget.CheckCancellation();
+            yield return paths.Current;
         }
     }
 
@@ -85,17 +71,18 @@ internal abstract class SingleValueFilter : JqFilter
 {
     public sealed override IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        context.Budget.EnterEvaluation();
+        context.Budget.EnterRecursion();
+        JsonNode? value;
         try
         {
-            JsonNode? value = EvaluateValue(input, context, environment);
+            value = EvaluateValue(input, context, environment);
             context.Budget.CheckCancellation();
-            yield return value;
         }
         finally
         {
-            context.Budget.LeaveEvaluation();
+            context.Budget.LeaveRecursion();
         }
+        yield return value;
     }
 
     protected sealed override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
@@ -286,8 +273,13 @@ internal sealed class AsFilter(
         }
     }
 
-    private static IEnumerable<JqEnvironment> Match(BindingPattern pattern, JsonNode? value, JqEnvironment scope, JqContext context)
+    private static IEnumerable<JqEnvironment> Match(BindingPattern pattern, JsonNode? value, JqEnvironment scope, JqContext context) =>
+        Match(pattern, value, scope, context, 1);
+
+    private static IEnumerable<JqEnvironment> Match(BindingPattern pattern, JsonNode? value, JqEnvironment scope, JqContext context, int depth)
     {
+        context.Budget.CheckCancellation();
+        JqRecursion.CheckDepth(depth, "pattern nesting limit exceeded");
         switch (pattern)
         {
             case VariablePattern variable:
@@ -295,57 +287,76 @@ internal sealed class AsFilter(
                 break;
             case AliasPattern alias:
                 JqEnvironment aliased = scope.Extend(alias.Name, value);
-                foreach (JqEnvironment inner in Match(alias.Inner, value, aliased, context))
+                foreach (JqEnvironment inner in Match(alias.Inner, value, aliased, context, depth + 1))
                     yield return inner;
                 break;
             case ArrayPattern array:
-                foreach (JqEnvironment bound in MatchItems(array.Items, 0, value, scope, context))
+                foreach (JqEnvironment bound in MatchSequence(array.Items.Count, scope, context,
+                    (index, current) => Match(array.Items[index], ElementAt(value, index), current, context, depth + 1)))
                     yield return bound;
                 break;
             case ObjectPattern obj:
-                foreach (JqEnvironment bound in MatchProperties(obj.Properties, 0, value, scope, context))
+                foreach (JqEnvironment bound in MatchSequence(obj.Properties.Count, scope, context,
+                    (index, current) => MatchProperty(obj.Properties[index], current)))
                     yield return bound;
                 break;
             default:
                 throw new InvalidOperationException("Unknown binding pattern.");
         }
+
+        IEnumerable<JqEnvironment> MatchProperty(ObjectPatternProperty property, JqEnvironment current)
+        {
+            foreach (JsonNode? keyValue in property.Key.Evaluate(value, context, current))
+            {
+                if (!TryGetString(keyValue, out string key))
+                    throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
+                JsonNode? field = ExtractField(value, key);
+                foreach (JqEnvironment bound in Match(property.Value, field, current, context, depth + 1))
+                    yield return bound;
+            }
+        }
     }
 
-    private static IEnumerable<JqEnvironment> MatchItems(IReadOnlyList<BindingPattern> items, int index, JsonNode? value, JqEnvironment scope, JqContext context)
+    private static IEnumerable<JqEnvironment> MatchSequence(int count, JqEnvironment scope, JqContext context,
+        Func<int, JqEnvironment, IEnumerable<JqEnvironment>> step)
     {
-        if (index == items.Count)
+        if (count == 0)
         {
             yield return scope;
             yield break;
         }
-        JsonNode? element = ElementAt(value, index);
-        foreach (JqEnvironment bound in Match(items[index], element, scope, context))
-            foreach (JqEnvironment rest in MatchItems(items, index + 1, value, bound, context))
-                yield return rest;
-    }
-
-    private static IEnumerable<JqEnvironment> MatchProperties(IReadOnlyList<ObjectPatternProperty> properties, int index, JsonNode? value, JqEnvironment scope, JqContext context)
-    {
-        if (index == properties.Count)
+        context.Budget.ReserveBytes(64 + 256L * count);
+        var iterators = new IEnumerator<JqEnvironment>?[count];
+        JqEnvironment current = scope;
+        int index = 0;
+        try
         {
-            yield return scope;
-            yield break;
+            while (index >= 0)
+            {
+                context.Budget.CheckCancellation();
+                if (index == count)
+                {
+                    yield return current;
+                    index--;
+                    continue;
+                }
+                IEnumerator<JqEnvironment> active = iterators[index] ?? step(index, current).GetEnumerator();
+                iterators[index] = active;
+                if (context.Budget.MoveNext(active))
+                {
+                    current = active.Current;
+                    index++;
+                    continue;
+                }
+                iterators[index] = null;
+                active.Dispose();
+                index--;
+            }
         }
-        ObjectPatternProperty property = properties[index];
-        foreach (JqEnvironment keyed in MatchKeys(property, value, scope, context))
-            foreach (JqEnvironment rest in MatchProperties(properties, index + 1, value, keyed, context))
-                yield return rest;
-    }
-
-    private static IEnumerable<JqEnvironment> MatchKeys(ObjectPatternProperty property, JsonNode? value, JqEnvironment scope, JqContext context)
-    {
-        foreach (JsonNode? keyValue in property.Key.Evaluate(value, context, scope))
+        finally
         {
-            if (!TryGetString(keyValue, out string key))
-                throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
-            JsonNode? field = ExtractField(value, key);
-            foreach (JqEnvironment bound in Match(property.Value, field, scope, context))
-                yield return bound;
+            for (int remaining = count - 1; remaining >= 0; remaining--)
+                iterators[remaining]?.Dispose();
         }
     }
 

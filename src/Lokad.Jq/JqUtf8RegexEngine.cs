@@ -49,7 +49,8 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
                 cancellationToken.ThrowIfCancellationRequested();
                 names[entry.Number] = entry.Name;
             }
-            regex = new Compiled(compiled, names, pattern.Length + 1, memory);
+            int captureSlots = (int)Math.Min(int.MaxValue, 1L + pattern.Length);
+            regex = new Compiled(compiled, names, captureSlots, memory);
             error = null;
             retained = true;
             return true;

@@ -202,9 +202,8 @@ public sealed partial class JqTests
     [InlineData("null | setpath([range(5000)|\"a\"]; 1) | [..] | length", "value nesting limit exceeded")]
     public async Task Jq_RejectsDeepTraversal(string filter, string diagnostic)
     {
-        // Comparison, containment, and descent recurse structurally; beyond
-        // the value policy they fail cleanly instead of consuming CLR
-        // frames, even where the reference computes a result.
+        // Recursive comparisons, containment and materialized copies stop
+        // at the shared depth boundary before consuming further CLR frames.
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 

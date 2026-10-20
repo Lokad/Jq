@@ -52,7 +52,7 @@ internal sealed class JqModuleLoader(
         ArgumentNullException.ThrowIfNull(importerDir);
         JqEnvironment env = rootEnvironment;
         foreach (JqModuleImport import in imports)
-            env = await ApplyImportAsync(env, import, importerDir, 0, cancellationToken).ConfigureAwait(false);
+            env = await ApplyImportAsync(env, import, importerDir, 1, cancellationToken).ConfigureAwait(false);
         return env;
     }
 
@@ -63,8 +63,7 @@ internal sealed class JqModuleLoader(
         int depth,
         CancellationToken cancellationToken)
     {
-        if (depth > JqBudget.MaximumDepth)
-            throw new JqQuotaException("module nesting limit exceeded");
+        JqRecursion.CheckDepth(depth, "module nesting limit exceeded");
         string? validation = JqModulePathValidation.Validate(import.RelPath);
         if (validation is not null)
             throw new JqException(validation);

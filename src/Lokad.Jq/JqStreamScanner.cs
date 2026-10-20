@@ -40,8 +40,6 @@ internal readonly record struct StreamScanOutcome(
 // `--seq`, records split at RS with truncation checks and resync recovery.
 internal sealed class JqStreamScanner : IDisposable
 {
-    private const int MaxPathDepth = 64;
-
     private readonly JqBudget _budget;
     private readonly JqRuntime _runtime;
     private readonly JqMemoryReservation _tokenMemory;
@@ -489,15 +487,13 @@ internal sealed class JqStreamScanner : IDisposable
 
     private void PushIndex(long index)
     {
-        if (_path.Count >= MaxPathDepth)
-            throw new JqQuotaException("value nesting limit exceeded");
+        JqRecursion.CheckDepth(_path.Count + 1, "value nesting limit exceeded");
         _path.Add(Segment.AtIndex(index));
     }
 
     private void PushPending()
     {
-        if (_path.Count >= MaxPathDepth)
-            throw new JqQuotaException("value nesting limit exceeded");
+        JqRecursion.CheckDepth(_path.Count + 1, "value nesting limit exceeded");
         _path.Add(Segment.Pending());
     }
 

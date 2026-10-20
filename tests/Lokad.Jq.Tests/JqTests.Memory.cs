@@ -348,7 +348,9 @@ public sealed partial class JqTests
     public async Task Jq_BoundsGeneratedJsonDepth(int depth, int expectedExit)
     {
         var host = new MockFileSystem();
-        var filter = "null | " + string.Join(" | ", Enumerable.Repeat("[.]", depth));
+        // Keep construction independent of the evaluator's recursion depth.
+        var filter = "reduce range(" + depth.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            + ") as $_ (null; [.])";
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
         Assert.Equal(expectedExit, await tool.ExecuteAsync(host, CancellationToken.None));

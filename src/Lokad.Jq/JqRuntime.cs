@@ -61,7 +61,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             Indented = indent != null || tabs,
             IndentCharacter = tabs ? '\t' : ' ',
             IndentSize = tabs ? 1 : indent ?? 2,
-            MaxDepth = JqBudget.MaximumDepth
+            MaxDepth = JqRecursion.MaximumDepth
         };
 
     private ReadOnlyMemory<byte> WriteJson(JsonNode? clean, bool ascii, int? indent, bool tabs,
@@ -152,7 +152,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     private bool ContainsNonFinite(JsonNode? node, int depth)
     {
         budget.CheckCancellation();
-        JqBudget.CheckValueDepth(node, depth);
+        JqRecursion.CheckValueDepth(node, depth);
         if (node is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
             return true;
         if (node is JsonArray array)
@@ -243,7 +243,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 AllowMultipleValues = true,
                 // Allow the next opening token so ReadValue rejects it as a
                 // terminal quota before allocating, rather than a reader syntax error.
-                MaxDepth = JqBudget.MaximumDepth + 1
+                MaxDepth = JqRecursion.MaximumDepth + 1
             });
             int firstContent = SkipJsonWhitespace(text, 0);
             if (TryMatchNonFinite(text, firstContent, out double topValue, out int topEnd))
@@ -423,8 +423,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             switch (reader.TokenType)
             {
                 case JsonTokenType.StartObject:
-                    if (depth >= JqBudget.MaximumDepth)
-                        throw new JqQuotaException("value nesting limit exceeded");
+                    JqRecursion.CheckDepth(depth + 1, "value nesting limit exceeded");
                     budget.ReserveValueNode();
                     var obj = new JsonObject();
                     bool expectsObjectValue = true;
@@ -455,8 +454,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     }
                     throw new JqException("truncated JSON value");
                 case JsonTokenType.StartArray:
-                    if (depth >= JqBudget.MaximumDepth)
-                        throw new JqQuotaException("value nesting limit exceeded");
+                    JqRecursion.CheckDepth(depth + 1, "value nesting limit exceeded");
                     budget.ReserveValueNode();
                     var array = new JsonArray();
                     bool expectsValue = true;
@@ -714,8 +712,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode MergeRecursive(JsonObject left, JsonObject right, int depth)
     {
-        if (depth > JqBudget.MaximumDepth)
-            throw new JqQuotaException("value nesting limit exceeded");
+        JqRecursion.CheckValueDepth(left, depth);
+        JqRecursion.CheckValueDepth(right, depth);
         if (Clone(left) is not JsonObject merged)
             throw new InvalidOperationException("Expected object clone.");
         foreach (var property in right)
@@ -1007,8 +1005,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
     private bool IntactValue(JsonNode? left, JsonNode? right, int depth)
     {
         budget.CheckCancellation();
-        if (depth > JqBudget.MaximumDepth)
-            throw new JqQuotaException("value nesting limit exceeded");
+        JqRecursion.CheckValueDepth(left, depth);
+        JqRecursion.CheckValueDepth(right, depth);
         if (left is null || right is null)
             return left is null && right is null;
         if (left is JsonArray leftArray && right is JsonArray rightArray)
@@ -1052,8 +1050,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
     private bool EqualsValue(JsonNode? left, JsonNode? right, int depth)
     {
         budget.CheckCancellation();
-        if (depth > JqBudget.MaximumDepth)
-            throw new JqQuotaException("value nesting limit exceeded");
+        JqRecursion.CheckValueDepth(left, depth);
+        JqRecursion.CheckValueDepth(right, depth);
         if (left is null || right is null)
             return left is null && right is null;
         if (left is JsonArray leftArray && right is JsonArray rightArray)
@@ -1101,8 +1099,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // (operators, sort, unique, min/max, bsearch, group) funnels through here.
     private static int Compare(JsonNode? l, JsonNode? r, int depth)
     {
-        if (depth > JqBudget.MaximumDepth)
-            throw new JqQuotaException("value nesting limit exceeded");
+        JqRecursion.CheckValueDepth(l, depth);
+        JqRecursion.CheckValueDepth(r, depth);
         if (l is null && IsNaNNumber(r))
             return -1;
         if (r is null && IsNaNNumber(l))
@@ -1517,8 +1515,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // fail cleanly instead of consuming CLR frames.
     private bool ContainsSameKind(JsonNode? container, JsonNode? contained, int depth)
     {
-        if (depth > JqBudget.MaximumDepth)
-            throw new JqQuotaException("value nesting limit exceeded");
+        JqRecursion.CheckValueDepth(container, depth);
+        JqRecursion.CheckValueDepth(contained, depth);
         if (container is JsonObject obj && contained is JsonObject needle)
             return needle.All(kv => obj.TryGetPropertyValue(kv.Key, out var value) && ContainsSameKind(value, kv.Value, depth + 1));
         if (container is JsonArray haystack && contained is JsonArray needles)

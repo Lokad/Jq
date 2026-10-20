@@ -88,8 +88,7 @@ materialized buffers, subject to checked CLR sizes and construction depth.
 
 | Boundary | Limit |
 | --- | --- |
-| JSON, recursive copy, parser and module depth | 64 |
-| Evaluator depth | 256 |
+| JSON, recursive traversal, parser, evaluator and module depth | 64 |
 | Iterative paths | 10,000 segments |
 | Function arity | 4,096, following the reference closure-index representation |
 | Host read request | 8 KiB |

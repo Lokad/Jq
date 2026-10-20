@@ -15,7 +15,7 @@ internal sealed partial class JqRuntime
         {
             AllowTrailingCommas = false,
             AllowMultipleValues = true,
-            MaxDepth = JqBudget.MaximumDepth + 1
+            MaxDepth = JqRecursion.MaximumDepth + 1
         };
 
         private readonly List<Frame> _frames = new();
@@ -51,12 +51,11 @@ internal sealed partial class JqRuntime
                         {
                             case JsonTokenType.StartArray:
                             case JsonTokenType.StartObject:
-                                if (_frames.Count >= JqBudget.MaximumDepth)
-                                    throw new JqQuotaException("value nesting limit exceeded");
+                                JqRecursion.CheckDepth(_frames.Count + 1, "value nesting limit exceeded");
                                 budget.ReserveValueNode();
                                 if (_frames.Count == _frames.Capacity)
                                 {
-                                    int capacity = System.Math.Min(JqBudget.MaximumDepth,
+                                    int capacity = System.Math.Min(JqRecursion.MaximumDepth,
                                         System.Math.Max(4, _frames.Capacity * 2));
                                     budget.CheckCancellation();
                                     _frames.Capacity = capacity;

@@ -13,9 +13,8 @@ namespace Lokad.Jq;
 internal sealed class JqBudget : IDisposable
 {
     private const int MaximumIdleSerializationBytes = 4096;
-    internal const int MaximumDepth = 64;
     private readonly CancellationToken _cancellationToken;
-    private int _evaluationDepth;
+    private int _recursionDepth;
     private readonly JqStorage _executionStorage;
     private JqStorage _storage;
     private JqStorage? _recordStorage;
@@ -158,7 +157,7 @@ internal sealed class JqBudget : IDisposable
     internal JsonNode? CopyValue(JsonNode? value, int depth, bool sortKeys)
     {
         CheckCancellation();
-        CheckValueDepth(value, depth);
+        JqRecursion.CheckValueDepth(value, depth);
         if (value is JsonArray array)
         {
             ReserveBytes(64 + 24L * array.Count);
@@ -228,19 +227,20 @@ internal sealed class JqBudget : IDisposable
         return builder.ToString();
     }
 
-    internal static void CheckValueDepth(JsonNode? value, int depth)
+    // Count synchronous advancement; suspended results keep their storage owners.
+    internal bool MoveNext<T>(IEnumerator<T> iterator)
     {
-        if (depth > MaximumDepth || depth == MaximumDepth && value is JsonArray or JsonObject)
-            throw new JqQuotaException("value nesting limit exceeded");
+        EnterRecursion();
+        try { return iterator.MoveNext(); }
+        finally { LeaveRecursion(); }
     }
 
-    internal void EnterEvaluation()
+    internal void EnterRecursion()
     {
         CheckCancellation();
-        if (_evaluationDepth >= 256)
-            throw new JqQuotaException("filter nesting limit exceeded");
-        _evaluationDepth++;
+        JqRecursion.CheckDepth(_recursionDepth + 1, "filter nesting limit exceeded");
+        _recursionDepth++;
     }
 
-    internal void LeaveEvaluation() => _evaluationDepth--;
+    internal void LeaveRecursion() => _recursionDepth--;
 }

@@ -423,7 +423,7 @@ internal sealed class JqParser(
                     else
                         DeclareFilterParam(parameter.Name);
                 }
-                if (++_depth > JqBudget.MaximumDepth)
+                if (++_depth > JqRecursion.MaximumDepth)
                     throw Error("filter nesting limit exceeded", Peek().Span);
                 try { body = ParseQuery(topLevel: false); }
                 finally { _depth--; }
@@ -454,7 +454,7 @@ internal sealed class JqParser(
 
     private JqFunctionDefinition ParseFuncDefHead()
     {
-        if (++_depth > JqBudget.MaximumDepth)
+        if (++_depth > JqRecursion.MaximumDepth)
             throw Error("filter nesting limit exceeded", Peek().Span);
         try
         {
@@ -506,12 +506,12 @@ internal sealed class JqParser(
     // collected positions, and binding bodies stay regular depth-bounded
     // calls; a nested rebinding stops the descent.
     private JqFilter RewriteTailCalls(JqFilter node, JqFunctionDefinition definition) =>
-        RewriteTail(node, definition, 0);
+        RewriteTail(node, definition, 1);
 
     private JqFilter RewriteTail(JqFilter node, JqFunctionDefinition definition, int depth)
     {
         _budget.CheckCancellation();
-        if (depth > JqBudget.MaximumDepth)
+        if (depth > JqRecursion.MaximumDepth)
             throw Error("filter nesting limit exceeded", Peek().Span);
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(definition);
@@ -613,7 +613,7 @@ internal sealed class JqParser(
         }
         if (Match("["))
         {
-            if (++_depth > JqBudget.MaximumDepth)
+            if (++_depth > JqRecursion.MaximumDepth)
                 throw Error("filter nesting limit exceeded", Peek().Span);
             try
             {
@@ -639,7 +639,7 @@ internal sealed class JqParser(
         }
         if (Match("{"))
         {
-            if (++_depth > JqBudget.MaximumDepth)
+            if (++_depth > JqRecursion.MaximumDepth)
                 throw Error("filter nesting limit exceeded", Peek().Span);
             try
             {
@@ -802,7 +802,7 @@ internal sealed class JqParser(
 
     private JqFilter ParseUnary()
     {
-        if (++_depth > JqBudget.MaximumDepth)
+        if (++_depth > JqRecursion.MaximumDepth)
             throw Error("filter nesting limit exceeded", Peek().Span);
         try
         {

@@ -981,7 +981,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             {
                 AllowTrailingCommas = true,
                 AllowMultipleValues = true,
-                MaxDepth = JqBudget.MaximumDepth
+                MaxDepth = JqRecursion.MaximumDepth
             });
             if (!reader.Read() || reader.TokenType != System.Text.Json.JsonTokenType.Number)
                 return false;

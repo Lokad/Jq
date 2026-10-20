@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Breaking: use a shared recursion depth of 64 across parsing, evaluation, value traversal,
+  JSON and module loading. Evaluation now counts active advancement rather than
+  suspended results; wide destructuring iterates through admitted storage.
+
 - Delegate regex bounds and timeout settings to the provider. Keep shared storage
   admission, terminal provider exhaustion and cancellation forwarding.
 
@@ -198,7 +202,7 @@
   in index-error rendering. Keep useful semantic regressions and work guards.
 - Preserve actual `OutOfMemoryException` from file-variable loading as an
   allocation failure, with owned descriptor cleanup and admission refunds.
-- Validation on Windows: warning-free Release build and all 4,015 tests pass,
+- Validation on Windows: warning-free Release build and all 4,038 tests pass,
   including governed-memory boundary and bounded-call cases. The packed artifact
   passes 19 detached consumer checks with isolated cache, exact package hash and
   locked restore.
