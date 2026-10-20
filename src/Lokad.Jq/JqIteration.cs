@@ -410,149 +410,117 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? walked in Walk(input, context, environment))
-            yield return walked;
-    }
-
-    private IEnumerable<JsonNode?> Walk(JsonNode? node, JqContext context, JqEnvironment environment)
-    {
-        // The root rebuilt node streams every body output; nested array levels
-        // collect every child output while nested object levels contribute only
-        // their first, matching the reference child reads below.
-        JsonNode? rebuilt = BuildRebuilt(node, context, environment);
-        foreach (JsonNode? value in Body.Evaluate(rebuilt, context, environment))
-            yield return value;
-    }
-
-    // Iterative frames retain child results for bottom-up rebuilding.
-    private sealed class WalkFrame(JsonNode? node, string? key)
-    {
-        public JsonNode? Node = node;
-        public string? Key = key;
-        public List<WalkChild> Children = new();
-        public int NextChild;
-        public List<Walklevel> Parts = new();
-    }
-
-    private sealed record WalkChild(string? Key, JsonNode? Node);
-
-    private sealed record Walklevel(string? Key, List<JsonNode?> Outputs);
-
-    private static void FillWalkChildren(WalkFrame frame, JqBudget budget)
-    {
-        if (frame.Node is JsonArray array)
+        using var memory = new JqMemoryReservation(context.Budget.MemoryBudget);
+        var pending = new List<WalkFrame>();
+        JsonNode? current = input;
+        string? key = null;
+        bool visit = true;
+        try
         {
-            budget.ReserveBytes(144L * array.Count);
-            for (int index = 0; index < array.Count; index++)
-                frame.Children.Add(new WalkChild(null, array[index]));
-            return;
-        }
-        if (frame.Node is JsonObject obj)
-        {
-            budget.ReserveBytes(144L * obj.Count);
-            foreach (var property in obj)
-                frame.Children.Add(new WalkChild(property.Key, property.Value));
-        }
-    }
-
-    private static JsonNode? RebuildWalkLevel(WalkFrame frame, JqContext context)
-    {
-        if (frame.Node is JsonArray)
-        {
-            context.Budget.CheckCancellation();
-            var walked = new JsonArray();
-            foreach (Walklevel part in frame.Parts)
-                foreach (JsonNode? output in part.Outputs)
+            while (true)
+            {
+                context.Budget.CheckCancellation();
+                if (visit && current is JsonArray or JsonObject)
                 {
-                    context.Budget.ReserveArrayItem(output);
-                    walked.Add(context.Runtime.Detach(output));
+                    if (pending.Count == pending.Capacity)
+                    {
+                        int capacity = checked(Math.Max(4, pending.Capacity * 2));
+                        long previous = memory.LastAdmittedBytes;
+                        memory.Resize(checked(previous + 128L * capacity));
+                        pending.Capacity = capacity;
+                        if (previous != 0) memory.Resize(128L * capacity);
+                    }
+                    context.Budget.ReserveBytes(64);
+                    var frame = new WalkFrame(current, key);
+                    pending.Add(frame);
+                    if (frame.TryNext(out current, out key)) continue;
+                    current = frame.Result;
+                    key = frame.Key;
+                    pending.RemoveAt(pending.Count - 1);
+                    frame.Dispose();
                 }
-            return walked;
-        }
-        if (frame.Node is JsonObject)
-        {
-            context.Budget.CheckCancellation();
-            var walked = new JsonObject();
-            foreach (Walklevel part in frame.Parts)
-                if (part.Key is string name && part.Outputs.Count > 0)
+                if (pending.Count == 0)
                 {
-                    context.Budget.ReserveObjectItem(part.Outputs[0]);
-                    walked.Add(name, context.Runtime.Detach(part.Outputs[0]));
+                    foreach (JsonNode? value in Body.Evaluate(current, context, environment)) yield return value;
+                    yield break;
                 }
-            return walked;
-        }
-        return frame.Node;
-    }
-
-    // First body output of a rebuilt level, or nothing when the body is empty.
-    // Empty levels drop out of their parent rebuild like the reference.
-    private JsonNode? FirstWalkOutput(JsonNode? rebuilt, JqContext context, JqEnvironment environment, out bool hasOutput)
-    {
-        using IEnumerator<JsonNode?> outputs = Body.Evaluate(rebuilt, context, environment).GetEnumerator();
-        if (!outputs.MoveNext())
-        {
-            hasOutput = false;
-            return null;
-        }
-        hasOutput = true;
-        return outputs.Current;
-    }
-
-    // Every body output of a rebuilt level. Object levels use the first-only
-    // read above; array levels collect the whole stream, so empty levels
-    // contribute zero elements like the reference.
-    private List<JsonNode?> CollectWalkOutputs(JsonNode? rebuilt, JqContext context, JqEnvironment environment)
-    {
-        var outputs = new List<JsonNode?>();
-        foreach (JsonNode? value in Body.Evaluate(rebuilt, context, environment))
-        {
-            context.Budget.CheckCancellation();
-            context.Budget.ReserveBytes(24);
-            outputs.Add(value);
-        }
-        return outputs;
-    }
-
-    private JsonNode? BuildRebuilt(JsonNode? node, JqContext context, JqEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
-        var stack = new Stack<WalkFrame>();
-        var root = new WalkFrame(node, null);
-        FillWalkChildren(root, context.Budget);
-        stack.Push(root);
-        while (stack.Count > 0)
-        {
-            context.Budget.CheckCancellation();
-            WalkFrame frame = stack.Peek();
-            if (frame.NextChild < frame.Children.Count)
-            {
-                WalkChild child = frame.Children[frame.NextChild];
-                frame.NextChild++;
-                WalkFrame childFrame = new WalkFrame(child.Node, child.Key);
-                FillWalkChildren(childFrame, context.Budget);
-                stack.Push(childFrame);
-                continue;
-            }
-            JsonNode? rebuilt = RebuildWalkLevel(frame, context);
-            stack.Pop();
-            if (stack.Count == 0)
-                return rebuilt;
-            if (stack.Peek().Node is JsonArray)
-            {
-                List<JsonNode?> outputs = CollectWalkOutputs(rebuilt, context, environment);
-                stack.Peek().Parts.Add(new Walklevel(frame.Key, outputs));
-            }
-            else
-            {
-                JsonNode? first = FirstWalkOutput(rebuilt, context, environment, out bool hasOutput);
-                if (hasOutput)
-                    stack.Peek().Parts.Add(new Walklevel(frame.Key, new List<JsonNode?> { first }));
+                WalkFrame parent = pending[^1];
+                if (parent.Result is JsonArray array)
+                {
+                    foreach (JsonNode? value in Body.Evaluate(current, context, environment))
+                    {
+                        context.Budget.ReserveArrayItem(value);
+                        array.Add(context.Runtime.Detach(value));
+                    }
+                }
+                else if (parent.Result is JsonObject obj && key is not null)
+                {
+                    using var outputs = Body.Evaluate(current, context, environment).GetEnumerator();
+                    if (outputs.MoveNext())
+                    {
+                        context.Budget.ReserveObjectItem(outputs.Current);
+                        obj.Add(key, context.Runtime.Detach(outputs.Current));
+                    }
+                }
+                if (parent.TryNext(out current, out key))
+                {
+                    visit = true;
+                    continue;
+                }
+                current = parent.Result;
+                key = parent.Key;
+                pending.RemoveAt(pending.Count - 1);
+                parent.Dispose();
+                visit = false;
             }
         }
-        throw new InvalidOperationException("Walk left no rebuilt node.");
+        finally
+        {
+            for (int index = pending.Count - 1; index >= 0; index--) pending[index].Dispose();
+        }
+    }
+
+    // Only open container cursors survive descent. Scalar children need no frame.
+    private sealed class WalkFrame : IDisposable
+    {
+        private readonly JsonNode _source;
+        private readonly IEnumerator<KeyValuePair<string, JsonNode?>>? _properties;
+        private int _index;
+        internal JsonNode Result { get; }
+        internal string? Key { get; }
+
+        internal WalkFrame(JsonNode source, string? key)
+        {
+            _source = source;
+            Key = key;
+            if (source is JsonObject obj)
+            {
+                Result = new JsonObject();
+                _properties = obj.GetEnumerator();
+            }
+            else Result = new JsonArray();
+        }
+
+        internal bool TryNext(out JsonNode? child, out string? key)
+        {
+            if (_source is JsonArray array && _index < array.Count)
+            {
+                child = array[_index++];
+                key = null;
+                return true;
+            }
+            if (_properties is not null && _properties.MoveNext())
+            {
+                child = _properties.Current.Value;
+                key = _properties.Current.Key;
+                return true;
+            }
+            child = null;
+            key = null;
+            return false;
+        }
+
+        public void Dispose() => _properties?.Dispose();
     }
 }
 
