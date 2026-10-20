@@ -1704,38 +1704,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return JsonValue.Create(budget.Finish(builder));
     }
 
-    internal IEnumerable<JsonNode?> Range(IReadOnlyList<List<JsonNode?>> args)
-    {
-        if (args.Count is < 1 or > 3)
-            throw new JqException("range expects one to three arguments");
-        if (args.Any(arg => arg.Count == 0))
-            yield break;
-
-        // Upstream range/3 steps through doubles (fractional steps count) and
-        // yields nothing for a zero step; range/1..2 always steps by one.
-        // Integral outputs keep integral storage like literals and inputs.
-        double start = args.Count == 1 ? 0 : RangeBound(args[0][0]);
-        double end = RangeBound(args.Count == 1 ? args[0][0] : args[1][0]);
-        double step = args.Count > 2 ? RangeBound(args[2][0]) : 1;
-        if (args.Count > 2 && !(step > 0) && !(step < 0))
-            yield break;
-
-        for (double value = start; step > 0 ? value < end : value > end; value += step)
-        {
-            budget.CheckCancellation();
-            yield return CreateNumber(value);
-        }
-    }
-
-    // Like the reference RANGE opcode, non-numeric bounds fail while numeric
-    // strings keep the recorded count leniency.
-    private static double RangeBound(JsonNode? bound)
-    {
-        if (!TryCountLevel(bound, out double value))
-            throw new JqException("Range bounds must be numeric");
-        return value;
-    }
-
     // Numbers that are whole and fit in a long keep integral storage like
     // literals and inputs; anything else stays a double.
     internal static JsonNode? CreateNumber(double value)

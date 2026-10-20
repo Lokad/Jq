@@ -253,28 +253,34 @@ internal sealed class RangeFilter(IReadOnlyList<JqFilter> args) : JqFilter
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         var current = new JsonNode?[args.Count];
-        foreach (JsonNode?[] combo in Combine(0))
-        {
-            var packed = new List<List<JsonNode?>>(combo.Length);
-            foreach (JsonNode? item in combo)
-                packed.Add(new List<JsonNode?> { item });
-            foreach (JsonNode? value in context.Runtime.Range(packed))
-                yield return value;
-        }
+        foreach (JsonNode? value in Generate(0)) yield return value;
 
-        IEnumerable<JsonNode?[]> Combine(int index)
+        IEnumerable<JsonNode?> Generate(int index)
         {
             if (index >= args.Count)
             {
-                yield return (JsonNode?[])current.Clone();
+                double start = args.Count == 1 ? 0 : Bound(current[0]);
+                double end = Bound(current[args.Count == 1 ? 0 : 1]);
+                double step = args.Count > 2 ? Bound(current[2]) : 1;
+                if (!(step > 0) && !(step < 0)) yield break;
+                for (double value = start; step > 0 ? value < end : value > end; value += step)
+                {
+                    context.Budget.CheckCancellation();
+                    yield return CreateNumber(value);
+                }
                 yield break;
             }
             foreach (JsonNode? value in args[index].Evaluate(input, context, environment))
             {
                 current[index] = value;
-                foreach (JsonNode?[] combo in Combine(index + 1))
-                    yield return combo;
+                foreach (JsonNode? result in Generate(index + 1)) yield return result;
             }
+        }
+
+        static double Bound(JsonNode? value)
+        {
+            if (!TryCountLevel(value, out double bound)) throw new JqException("Range bounds must be numeric");
+            return bound;
         }
     }
 }
