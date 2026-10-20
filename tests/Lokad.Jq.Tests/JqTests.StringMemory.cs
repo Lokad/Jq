@@ -6,6 +6,32 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("trim", " x ", "x")]
+    [InlineData("getpath([{start:1,end:2}])", "abc", "b")]
+    [InlineData("index(\"b\")", "abc", "1")]
+    [InlineData("[.] | @csv", "a\"b", "\"a\"\"b\"")]
+    [InlineData("@urid", "é%C3%A9", "éé")]
+    [InlineData("@base64d", "w6k=", "é")]
+    [InlineData("tojson", "\ue000", "\"\\ue000\"")]
+    public async Task Jq_StringOperationsStreamWithBoundedMemoryAndStopOnClosure(string filter, string input, string output)
+    {
+        const int records = 2500;
+        foreach (bool close in new[] { false, true })
+        {
+            var root = new BenchmarkMemoryBudget(64 * 1024);
+            var host = new MockFileSystem { AppendRemainsOpen = !close };
+            host.SetStandardInput(string.Concat(Enumerable.Repeat(input + "\n", records)));
+            var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-Rr", filter)));
+            Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+            Assert.Equal(string.Concat(Enumerable.Repeat(output + "\n", close ? 1 : records)), host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal(close ? 1 : records, host.AppendCallCount);
+            Assert.Equal(0, root.ReservedBytes);
+            Assert.InRange(root.PeakBytes, 1, 64 * 1024);
+        }
+    }
+
+    [Theory]
     [InlineData("urid", "é%F0%9F%9A%80+%00", "é🚀+\0")]
     [InlineData("base64d", "w6k=ignored", "é")]
     [InlineData("base64d", "w6k", "é")]

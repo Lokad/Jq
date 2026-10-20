@@ -212,6 +212,27 @@ internal static class GovernorRunner
         string duplicate = "[" + string.Join(',', Enumerable.Range(0, 64)) + "]";
         Add("unique-duplicate-trees", 64, ["-c", "unique | length"],
             "[" + string.Join(',', Enumerable.Repeat(duplicate, 64)) + "]", "1\n");
+        string borrowed = new('x', 1000);
+        string borrowedLines = string.Concat(Enumerable.Repeat(borrowed + "\n", records));
+        Add("trim-borrowed", records, ["-Rr", "trim"], borrowedLines, borrowedLines);
+        Add("slice-path", records, ["-Rr", "getpath([{start:1,end:2}])"], borrowedLines,
+            string.Concat(Enumerable.Repeat("x\n", records)));
+        Add("search-first", records, ["-Rc", "index(\"x\")"], borrowedLines,
+            string.Concat(Enumerable.Repeat("0\n", records)));
+        Add("search-no-hit", records, ["-Rc", "index(\"xxxxxxxxxxxxxxxz\")"], borrowedLines,
+            string.Concat(Enumerable.Repeat("null\n", records)));
+        Add("csv-quotes", records, ["-Rr", "[.] | @csv"], string.Concat(Enumerable.Repeat(new string('"', 100) + "\n", records)),
+            string.Concat(Enumerable.Repeat(new string('"', 202) + "\n", records)));
+        string unicode = new('é', 100);
+        string unicodeLines = string.Concat(Enumerable.Repeat(unicode + "\n", records));
+        Add("uri-unicode", records, ["-Rr", "@urid"], unicodeLines, unicodeLines);
+        Add("base64-decode", records, ["-Rr", "@base64d"],
+            string.Concat(Enumerable.Repeat(Convert.ToBase64String(Encoding.UTF8.GetBytes(unicode)) + "\n", records)), unicodeLines);
+        Add("json-escaped", records, ["-ac", "."], string.Concat(Enumerable.Repeat("\"" + unicode + "\"\n", records)),
+            string.Concat(Enumerable.Repeat("\"" + string.Concat(Enumerable.Repeat("\\u00e9", 100)) + "\"\n", records)));
+        string privateUse = new('\ue000', 100);
+        Add("tojson-escaped", records, ["-nr", "--arg", "s", privateUse, "range(1000) | $s | tojson"], "",
+            string.Concat(Enumerable.Repeat("\"" + string.Concat(Enumerable.Repeat("\\ue000", 100)) + "\"\n", records)));
         foreach (int length in new[] { 1000, 100000 })
         {
             string text = new('a', length);
