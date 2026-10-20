@@ -1977,9 +1977,23 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 }
                 else if (TryGetString(field, out string? cell) && cell is not null)
                 {
-                    budget.Append(builder, "\"");
-                    budget.Append(builder, cell.Replace("\"", "\"\""));
-                    budget.Append(builder, "\"");
+                    long length = cell.Length + 2L;
+                    for (int position = 0; position < cell.Length; position++)
+                    {
+                        if ((position & 4095) == 0) budget.CheckCancellation();
+                        if (cell[position] == '"') length++;
+                    }
+                    if (length > int.MaxValue - builder.Length)
+                        throw new JqQuotaException("string result cannot be represented");
+                    budget.ReserveString(length);
+                    builder.Append('"');
+                    for (int position = 0; position < cell.Length; position++)
+                    {
+                        if ((position & 4095) == 0) budget.CheckCancellation();
+                        if (cell[position] == '"') builder.Append('"');
+                        builder.Append(cell[position]);
+                    }
+                    builder.Append('"');
                 }
                 else
                 {
