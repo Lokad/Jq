@@ -1416,34 +1416,35 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     private IEnumerable<int> MatchingIndices(JsonNode? input, JsonNode? needle)
     {
+        budget.CheckCancellation();
         if (TryGetString(input, out var text) && text is not null && TryGetString(needle, out var fragment))
         {
             // Scalar offsets, matching rune-wise substring search. Like the
             // reference byte search, an empty needle matches nowhere and the
             // scan resumes one scalar past each hit so overlaps are reported.
-            budget.ReserveBytes(12L * text.Length + 12L * (fragment?.Length ?? 0));
-            var runes = new List<System.Text.Rune>();
-            foreach (var rune in text.EnumerateRunes())
-                runes.Add(rune);
-            var wanted = new List<System.Text.Rune>();
-            if (fragment is not null)
-                foreach (var rune in fragment.EnumerateRunes())
-                    wanted.Add(rune);
-            if (wanted.Count == 0)
+            if (string.IsNullOrEmpty(fragment))
                 yield break;
-            for (int start = 0; start + wanted.Count <= runes.Count; start++)
+            int position = 0;
+            int scalar = 0;
+            foreach (Rune rune in text.EnumerateRunes())
             {
+                if (position > text.Length - fragment.Length) break;
+                budget.CheckCancellation();
                 bool match = true;
-                for (int offset = 0; offset < wanted.Count; offset++)
-                    if (!runes[start + offset].Equals(wanted[offset]))
+                for (int offset = 0; offset < fragment.Length;)
+                {
+                    budget.CheckCancellation();
+                    int count = Math.Min(4096, fragment.Length - offset);
+                    if (!text.AsSpan(position + offset, count).SequenceEqual(fragment.AsSpan(offset, count)))
                     {
                         match = false;
                         break;
                     }
-                if (!match)
-                    continue;
-                budget.CheckCancellation();
-                yield return start;
+                    offset += count;
+                }
+                if (match) yield return scalar;
+                position += rune.Utf16SequenceLength;
+                scalar++;
             }
             yield break;
         }
@@ -1458,6 +1459,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     yield break;
                 for (int start = 0; start + pattern.Count <= values.Count; start++)
                 {
+                    budget.CheckCancellation();
                     bool match = true;
                     for (int offset = 0; offset < pattern.Count; offset++)
                         if (!JsonEquals(values[start + offset], pattern[offset]))
@@ -1469,7 +1471,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
                         continue;
                     budget.CheckCancellation();
                     yield return start;
-                    start += Math.Max(0, pattern.Count - 1);
                 }
                 yield break;
             }

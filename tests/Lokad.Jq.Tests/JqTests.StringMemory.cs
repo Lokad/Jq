@@ -6,6 +6,71 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("[1,1,1,1]", "indices([1,1])", "[0,1,2]\n")]
+    [InlineData("[1,1,1]", "rindex([1,1])", "1\n")]
+    [InlineData("[1,1,1,1]", "getpath([[1,1]])", "[0,1,2]\n")]
+    [InlineData("[1,2,1,2,1]", "indices([1,2,1])", "[0,2]\n")]
+    [InlineData("[1,2,1,2]", "indices([1,2])", "[0,2]\n")]
+    [InlineData("[1,1,1]", "index([1,1])", "0\n")]
+    [InlineData("[null,null,null]", "indices([null,null])", "[0,1]\n")]
+    [InlineData("[[1],[1],[1]]", "indices([[1],[1]])", "[0,1]\n")]
+    [InlineData("[1,2]", "[indices([]),indices([1,2,3]),indices([nan])]", "[[],[],[]]\n")]
+    [InlineData("\"a🚀🚀z\"", "[indices(\"🚀\"),index(\"z\"),rindex(\"🚀\")]", "[[1,2],3,2]\n")]
+    [InlineData("\"aaaa\"", "indices(\"aa\")", "[0,1,2]\n")]
+    [InlineData("\"abc\"", "[indices(\"\"),index(\"\"),index(\"abcd\")]", "[[],null,null]\n")]
+    public async Task Jq_SearchPreservesOverlapsAndScalarOffsets(string input, string filter, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(input);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter)));
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("x")]
+    [InlineData("xxxxxxxxxxxxxxxz")]
+    public void Jq_StringIndexBorrowsInputWithoutSearchTables(string needle)
+    {
+        JsonNode input = JsonValue.Create(new string('x', 100000));
+        var root = new BenchmarkMemoryBudget(0);
+        using var cancellation = new CancellationTokenSource();
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token);
+        var runtime = new JqRuntime(budget);
+        JsonNode pattern = JsonValue.Create(needle);
+        JsonNode? result = runtime.Index(input, pattern);
+        if (needle == "x") Assert.Equal(0, result?.GetValue<int>());
+        else Assert.Null(result);
+        Assert.Equal(0, root.ReservedBytes);
+        cancellation.Cancel();
+        Assert.Throws<OperationCanceledException>(() => runtime.Index(input, pattern));
+    }
+
+    [Fact]
+    public async Task Jq_RepetitiveUnsuccessfulSearchObservesCancellation()
+    {
+        JsonNode input = JsonValue.Create(new string('x', 20000));
+        JsonNode pattern = JsonValue.Create(new string('x', 9999) + "z");
+        using var cancellation = new CancellationTokenSource();
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, null, cancellation.Token);
+        var runtime = new JqRuntime(budget);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task work = Task.Run(() =>
+        {
+            started.SetResult();
+            // Finite repetitive work lets cancellation race any unsuccessful scan,
+            // including a scan started after the cancellation request.
+            for (int index = 0; index < 100; index++) Assert.Null(runtime.Index(input, pattern));
+        });
+        await started.Task;
+        cancellation.Cancel();
+        var failure = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => work);
+        Assert.Equal(cancellation.Token, failure.CancellationToken);
+    }
+
+    [Theory]
     [InlineData("try @csv catch \"caught\"")]
     [InlineData("@csv?")]
     public async Task Jq_CsvExpansionRefusalPreservesPrefixAndCleanup(string operation)
