@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using Lokad.Jq;
 
 namespace Lokad.Jq.Tests;
@@ -322,7 +323,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_OptionalDoesNotSuppressQuota()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "{a:range(0;300000)}? | length")));
 

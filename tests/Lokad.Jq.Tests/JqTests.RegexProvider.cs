@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
@@ -8,7 +9,7 @@ public sealed partial class JqTests
     [InlineData("gsub(\"x\" * 17000; \"y\")", "\"x\"\n")]
     public async Task Jq_RegexProviderCompilesLargeLiteralPatterns(string expression, string expected)
     {
-        var memory = new TestMemoryBudget(4 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "\"x\" | " + expression)));
 
@@ -23,7 +24,7 @@ public sealed partial class JqTests
     [InlineData("match(\"(?<r>a(?&r)?b)\") | .length", "600\n")]
     public async Task Jq_RecursiveRegexUsesProviderExecutionSettings(string expression, string expected)
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "(\"a\" * 300 + \"b\" * 300) | " + expression)));
@@ -40,7 +41,7 @@ public sealed partial class JqTests
     [InlineData("detailed", "match(\"x\")")]
     public async Task Jq_ProviderResourceExhaustionUnwindsOwnedInputs(string stage, string expression)
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         int failures = 0;
         var engine = new ObservedRegexEngine((operation, _, _) =>
         {

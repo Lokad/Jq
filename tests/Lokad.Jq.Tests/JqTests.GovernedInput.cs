@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Text;
 
 namespace Lokad.Jq.Tests;
@@ -10,7 +11,7 @@ public sealed partial class JqTests
     [InlineData("inputs?")]
     public async Task Jq_GovernedInputRefusalPrecedesReadAndBypassesHandlers(string filter)
     {
-        var memory = new TestMemoryBudget(8191);
+        var memory = new BenchmarkMemoryBudget(8191);
         var host = new MockFileSystem();
         host.AddFile("/input", "1\n");
         var invocation = filter == "."
@@ -30,7 +31,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedInputGrowthRefusalPreservesPrefixAndStopsLaterFiles()
     {
-        var memory = new TestMemoryBudget(40000);
+        var memory = new BenchmarkMemoryBudget(40000);
         var host = new MockFileSystem();
         host.AddFile("/input", "a\n" + new string('b', 25000) + "\n");
         host.AddFile("/later", "later\n");
@@ -49,7 +50,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedInputAndRawOutputKeepConstantCapacityAcrossRecords()
     {
-        var memory = new TestMemoryBudget(20 * 1024);
+        var memory = new BenchmarkMemoryBudget(20 * 1024);
         string input = string.Concat(Enumerable.Repeat("a\n", 10000));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", "-r", ".")));
         for (int repeat = 0; repeat < 2; repeat++)
@@ -68,7 +69,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedInputKeepsPendingReadAndCleanupChargedAfterCancellation()
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var inner = new MockFileSystem();
         inner.AddFile("/input", "1\n");
@@ -99,7 +100,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedHostedReadResultOwnsCapacityAfterReadCompletion()
     {
-        var memory = new TestMemoryBudget(16 * 1024);
+        var memory = new BenchmarkMemoryBudget(16 * 1024);
         using var caller = memory.CreateScope();
         var budget = new JqBudget(JqUtf8RegexEngine.Instance, caller, CancellationToken.None);
         var host = new MockFileSystem();
@@ -126,7 +127,7 @@ public sealed partial class JqTests
     public async Task Jq_GovernedHostedReadRefusalClosesOwnedFileBeforeReading(string kind, long limit)
     {
         // Admit compilation first, then refuse the hosted read's backing storage.
-        var memory = new TestMemoryBudget(limit);
+        var memory = new BenchmarkMemoryBudget(limit);
         var host = new MockFileSystem();
         host.AddFile("/data", "[1]");
         host.AddFile("/program", ".");
@@ -152,7 +153,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedHostedReadGrowthRefusalRefundsUnpublishedStorage()
     {
-        var memory = new TestMemoryBudget(16384);
+        var memory = new BenchmarkMemoryBudget(16384);
         using var caller = memory.CreateScope();
         var budget = new JqBudget(JqUtf8RegexEngine.Instance, caller, CancellationToken.None);
         var host = new MockFileSystem();
@@ -169,7 +170,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedStreamScannerRetainsAndRefundsTokenCapacity()
     {
-        var memory = new TestMemoryBudget(2048);
+        var memory = new BenchmarkMemoryBudget(2048);
         using var scope = memory.CreateScope();
         var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
         using (var scanner = new JqStreamScanner(budget, new JqRuntime(budget), false, false))

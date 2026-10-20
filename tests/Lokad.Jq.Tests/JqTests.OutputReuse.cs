@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Globalization;
 using System.Text;
 
@@ -45,7 +46,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "range(0;1024)")));
 
         Assert.Equal(0, await command.ExecuteAsync(host,
-            new TestMemoryBudget(64 * 1024), CancellationToken.None));
+            new BenchmarkMemoryBudget(64 * 1024), CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Range(0, 1024)
             .Select(i => i.ToString(CultureInfo.InvariantCulture) + "\n")), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -56,7 +57,7 @@ public sealed partial class JqTests
     public async Task Jq_OutputAdmissionFailureDoesNotEscapeDuringWriterCleanup()
     {
         const long limit = 64 * 1024;
-        var memory = new TestMemoryBudget(limit);
+        var memory = new BenchmarkMemoryBudget(limit);
         var host = new MockFileSystem();
         IMemoryReservation? pressure = null;
         host.BeforeByteAppend = () =>

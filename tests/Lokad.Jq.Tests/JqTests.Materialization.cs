@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Globalization;
 using System.Text;
 
@@ -8,7 +9,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_PaddingAndExistingUpdatesUseSharedAdmission()
     {
-        var memory = new TestMemoryBudget(96 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(96 * 1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "[] | .[1000001] = 1 | .[1000001] = 2 | [length, .[1000001]]")));
@@ -23,7 +24,7 @@ public sealed partial class JqTests
     [InlineData("(null | setpath([1000001]; 1))?")]
     public async Task Jq_UnadmittedPaddingIsTerminal(string expression)
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "\"prefix\", (" + expression + "), \"later\"")));
         Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
@@ -36,7 +37,7 @@ public sealed partial class JqTests
     public async Task Jq_HostedMaterializationUsesSharedAdmission()
     {
         const int length = 64 * 1024 * 1024 + 1;
-        var memory = new TestMemoryBudget(256 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(256 * 1024 * 1024);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var host = new GeneratedLargeValueHost(length, 0);
         using (var content = Assert.IsType<JqReadResult.Complete>(
@@ -54,7 +55,7 @@ public sealed partial class JqTests
     public async Task Jq_LargeRawValuesUseSharedAdmission()
     {
         const int length = 64 * 1024 * 1024 + 1;
-        var memory = new TestMemoryBudget(512 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(512 * 1024 * 1024);
         var host = new GeneratedLargeValueHost(length, 0);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", "length")));
         Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
@@ -67,7 +68,7 @@ public sealed partial class JqTests
     public async Task Jq_LargeJsonValuesUseSharedAdmission()
     {
         const int nulls = 11184812;
-        var memory = new TestMemoryBudget(512 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(512 * 1024 * 1024);
         var host = new GeneratedLargeValueHost(0, nulls);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "\"\\u0000\" * 11184812")));
         Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));

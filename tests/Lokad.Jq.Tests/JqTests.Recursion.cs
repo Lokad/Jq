@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Globalization;
 
 namespace Lokad.Jq.Tests;
@@ -17,7 +18,7 @@ public sealed partial class JqTests
     [InlineData("seq-stream", 65, 5)]
     public async Task Jq_InputDepthUsesTheSharedBoundary(string mode, int depth, int status)
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         var host = new MockFileSystem();
         var arguments = new List<string>();
         if (mode.Contains("seq", StringComparison.Ordinal)) arguments.Add("--seq");
@@ -52,7 +53,7 @@ public sealed partial class JqTests
             ("tojson | length", (6 * depth + 1).ToString(CultureInfo.InvariantCulture) + "\n"),
         })
         {
-            var memory = new TestMemoryBudget(4 * 1024 * 1024);
+            var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
             var host = new MockFileSystem();
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", path + " | " + operation)));
 
@@ -68,7 +69,7 @@ public sealed partial class JqTests
     [InlineData(65, 5)]
     public async Task Jq_ModuleLoadingUsesTheSharedDepth(int count, int status)
     {
-        var memory = new TestMemoryBudget(4 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var host = new MockFileSystem();
         for (int index = 0; index < count; index++)
         {
@@ -129,7 +130,7 @@ public sealed partial class JqTests
         string pattern = objects
             ? "{" + string.Join(',', Enumerable.Range(0, count).Select(index => "k" + index.ToString(CultureInfo.InvariantCulture) + ":$v" + index.ToString(CultureInfo.InvariantCulture))) + "}"
             : "[" + string.Join(',', Enumerable.Range(0, count).Select(index => "$v" + index.ToString(CultureInfo.InvariantCulture))) + "]";
-        var memory = new TestMemoryBudget(32 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(32 * 1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "null as " + pattern + " | $v4999")));
 
@@ -144,7 +145,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_DestructuringUnwindsSuspendedBranchesOnCancellationOrClosure(bool cancel)
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var host = new MockFileSystem { AppendRemainsOpen = cancel };
         host.AddFile("/first", "{\"a\":1,\"b\":2,\"c\":3,\"d\":4}\n");

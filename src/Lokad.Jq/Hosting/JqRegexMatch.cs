@@ -4,7 +4,7 @@ namespace Lokad.Jq;
 /// <remarks>The owner must dispose idempotently without throwing. Default represents no match.</remarks>
 public readonly ref struct JqRegexMatch(ReadOnlySpan<JqRegexCapture> captures, IDisposable? owner)
 {
-    private ReadOnlySpan<JqRegexCapture> Captures { get; } = captures;
+    internal ReadOnlySpan<JqRegexCapture> Captures { get; } = captures;
     internal IDisposable? Owner { get; } = owner;
 
     /// <summary>Whether the whole match participated.</summary>

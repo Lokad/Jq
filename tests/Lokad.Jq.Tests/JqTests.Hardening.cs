@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using Lokad.Jq;
 
 namespace Lokad.Jq.Tests;
@@ -7,7 +8,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_PathMaterializationRespectsSharedAdmission()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
             "\"prefix\", (null | setpath([range(5000)|\"a\"]; 1) | [paths] | length)")));
@@ -32,7 +33,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_CombinationsCountBuildIsBudgetBounded()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1 | combinations(1000000) | length")));
         Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
@@ -124,7 +125,7 @@ public sealed partial class JqTests
     {
         // The owned file stays open while evaluation trips quota; persistent
         // cleanup failures must not replace the quota error.
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem { CloseFailuresRemaining = 2 };
         host.AddFile("/input", "[0]");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "[range(0;300000)] | length", "/input")));
@@ -186,7 +187,7 @@ public sealed partial class JqTests
     {
         // Collect-all fan-out grows rebuilt trees exponentially; per-output
         // budget charges fail staged instead of hanging or exhausting memory.
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "null | setpath([range(12)|0]; 0) | walk((.,.)) | length")));
         Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));

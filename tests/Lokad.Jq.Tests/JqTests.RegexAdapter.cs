@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Lokad.Jq.Tests;
@@ -19,7 +20,7 @@ public sealed partial class JqTests
     public async Task Jq_AdapterCancellationDuringWorkUnwindsOwnedInputs(string stage, string expression, int call)
     {
         using var cancellation = new CancellationTokenSource();
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         int calls = 0;
         var engine = new ObservedRegexEngine((operation, budget, token) =>
         {
@@ -57,7 +58,7 @@ public sealed partial class JqTests
     [InlineData("detailed", "match(\"x\")")]
     public async Task Jq_AdapterRefusalIsTerminalAndNeverRetried(string stage, string expression)
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         int refusals = 0;
         var engine = new ObservedRegexEngine((operation, budget, token) =>
         {
@@ -83,7 +84,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_AdapterHandleWaitsForLastBorrowerAndIsDisposedOnce()
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         var engine = new ObservedRegexEngine((_, _, _) => { });
         using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
@@ -94,7 +95,7 @@ public sealed partial class JqTests
         subject.Dispose();
         Assert.Equal(0, engine.Disposed);
         Assert.True(memory.ReservedBytes > 0);
-        Assert.True(match.Value.Success);
+        Assert.True(match.Success);
         match.Dispose();
         match.Dispose();
         Assert.Equal(1, engine.Created);

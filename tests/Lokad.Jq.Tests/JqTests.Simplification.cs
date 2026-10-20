@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Globalization;
 using System.Text;
 
@@ -13,7 +14,7 @@ public sealed partial class JqTests
     public async Task Jq_LongStreamsKeepBoundedMemory(string mode)
     {
         const int records = 300_000;
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         var host = new RepeatingRecordHost(mode, records);
         var command = LongStreamCommand(mode, false);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(60));
@@ -42,7 +43,7 @@ public sealed partial class JqTests
     [InlineData("stream", true)]
     public async Task Jq_LongStreamStopsBeforeAnotherReadOrFile(string mode, bool cancel)
     {
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         var host = new RepeatingRecordHost(mode, 300_000);
         var command = LongStreamCommand(mode, true);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -115,7 +116,7 @@ public sealed partial class JqTests
     [InlineData("0 | while(. < 2; 1,2)", "0\n1\n1\n1\n1\n1\n1\n1\n")]
     public async Task Jq_EmittingWhileCancelsWithExactPrefix(string filter, string expected)
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         host.BeforeByteAppend = () => { if (host.AppendCallCount == 8) cancellation.Cancel(); };

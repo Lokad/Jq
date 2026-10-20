@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Lokad.Jq.Tests;
@@ -7,7 +8,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_ProviderResultOwnerRefundsBeforeItsCompiledHandle()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var engine = new OwnedResultRegexEngine();
         using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
@@ -22,7 +23,7 @@ public sealed partial class JqTests
         subject.Dispose();
         Assert.Empty(engine.Cleanup);
         Assert.Equal(compiled + 32, memory.ReservedBytes);
-        Assert.Equal(new JqRegexCapture(true, 0, 1, 0, 1), match.Value.Value);
+        Assert.Equal(new JqRegexCapture(true, 0, 1, 0, 1), match.Value);
         match.Dispose();
         copy.Dispose();
         Assert.Equal(new[] { "result", "compiled" }, engine.Cleanup);
@@ -34,7 +35,7 @@ public sealed partial class JqTests
     {
         using var cancellation = new CancellationTokenSource();
         var engine = new OwnedResultRegexEngine { AfterMatch = cancellation.Cancel };
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         host.AddFile("/first", "\"x\"\n");
         host.AddFile("/later", "\"later\"\n");

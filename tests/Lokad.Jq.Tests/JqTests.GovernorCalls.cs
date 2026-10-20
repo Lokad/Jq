@@ -18,7 +18,7 @@ public sealed partial class JqTests
     [InlineData(true, 128, 1000)]
     public async Task Jq_GovernedHotCursorTextReusesBoundedCredit(bool stream, int width, int count)
     {
-        var root = new TestMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         string quoted = "\"" + new string('a', width) + "\"";
@@ -40,7 +40,7 @@ public sealed partial class JqTests
     public void Jq_GovernedCursorCreditWarmsWithoutPrepayingAndKeepsRetainedTreesCharged()
     {
         const int limit = 16 * 1024;
-        var root = new TestMemoryBudget(limit);
+        var root = new BenchmarkMemoryBudget(limit);
         var memory = new CountingMemoryBudget(root);
         using (var storage = new JqStorage(memory))
         {
@@ -85,7 +85,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedHotCursorPaddingRefusalLeavesRetainedDemandUnchanged()
     {
-        var root = new TestMemoryBudget(7000);
+        var root = new BenchmarkMemoryBudget(7000);
         var memory = new CountingMemoryBudget(root);
         using (var storage = new JqStorage(memory))
         {
@@ -114,7 +114,7 @@ public sealed partial class JqTests
     [InlineData(true, 1000)]
     public async Task Jq_GovernedCursorScalarEventsReuseBoundedCredit(bool stream, int count)
     {
-        var root = new TestMemoryBudget(32 * 1024);
+        var root = new BenchmarkMemoryBudget(32 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         string expected = stream
@@ -135,7 +135,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedCursorReconciliationKeepsOnlyBoundedExistingCredit()
     {
-        var root = new TestMemoryBudget(16 * 1024);
+        var root = new BenchmarkMemoryBudget(16 * 1024);
         var memory = new CountingMemoryBudget(root);
         using (var storage = new JqStorage(memory))
         {
@@ -165,7 +165,7 @@ public sealed partial class JqTests
     [InlineData(1000)]
     public async Task Jq_GovernedGrowingRegexCallsFollowSubjectCapacity(int count)
     {
-        var root = new TestMemoryBudget(4 * 1024 * 1024);
+        var root = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         host.SetStandardInput("[" + string.Join(',', Enumerable.Range(1, count).Select(length =>
@@ -188,7 +188,7 @@ public sealed partial class JqTests
     [InlineData(1000)]
     public async Task Jq_GovernedEmptyStderrKeepsHostEffectsWithoutAdmissionChurn(int count)
     {
-        var root = new TestMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
@@ -211,7 +211,7 @@ public sealed partial class JqTests
     [InlineData(true, 1000)]
     public async Task Jq_GovernedRegexCallsReuseBoundedOperationOwners(bool detailed, int count)
     {
-        var root = new TestMemoryBudget(2 * 1024 * 1024);
+        var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         string filter = detailed ? "scan(\"a\")" : "range(" + count.ToString(CultureInfo.InvariantCulture) + ") | \"x\" | test(\"x\")";
@@ -234,7 +234,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedSmallBurstsUseBoundedCreditWithoutPaddingColdOwners()
     {
-        var root = new TestMemoryBudget(512);
+        var root = new BenchmarkMemoryBudget(512);
         var memory = new CountingMemoryBudget(root);
         using (var storage = new JqStorage(memory))
         {
@@ -251,7 +251,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedSmallBurstPaddingRefusalDoesNotRetryExactDemand()
     {
-        var root = new TestMemoryBudget(300);
+        var root = new BenchmarkMemoryBudget(300);
         var memory = new CountingMemoryBudget(root);
         using (var storage = new JqStorage(memory))
         {
@@ -272,7 +272,7 @@ public sealed partial class JqTests
     [InlineData(1000)]
     public async Task Jq_GovernedRawCapacityGrowsGeometricallyAndKeepsExactOutput(int count)
     {
-        var root = new TestMemoryBudget(4 * 1024 * 1024);
+        var root = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         host.SetStandardInput("[" + string.Join(',', Enumerable.Range(1, count).Select(length =>
@@ -296,7 +296,7 @@ public sealed partial class JqTests
     public async Task Jq_GovernedRawPaddingRefusalStopsOutputEvenWhenExactReplacementFits()
     {
         const long limit = 64 * 1024;
-        var root = new TestMemoryBudget(limit);
+        var root = new BenchmarkMemoryBudget(limit);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", "\"x\",\"xx\",\"xxx\"")));
@@ -331,7 +331,7 @@ public sealed partial class JqTests
     [InlineData(true, 1000)]
     public async Task Jq_GovernedRecordReservationsReuseTheirAllowance(bool raw, int count)
     {
-        var root = new TestMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         string line = raw ? "x\n" : "1\n";
@@ -351,7 +351,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedRecordReuseKeepsOnlyBoundedAdmittedCredit()
     {
-        var root = new TestMemoryBudget(32 * 1024);
+        var root = new BenchmarkMemoryBudget(32 * 1024);
         var memory = new CountingMemoryBudget(root);
         using (var storage = new JqStorage(memory))
         {
@@ -373,7 +373,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedStorageCreditStaysChargedAndRefundsAtReconciliation()
     {
-        var root = new TestMemoryBudget(16 * 1024);
+        var root = new BenchmarkMemoryBudget(16 * 1024);
         var memory = new CountingMemoryBudget(root);
         using (var storage = new JqStorage(memory))
         {
@@ -395,7 +395,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedStoragePaddingRefusalPreservesDemandWithoutAnExactRetry()
     {
-        var root = new TestMemoryBudget(7000);
+        var root = new BenchmarkMemoryBudget(7000);
         var memory = new CountingMemoryBudget(root);
         using (var storage = new JqStorage(memory))
         {
@@ -414,7 +414,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedKnownCapacityAdmissionsStayExactAndOverflowLeavesDemandUnchanged()
     {
-        var root = new TestMemoryBudget(long.MaxValue);
+        var root = new BenchmarkMemoryBudget(long.MaxValue);
         using (var storage = new JqStorage(root))
         {
             storage.ReserveBytes(4096);
@@ -433,7 +433,7 @@ public sealed partial class JqTests
     [InlineData(100000)]
     public async Task Jq_GovernedHtmlUsesWholeBuilderAdmissionForSmallAndLargeText(int count)
     {
-        var root = new TestMemoryBudget(2 * 1024 * 1024);
+        var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         string value = new('a', count);
         var host = new MockFileSystem();
@@ -453,7 +453,7 @@ public sealed partial class JqTests
     [InlineData(10000)]
     public async Task Jq_GovernedMapBatchesNodeAndSlotAdmission(int count)
     {
-        var root = new TestMemoryBudget(4 * 1024 * 1024);
+        var root = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         host.SetStandardInput("[" + string.Join(',', Enumerable.Range(0, count)) + "]");
@@ -472,7 +472,7 @@ public sealed partial class JqTests
     [InlineData(1000)]
     public async Task Jq_GovernedJsonOutputCallsFollowCapacityInsteadOfRecordCount(int count)
     {
-        var root = new TestMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-c",
@@ -492,7 +492,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedBudgetUsesCachedAdmissionAndPreservesRefusalAndZeroCancellation()
     {
-        var root = new TestMemoryBudget(6);
+        var root = new BenchmarkMemoryBudget(6);
         var memory = new CountingMemoryBudget(root);
         using var cancellation = new CancellationTokenSource();
         using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
@@ -518,7 +518,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedJsonBufferKeepsRealReplacementPeaksWithoutNoopNotifications()
     {
-        var root = new TestMemoryBudget(1024);
+        var root = new BenchmarkMemoryBudget(1024);
         var memory = new CountingMemoryBudget(root);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using (var buffer = new JqJsonBuffer(budget))

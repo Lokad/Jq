@@ -9,7 +9,7 @@ public sealed partial class JqTests
     [InlineData("error(. + \"y\")", 8193)]
     public async Task Jq_ScalarReductionKeepsEscapingErrorStorageCharged(string error, int length)
     {
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         var host = new MockFileSystem();
         host.BeforeByteAppend = () => Assert.True(memory.ReservedBytes >= 2L * length);
         string filter = "try (reduce range(2) as $i (\"\"; if $i == 0 then \"x\" * 8192 else " + error + " end)) catch length";
@@ -26,7 +26,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" * 128 | . as $temporary | true", "4\n")]
     public async Task Jq_ScalarReductionRetainsOnlyItsLiveUpdateDemand(string update, string expected)
     {
-        var root = new TestMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n",
@@ -49,7 +49,7 @@ public sealed partial class JqTests
             "reduce range(1000) as $_ ([]; . + [\"x\" * 128]) | length",
         })
         {
-            var memory = new TestMemoryBudget(64 * 1024);
+            var memory = new BenchmarkMemoryBudget(64 * 1024);
             var host = new MockFileSystem();
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
             Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
@@ -62,7 +62,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_ScalarReductionDoesNotRefundPersistentRegexKeys()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var engine = new FixedRegexEngine();
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
@@ -79,7 +79,7 @@ public sealed partial class JqTests
     public async Task Jq_ScalarReplacementAdmitsItsPeakBeforeReleasingOldState()
     {
         const int limit = 128 * 1024;
-        var memory = new TestMemoryBudget(limit);
+        var memory = new BenchmarkMemoryBudget(limit);
         IMemoryReservation? pressure = null;
         var host = new MockFileSystem();
         host.AddFile("/first", "1\n" + new string(' ', 8190) + "2\n");

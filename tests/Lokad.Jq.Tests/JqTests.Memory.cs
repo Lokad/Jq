@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using Lokad.Jq;
 
 namespace Lokad.Jq.Tests;
@@ -21,7 +22,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, new TestMemoryBudget(64 * 1024), CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, new BenchmarkMemoryBudget(64 * 1024), CancellationToken.None));
         Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -68,7 +69,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" * 300000 | gsub(\"x\"; \"\") | empty")]
     public async Task Jq_SharedAdmissionBoundsConstruction(string filter)
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
@@ -83,7 +84,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_SharedAdmissionBoundsRetainedStringResults()
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n",
             "[range(0;150) | \"x\" * 262144] | length")));
@@ -99,7 +100,7 @@ public sealed partial class JqTests
     public async Task Jq_BoundsJsonBeforeMaterializingInputOrArguments(bool argument)
     {
         var json = "[" + string.Join(',', Enumerable.Repeat("null", 262145)) + "]";
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         host.SetStandardInput(json);
         var invocation = argument
@@ -117,7 +118,7 @@ public sealed partial class JqTests
     {
         // Refusal while parsing positional JSON remains a terminal resource failure.
         var json = "[" + string.Join(",", Enumerable.Repeat("null", 262145)) + "]";
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "$ARGS.positional[0] | length", "--jsonargs", json)));
         Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
@@ -128,7 +129,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_LongWhitespaceInputKeepsReadRequestsAndMemoryBounded()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         byte[] input = new byte[17 * 1024 * 1024];
         input.AsSpan().Fill((byte)' ');
@@ -281,7 +282,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_BoundsSlurpAcrossManySmallInputs()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         host.SetStandardInput(string.Concat(Enumerable.Repeat("null\n", 262145)));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-s", "length")));
@@ -299,7 +300,7 @@ public sealed partial class JqTests
         host.AddFile("/b", new string('y', 4194305));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", "-s", "length", "/a", "/b")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, new TestMemoryBudget(64 * 1024), CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, new BenchmarkMemoryBudget(64 * 1024), CancellationToken.None));
         Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.OpenFileCount);
     }
@@ -310,7 +311,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "\"\\u0000\" * 1398102")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, new TestMemoryBudget(64 * 1024), CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, new BenchmarkMemoryBudget(64 * 1024), CancellationToken.None));
         Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -322,7 +323,7 @@ public sealed partial class JqTests
         host.AddFile("/filter", new string(' ', 1024 * 1024 + 1) + "42");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-f", "/filter")));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, new TestMemoryBudget(16 * 1024 * 1024), CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, new BenchmarkMemoryBudget(16 * 1024 * 1024), CancellationToken.None));
         Assert.Equal("42\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.OpenFileCount);
@@ -460,7 +461,7 @@ public sealed partial class JqTests
         host.SetStandardInput(new string('x', 8 * 1024 * 1024 + 1));
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", "empty")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, new TestMemoryBudget(64 * 1024), CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, new BenchmarkMemoryBudget(64 * 1024), CancellationToken.None));
         Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -476,7 +477,7 @@ public sealed partial class JqTests
             ? new[] { "-n", "-f", "filter" }
             : new[] { "-n", "empty" }.Concat(Enumerable.Repeat("file", 64)).ToArray();
         var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", args, [new JqEnvironmentVariable("PWD", directory)]);
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 

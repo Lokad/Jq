@@ -8,7 +8,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_CacheOwnsKeysWhenTheProviderRetainsNoPatternText()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var engine = new FixedRegexEngine();
         using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
@@ -30,7 +30,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_CacheKeyRefusalPrecedesCopyAndProviderWork()
     {
-        var root = new TestMemoryBudget(20127);
+        var root = new BenchmarkMemoryBudget(20127);
         var memory = new CountingMemoryBudget(root);
         var engine = new FixedRegexEngine();
         using var budget = new JqBudget(engine, memory, CancellationToken.None);

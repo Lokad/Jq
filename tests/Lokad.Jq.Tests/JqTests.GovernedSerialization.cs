@@ -11,7 +11,7 @@ public sealed partial class JqTests
     [InlineData(1000)]
     public void Jq_GovernedMixedSerializationReconcilesFinishedGrowthBeforeReuse(int count)
     {
-        var root = new TestMemoryBudget(8192);
+        var root = new BenchmarkMemoryBudget(8192);
         var memory = new CountingMemoryBudget(root);
         using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
         {
@@ -42,7 +42,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedSerializerReconciliationCannotBypassReplacementPeak()
     {
-        var root = new TestMemoryBudget(4096);
+        var root = new BenchmarkMemoryBudget(4096);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 32; i++)
@@ -63,7 +63,7 @@ public sealed partial class JqTests
     public void Jq_GovernedReconciledSerializerCreditStaysChargedAndReturnDoesNotResize()
     {
         const int limit = 8192;
-        var root = new TestMemoryBudget(limit);
+        var root = new BenchmarkMemoryBudget(limit);
         var memory = new CountingMemoryBudget(root);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var runtime = new JqRuntime(budget);
@@ -100,7 +100,7 @@ public sealed partial class JqTests
     [InlineData(true, true, true)]
     public void Jq_GovernedHotSerializationPreservesEncodingAndFormatting(bool ascii, bool pretty, bool tabs)
     {
-        var root = new TestMemoryBudget(32 * 1024);
+        var root = new BenchmarkMemoryBudget(32 * 1024);
         using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
@@ -125,7 +125,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedColdSerializationRefundsImmediately()
     {
-        var memory = new TestMemoryBudget(256);
+        var memory = new BenchmarkMemoryBudget(256);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 10; i++)
@@ -139,7 +139,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedSerializationKeepsOverlappingResultsDistinctAndDefersActiveRefunds()
     {
-        var memory = new TestMemoryBudget(32 * 1024);
+        var memory = new BenchmarkMemoryBudget(32 * 1024);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 64; i++)
@@ -169,7 +169,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedSerializationDropsOversizedAndFailedBuffers()
     {
-        var memory = new TestMemoryBudget(32 * 1024);
+        var memory = new BenchmarkMemoryBudget(32 * 1024);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 64; i++)
@@ -193,7 +193,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedSerializationReusePreservesCancellationAndAdmission()
     {
-        var memory = new TestMemoryBudget(4096);
+        var memory = new BenchmarkMemoryBudget(4096);
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token);
         var runtime = new JqRuntime(budget);
@@ -218,7 +218,7 @@ public sealed partial class JqTests
     [InlineData(1000)]
     public async Task Jq_GovernedRepeatedSerializationReusesOnlyReturnedBuffers(int count)
     {
-        var root = new TestMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "range(" + count + ") | \"x\" | tojson")));

@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Globalization;
 using System.Text.Json;
 
@@ -91,7 +92,7 @@ public sealed partial class JqTests
             "try inputs catch \"caught\"", "/first", "/later")));
 
         Assert.Equal(5, await command.ExecuteAsync(new ChunkedHost(inner, chunk),
-            new TestMemoryBudget(32 * 1024), CancellationToken.None));
+            new BenchmarkMemoryBudget(32 * 1024), CancellationToken.None));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(inner.ClosedDescriptors);

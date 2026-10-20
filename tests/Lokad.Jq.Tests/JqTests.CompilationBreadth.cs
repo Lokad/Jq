@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
@@ -17,7 +18,7 @@ public sealed partial class JqTests
             "definitions" => string.Concat(Enumerable.Range(0, count).Select(index => "def f" + index + ":" + index + ";")) + "f4999 + 1",
             _ => "module {items:[" + string.Join(',', Enumerable.Repeat("0", count)) + "]}; 5000",
         };
-        var memory = new TestMemoryBudget(32 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(32 * 1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
         Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
@@ -30,7 +31,7 @@ public sealed partial class JqTests
     public async Task Jq_BindsAdmittedArgumentVectors()
     {
         string[] arguments = ["-n", "--args", "$ARGS.positional | length", .. Enumerable.Repeat("value", 5000)];
-        var memory = new TestMemoryBudget(4 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", arguments, [])));
         Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
@@ -67,7 +68,7 @@ public sealed partial class JqTests
     public async Task Jq_LargeCompilationUsesSharedAdmissionAndCleansOwnedFiles(bool hosted)
     {
         string source = "{" + string.Join(',', Enumerable.Range(0, 5000).Select(index => "k" + index + ":0")) + "}";
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         host.AddFile("/program", source);
         var invocation = hosted ? BuildInvocation("jq", "-n", "-f", "/program") : BuildInvocation("jq", "-n", source);

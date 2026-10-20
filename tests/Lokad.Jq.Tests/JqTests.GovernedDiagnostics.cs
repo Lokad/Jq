@@ -11,7 +11,7 @@ public sealed partial class JqTests
     [InlineData(1000)]
     public async Task Jq_GovernedSmallStderrReusesBoundedCreditAndPreservesEveryAppend(int count)
     {
-        var root = new TestMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
@@ -31,7 +31,7 @@ public sealed partial class JqTests
     [InlineData(4096)]
     public void Jq_GovernedDiagnosticBurstsTrackAllQueuedBytesWithBoundedPadding(int width)
     {
-        var root = new TestMemoryBudget(8 * 1024 * 1024);
+        var root = new BenchmarkMemoryBudget(8 * 1024 * 1024);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
         {
@@ -54,7 +54,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedDiagnosticPaddingRefusalKeepsQueuedBytesWithoutRetrying()
     {
-        var root = new TestMemoryBudget(1024);
+        var root = new BenchmarkMemoryBudget(1024);
         var memory = new CountingMemoryBudget(root);
         Assert.True(root.TryReserve(900, out var pressure));
         using (pressure)
@@ -88,7 +88,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_GovernedHotDiagnosticQueueStaysChargedUntilPendingDrainEnds(bool cancel)
     {
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         using var cancellation = new CancellationTokenSource();
         var inner = new MockFileSystem();
         var host = new MemoryBorrowHost(inner) { DelayedDescriptor = JqFileDescriptor.StdErr };
@@ -123,7 +123,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_GovernedEmptyStderrStillAwaitsHostAndPreservesCancellation(bool cancel)
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource();
         var inner = new MockFileSystem();
         var host = new MemoryBorrowHost(inner) { DelayedDescriptor = JqFileDescriptor.StdErr };
@@ -155,7 +155,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedEmptyDiagnosticQueueKeepsPriorBytesAndValidatesLifetime()
     {
-        var root = new TestMemoryBudget(8);
+        var root = new BenchmarkMemoryBudget(8);
         var memory = new CountingMemoryBudget(root);
         using var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None));
@@ -189,7 +189,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedEmptyDiagnosticsStillCheckCancellationAndPermitRefunds()
     {
-        var memory = new TestMemoryBudget(8);
+        var memory = new BenchmarkMemoryBudget(8);
         using var cancellation = new CancellationTokenSource();
         using var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token));
@@ -207,7 +207,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_GovernedDiagnosticKeepsExactUtf8ChargeUntilHostCompletes(bool cancel)
     {
-        var memory = new TestMemoryBudget(1024);
+        var memory = new BenchmarkMemoryBudget(1024);
         using var cancellation = new CancellationTokenSource();
         var inner = new MockFileSystem();
         var host = new MemoryBorrowHost(inner) { DelayedDescriptor = JqFileDescriptor.StdErr };
@@ -238,7 +238,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedDiagnosticRefusalLeavesExistingOwnerIntact()
     {
-        var memory = new TestMemoryBudget(8);
+        var memory = new BenchmarkMemoryBudget(8);
         Assert.True(memory.TryReserve(8, out IMemoryReservation? retained));
         using (retained)
         {
@@ -256,7 +256,7 @@ public sealed partial class JqTests
     public async Task Jq_GovernedErrorPayloadRefusalPreservesPrefixAndStopsLaterFiles()
     {
         const long limit = 1024 * 1024;
-        var memory = new TestMemoryBudget(limit);
+        var memory = new BenchmarkMemoryBudget(limit);
         var host = new MockFileSystem();
         string payload = new('x', 20000);
         host.AddFile("/input", "\"" + payload + "\"");
@@ -284,7 +284,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedHaltPayloadRefusalReturnsResourceStatusInsteadOfHaltCode()
     {
-        var memory = new TestMemoryBudget(16 * 1024);
+        var memory = new BenchmarkMemoryBudget(16 * 1024);
         var host = new MockFileSystem();
         string payload = new('x', 20000);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r",
@@ -303,7 +303,7 @@ public sealed partial class JqTests
     public async Task Jq_GovernedTerminalPayloadKeepsUtf8StorageUntilStderrCompletes(
         string operation, int status, string expected)
     {
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         var inner = new MockFileSystem();
         inner.AddFile("/input", "\"café 😀\"");
         var host = new MemoryBorrowHost(inner) { DelayedDescriptor = JqFileDescriptor.StdErr };

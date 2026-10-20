@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Threading;
 
 namespace Lokad.Jq.Tests;
@@ -108,7 +109,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_DiscardedEvaluationUsesBoundedSharedAdmission()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "range(100000) | empty")));
         Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
@@ -171,7 +172,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-L", "/",
             "import \"data\" as $data" + metadata + "; empty")));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, new TestMemoryBudget(32 * 1024), CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, new BenchmarkMemoryBudget(32 * 1024), CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -185,7 +186,7 @@ public sealed partial class JqTests
         host.AddFile("/data", "[" + string.Join(',', Enumerable.Repeat("0", 200)) + "]" + new string(' ', 9000));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "/data")));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, new TestMemoryBudget(32 * 1024), CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, new BenchmarkMemoryBudget(32 * 1024), CancellationToken.None));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(1, host.ReadBytesCallCount);
         Assert.Single(host.ClosedDescriptors);
@@ -197,7 +198,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_StreamNumericDecodePreservesAdmissionRefusal(bool finish)
     {
-        var memory = new TestMemoryBudget(256);
+        var memory = new BenchmarkMemoryBudget(256);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var scanner = new JqStreamScanner(budget, new JqRuntime(budget), false, false);
         scanner.Consume("1"u8, false);
@@ -238,7 +239,7 @@ public sealed partial class JqTests
     {
         string token = "\"" + (escaped ? string.Concat(Enumerable.Repeat("\\u0061", 262144)) : new string('a', 262144)) + "\"";
         byte[] input = System.Text.Encoding.UTF8.GetBytes(objectKey ? "{" + token + ":0}" : token);
-        var memory = new TestMemoryBudget(256);
+        var memory = new BenchmarkMemoryBudget(256);
         Assert.Throws<JqQuotaException>(() => new JqRuntime(new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)).ReadJsonValue(input, out _));
 
         var runtime = new JqRuntime(new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None));
@@ -273,7 +274,7 @@ public sealed partial class JqTests
     public void Jq_JsonStringPreflightCountsDecodedCodeUnitsOnce(string token, string expected, bool objectKey)
     {
         byte[] input = System.Text.Encoding.UTF8.GetBytes(objectKey ? "{" + token + ":0}" : token);
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         var runtime = new JqRuntime(budget);
 

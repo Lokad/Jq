@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
@@ -7,7 +8,7 @@ public sealed partial class JqTests
     [InlineData("--slurpfile")]
     public async Task Jq_GovernedFileVariableAllocationFailurePropagatesAndRefunds(string option)
     {
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         var host = new MockFileSystem();
         host.AddFile("/data", "1");
         var failure = new OutOfMemoryException("simulated allocation failure");
@@ -28,7 +29,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedInvocationFailureRefundsUnusedSnapshotAdmission()
     {
-        var memory = new TestMemoryBudget(1024);
+        var memory = new BenchmarkMemoryBudget(1024);
         Assert.Throws<OutOfMemoryException>(() => JqCommandInvocation.TryCreateWithStandardDescriptors(
             "jq", new FailingSnapshotArguments(), [], memory, out _));
         Assert.Equal(0, memory.ReservedBytes);
@@ -44,7 +45,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_GovernedInvocationFactoriesPreserveExplicitClock(bool explicitDescriptors)
     {
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         var clock = new JqClock(new FixedClock(FixedInstant), TimeZoneInfo.Utc);
         JqCommandInvocation? invocation;
         bool admitted = explicitDescriptors
@@ -71,7 +72,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_GovernedBindingRefusalKeepsTerminalCategoryForJsonArguments(bool positional)
     {
-        var memory = new TestMemoryBudget(32 * 1024);
+        var memory = new BenchmarkMemoryBudget(32 * 1024);
         string json = "[" + string.Join(',', Enumerable.Repeat("0", 10000)) + "]";
         string[] arguments = positional
             ? ["-n", "$ARGS.positional[0] | length", "--jsonargs", json]
@@ -92,7 +93,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedInvocationRefusalPreservesCallerAdmission()
     {
-        var memory = new TestMemoryBudget(64);
+        var memory = new BenchmarkMemoryBudget(64);
         using var caller = memory.CreateScope();
         Assert.True(caller.TryReserve(8, out IMemoryReservation? retained));
         using (retained)
@@ -111,7 +112,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedInvocationSnapshotsStayChargedAcrossReuseAndBorrowTheirRoot()
     {
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         string[] arguments = ["-n", "-r", "--arg", "name", "original", "$name"];
         JqEnvironmentVariable[] environment = [new("PWD", "/work")];
         Assert.True(JqCommandInvocation.TryCreateWithStandardDescriptors("jq", arguments,
@@ -148,7 +149,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedInvocationUsesExplicitDescriptorsAndPreservesArgumentErrors()
     {
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         var output = new JqFileDescriptor(10);
         var error = new JqFileDescriptor(11);
         Assert.True(JqCommandInvocation.TryCreate("jq", ["--argjson", "data", "invalid", "$data"],
@@ -171,7 +172,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedInvocationAndBindingStayLiveThroughOverlappingWritesAndCleanup()
     {
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         Assert.True(JqCommandInvocation.TryCreateWithStandardDescriptors("jq", [".", "/input"],
             [], memory, out JqCommandInvocation? invocation));
         using (invocation)

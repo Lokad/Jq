@@ -54,9 +54,9 @@ internal static class JqMatch
         ArgumentNullException.ThrowIfNull(modifiers);
         JqRegexOptions options = JqRegexOptions.ParseOrThrow(modifiers);
         bool global = modifiers.Contains('g');
-        JqRegexCache.Pattern compiled = context.Regexes.Get(pattern, options.Pattern);
+        IJqCompiledRegex compiled = context.Regexes.Get(pattern, options.Pattern);
         JqRegexMatchOptions matchOptions = options.Match;
-        IReadOnlyDictionary<int, string> names = GroupNameMap(compiled);
+        IReadOnlyDictionary<int, string> names = compiled.GroupNames;
         using var ownedSubject = context.Regexes.EncodeSubject(text);
         ReadOnlyMemory<byte> subject = ownedSubject.Value;
         context.Budget.ReserveMetadata(32, 1);
@@ -64,8 +64,7 @@ internal static class JqMatch
         int start = 0;
         while (true)
         {
-            using var ownedMatch = context.Regexes.Match(compiled, subject, start, matchOptions);
-            JqRegexMatch match = ownedMatch.Value;
+            using var match = context.Regexes.Match(compiled, subject, start, matchOptions);
             if (!match.Success)
                 break;
             context.Budget.CheckCancellation();
@@ -95,12 +94,6 @@ internal static class JqMatch
                 break;
         }
         return results;
-    }
-
-    internal static IReadOnlyDictionary<int, string> GroupNameMap(JqRegexCache.Pattern compiled)
-    {
-        ArgumentNullException.ThrowIfNull(compiled);
-        return compiled.Names;
     }
 
     // Named-capture fold for sub/gsub replacements: numbered groups in

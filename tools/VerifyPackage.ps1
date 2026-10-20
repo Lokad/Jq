@@ -69,7 +69,6 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Program.cs') -Dest
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Symbols.cs') -Destination (Join-Path $verificationRoot 'Symbols.cs')
 # Reuse the development-only host contract; no governor enters the package.
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../benchmarks/Lokad.Jq.Benchmarks/BenchmarkMemoryBudget.cs') -Destination (Join-Path $verificationRoot 'BenchmarkMemoryBudget.cs')
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../tests/Lokad.Jq.Tests/TestMemoryBudget.cs') -Destination (Join-Path $verificationRoot 'TestMemoryBudget.cs')
 $feed = [Security.SecurityElement]::Escape([IO.Path]::GetDirectoryName($packageFile))
 @"
 <configuration><packageSources><clear />

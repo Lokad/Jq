@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
@@ -84,7 +85,7 @@ public sealed partial class JqTests
     {
         using var cancellation = new CancellationTokenSource();
         var prefix = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem { BeforeByteAppend = () => prefix.TrySetResult() };
         host.AddFile("/first", "1\n2\n");
         host.AddFile("/later", "3\n");
@@ -113,7 +114,7 @@ public sealed partial class JqTests
     public async Task Jq_DownstreamClosureStopsBeforeLongBesselWork()
     {
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem { AppendRemainsOpen = false };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
             "\"prefix\", jn(10000000000; 10000000000)")));

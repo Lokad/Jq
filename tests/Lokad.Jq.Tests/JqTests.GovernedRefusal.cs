@@ -16,7 +16,7 @@ public sealed partial class JqTests
     [InlineData(2, "(\"x\" * 1000000)?")]
     public async Task Jq_GovernedRefusalKeepsResourceStatusWhenPendingStderrStops(int drainResult, string expression)
     {
-        var root = new TestMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(64 * 1024);
         using var caller = root.CreateScope();
         Assert.True(caller.TryReserve(7, out var retained));
         using (retained)
@@ -64,7 +64,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_GovernedRefusalAwaitsOwnedCleanupAndPendingStderrBeforeRefund(bool cancel)
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource();
         var inner = new MockFileSystem();
         inner.AddFile("/input", "0\n");

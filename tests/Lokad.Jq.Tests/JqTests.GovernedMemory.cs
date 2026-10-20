@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Text;
 
 namespace Lokad.Jq.Tests;
@@ -8,7 +9,7 @@ public sealed partial class JqTests
     public async Task Jq_GovernedRawOutputPreflightsReplacementPeakAndPreservesBorrowedOwner()
     {
         const long limit = 64 * 1024;
-        var memory = new TestMemoryBudget(limit);
+        var memory = new BenchmarkMemoryBudget(limit);
         using IMemoryScope caller = memory.CreateScope();
         Assert.True(caller.TryReserve(2, out IMemoryReservation? retained));
         using (retained)
@@ -39,7 +40,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedRawOutputReusesAllowanceAcrossRecordsAndInvocations()
     {
-        var memory = new TestMemoryBudget(16 * 1024);
+        var memory = new BenchmarkMemoryBudget(16 * 1024);
         long? observed = null;
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", "range(100) | \"xx\"")));
         for (int run = 0; run < 3; run++)
@@ -61,7 +62,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedJsonBufferAccountsForCapacityAndBorrowedGrowthStorage()
     {
-        var memory = new TestMemoryBudget(1024);
+        var memory = new BenchmarkMemoryBudget(1024);
         using var scope = memory.CreateScope();
         var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
         using (var buffer = new JqJsonBuffer(budget))
@@ -87,7 +88,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedBufferRefusalLeavesStorageAndReservationUnchanged()
     {
-        var memory = new TestMemoryBudget(8);
+        var memory = new BenchmarkMemoryBudget(8);
         byte[] buffer = [];
         using (var reservation = new JqMemoryReservation(memory))
         {
@@ -115,7 +116,7 @@ public sealed partial class JqTests
     [InlineData(true, true)]
     public async Task Jq_GovernedOutputKeepsChargesThroughCancellationAndCleanup(bool raw, bool cancel)
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var inner = new MockFileSystem();
         inner.AddFile("/input", "\"xx\"");
@@ -155,7 +156,7 @@ public sealed partial class JqTests
     public async Task Jq_GovernedOverlappingExecutionsShareParentDemand()
     {
         const long limit = 64 * 1024;
-        var memory = new TestMemoryBudget(limit);
+        var memory = new BenchmarkMemoryBudget(limit);
         using IMemoryScope caller = memory.CreateScope();
         Assert.True(caller.TryReserve(1, out IMemoryReservation? retained));
         using (retained)
@@ -194,7 +195,7 @@ public sealed partial class JqTests
     [InlineData("--build-configuration")]
     public async Task Jq_GovernedInformationOutputRefusalIsTerminal(string option)
     {
-        var memory = new TestMemoryBudget(1);
+        var memory = new BenchmarkMemoryBudget(1);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", option)));
         Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
@@ -206,7 +207,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedReservationRejectsResizeAfterAncestorDisposal()
     {
-        var memory = new TestMemoryBudget(8);
+        var memory = new BenchmarkMemoryBudget(8);
         using var owner = memory.CreateScope();
         using var reservation = new JqMemoryReservation(owner);
         reservation.Resize(8);

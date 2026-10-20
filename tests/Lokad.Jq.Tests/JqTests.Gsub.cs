@@ -129,7 +129,7 @@ public sealed partial class JqTests
         for (int i = 0; i < 100; i++)
         {
             using var match = regexes.Match(pattern, "x"u8.ToArray(), 0, JqRegexMatchOptions.None);
-            Assert.True(match.Value.Success);
+            Assert.True(match.Success);
             Assert.True(regexes.IsMatch(pattern, "x"u8.ToArray(), JqRegexMatchOptions.None));
         }
     }

@@ -14,7 +14,7 @@ internal sealed class JqRegexCache : IDisposable
     private const int MaximumIdleBytes = 4096;
     private SubjectMemory? _idleSubject;
     private int _borrowers;
-    private readonly Dictionary<(string Pattern, JqRegexCompileOptions Options), Pattern> _patterns = new();
+    private readonly Dictionary<(string Pattern, JqRegexCompileOptions Options), IJqCompiledRegex> _patterns = new();
 
     internal JqRegexCache(JqBudget budget)
     {
@@ -22,11 +22,11 @@ internal sealed class JqRegexCache : IDisposable
         _keys = new JqMemoryReservation(budget.MemoryBudget);
     }
 
-    internal Pattern Get(string pattern, JqRegexCompileOptions options)
+    internal IJqCompiledRegex Get(string pattern, JqRegexCompileOptions options)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _budget.CheckCancellation();
-        if (_patterns.TryGetValue((pattern, options), out Pattern? cached)) return cached;
+        if (_patterns.TryGetValue((pattern, options), out IJqCompiledRegex? cached)) return cached;
         IJqCompiledRegex? compiled = null;
         long previousKeys = _keys.LastAdmittedBytes;
         bool retained = false;
@@ -42,7 +42,7 @@ internal sealed class JqRegexCache : IDisposable
                 _budget.CancellationToken, out compiled, out string? error))
                 throw new JqException(error ?? "unsupported regex");
             _budget.CheckCancellation();
-            cached = new Pattern(compiled, compiled.GroupNames);
+            cached = compiled;
             _patterns.Add((ownedPattern, options), cached);
             retained = true;
             return cached;
@@ -79,7 +79,7 @@ internal sealed class JqRegexCache : IDisposable
         }
     }
 
-    internal MatchResult Match(Pattern pattern, ReadOnlyMemory<byte> input,
+    internal JqRegexMatch Match(IJqCompiledRegex pattern, ReadOnlyMemory<byte> input,
         int start, JqRegexMatchOptions options)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -88,12 +88,12 @@ internal sealed class JqRegexCache : IDisposable
         bool retained = false;
         try
         {
-            match = pattern.Regex.Match(input.Span, start, options, _budget.CancellationToken);
+            match = pattern.Match(input.Span, start, options, _budget.CancellationToken);
             _budget.CheckCancellation();
             var lifetime = new MatchLifetime(this, match.Owner);
             _borrowers++;
             retained = true;
-            return new MatchResult(match, lifetime);
+            return new JqRegexMatch(match.Captures, lifetime);
         }
         catch (JqRegexResourceException exception) { throw Terminal(exception); }
         catch (NotSupportedException exception)
@@ -103,11 +103,11 @@ internal sealed class JqRegexCache : IDisposable
         finally { if (!retained) match.Dispose(); }
     }
 
-    internal bool IsMatch(Pattern pattern, ReadOnlyMemory<byte> input, JqRegexMatchOptions options)
+    internal bool IsMatch(IJqCompiledRegex pattern, ReadOnlyMemory<byte> input, JqRegexMatchOptions options)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _budget.CheckCancellation();
-        try { return pattern.Regex.IsMatch(input.Span, options, _budget.CancellationToken); }
+        try { return pattern.IsMatch(input.Span, options, _budget.CancellationToken); }
         catch (JqRegexResourceException exception) { throw Terminal(exception); }
         catch (NotSupportedException ex) { throw new JqException($"unsupported regex: {ex.Message}"); }
         finally { _budget.CheckCancellation(); }
@@ -155,7 +155,7 @@ internal sealed class JqRegexCache : IDisposable
 
     private void ReleaseCompiled()
     {
-        foreach (Pattern pattern in _patterns.Values) pattern.Regex.Dispose();
+        foreach (IJqCompiledRegex pattern in _patterns.Values) pattern.Dispose();
         _patterns.Clear();
         _keys.Dispose();
     }
@@ -215,8 +215,6 @@ internal sealed class JqRegexCache : IDisposable
         }
     }
 
-    internal sealed record Pattern(IJqCompiledRegex Regex, IReadOnlyDictionary<int, string> Names);
-
     private sealed class MatchLifetime(JqRegexCache cache, IDisposable? owner) : IDisposable
     {
         private bool _disposed;
@@ -228,12 +226,5 @@ internal sealed class JqRegexCache : IDisposable
             try { owner?.Dispose(); }
             finally { cache.ReleaseBorrower(); }
         }
-    }
-
-    internal readonly ref struct MatchResult(JqRegexMatch value, IDisposable lifetime)
-    {
-        internal JqRegexMatch Value { get; } = value;
-
-        public void Dispose() => lifetime.Dispose();
     }
 }

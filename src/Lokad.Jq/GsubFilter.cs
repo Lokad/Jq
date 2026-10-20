@@ -35,8 +35,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
             var start = 0;
             while (start <= subject.Length)
             {
-                using var ownedMatch = context.Regexes.Match(regex, subject, start, matchOptions);
-                var match = ownedMatch.Value;
+                using var match = context.Regexes.Match(regex, subject, start, matchOptions);
                 if (!match.Success) break;
                 context.Budget.CheckCancellation();
                 var end = match.Value.EndOffsetInUtf16;
@@ -48,12 +47,12 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                 var gapLength = match.Value.StartOffsetInUtf16 - previous;
                 JqStorage? storage = context.Budget.TemporaryStorage;
                 long captureBefore = storage?.UsedBytes ?? 0;
-                JsonObject captures = JqMatch.FoldNamedCaptures(context, text, match, JqMatch.GroupNameMap(regex), match.CaptureSlotCount - 1);
+                JsonObject captures = JqMatch.FoldNamedCaptures(context, text, match, regex.GroupNames, match.CaptureSlotCount - 1);
                 long captureDemand = storage is null ? 0 : storage.UsedBytes - captureBefore;
 
                 // Positions and capture strings have been copied. Release the
                 // provider result before evaluating nested replacements.
-                ownedMatch.Dispose();
+                match.Dispose();
                 var index = 0;
                 long bodyBefore = storage?.UsedBytes ?? 0;
                 long retainedBuilderDemand = 0;

@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Threading;
 using Lokad.Jq;
 
@@ -16,7 +17,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        var exitCode = await tool.ExecuteAsync(fileSystem, new TestMemoryBudget(64 * 1024), cancellation.Token);
+        var exitCode = await tool.ExecuteAsync(fileSystem, new BenchmarkMemoryBudget(64 * 1024), cancellation.Token);
 
         Assert.Equal(5, exitCode);
         Assert.Equal("jq: memory budget exceeded\n", fileSystem.GetOutput(JqFileDescriptor.StdErr));
@@ -32,7 +33,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        var exitCode = await tool.ExecuteAsync(fileSystem, new TestMemoryBudget(64 * 1024), cancellation.Token);
+        var exitCode = await tool.ExecuteAsync(fileSystem, new BenchmarkMemoryBudget(64 * 1024), cancellation.Token);
 
         Assert.Equal(5, exitCode);
         Assert.Contains("memory budget exceeded", fileSystem.GetOutput(JqFileDescriptor.StdErr));
@@ -48,7 +49,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "try (. * 1000000) catch .")));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        var exitCode = await tool.ExecuteAsync(fileSystem, new TestMemoryBudget(64 * 1024), cancellation.Token);
+        var exitCode = await tool.ExecuteAsync(fileSystem, new BenchmarkMemoryBudget(64 * 1024), cancellation.Token);
 
         Assert.Equal(5, exitCode);
         Assert.Equal("jq: memory budget exceeded\n", fileSystem.GetOutput(JqFileDescriptor.StdErr));

@@ -11,7 +11,7 @@ public sealed partial class JqTests
     [InlineData("gsub(\"x\"; range(10000) | tostring)")]
     public async Task Jq_RegexRetainedConstructionRefusesBeforePublishingResults(string operation)
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         var host = new MockFileSystem();
         host.AddFile("/first", "\"" + new string('x', 4000) + "\"\n");
         host.AddFile("/later", "\"later\"\n");
@@ -35,7 +35,7 @@ public sealed partial class JqTests
     [InlineData("splits(\"x\")", 4001)]
     public async Task Jq_AdmittedRegexConstructionKeepsAllResults(string operation, int count)
     {
-        var root = new TestMemoryBudget(32 * 1024 * 1024);
+        var root = new BenchmarkMemoryBudget(32 * 1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         host.SetStandardInput("\"" + new string('x', 4000) + "\"\n");
@@ -53,7 +53,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_NestedSubstitutionsDiscardOnlyCompletedCaptureAndReplacementDemand()
     {
-        var root = new TestMemoryBudget(1024 * 1024);
+        var root = new BenchmarkMemoryBudget(1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         host.SetStandardInput("\"" + new string('x', 10000) + "\"\n");
@@ -72,7 +72,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_SubstitutionKeepsEscapingReplacementPayloadCharged()
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         var host = new MockFileSystem();
         host.BeforeByteAppend = () => Assert.True(memory.ReservedBytes >= 2L * 8192);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n",

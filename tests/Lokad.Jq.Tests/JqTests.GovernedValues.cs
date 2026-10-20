@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Text;
 
 namespace Lokad.Jq.Tests;
@@ -11,7 +12,7 @@ public sealed partial class JqTests
     [InlineData("try {values: [range(10000)]} catch \"caught\"")]
     public async Task Jq_GovernedValueAdmissionPrecedesExpansionAndCannotBeCaught(string filter)
     {
-        var memory = new TestMemoryBudget(16 * 1024);
+        var memory = new BenchmarkMemoryBudget(16 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
@@ -30,7 +31,7 @@ public sealed partial class JqTests
     [InlineData("stream")]
     public async Task Jq_GovernedInputValuesReuseAllowanceAcrossOuterRecords(string mode)
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         string value = new('x', 4096);
         const int records = 300;
         string input = mode switch
@@ -62,7 +63,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedSlurpRetainsValuesInsteadOfRefundingBorrowedRecords()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         host.SetStandardInput(string.Concat(Enumerable.Repeat("\"" + new string('x', 4096) + "\"\n", 100)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-s", "length")));
@@ -77,7 +78,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedVariableAliasesRemainChargedDuringNestedInput()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         string value = new('x', 4096);
         host.SetStandardInput("\"" + value + "\"\n\"" + value + "\"\n");
@@ -93,7 +94,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedModuleCompilationStaysChargedAcrossRecordRefunds()
     {
-        var memory = new TestMemoryBudget(256 * 1024);
+        var memory = new BenchmarkMemoryBudget(256 * 1024);
         var host = new MockFileSystem();
         host.AddFile("/module.jq", "def value: \"" + new string('x', 4096) + "\";");
         host.SetStandardInput(string.Concat(Enumerable.Repeat("null\n", 100)));
@@ -113,7 +114,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedDiagnosticsReleaseSerializationAndQueueStorageBetweenRecords()
     {
-        var memory = new TestMemoryBudget(96 * 1024);
+        var memory = new BenchmarkMemoryBudget(96 * 1024);
         var host = new MockFileSystem();
         string value = new('x', 4096);
         host.SetStandardInput(string.Concat(Enumerable.Repeat("\"" + value + "\"\n", 300)));
@@ -132,7 +133,7 @@ public sealed partial class JqTests
     [InlineData("stream")]
     public async Task Jq_GovernedCursorPayloadStaysChargedThroughTerminalDiagnostic(string mode)
     {
-        var memory = new TestMemoryBudget(96 * 1024);
+        var memory = new BenchmarkMemoryBudget(96 * 1024);
         var host = new MockFileSystem();
         string value = new('x', 4096);
         host.AddFile("/input", (mode == "seq" ? "\u001e" : "") + "\"" + value + "\"\n");

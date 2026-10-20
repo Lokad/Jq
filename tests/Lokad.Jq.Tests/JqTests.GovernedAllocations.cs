@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Globalization;
 using System.Text.Json.Nodes;
 
@@ -20,7 +21,7 @@ public sealed partial class JqTests
     public async Task Jq_GovernedCollectionAdmissionPreservesPrefixUnderCompetingDemand(string operation)
     {
         const long limit = 1024 * 1024;
-        var memory = new TestMemoryBudget(limit);
+        var memory = new BenchmarkMemoryBudget(limit);
         var host = new MockFileSystem();
         string input = "[" + string.Join(',', Enumerable.Range(0, 1000)
             .Select(number => number.ToString(CultureInfo.InvariantCulture))) + "]";
@@ -55,7 +56,7 @@ public sealed partial class JqTests
     public async Task Jq_GovernedUnicodeScratchAdmissionPrecedesLargeLists(string operation)
     {
         const long limit = 1024 * 1024;
-        var memory = new TestMemoryBudget(limit);
+        var memory = new BenchmarkMemoryBudget(limit);
         var host = new MockFileSystem();
         string value = new('x', 10000);
         host.SetStandardInput("\"" + value + "\"\n");
@@ -82,7 +83,7 @@ public sealed partial class JqTests
         string source = "module {data: [" + string.Join(',', Enumerable.Repeat("1", 100)) + "]}; .";
         using var lexicalBudget = new JqBudget(CancellationToken.None);
         var tokens = Lexer.Tokenize(source, JqProgramSource.Inline, lexicalBudget);
-        var memory = new TestMemoryBudget(8192);
+        var memory = new BenchmarkMemoryBudget(8192);
         using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), budget))
         {
@@ -101,7 +102,7 @@ public sealed partial class JqTests
     {
         string source = "module {data: [" + string.Join(',', Enumerable.Repeat("1", 1000))
             + "]}; " + (module ? "def f: .;" : ".");
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
         {
             var environment = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
@@ -126,7 +127,7 @@ public sealed partial class JqTests
     [InlineData("getpath([{start: 1, end: 3}])", "[1,2]\n")]
     public async Task Jq_GovernedCollectionCopiesRetainExactValuesAndOrdering(string filter, string expected)
     {
-        var memory = new TestMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
         var host = new MockFileSystem();
         host.SetStandardInput("[3,1,2]\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter)));

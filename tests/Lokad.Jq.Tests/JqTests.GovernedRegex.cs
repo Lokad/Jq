@@ -11,7 +11,7 @@ public sealed partial class JqTests
     [InlineData(17000)]
     public void Jq_LiteralMatchesUseProviderCaptureStorage(int length)
     {
-        var root = new TestMemoryBudget(1024 * 1024);
+        var root = new BenchmarkMemoryBudget(1024 * 1024);
         var counted = new Lokad.Jq.Benchmarking.CountingMemoryBudget(root);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
@@ -22,9 +22,9 @@ public sealed partial class JqTests
         for (int index = 0; index < 1000; index++)
         {
             using var match = regexes.Match(pattern, subject.Value, 0, JqRegexMatchOptions.None);
-            Assert.True(match.Value.Success);
-            Assert.Equal(1, match.Value.CaptureSlotCount);
-            Assert.Equal(new JqRegexCapture(true, 0, length, 0, length), match.Value.Value);
+            Assert.True(match.Success);
+            Assert.Equal(1, match.CaptureSlotCount);
+            Assert.Equal(new JqRegexCapture(true, 0, length, 0, length), match.Value);
         }
         Assert.Equal(before, counted.Counts);
         regexes.Dispose();
@@ -35,7 +35,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedRegexSubjectGrowthAmortizesCallsAndKeepsItsIdleBound()
     {
-        var root = new TestMemoryBudget(16 * 1024);
+        var root = new BenchmarkMemoryBudget(16 * 1024);
         var memory = new CountingMemoryBudget(root);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
@@ -57,7 +57,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedRegexSubjectPaddingRefusalDoesNotRetryOrEvictAndRecover()
     {
-        var root = new TestMemoryBudget(1000);
+        var root = new BenchmarkMemoryBudget(1000);
         var memory = new CountingMemoryBudget(root);
         Assert.True(root.TryReserve(926, out var pressure));
         using (pressure)
@@ -80,7 +80,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedRegexSubjectIdleBoundaryUsesUtf8CapacityIncludingMetadata()
     {
-        var root = new TestMemoryBudget(16 * 1024);
+        var root = new BenchmarkMemoryBudget(16 * 1024);
         var memory = new CountingMemoryBudget(root);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
@@ -101,7 +101,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedRegexCacheRetainsPatternsAndRollsBackFailedCompilation()
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var scope = memory.CreateScope();
         var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
         using (var regexes = new JqRegexCache(budget))
@@ -121,7 +121,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedRegexKeepsBoundedSubjectAndRefundsFailedEncoding()
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var scope = memory.CreateScope();
         var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
@@ -132,7 +132,7 @@ public sealed partial class JqTests
             Assert.Equal(retained + 70, memory.ReservedBytes);
             using (var match = regexes.Match(pattern, subject.Value, 0, JqRegexMatchOptions.None))
             {
-                Assert.False(match.Value.Success);
+                Assert.False(match.Success);
                 Assert.Equal(retained + 70, memory.ReservedBytes);
             }
             Assert.Equal(retained + 70, memory.ReservedBytes);
@@ -147,7 +147,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedRegexNestedLeasesAndCopiedResultsSurviveCacheDisposal()
     {
-        var memory = new TestMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         var pattern = regexes.Get("x", JqRegexCompileOptions.None);
@@ -177,7 +177,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedRegexSubjectReuseIgnoresOldDisposeAndDropsLargeOwners()
     {
-        var memory = new TestMemoryBudget(2 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         var old = regexes.EncodeSubject("x");
@@ -192,7 +192,7 @@ public sealed partial class JqTests
         long retained = memory.ReservedBytes;
         using (var match = regexes.Match(pattern, current.Value, 0, JqRegexMatchOptions.None))
         {
-            Assert.False(match.Value.Success);
+            Assert.False(match.Success);
             Assert.Equal(retained, memory.ReservedBytes);
         }
         Assert.Equal(retained, memory.ReservedBytes);
@@ -205,7 +205,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_GovernedRegexRefusedSubjectGrowthRefundsItsIdleOwner()
     {
-        var memory = new TestMemoryBudget(400);
+        var memory = new BenchmarkMemoryBudget(400);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         regexes.Get("x", JqRegexCompileOptions.None);
@@ -222,7 +222,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedRegexRepeatsWithBoundedCacheAndCompleteExecutionRefunds()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "range(1000) | \"x\" | test(\"x\")")));
         for (int repeat = 0; repeat < 2; repeat++)
         {
@@ -238,7 +238,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GovernedNestedRegexReplacementKeepsParentAdmissionsLive()
     {
-        var memory = new TestMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         host.SetStandardInput(string.Concat(Enumerable.Repeat("\"ab\"\n", 2000)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r",

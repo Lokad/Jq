@@ -1,5 +1,5 @@
+using Lokad.Jq.Benchmarking;
 using Lokad.Jq;
-using Lokad.Jq.Tests;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.Json;
@@ -98,7 +98,7 @@ int checks = 0;
 }
 {
     var host = new SmokeHost();
-    var memory = new TestMemoryBudget(64 * 1024);
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
     Check("terminal string admission", await Command(["-nr", "\"ok\", (\"x\" * 1000000)"], []).ExecuteAsync(host, memory, CancellationToken.None) == 5
         && host.Output(JqFileDescriptor.StdOut) == "ok\n" && host.Output(JqFileDescriptor.StdErr) == "jq: memory budget exceeded\n"
         && memory.ReservedBytes == 0);
@@ -132,7 +132,7 @@ int checks = 0;
         && host.Output(JqFileDescriptor.StdOut) == "7\n" && host.ClosedDescriptors.Count == 0);
 }
 {
-    var memory = new TestMemoryBudget(64 * 1024);
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
     if (!JqCommandInvocation.TryCreateWithStandardDescriptors("jq",
         ["-n", "-r", "--arg", "name", "sample", "$name"], [], memory, out var invocation))
         throw new InvalidOperationException("Expected governed snapshot admission.");
@@ -154,7 +154,7 @@ int checks = 0;
     }
 }
 {
-    var memory = new TestMemoryBudget(8);
+    var memory = new BenchmarkMemoryBudget(8);
     if (!memory.TryReserve(4, out var retained))
         throw new InvalidOperationException("Expected caller admission.");
     using (retained)
@@ -166,7 +166,7 @@ int checks = 0;
 }
 {
     const long limit = 128 * 1024;
-    var memory = new TestMemoryBudget(limit);
+    var memory = new BenchmarkMemoryBudget(limit);
     using var caller = memory.CreateScope();
     if (!JqCommandInvocation.TryCreateWithStandardDescriptors("jq", [".", "/data"], [], caller, out var invocation))
         throw new InvalidOperationException("Expected governed snapshot admission.");
@@ -220,14 +220,14 @@ int checks = 0;
 }
 {
     var host = new SmokeHost();
-    var memory = new TestMemoryBudget(64 * 1024);
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
     Check("discarded evaluation keeps shared admission bounded", await Command(["-n", "range(100000) | empty"], []).ExecuteAsync(host, memory, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == ""
         && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0 && memory.PeakBytes <= 64 * 1024);
 }
 {
     const long limit = 64 * 1024;
-    var memory = new TestMemoryBudget(limit);
+    var memory = new BenchmarkMemoryBudget(limit);
     if (!JqCommandInvocation.TryCreateWithStandardDescriptors("jq", ["-nr", "\"x\",\"xx\",\"xxx\""],
         [], memory, out var invocation))
         throw new InvalidOperationException("Expected governed snapshot admission.");
@@ -261,7 +261,7 @@ int checks = 0;
     if (memory.ReservedBytes != 0) throw new InvalidOperationException("Invocation storage was not refunded.");
 }
 {
-    var memory = new TestMemoryBudget(64 * 1024);
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
     if (!JqCommandInvocation.TryCreateWithStandardDescriptors("jq", ["-r",
         "\"prefix\", (\"note\" | stderr | empty), try (\"x\" * 1000000) catch \"caught\", \"later\"",
         "/first", "/later"], [], memory, out var invocation))
@@ -282,7 +282,7 @@ int checks = 0;
 {
     using var cancellation = new CancellationTokenSource();
     var engine = new SmokeCooperatingRegex(cancellation);
-    var memory = new TestMemoryBudget(64 * 1024);
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
     var host = new SmokeHost();
     host.AddFile("/data", "\"x\"\n");
     bool cancelled = false;
@@ -299,7 +299,7 @@ int checks = 0;
 {
     using var cancellation = new CancellationTokenSource();
     var engine = new SmokeCooperatingRegex(cancellation) { CancelOnSearch = false };
-    var memory = new TestMemoryBudget(64 * 1024);
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
     var host = new SmokeHost();
     int status = await Command(["-nr", "\"x\" | match(\"x\") | .string"], [])
         .ExecuteAsync(host, engine, memory, CancellationToken.None);

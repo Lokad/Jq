@@ -1,3 +1,4 @@
+using Lokad.Jq.Benchmarking;
 using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
@@ -12,7 +13,7 @@ public sealed partial class JqTests
     {
         string text = new string('x', prefix) + "🚀é";
         var host = new MockFileSystem();
-        var memory = new TestMemoryBudget(2 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         var invocation = BuildInvocation("jq", "-nr", "--arg", "text", text,
             "$text, ($text | utf8bytelength)");
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
@@ -27,7 +28,7 @@ public sealed partial class JqTests
     [InlineData("--stream-errors")]
     public async Task Jq_StreamingReadsAdmittedLargeStringTokens(string mode)
     {
-        var memory = new TestMemoryBudget(128 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024 * 1024);
         var host = new MockFileSystem();
         host.SetStandardInput("\"" + new string('x', 8388609) + "\"");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", mode, ".[1] | length")));
@@ -43,7 +44,7 @@ public sealed partial class JqTests
     [InlineData("[\"x\" * 4194304, \"y\" * 4194305] | join(\"\") | length", "8388609\n")]
     public async Task Jq_StringConstructionUsesSharedAdmission(string filter, string expected)
     {
-        var memory = new TestMemoryBudget(128 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(128 * 1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
         Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
@@ -57,7 +58,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_AdmittedLargeInputCountsMixedEscapes(bool raw)
     {
-        var memory = new TestMemoryBudget(96 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(96 * 1024 * 1024);
         var host = new MockFileSystem();
         host.SetStandardInput(raw ? new string('x', 8388609)
             : "\"" + new string('x', 8388603) + "\\u0061é\\n\\\\\\uD83D\\uDE80\"");
