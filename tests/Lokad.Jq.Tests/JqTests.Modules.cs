@@ -18,6 +18,19 @@ public sealed partial class JqTests
     }
 
     [Fact]
+    public async Task Jq_Modules_ResumedBodiesUseLinkedFunctionsAndRetainMetadata()
+    {
+        var fs = new MockFileSystem();
+        fs.AddFile("/lib/leaf.jq", "def leaf: 7;");
+        fs.AddFile("/lib/middle.jq", "module {version:42}; include \"leaf\"; def value: leaf;");
+        var (exit, stdout, stderr) = await RunModulesAsync(fs, "-nc", "-L", "/lib",
+            "module {version:1}; include \"middle\"; [value, (\"middle\" | modulemeta | .version)]");
+        Assert.Equal(0, exit);
+        Assert.Equal("[7,42]\n", stdout);
+        Assert.Empty(stderr);
+    }
+
+    [Fact]
     public async Task Jq_Modules_ImportAlias()
     {
         var fs = new MockFileSystem();

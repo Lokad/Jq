@@ -87,9 +87,32 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), budget))
         {
             var parser = new JqParser(tokens, JqProgramSource.Inline, context.RootEnvironment, budget);
-            var failure = Assert.Throws<JqQuotaException>(() => parser.ParseImportsOnly());
+            var failure = Assert.Throws<JqQuotaException>(() => parser.ParsePrefix());
             Assert.True(failure.IsMemoryAdmission);
             Assert.InRange(memory.ReservedBytes, 1, 8192);
+        }
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Jq_ResumedCompilationDoesNotReconstructMetadata(bool module)
+    {
+        string source = "module {data: [" + string.Join(',', Enumerable.Repeat("1", 1000))
+            + "]}; " + (module ? "def f: .;" : ".");
+        var memory = new TestMemoryBudget(1024 * 1024);
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        {
+            var environment = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+            var tokens = Lexer.Tokenize(source, JqProgramSource.Inline, budget);
+            var prefix = new JqParser(tokens, JqProgramSource.Inline, environment, budget).ParsePrefix();
+            Assert.Equal(1000, Assert.IsType<JsonArray>(prefix.Metadata?["data"]).Count);
+            long admitted = memory.ReservedBytes;
+            var parser = new JqParser(tokens, JqProgramSource.Inline, environment, budget);
+            if (module) Assert.Single(parser.ParseDefinitions(prefix.BodyIndex));
+            else Assert.IsType<IdentityFilter>(parser.ParseBody(prefix.BodyIndex));
+            Assert.InRange(memory.ReservedBytes - admitted, 0, 4096);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }

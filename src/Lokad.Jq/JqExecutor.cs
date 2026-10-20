@@ -126,7 +126,7 @@ internal static class JqExecutor
             stage = 3;
             var tokens = Lexer.Tokenize(filterText, programSource, budget);
             var preParser = new JqParser(tokens, programSource, context.RootEnvironment, budget);
-            (_, IReadOnlyList<JqModuleImport> mainImports) = preParser.ParseImportsOnly();
+            (_, IReadOnlyList<JqModuleImport> mainImports, int bodyIndex) = preParser.ParsePrefix();
             string mainImporterDir = invocation.FilterFile is { } mainProgramPath
                 ? ParentDir(mainProgramPath.Absolute.Path)
                 : invocation.WorkingDirectory.Path;
@@ -136,11 +136,9 @@ internal static class JqExecutor
             var loader = new JqModuleLoader(host, budget, context.Runtime, context.RootEnvironment, libraryDirs, invocation.WorkingDirectory.Path);
             context.ModuleLoader = loader;
             JqEnvironment moduleEnv = await loader.LoadMainImportsAsync(mainImports, mainImporterDir, cancellationToken).ConfigureAwait(false);
-            // Reuse the immutable token sequence with the newly linked scope.
-            // Import scanning and full parsing each consume compilation work;
-            // reused token storage has only one persistent admission.
+            // Resume after the validated prefix with dependencies in scope.
             budget.CheckCancellation();
-            var filter = new JqParser(tokens, programSource, moduleEnv, budget).Parse();
+            var filter = new JqParser(tokens, programSource, moduleEnv, budget).ParseBody(bodyIndex);
             stage = 4;
             await using var cursor = new JqInputCursor(host, invocation, context, cancellationToken);
             context.InputCursor = cursor;

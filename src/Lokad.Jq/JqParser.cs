@@ -24,9 +24,19 @@ internal sealed class JqParser(
 
     public JqFilter Parse()
     {
+        ParsePrefix();
+        return ParseBody();
+    }
+
+    internal JqFilter ParseBody(int bodyIndex)
+    {
+        _index = bodyIndex;
         SeedFunctionsFromEnvironment();
-        ParseModuleHeader();
-        ParseImportList();
+        return ParseBody();
+    }
+
+    private JqFilter ParseBody()
+    {
         if (Peek().Kind == TokenKind.End)
             throw Error("Top-level program not given (try \".\")", Peek().Span);
         var filter = ParseQuery(topLevel: true);
@@ -34,23 +44,21 @@ internal sealed class JqParser(
         return filter;
     }
 
-    // Pre-scan for the loader: parses only the module header and imports,
-    // leaving the body unparsed. Validates constant metadata and paths.
-    internal (JsonObject? Metadata, IReadOnlyList<JqModuleImport> Imports) ParseImportsOnly()
+    // Validate metadata/imports before dependency loading; retain the position
+    // where parsing resumes with the linked environment.
+    internal (JsonObject? Metadata, IReadOnlyList<JqModuleImport> Imports, int BodyIndex) ParsePrefix()
     {
         SeedFunctionsFromEnvironment();
         var metadata = ParseModuleHeader();
         var imports = ParseImportList();
-        return (metadata, imports);
+        return (metadata, imports, _index);
     }
 
-    // Library files contain only a module header, imports, and function
-    // definitions. Any main expression is rejected like the reference.
-    internal (JsonObject? Metadata, IReadOnlyList<JqModuleImport> Imports, IReadOnlyList<JqFunctionDefinition> Definitions) ParseModuleFile()
+    // Library bodies contain definitions only, with dependencies in scope.
+    internal IReadOnlyList<JqFunctionDefinition> ParseDefinitions(int bodyIndex)
     {
+        _index = bodyIndex;
         SeedFunctionsFromEnvironment();
-        var metadata = ParseModuleHeader();
-        var imports = ParseImportList();
         var definitions = new List<JqFunctionDefinition>();
         while (PeekIsDef())
         {
@@ -80,7 +88,7 @@ internal sealed class JqParser(
         }
         if (Peek().Kind != TokenKind.End)
             throw Error("library should only have function definitions, not a main expression", Peek().Span);
-        return (metadata, imports, definitions);
+        return definitions;
     }
 
     private JsonObject? ParseModuleHeader()

@@ -229,22 +229,18 @@ internal sealed class JqModuleLoader(
             // Pre-scan imports before loading dependencies.
             var tokens = Lexer.Tokenize(sourceText, programSource, budget);
             var preParser = new JqParser(tokens, programSource, rootEnvironment, budget);
-            (JsonObject? metadata, IReadOnlyList<JqModuleImport> imports) = preParser.ParseImportsOnly();
+            (JsonObject? metadata, IReadOnlyList<JqModuleImport> imports, int bodyIndex) = preParser.ParsePrefix();
             string childImporterDir = ParentDir(canonicalPath);
             JqEnvironment env = rootEnvironment;
             foreach (JqModuleImport import in imports)
                 env = await ApplyImportAsync(env, import, childImporterDir, depth + 1, cancellationToken).ConfigureAwait(false);
-            // Full parse with dependencies in scope for include validation.
-            var fullParser = new JqParser(tokens, programSource, env, budget);
-            // Seed parser scopes with include-provided functions for validation.
-            // The parser seeds from the environment automatically.
-            (JsonObject? fullMetadata, IReadOnlyList<JqModuleImport> fullImports, IReadOnlyList<JqFunctionDefinition> definitions) = fullParser.ParseModuleFile();
+            var definitions = new JqParser(tokens, programSource, env, budget).ParseDefinitions(bodyIndex);
             foreach (JqFunctionDefinition definition in definitions)
             {
                 budget.CheckCancellation();
                 env = env.ExtendFunction(definition.Name, definition.Arity, definition);
             }
-            var loaded = new JqLoadedModule(fullMetadata ?? metadata, fullImports, definitions, env);
+            var loaded = new JqLoadedModule(metadata, imports, definitions, env);
             _cache[canonicalPath] = loaded;
             return loaded;
         }
