@@ -773,15 +773,16 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
         {
             if (Stream is null)
             {
+                context.Budget.ReserveBytes(64);
                 var collected = new JsonArray();
                 context.Budget.CheckCancellation();
                 foreach (JsonNode? row in MapFilter.Iterate(input, context, environment))
                 {
                     foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
                     {
-                        JsonNode? lookup = LookupIndex(idx, key, context);
-                        var pair = new JsonArray(context.Runtime.Clone(row), context.Runtime.Clone(lookup));
-                        context.Budget.CheckCancellation();
+                        JsonNode? lookup = LookupIndex(idx, key);
+                        context.Budget.ReserveBytes(24);
+                        JsonArray pair = CreatePair(row, lookup, 1);
                         collected.Add(pair);
                     }
                 }
@@ -793,9 +794,8 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
                 {
                     foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
                     {
-                        JsonNode? lookup = LookupIndex(idx, key, context);
-                        var pair = new JsonArray(context.Runtime.Clone(row), context.Runtime.Clone(lookup));
-                        context.Budget.CheckCancellation();
+                        JsonNode? lookup = LookupIndex(idx, key);
+                        JsonArray pair = CreatePair(row, lookup, 0);
                         if (JoinExpr is null)
                         {
                             yield return pair;
@@ -809,21 +809,30 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
                 }
             }
         }
+
+        JsonArray CreatePair(JsonNode? row, JsonNode? lookup, int depth)
+        {
+            context.Budget.ReserveBytes(112 + (row is JsonValue ? 64 : 0) + (lookup is JsonValue ? 64 : 0));
+            return new JsonArray
+            {
+                context.Budget.CopyValue(row, depth + 1, false),
+                context.Budget.CopyValue(lookup, depth + 1, false)
+            };
+        }
     }
 
-    private static JsonNode? LookupIndex(JsonNode? idx, JsonNode? key, JqContext context)
+    private static JsonNode? LookupIndex(JsonNode? idx, JsonNode? key)
     {
-        ArgumentNullException.ThrowIfNull(context);
         if (idx is null)
             return null;
         if (idx is JsonObject obj && TryGetString(key, out string? name) && name is not null)
-            return context.Runtime.Clone(obj.TryGetPropertyValue(name, out JsonNode? child) ? child : null);
+            return obj.TryGetPropertyValue(name, out JsonNode? child) ? child : null;
         if (idx is JsonArray arr && JqPaths.TryGetIndex(key, out long index, out bool isNaN))
         {
             if (isNaN)
                 return null;
             long resolved = index < 0 ? arr.Count + index : index;
-            return resolved >= 0 && resolved < arr.Count ? context.Runtime.Clone(arr[(int)resolved]) : null;
+            return resolved >= 0 && resolved < arr.Count ? arr[(int)resolved] : null;
         }
         throw new JqRuntimeException("cannot index " + TypeName(idx));
     }
