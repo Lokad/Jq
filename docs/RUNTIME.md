@@ -93,7 +93,6 @@ materialized buffers, subject to checked CLR sizes and construction depth.
 | Iterative paths | 10,000 segments |
 | Function arity | 4,096, following the reference closure-index representation |
 | Host read request | 8 KiB |
-| Default regex adapter | 16,384 UTF-16 pattern units; depth 256; workspace 256 KiB |
 
 Structural/regex exhaustion is terminal status 5, including under `--seq`,
 `--stream-errors` and `-e`. Reference path-length errors and invalid regex syntax
@@ -105,10 +104,8 @@ Immutable `JqExecutionPolicy` selects a borrowed regex engine with
 `new JqExecutionPolicy { RegexEngine = engine }`. The default is
 `JqUtf8RegexEngine.Instance`. The selected adapter receives the active token and
 owns cooperation within its engine. The default Utf8Regex 0.3.0 adapter checks
-only around synchronous calls and cannot interrupt an active search. Its pattern
-guard bounds constructor exposure without guaranteeing compile-depth safety.
-See [regex behavior](REGEX.md)
-for engine details.
+only around synchronous calls and cannot interrupt an active search. Regex resource
+bounds belong to the provider. See [regex behavior](REGEX.md) for engine details.
 
 ## Numbers
 

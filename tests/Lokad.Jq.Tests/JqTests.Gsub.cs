@@ -97,9 +97,8 @@ public sealed partial class JqTests
     [InlineData("\"x\" | gsub(\"[\";\"y\")", "invalid regex")]
     [InlineData("\"x\" | gsub(\"x\";\"y\";\"l\")", "unsupported regex flag")]
     [InlineData("\"x\" | gsub(\"x\";\"y\";\"z\")", "z is not a valid modifier string")]
-    [InlineData("\"x\" | gsub(\"x\" * 16385;\"y\")", "regex pattern exceeds")]
     [InlineData("\"🚀\" | gsub(\"\\\\C\";\"y\")", "invalid regex")]
-    public async Task Jq_GsubReportsInvalidInputsAndRegexLimits(string filter, string diagnostic)
+    public async Task Jq_GsubReportsInvalidInputs(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));

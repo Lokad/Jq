@@ -54,9 +54,8 @@ their result streams.
 
 ## Limits and cancellation
 
-The default adapter enforces depth 256, a 256 KiB workspace bound and a
-16,384-character pattern guard. The latter bounds constructor exposure; it does
-not guarantee compile-depth safety or cancellation.
+The provider owns regex resource bounds. The default adapter uses Utf8Regex's
+execution settings and default match timeout.
 
 Shared admission covers conservative pattern/workspace estimates, subject buffers
 and capture storage. Eager match/scan results, named-capture DOMs, list capacity
@@ -67,7 +66,7 @@ stay charged, and active borrowers delay refunds. Every refusal terminates
 the command. Reuse and structural ceilings are described in
 [runtime memory rules](RUNTIME.md#memory-admission).
 
-Depth/workspace exhaustion reports status 5 outside `try`/`?`. Syntax errors stay
+Provider resource exhaustion reports status 5 outside `try`/`?`. Syntax errors stay
 catchable; cancellation propagates as `OperationCanceledException`. Utf8Regex
 0.3.0 has no cancellation-token API: the default adapter checks before and after
 engine calls and cannot interrupt a search in progress. It may therefore delay

@@ -6,7 +6,7 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Fact]
-    public async Task Jq_AdmittedPaddingAndExistingUpdatesExceedFormerIndexPolicy()
+    public async Task Jq_PaddingAndExistingUpdatesUseSharedAdmission()
     {
         var memory = new TestMemoryBudget(96 * 1024 * 1024);
         var host = new MockFileSystem();
@@ -33,7 +33,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_AdmittedHostedMaterializationExceedsFormerBufferCeiling()
+    public async Task Jq_HostedMaterializationUsesSharedAdmission()
     {
         const int length = 64 * 1024 * 1024 + 1;
         var memory = new TestMemoryBudget(256 * 1024 * 1024);
@@ -51,7 +51,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_AdmittedRawValueExceedsFormerInputBufferCeiling()
+    public async Task Jq_LargeRawValuesUseSharedAdmission()
     {
         const int length = 64 * 1024 * 1024 + 1;
         var memory = new TestMemoryBudget(512 * 1024 * 1024);
@@ -64,7 +64,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_AdmittedJsonExceedsFormerOutputAndBackingCeilings()
+    public async Task Jq_LargeJsonValuesUseSharedAdmission()
     {
         const int nulls = 11184812;
         var memory = new TestMemoryBudget(512 * 1024 * 1024);

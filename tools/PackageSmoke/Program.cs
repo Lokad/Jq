@@ -105,10 +105,10 @@ int checks = 0;
 }
 {
     var host = new SmokeHost();
-    Check("terminal regex depth protection", await Command(["-n",
-        "(\"a\" * 300 + \"b\" * 300) | try test(\"(?<r>a(?&r)?b)\") catch \"caught\""], [])
-        .ExecuteAsync(host, CancellationToken.None) == 5
-        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr).Contains("depth limit", StringComparison.Ordinal));
+    Check("provider regex matching", await Command(["-n",
+        "\"x\" | test(\"x\" * 17000)"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "false\n" && host.Output(JqFileDescriptor.StdErr) == "");
 }
 {
     using var cancellation = new CancellationTokenSource();

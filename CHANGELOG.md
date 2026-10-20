@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Delegate regex bounds and timeout settings to the provider. Keep shared storage
+  admission, terminal provider exhaustion and cancellation forwarding.
+
 - Remove the fixed 100,000-order Bessel cutoff. Use a converged continued fraction,
   scaled backward J recurrence and J0/J1 normalization; prove early underflow
   analytically. Preserve forward Y recurrence, reflection and cooperative

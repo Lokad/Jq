@@ -10,9 +10,6 @@ namespace Lokad.Jq;
 /// </remarks>
 public sealed class JqUtf8RegexEngine : IJqRegexEngine
 {
-    private const int MaximumPatternLength = 16 * 1024;
-    private const int MaximumWorkingBytes = 256 * 1024;
-
     /// <summary>The stateless default engine; compiled handles remain execution-owned.</summary>
     public static JqUtf8RegexEngine Instance { get; } = new();
 
@@ -21,15 +18,13 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
         CancellationToken cancellationToken, [NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (pattern.Length > MaximumPatternLength)
-            throw new JqRegexResourceException("regex pattern exceeds the 16384-character limit", false);
         var memory = new JqMemoryReservation(memoryBudget);
         bool retained = false;
         try
         {
             // One owner covers the conservative compiled representation, metadata and
             // pooled engine workspace. Jq separately owns subject/capture scratch.
-            memory.Resize(64 * 1024L + MaximumWorkingBytes + 64L * pattern.Length);
+            memory.Resize(320 * 1024L + 64L * pattern.Length);
             var flags = Pcre2CompileOptions.Ucp;
             if ((options & JqRegexCompileOptions.Caseless) != 0) flags |= Pcre2CompileOptions.Caseless;
             if ((options & JqRegexCompileOptions.Multiline) != 0) flags |= Pcre2CompileOptions.Multiline;
@@ -42,12 +37,7 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
                     AllowDuplicateNames = true,
                     BackslashC = Pcre2BackslashCPolicy.Forbid,
                 },
-                new Utf8Pcre2ExecutionLimits
-                {
-                    MatchLimit = 0,
-                    DepthLimit = 256,
-                    HeapLimitInBytes = MaximumWorkingBytes,
-                }, Timeout.InfiniteTimeSpan);
+                default, Utf8Pcre2Regex.DefaultMatchTimeout);
             cancellationToken.ThrowIfCancellationRequested();
             if (compiled.NameEntryCount != 0)
                 memory.Resize(checked(memory.LastAdmittedBytes + 64L * compiled.NameEntryCount));
@@ -68,6 +58,10 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
         {
             throw new JqRegexResourceException("memory budget exceeded", true);
         }
+        catch (Pcre2CompileException exception) when (IsResourceFailure(exception.ErrorKind))
+        {
+            throw new JqRegexResourceException("regex compilation failed: " + exception.Message, false);
+        }
         catch (Pcre2CompileException exception)
         {
             regex = null;
@@ -85,6 +79,9 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
             if (!retained) memory.Dispose();
         }
     }
+
+    private static bool IsResourceFailure(Pcre2ErrorKind kind) => kind is
+        Pcre2ErrorKind.Timeout or Pcre2ErrorKind.MatchLimit or Pcre2ErrorKind.DepthLimit or Pcre2ErrorKind.HeapLimit;
 
     private sealed class Compiled(Utf8Pcre2Regex regex, IReadOnlyDictionary<int, string> names,
         int captureSlots, JqMemoryReservation memory) : IJqCompiledRegex
@@ -129,12 +126,9 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
         private static Pcre2MatchOptions ConvertOptions(JqRegexMatchOptions options) =>
             (options & JqRegexMatchOptions.NotEmpty) != 0 ? Pcre2MatchOptions.NotEmpty : Pcre2MatchOptions.None;
 
-        private static Exception Failure(Pcre2MatchException exception) => exception.ErrorKind switch
-        {
-            Pcre2ErrorKind.DepthLimit or Pcre2ErrorKind.HeapLimit =>
-                new JqRegexResourceException("regex matching failed: " + exception.Message, false),
-            _ => new JqException("regex matching failed: " + exception.Message),
-        };
+        private static Exception Failure(Pcre2MatchException exception) => IsResourceFailure(exception.ErrorKind)
+            ? new JqRegexResourceException("regex matching failed: " + exception.Message, false)
+            : new JqException("regex matching failed: " + exception.Message);
 
         public void Dispose()
         {

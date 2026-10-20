@@ -9,7 +9,7 @@ public sealed partial class JqTests
     [InlineData(100001.0, 100001.0, 0.009636911888405673, -0.0166916211131535)]
     [InlineData(150000.0, 150000.0, 0.008418646038002991, -0.01458152271677244)]
     [InlineData(1000000.0, 1000000.0, 0.004473073183377776, -0.007747590021617347)]
-    public void Jq_BesselRecurrencesKeepFiniteValuesAcrossTheFormerCutoff(double order,
+    public void Jq_BesselRecurrencesPreserveFiniteValuesAtLargeOrders(double order,
         double point, double expectedJ, double expectedY)
     {
         using var budget = new JqBudget(CancellationToken.None);

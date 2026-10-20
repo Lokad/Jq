@@ -4,22 +4,6 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
-    [Theory]
-    [InlineData("\"x\"", "test(\"x\" * 16385)", "regex pattern exceeds")]
-    public async Task Jq_RegexQuotasBypassLanguageHandlers(string input, string expression, string diagnostic)
-    {
-        foreach (string handler in new[] { "try (" + expression + ") catch \"caught\"", "(" + expression + ")?", "(" + expression + ")? // \"fallback\"" })
-        {
-            var host = new MockFileSystem();
-            var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", input + " | " + handler)));
-
-            Assert.Equal(5, await command.ExecuteAsync(host, JqExecutionPolicy.Default, CancellationToken.None));
-            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-            Assert.StartsWith("jq: ", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
-            Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
-        }
-    }
-
     [Fact]
     public async Task Jq_InvalidRegexSyntaxRemainsCatchable()
     {
@@ -132,19 +116,6 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.InRange(memory.PeakBytes, 1, 64 * 1024);
         Assert.Equal(0, memory.ReservedBytes);
-    }
-
-    [Theory]
-    [InlineData("test")]
-    [InlineData("match")]
-    public async Task Jq_RegexDepthLimitCannotBeCaught(string operation)
-    {
-        var host = new MockFileSystem();
-        var filter = "(\"a\" * 300 + \"b\" * 300) | try " + operation + "(\"(?<r>a(?&r)?b)\") catch \"caught\"";
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-        Assert.Equal(5, await command.ExecuteAsync(host, CancellationToken.None));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Contains("depth limit", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]

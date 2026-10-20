@@ -61,8 +61,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" | test(\"[\")", "invalid regex")]
     [InlineData("\"x\" | test(\"x\";\"z\")", "z is not a valid modifier string")]
     [InlineData("\"x\" | test(\"x\";\"l\")", "unsupported regex flag")]
-    [InlineData("\"x\" | test(\"x\" * 16385)", "regex pattern exceeds")]
-    public async Task Jq_TestReportsInvalidInputsAndRegexLimits(string filter, string diagnostic)
+    public async Task Jq_TestReportsInvalidInputs(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
