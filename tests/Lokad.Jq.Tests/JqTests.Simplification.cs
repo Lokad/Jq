@@ -127,7 +127,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_FiniteSparseUpdateSurvivesWithoutExecutionFuel()
+    public async Task Jq_SparseUpdatesPreservePaddingAndValues()
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-c",
@@ -138,7 +138,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_FiniteCalendarLoopSurvivesWithoutExecutionFuel()
+    public async Task Jq_CalendarLoopPreservesFinalFields()
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-c",

@@ -7,7 +7,7 @@ public sealed partial class JqTests
     [InlineData("interpolation")]
     [InlineData("definitions")]
     [InlineData("metadata")]
-    public async Task Jq_AdmittedShallowProgramsExceedFormerTokenCeiling(string shape)
+    public async Task Jq_CompilesAdmittedShallowPrograms(string shape)
     {
         const int count = 5000;
         string filter = shape switch
@@ -27,7 +27,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_AdmittedArgumentVectorExceedsFormerCountCeiling()
+    public async Task Jq_BindsAdmittedArgumentVectors()
     {
         string[] arguments = ["-n", "--args", "$ARGS.positional | length", .. Enumerable.Repeat("value", 5000)];
         var memory = new TestMemoryBudget(4 * 1024 * 1024);

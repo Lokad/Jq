@@ -195,7 +195,7 @@ semantic gaps. References are the jq 1.8.2 manual and its parser/builtin registr
 | Raw/join/NUL output, sorted keys, ASCII | implemented | JqTests.Output |
 | Exit categories: success, compile (3), input parse and quota failures (5), missing files and system errors (2), halt codes, `-e` modes | implemented | JqTests.Diagnostics, JqTests.Output |
 | Diagnostics bytes and source spans | implemented | JqTests.Diagnostics |
-| Descriptor ownership, backpressure, closure, cancellation, budgets | implemented | HostBoundaryTests, JqTests.Diagnostics, JqTests.Hardening, JqTests.Policy, JqTests.Governed |
+| Descriptor ownership, backpressure, closure, cancellation, budgets | implemented | HostBoundaryTests, JqTests.Diagnostics, JqTests.Hardening, JqTests.Execution, JqTests.Governed |
 
 ## Evidence
 

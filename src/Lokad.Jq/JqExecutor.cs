@@ -435,7 +435,7 @@ internal static class JqExecutor
         return canonicalPath[..slash];
     }
 
-    private static async Task<BoundedReadResult.Complete> ReadFileAsync(
+    private static async Task<JqReadResult.Complete> ReadFileAsync(
         JqResolvedPath path, IJqHost host, JqBudget budget, CancellationToken cancellationToken)
     {
         var opened = await JqHostExtensions.GuardHostAsync(() => host.OpenReadAsync(path.Absolute, cancellationToken)).ConfigureAwait(false);
@@ -457,15 +457,15 @@ internal static class JqExecutor
         }
     }
 
-    private static async Task<BoundedReadResult.Complete> ReadAllAsync(
+    private static async Task<JqReadResult.Complete> ReadAllAsync(
         IJqHost host, JqFileDescriptor descriptor, JqBudget budget, CancellationToken cancellationToken)
     {
         var result = await host.TryReadAllBytesAsync(
             descriptor, budget, cancellationToken).ConfigureAwait(false);
         return result switch
         {
-            BoundedReadResult.Complete complete => complete,
-            BoundedReadResult.Failed => throw new JqException("input read failed"),
+            JqReadResult.Complete complete => complete,
+            JqReadResult.Failed => throw new JqException("input read failed"),
             _ => throw new InvalidOperationException("Unknown bounded read result.")
         };
     }

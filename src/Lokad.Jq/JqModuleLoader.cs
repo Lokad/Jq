@@ -257,7 +257,7 @@ internal sealed class JqModuleLoader(
         }
     }
 
-    private async Task<(string CanonicalPath, BoundedReadResult.Complete Content)?> FindModuleFileAsync(
+    private async Task<(string CanonicalPath, JqReadResult.Complete Content)?> FindModuleFileAsync(
         JqModuleImport import,
         string importerDir,
         string suffix,
@@ -301,7 +301,7 @@ internal sealed class JqModuleLoader(
                 {
                     var result = await host.TryReadAllBytesAsync(
                         opened.FileDescriptor.Value, budget, cancellationToken).ConfigureAwait(false);
-                    if (result is BoundedReadResult.Complete complete)
+                    if (result is JqReadResult.Complete complete)
                         return (path.Path, complete);
                     continue;
                 }

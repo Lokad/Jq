@@ -426,7 +426,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Jq_StringLimitCountsDecodedJsonCharacters(bool property)
+    public async Task Jq_EscapedJsonStringsUseDecodedLength(bool property)
     {
         // The encoded token is over 8 Mi characters, but decodes to only 1.5 M characters.
         var token = "\"" + string.Concat(Enumerable.Repeat("\\u0061", 1500000)) + "\"";

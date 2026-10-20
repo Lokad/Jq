@@ -68,7 +68,7 @@ internal sealed partial class JqRuntime
                                 break;
                             case JsonTokenType.PropertyName:
                                 Frame frame = _frames[^1];
-                                _frames[^1] = frame with { Key = runtime.ReadBoundedString(ref reader) };
+                                _frames[^1] = frame with { Key = runtime.ReadAdmittedString(ref reader) };
                                 break;
                             case JsonTokenType.EndArray:
                             case JsonTokenType.EndObject:

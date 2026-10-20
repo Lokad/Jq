@@ -160,7 +160,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Jq_PolicyRegexCancellationPropagatesAtSearchBoundary(bool detailed)
+    public void Jq_RegexCancellationPropagatesAtSearchBoundary(bool detailed)
     {
         using var cancellation = new CancellationTokenSource();
         using var regexes = new JqRegexCache(new JqBudget(cancellation.Token));
@@ -175,7 +175,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_PolicyCancellationWinsBeforeSetupAndWrites()
+    public async Task Jq_CancellationWinsBeforeSetupAndWrites()
     {
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();

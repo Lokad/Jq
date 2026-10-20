@@ -106,7 +106,7 @@ public sealed partial class JqTests
         host.SetStandardInput("abc");
         host.BeforeByteRead = _ => Assert.Equal(12288, memory.ReservedBytes);
 
-        using (var content = Assert.IsType<BoundedReadResult.Complete>(
+        using (var content = Assert.IsType<JqReadResult.Complete>(
             await host.TryReadAllBytesAsync(JqFileDescriptor.StdIn, budget, CancellationToken.None)))
         {
             Assert.Equal("abc"u8.ToArray(), content.Content.ToArray());

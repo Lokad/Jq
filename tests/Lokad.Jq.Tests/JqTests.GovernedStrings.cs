@@ -25,7 +25,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("--stream")]
     [InlineData("--stream-errors")]
-    public async Task Jq_AdmittedStreamingTokenExceedsFormerStringPolicy(string mode)
+    public async Task Jq_StreamingReadsAdmittedLargeStringTokens(string mode)
     {
         var memory = new TestMemoryBudget(128 * 1024 * 1024);
         var host = new MockFileSystem();
@@ -41,7 +41,7 @@ public sealed partial class JqTests
     [InlineData("\"ab\" * 4194305 | length", "8388610\n")]
     [InlineData("(\"x\" * 8388608) + \"y\" | length", "8388609\n")]
     [InlineData("[\"x\" * 4194304, \"y\" * 4194305] | join(\"\") | length", "8388609\n")]
-    public async Task Jq_AdmittedStringsCanExceedFormerLengthPolicy(string filter, string expected)
+    public async Task Jq_StringConstructionUsesSharedAdmission(string filter, string expected)
     {
         var memory = new TestMemoryBudget(128 * 1024 * 1024);
         var host = new MockFileSystem();

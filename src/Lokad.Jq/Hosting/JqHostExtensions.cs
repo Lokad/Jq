@@ -34,7 +34,7 @@ internal static class JqHostExtensions
     }
 
     // Read with bounded requests and publish accumulated bytes only on successful EOF.
-    internal static async ValueTask<BoundedReadResult> TryReadAllBytesAsync(
+    internal static async ValueTask<JqReadResult> TryReadAllBytesAsync(
         this IJqHost host, JqFileDescriptor descriptor, JqBudget budget,
         CancellationToken cancellationToken)
     {
@@ -55,7 +55,7 @@ internal static class JqHostExtensions
                 var read = await GuardedReadAsync(host, descriptor, buffer, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (read.IsError)
-                    return new BoundedReadResult.Failed(read);
+                    return new JqReadResult.Failed(read);
                 int required = JqBudget.BufferCapacity(output.Length + read.BytesRead, 0);
                 if (required > output.Capacity)
                 {
@@ -73,7 +73,7 @@ internal static class JqHostExtensions
                 output.Write(buffer.AsSpan(0, read.BytesRead));
                 if (read.ReachedEoF)
                 {
-                    var result = new BoundedReadResult.Complete(
+                    var result = new JqReadResult.Complete(
                         output.GetBuffer().AsMemory(0, (int)output.Length), outputMemory);
                     published = true;
                     return result;

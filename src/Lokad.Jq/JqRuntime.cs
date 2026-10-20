@@ -437,7 +437,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                             return obj;
                         if (reader.TokenType != JsonTokenType.PropertyName)
                             throw new JqException("expected object key");
-                        string name = ReadBoundedString(ref reader);
+                        string name = ReadAdmittedString(ref reader);
                         budget.ReserveBytes(96);
                         ReadToken(ref reader, source, ref consumedBase, headState, expectsObjectValue, out bool hasValue, out JsonNode? valueFallback);
                         if (!hasValue)
@@ -493,7 +493,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         switch (reader.TokenType)
         {
             case JsonTokenType.String:
-                return JsonValue.Create(ReadBoundedString(ref reader));
+                return JsonValue.Create(ReadAdmittedString(ref reader));
             case JsonTokenType.Number:
                 if (reader.TryGetInt64(out long whole))
                 {
@@ -513,7 +513,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
     }
 
-    private string ReadBoundedString(ref Utf8JsonReader reader)
+    private string ReadAdmittedString(ref Utf8JsonReader reader)
     {
         // The reader validates the token's escape syntax. Count decoded UTF-16
         // units without creating the string, then preflight its allocation.
