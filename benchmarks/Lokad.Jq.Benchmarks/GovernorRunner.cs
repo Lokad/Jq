@@ -194,6 +194,24 @@ internal static class GovernorRunner
         Add("raw-records", records, ["-Rr", "."], rawLines, rawLines);
         Add("map", elements, ["-c", "map(. + 1)"], "[" + string.Join(',', Enumerable.Range(0, elements)) + "]",
             "[" + string.Join(',', Enumerable.Range(1, elements)) + "]\n");
+        string wideObject = "{" + string.Join(',', Enumerable.Range(0, 1024)
+            .Select(index => "\"k" + index.ToString(CultureInfo.InvariantCulture) + "\":0")) + "}";
+        string comparison = "{\"left\":" + wideObject + ",\"right\":" + wideObject + "}";
+        Add("compare-wide-objects", 1024, ["-c", ".left <= .right"], comparison, "true\n");
+        Add("compare-object-records", 100, ["-c", ".left <= .right"],
+            string.Concat(Enumerable.Repeat(comparison + "\n", 100)), string.Concat(Enumerable.Repeat("true\n", 100)));
+        string fields = string.Join(',', Enumerable.Range(0, 16)
+            .Select(index => "\"k" + index.ToString(CultureInfo.InvariantCulture) + "\":0"));
+        Add("sort-objects", 128, ["-c", "sort | map(.rank)"],
+            "[" + string.Join(',', Enumerable.Range(0, 128).Reverse()
+                .Select(rank => "{" + fields + ",\"rank\":" + rank.ToString(CultureInfo.InvariantCulture) + "}")) + "]",
+            "[" + string.Join(',', Enumerable.Range(0, 128)) + "]\n");
+        string sharedKey = "[" + string.Join(',', Enumerable.Range(0, 1000)) + "]";
+        Add("min-shared-array-key", 200, ["-c", "--argjson", "key", sharedKey, "min_by($key)"],
+            "[" + string.Join(',', Enumerable.Range(0, 200)) + "]", "0\n");
+        string duplicate = "[" + string.Join(',', Enumerable.Range(0, 64)) + "]";
+        Add("unique-duplicate-trees", 64, ["-c", "unique | length"],
+            "[" + string.Join(',', Enumerable.Repeat(duplicate, 64)) + "]", "1\n");
         foreach (int length in new[] { 1000, 100000 })
         {
             string text = new('a', length);
