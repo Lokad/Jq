@@ -10,6 +10,7 @@ namespace Lokad.Jq;
 // slices keep optional raw bounds with the same resolution.
 internal abstract record JqValueSegment
 {
+    // Raw values are borrowed for diagnostics; PathToJson copies before parenting.
     internal abstract JsonNode? ToJson();
 }
 
@@ -49,14 +50,14 @@ internal sealed record SliceSegment(double? Start, double? End) : JqValueSegment
 // the use sites and rendering keeps the raw key set.
 internal sealed record SliceObjectSegment(JsonObject Raw) : JqValueSegment
 {
-    internal override JsonNode? ToJson() => Raw.DeepClone();
+    internal override JsonNode? ToJson() => Raw;
 }
 
 // A segment that can never address a container (booleans, arrays, and nulls
 // from path values). Traversal reports container-shaped type errors.
 internal sealed record InvalidSegment(JsonNode? Raw) : JqValueSegment
 {
-    internal override JsonNode? ToJson() => Raw?.DeepClone();
+    internal override JsonNode? ToJson() => Raw;
 }
 
 // One enumerated path: accumulated segments, the value found there, and

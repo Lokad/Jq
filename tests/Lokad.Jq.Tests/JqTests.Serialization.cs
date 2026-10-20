@@ -8,6 +8,51 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Fact]
+    public void Jq_TruncatedDiagnosticsRetainOnlyTheirShortResult()
+    {
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        {
+            string diagnostic = new JqRuntime(budget).TruncatedDump(JsonValue.Create(new string('x', 10000)));
+            Assert.Equal("\"" + new string('x', 24) + "...\"", diagnostic);
+            Assert.InRange(memory.ReservedBytes, 2L * diagnostic.Length, 256);
+        }
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_TruncatedDiagnosticsKeepUtf8ScalarBoundaries()
+    {
+        using var budget = new JqBudget(CancellationToken.None);
+        var runtime = new JqRuntime(budget);
+        Assert.Equal("\"" + new string('\u00e9', 12) + "...\"",
+            runtime.TruncatedDump(JsonValue.Create(new string('\u00e9', 14))));
+        Assert.Equal("\"\\ud83d\\ude80\\ud83d\\ude80...\"",
+            runtime.TruncatedDump(JsonValue.Create(string.Concat(Enumerable.Repeat("\U0001f680", 10)))));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Jq_RawPathDiagnosticsBorrowWhileMaterializedPathsRemainIndependent(bool slice)
+    {
+        using var budget = new JqBudget(CancellationToken.None);
+        var items = new JsonArray(1, 2);
+        JsonNode raw = slice ? new JsonObject { ["start"] = items } : items;
+        var owner = new JsonObject { ["key"] = raw };
+        JqValueSegment segment = slice ? new SliceObjectSegment((JsonObject)raw) : new InvalidSegment(raw);
+        var runtime = new JqRuntime(budget);
+
+        Assert.Equal(slice ? "{\"start\":[1,2]}" : "[1,2]",
+            runtime.Serialize(segment.ToJson(), false, null, false));
+        Assert.Same(owner, raw.Parent);
+        var materialized = Assert.IsType<JsonArray>(JqPaths.PathToJson([segment], budget));
+        var copiedItems = Assert.IsType<JsonArray>(slice ? materialized[0]?["start"] : materialized[0]);
+        copiedItems[0] = 9;
+        Assert.Equal(1, items[0]?.GetValue<int>());
+    }
+
+    [Fact]
     public void Jq_SortedNonFiniteOutputFitsOneTreeCopyAndPreservesBorrowedInput()
     {
         var memory = new BenchmarkMemoryBudget(128 * 1024);

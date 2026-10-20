@@ -187,8 +187,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // evaluation can now yield live references (identity shares its input
     // pointer like upstream DUP), and System.Text.Json forbids multiple
     // parents, so nodes that are already parented elsewhere are detached
-    // first. The charge matches the previous clone-on-produce accounting
-    // for those subtrees.
+    // before attaching them to another parent.
     internal JsonNode? Detach(JsonNode? node)
     {
         if (node is null || node.Parent is null)
@@ -553,9 +552,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // truncation window dominates it in every case.
     internal string TruncatedDump(JsonNode? node)
     {
-        byte[] dumped = Encoding.UTF8.GetBytes(Serialize(node, false, null, false));
+        using var rendered = SerializeUtf8(node, false, null, false);
+        ReadOnlySpan<byte> dumped = rendered.Value.Span;
         if (dumped.Length <= 29)
+        {
+            budget.ReserveString(Encoding.UTF8.GetCharCount(dumped));
             return Encoding.UTF8.GetString(dumped);
+        }
         char delimiter = dumped[0] switch
         {
             (byte)'"' => '"',
@@ -566,7 +569,9 @@ internal sealed partial class JqRuntime(JqBudget budget)
         int keep = 30 - (delimiter == '\0' ? 4 : 5);
         while (keep > 0 && dumped[keep] >= 0x80 && dumped[keep] < 0xC0)
             keep--;
-        string head = Encoding.UTF8.GetString(dumped, 0, keep);
+        ReadOnlySpan<byte> prefix = dumped[..keep];
+        budget.ReserveString(Encoding.UTF8.GetCharCount(prefix) + (delimiter == '\0' ? 3 : 4));
+        string head = Encoding.UTF8.GetString(prefix);
         return delimiter == '\0' ? head + "..." : head + "..." + delimiter;
     }
 
