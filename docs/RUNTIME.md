@@ -65,8 +65,14 @@ Coarse owners track executions, records, buffers, results and caches. Completed
 temporary work reconciles demand at proven lifetime boundaries; shared values and
 escaping errors retain their charge. Other construction within one record can
 remain conservatively charged, so a long loop may refuse despite a bounded live
-set. Identity, variable, child and ordinary `getpath` reads borrow existing values.
+set. Identity, variable, child and ordinary `getpath` reads borrow existing values,
+as do pass-through selectors, diagnostics, unchanged `abs`, extrema and adding null.
 Path writes copy replacements at the write boundary; merges copy selected branches.
+`add` appends to its private array accumulator; `with_entries` retains borrowed
+body outputs until final object construction, after all body effects finish.
+Loop branches stream depth-first. Proven single-result tails run flat; other
+branches retain admitted continuation capacity for the traversal. `walk` uses admitted
+container cursors and builds parents directly from completed child outputs.
 Transpose columns/padding and JOIN pairs admit their container storage before
 construction, including null cells and missing lookups.
 String search, trimming and scalar slicing scan borrowed text without full-input
@@ -94,14 +100,18 @@ Cold or oversized storage is refunded; overlapping borrowers keep separate owner
 ## Safeguards and cancellation
 
 Shared admission governs source/token/argument breadth, array padding, strings and
-materialized buffers, subject to checked CLR sizes and construction depth.
+materialized buffers, subject to checked CLR sizes and the guards below.
 
 | Boundary | Limit |
 | --- | --- |
-| JSON, recursive traversal, parser, evaluator and module depth | 64 |
+| JSON input/output, recursive tree operations, parser, evaluator and module depth | 64 |
 | Iterative paths | 10,000 segments |
 | Function arity | 4,096, following the reference closure-index representation |
 | Host read request | 8 KiB |
+
+Depth guards apply at the operation that parses, copies, compares or renders a
+tree. Iterative paths and `walk` can process deeper runtime trees within shared
+admission; a later recursive consumer still applies its own guard.
 
 Structural/regex exhaustion is terminal status 5, including under `--seq`,
 `--stream-errors` and `-e`. Reference path-length errors and invalid regex syntax

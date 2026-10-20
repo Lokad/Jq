@@ -156,18 +156,19 @@ marked comparison table and provenance sections above.
 
 ## Governor diagnostics
 
-The 71-case catalog checks separate stdout/stderr digests and complete refunds
+The 80-case catalog checks separate stdout/stderr digests and complete refunds
 under a shared 256 MiB allowance with one/four workers. Instrumented call counts
 are separate from uninstrumented timing/allocation lanes, which warm for at least
 eight calls and one second, then collect three alternating pairs. These local
 probes do not qualify general speedups or another host's contention costs.
 
-The 2026-10-20 cleanup rerun passes all 142 rows with full refunds and zero counter
-reads, same-target resizes or refusals. Nine new cases cover transpose padding,
-JOIN collection/streams, borrowed getpath, replacement copies, overwritten/deep
-merges and range argument products. The original 124 rows preserve their call
-counts and independent output/error digests against revision cfb5dc1; their
-single-worker estimated peaks are unchanged.
+The 2026-10-20 cleanup rerun passes all 160 rows with full refunds and zero counter
+reads, same-target resizes or refusals. Nine new cases cover borrowed selectors and
+extrema, array addition, walk/entry storage, flat loop tails and lazy branches.
+Against revision a925e49, all original 142 rows retain independent output/error
+digests; 140 retain call counts. The deep-merge case uses fewer calls at both worker
+counts, and its single-worker estimated peak falls from 299,476 to 213,460 bytes.
+Other original single-worker peaks are unchanged.
 Separate probes measure allocation and admission reductions. These diagnostics
 establish no timing claim.
 Provider storage is not estimated by Jq; Utf8Regex 0.3.0 has no shared-budget hook.

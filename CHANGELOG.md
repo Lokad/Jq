@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Stream `while`/`until`/`recurse` branches lazily, preserving condition
+  multiplicity and deferred errors/effects. Admit pending continuations and keep
+  proven single-result tails bounded, with cancellation and cleanup coverage.
+- Preserve borrowed aliases through pass-through builtins and extrema. Append
+  private `add` arrays without copying history; simplify `walk` child cursors and
+  remove `with_entries`' intermediate deep copy while preserving validation order.
 - Admit transpose columns/padding and JOIN pairs before construction. Preserve
   terminal refusal, pending output borrows, cleanup and bounded record streams.
   Group all JOIN lookups per row, preserving rows whose key stream is empty.

@@ -6,12 +6,13 @@ are 95 implemented rows, eight intentionally different and one partial (regex).
 
 The runtime uses UTF-8 I/O, Unicode-scalar string operations and `JsonNode` values
 with C# null representing JSON null. Objects preserve insertion order and resolve
-duplicate keys last-wins. Bindings and value parameters share references; updates
-rebuild containers while preserving the tested path-identity rules. `getpath`
-preserves root/child aliases; writes keep source values and results independent.
+duplicate keys last-wins. Bindings, value parameters and pass-through operations
+retain aliases, including `getpath` and selected extrema. Updates rebuild
+containers while preserving the tested path rules and independent source values.
 All I/O, modules, environment, clock and timezone inputs come from the embedding host.
 String search indices count Unicode scalars. String and array searches report
 overlapping matches.
+Loops preserve depth-first condition multiplicity, effects and lazy termination.
 
 ## Known differences and limits
 
