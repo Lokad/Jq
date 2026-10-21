@@ -6,6 +6,33 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("sort_by", true)]
+    [InlineData("group_by", true)]
+    [InlineData("unique_by", true)]
+    [InlineData("min_by", false)]
+    [InlineData("max_by", false)]
+    public async Task Jq_KeyedCollectionsRejectObjectsAfterKeyEffects(string operation, bool sorting)
+    {
+        foreach (string input in new[] { "{}", "{\"b\":2,\"a\":1}" })
+        foreach (string key in new[] { ".", "debug", "empty", "error(\"key failure\")" })
+        {
+            var host = new MockFileSystem();
+            host.SetStandardInput(input);
+            var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-cr",
+                "try " + operation + "(" + key + ") catch .")));
+            Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+            bool empty = input == "{}";
+            string mapped = empty ? "[]" : key == "empty" ? "[[],[]]" : "[[2],[1]]";
+            string suffix = sorting ? "cannot be sorted, as they are not both arrays" : "cannot be iterated over";
+            string expected = !empty && key == "error(\"key failure\")" ? "key failure\n"
+                : "object (" + input + ") and array (" + mapped + ") " + suffix + "\n";
+            Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Equal(!empty && key == "debug" ? "[\"DEBUG:\",2]\n[\"DEBUG:\",1]\n" : "",
+                host.GetOutput(JqFileDescriptor.StdErr));
+        }
+    }
+
+    [Theory]
     [InlineData("min_by", "1\n")]
     [InlineData("max_by", "2\n")]
     [InlineData("sort_by", "[1,2]\n")]

@@ -423,10 +423,21 @@ internal sealed class BsearchFilter(JqFilter Target) : JqFilter
 // collected sequence mirrors map([f]) without adding a JSON nesting level.
 internal static class CollectionKeys
 {
+    internal static JsonArray RequireArray(JsonNode? input, JqFilter keys, JqContext context, JqEnvironment environment, bool sorting)
+    {
+        if (input is JsonArray array) return array;
+        // jq evaluates map([f]) before its internal array check. Retain those
+        // effects and failures; only this invalid-input path needs JSON keys.
+        JsonNode? mapped = new MapFilter(new ArrayFilter(keys)).Evaluate(input, context, environment).Single();
+        string operation = sorting ? "cannot be sorted, as they are not both arrays" : "cannot be iterated over";
+        throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false)
+            + ") and array (" + context.Runtime.Serialize(mapped, false, null, false) + ") " + operation);
+    }
+
     internal static IEnumerable<(JsonNode? Element, IReadOnlyList<JsonNode?> Keys)> Keyed(JsonNode? input, JqFilter keys, JqContext context, JqEnvironment environment)
     {
-        long count = input is JsonArray array ? array.Count : input is JsonObject obj ? obj.Count : 0;
-        context.Budget.ReserveBytes(80L * count);
+        JsonArray array = RequireArray(input, keys, context, environment, true);
+        context.Budget.ReserveBytes(80L * array.Count);
         foreach (JsonNode? element in MapFilter.Iterate(input, context, environment))
         {
             var collected = new List<JsonNode?>();
@@ -544,6 +555,7 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
+        input = CollectionKeys.RequireArray(input, Keys, context, environment, false);
         JsonNode? best = null;
         IReadOnlyList<JsonNode?> bestKeys = Array.Empty<JsonNode?>();
         bool empty = true;
