@@ -257,6 +257,22 @@ internal static class GovernorRunner
                 string.Concat(Enumerable.Repeat("{\"a\":1}\n", records)), string.Concat(Enumerable.Repeat("[\"a\"]\n", records)));
         Add("zero-argument-floor", records, ["-nc", "range(1000) | floor"], "",
             string.Concat(Enumerable.Range(0, records).Select(value => value.ToString(CultureInfo.InvariantCulture) + "\n")));
+        string deletionRecords = string.Concat(Enumerable.Repeat("[0,1,2,3]\n", records));
+        Add("delete-nested-slice", records, ["-c", "del(.[0:2][0])"], deletionRecords,
+            string.Concat(Enumerable.Repeat("[1,2,3]\n", records)));
+        Add("delete-mixed-slices", records, ["-c", "del(.[0:1],getpath([{start:2,end:3}]))"], deletionRecords,
+            string.Concat(Enumerable.Repeat("[1,3]\n", records)));
+        Add("delete-deep-path", records, ["-nc", "null | setpath([range(1000)|0];null) | delpaths([[range(1000)|0]]) | true"], "", "true\n");
+        Add("slice-key-borrowed", records,
+            ["-c", "--argjson", "path", "[{\"start\":0,\"end\":1,\"unused\":" + payload + "}]", "getpath($path) | length"],
+            deletionRecords, string.Concat(Enumerable.Repeat("1\n", records)));
+        foreach (string operation in new[] { "//=", "+=" })
+            Add(operation == "//=" ? "compound-default-borrowed" : "compound-add-borrowed", 1000,
+                ["-c", "--argjson", "value", payload, "(.slot " + operation + " $value) | .slot | length"], "{\"slot\":null}", "1000\n");
+        foreach (string operation in new[] { "_sort_by_impl", "_group_by_impl", "_unique_by_impl" })
+            Add("precomputed" + operation, records, ["-c", operation + "(.) | length"], nullRows,
+                operation == "_sort_by_impl" ? "1000\n" : "1\n");
+        Add("join-null-error", 1, ["-nc", "try join(\",\") catch ."], "", "\"Cannot iterate over null (null)\"\n");
         Add("descent-first-child", records, ["-c", "limit(2; ..) | null"], nullRows, "null\nnull\n");
         Add("paths-first-child", records, ["-c", "first(paths)"], nullRows, "[0]\n");
         Add("tostream-first-event", 1024, ["-c", "first(tostream)"], wideObject, "[[\"k0\"],0]\n");
