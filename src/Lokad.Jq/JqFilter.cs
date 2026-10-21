@@ -1058,136 +1058,32 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
 
 internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional) : JqFilter
 {
-        // Like the reference postfix ?, a suppressed step ends key enumeration
-        // keeping prior outputs instead of failing when keys themselves error.
-        private static IEnumerable<JsonNode?> SuppressedKeys(JqFilter index, JsonNode? input, JqContext context, JqEnvironment environment)
-        {
-            using IEnumerator<JsonNode?> keys = index.Evaluate(input, context, environment).GetEnumerator();
-            while (true)
-            {
-                bool moved;
-                try
-                {
-                    moved = keys.MoveNext();
-                }
-                catch (Exception exception) when (JqErrors.IsCatchable(exception))
-                {
-                    yield break;
-                }
-                if (!moved)
-                    yield break;
-                yield return keys.Current;
-            }
-        }
-
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        // Key-major order: each key combines with every source value,
-        // matching index-then-source evaluation with backtracking.
-        IEnumerable<JsonNode?> stepKeys = optional
-            ? SuppressedKeys(index, input, context, environment)
-            : index.Evaluate(input, context, environment);
-        foreach (var key in stepKeys)
-            foreach (var value in source.Evaluate(input, context, environment))
-            {
-                if (value is JsonArray arr && TryGetArrayIndex(key, out long ix))
-                {
-                    long resolved = ix < 0 ? arr.Count + ix : ix;
-                    JsonNode? element = resolved >= 0 && resolved < arr.Count ? arr[(int)resolved] : null;
-                    yield return element;
-                }
-                else if (value is JsonArray && key is JsonValue nan && nan.TryGetValue<double>(out double missing) && double.IsNaN(missing))
-                {
-                    // A NaN index reads null instead of failing.
-                    yield return null;
-                }
-                else if (value is JsonArray && key is JsonArray pattern)
-                {
-                    // Like the reference array get, an array key searches
-                    // contiguous subsequence positions instead of indexing.
-                    yield return context.Runtime.Indices(value, pattern);
-                }
-                else if (key is JsonObject sliceKey && (value is JsonArray || TryGetString(value, out _)))
-                {
-                    // Like the reference parse_slice key lookup, both bounds
-                    // must be present: a missing key fails even though null
-                    // values default (suppressed under ? like other reads).
-                    if (!sliceKey.ContainsKey("start") || !sliceKey.ContainsKey("end"))
-                    {
-                        if (optional)
-                            yield break;
-                        throw new JqException("Array/string slice indices must be integers");
-                    }
-                    // Like the reference object-key get, slice objects on
-                    // arrays and strings read bounds from their fields.
-                    JqFilter held = new LiteralFilter(value);
-                    JqFilter lower = new IndexFilter(new IdentityFilter(), new LiteralFilter(JsonValue.Create("start")), false);
-                    JqFilter upper = new IndexFilter(new IdentityFilter(), new LiteralFilter(JsonValue.Create("end")), false);
-                    foreach (JsonNode? sliced in new SliceFilter(held, lower, upper, optional).Evaluate(key, context, environment))
-                        yield return sliced;
-                }
-                else if (value is JsonObject obj && TryGetString(key, out var name))
-                {
-                    JsonNode? field = obj.TryGetPropertyValue(name, out var child) ? child : null;
-                    yield return field;
-                }
-                else if (key is JsonObject objectKey && value is not null)
-                {
-                    // Like the reference get, an object key on a scalar
-                    // reports the container and key kinds; null roots read
-                    // null below.
-                    if (!optional)
-                        throw new JqRuntimeException("Cannot index " + TypeName(value) + " with object (" + context.Runtime.Serialize(objectKey, false, null, false) + ")");
-                }
-                else if (value == null)
-                {
-                    // Like the reference null-tolerant read, only string,
-                    // number, and slice-object keys yield null here; exotic
-                    // keys fail staged unless suppressed like other kinds.
-                    if (key is null || key is JsonArray || (key is JsonValue scalar && scalar.TryGetValue<bool>(out _)))
-                    {
-                        if (!optional)
-                            throw new JqRuntimeException("cannot index null");
-                    }
-                    else
-                        yield return null;
-                }
-                else if (!optional)
-                {
-                    throw new JqRuntimeException($"cannot index {TypeName(value)}");
-                }
-            }
+        foreach (JsonNode? key in index.Evaluate(input, context, environment))
+            foreach (JsonNode? value in source.Evaluate(input, context, environment))
+                if (JqPathReads.TryIndex(value, key, optional, context, out JsonNode? result))
+                    yield return result;
     }
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
     {
-        foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
-        {
-            IEnumerable<JsonNode?> pathKeys = optional
-                ? SuppressedKeys(index, pair.Value, context, environment)
-                : index.Evaluate(pair.Value, context, environment);
-            foreach (JsonNode? key in pathKeys)
+        // Keys are subexpressions of the enclosing input, before the source.
+        // Optional access suppresses read failures, never key/source effects.
+        foreach (JsonNode? key in index.Evaluate(outer.Value, context, environment))
+            foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
             {
-                JqValueSegment segment = PathSegmentFor(key, context);
-                RequireTracked(pair, segment, context);
-                // Like the reference INDEX step, the read itself follows the
-                // value-mode get: exotic keys append as-is while get failures
-                // propagate (suppressed under ?) instead of branching here.
-                JqFilter read = new IndexFilter(new LiteralFilter(pair.Value), new LiteralFilter(key), optional);
-                foreach (JsonNode? got in read.Evaluate(pair.Value, context, environment))
-                    yield return new JqValuePath(Extend(pair.Segments, segment, context.Budget), got, true);
+                if (!pair.Tracked) RequireTracked(pair, PathSegmentFor(key, context), context);
+                if (JqPathReads.TryIndex(pair.Value, key, optional, context, out JsonNode? result))
+                    yield return new JqValuePath(Extend(pair.Segments, PathSegmentFor(key, context), context.Budget), result, true);
             }
-        }
     }
 
     private static JqValueSegment PathSegmentFor(JsonNode? key, JqContext context)
     {
-        if (TryGetString(key, out string? name))
-            return new KeySegment(name);
-        if (JqPaths.TryGetFractional(key, out double fractional))
-            return new FractionalSegment(fractional);
-        if (TryGetIndex(key, out long index, out bool isNaN))
-            return new IndexSegment(index, isNaN);
+        if (TryGetString(key, out string? name)) return new KeySegment(name);
+        if (JqPaths.TryGetFractional(key, out double fractional)) return new FractionalSegment(fractional);
+        if (TryGetIndex(key, out long index, out bool isNaN)) return new IndexSegment(index, isNaN);
         return new InvalidSegment(context.Budget.CopyValue(key, 0));
     }
 }
@@ -1196,171 +1092,36 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        // Bound-major order: each start combines with every end, then every
-        // source value, matching key-object construction with backtracking.
-        // Raw starts keep nulls so scalar diagnostics can rebuild the
-        // reference key object; resolution defaults them exactly as before.
-        foreach (double? rawStart in RawStartBounds())
-            foreach (double? endBound in EndBounds())
-                foreach (var value in source.Evaluate(input, context, environment))
-                {
-                    double startBound = rawStart ?? 0;
-                    if (value is JsonArray arr)
-                    {
-                        JqPaths.ResolveSlice(arr.Count, startBound, endBound, out int from, out int to);
-                        context.Budget.ReserveBytes(64 + 24L * (to - from));
-                        var result = new JsonArray();
-                        for (var i = from; i < to; i++)
-                        {
-                            context.Budget.ReserveArrayItem(arr[i]);
-                            result.Add(context.Runtime.Clone(arr[i]));
-                        }
+        foreach (JsonNode? lower in Bounds(start, input, context, environment))
+            foreach (JsonNode? upper in Bounds(end, input, context, environment))
+                foreach (JsonNode? value in source.Evaluate(input, context, environment))
+                    if (JqPathReads.TrySlice(value, lower, upper, optional, context, out JsonNode? result))
                         yield return result;
-                    }
-                    else if (TryGetString(value, out var text))
-                    {
-                        yield return JsonValue.Create(context.Runtime.SliceString(text, startBound, endBound));
-                    }
-                    else if (value == null)
-                    {
-                        yield return null;
-                    }
-                    else if (!optional)
-                    {
-                        // Like the reference get, a slice on a scalar reports
-                        // the container with the evaluated key object, where
-                        // omitted, null, and NaN bounds all render as null.
-                        var keyObject = new JsonObject();
-                        keyObject["start"] = rawStart.HasValue ? JqRuntime.CreateNumber(rawStart.Value) : null;
-                        keyObject["end"] = endBound.HasValue ? JqRuntime.CreateNumber(endBound.Value) : null;
-                        throw new JqRuntimeException("Cannot index " + TypeName(value) + " with object (" + context.Runtime.Serialize(keyObject, false, null, false) + ")");
-                    }
-                }
-
-        IEnumerable<double?> RawStartBounds()
-        {
-            if (start == null)
-            {
-                yield return null;
-                yield break;
-            }
-            foreach (var bound in start.Evaluate(input, context, environment))
-            {
-                if (bound == null)
-                {
-                    yield return null;
-                    continue;
-                }
-                if (bound is JsonValue edge && edge.TryGetValue<double>(out double nan) && double.IsNaN(nan))
-                {
-                    yield return null;
-                    continue;
-                }
-                if (!FlattenFilter.TryDepthLevel(bound, out double position))
-                {
-                    // Like the reference postfix ?, a suppressed step yields
-                    // nothing instead of failing on bad bounds.
-                    if (optional)
-                        yield break;
-                    throw new JqException("Array/string slice indices must be integers");
-                }
-                yield return position;
-            }
-        }
-
-        // A missing, null, or NaN end means the container length, matching
-        // slice defaults; other bounds keep their fractional values for the
-        // shared start-down/end-up resolution.
-        IEnumerable<double?> EndBounds()
-        {
-            if (end == null)
-            {
-                yield return null;
-                yield break;
-            }
-            foreach (var bound in end.Evaluate(input, context, environment))
-            {
-                if (bound == null || (bound is JsonValue edge && edge.TryGetValue<double>(out double nan) && double.IsNaN(nan)))
-                    yield return null;
-                else if (!FlattenFilter.TryDepthLevel(bound, out double finish))
-                {
-                    if (optional)
-                        yield break;
-                    throw new JqException("Array/string slice indices must be integers");
-                }
-                else
-                    yield return finish;
-            }
-        }
     }
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
     {
-        foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
-            foreach (double? lower in SliceBoundValues(start, pair.Value, context, environment, optional))
-                foreach (double? upper in SliceBoundValues(end, pair.Value, context, environment, optional))
+        foreach (JsonNode? lower in Bounds(start, outer.Value, context, environment))
+            foreach (JsonNode? upper in Bounds(end, outer.Value, context, environment))
+                foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
                 {
-                    var segment = new SliceSegment(lower, upper);
-                    RequireTracked(pair, segment, context);
-                    if (pair.Value is JsonArray arr)
-                    {
-                        JqPaths.ResolveSlice(arr.Count, lower, upper, out int from, out int to);
-                        context.Budget.ReserveBytes(64 + 24L * (to - from));
-                        var part = new JsonArray();
-                        for (int position = from; position < to; position++)
-                        {
-                            context.Budget.ReserveArrayItem(arr[position]);
-                            part.Add(context.Budget.CopyValue(arr[position], 1));
-                        }
-                        yield return new JqValuePath(Extend(pair.Segments, segment, context.Budget), part, true);
-                    }
-                    else if (pair.Value is JsonValue scalar && scalar.TryGetValue<string>(out string? text) && text is not null)
-                    {
-                        yield return new JqValuePath(Extend(pair.Segments, segment, context.Budget),
-                            JsonValue.Create(context.Runtime.SliceString(text, lower, upper)), true);
-                    }
-                    else if (pair.Value == null)
-                        yield return new JqValuePath(Extend(pair.Segments, segment, context.Budget), null, true);
-                    else
-                    {
-                        // Like the reference path step, a slice on a scalar
-                        // fails with the container and key kinds rather than
-                        // an invalid-path message.
-                        var keyObject = new JsonObject();
-                        keyObject["start"] = lower.HasValue ? JqRuntime.CreateNumber(lower.Value) : null;
-                        keyObject["end"] = upper.HasValue ? JqRuntime.CreateNumber(upper.Value) : null;
-                        throw new JqRuntimeException("Cannot index " + TypeName(pair.Value) + " with object (" + context.Runtime.Serialize(keyObject, false, null, false) + ")");
-                    }
+                    if (!pair.Tracked) RequireTracked(pair, Segment(), context);
+                    if (JqPathReads.TrySlice(pair.Value, lower, upper, optional, context, out JsonNode? result))
+                        yield return new JqValuePath(Extend(pair.Segments, Segment(), context.Budget), result, true);
+
+                    JqValueSegment Segment() => JqPaths.TrySliceBoundValue(lower, out double? from)
+                        && JqPaths.TrySliceBoundValue(upper, out double? to)
+                        ? new SliceSegment(from, to)
+                        : new InvalidSegment(JqPathReads.SliceKey(lower, upper, context));
                 }
     }
 
-    private static IEnumerable<double?> SliceBoundValues(JqFilter? bound, JsonNode? input, JqContext context, JqEnvironment environment, bool optional)
+    private static IEnumerable<JsonNode?> Bounds(JqFilter? bound, JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        if (bound == null)
-        {
-            yield return null;
-            yield break;
-        }
-        foreach (JsonNode? edge in bound.Evaluate(input, context, environment))
-        {
-            if (edge is null)
-            {
-                yield return null;
-                continue;
-            }
-            if (edge is JsonValue number && number.TryGetValue<double>(out double index) && double.IsNaN(index))
-            {
-                yield return null;
-                continue;
-            }
-            if (!FlattenFilter.TryDepthLevel(edge, out double position))
-            {
-                if (optional)
-                    yield break;
-                throw new JqException("Array/string slice indices must be integers");
-            }
-            yield return position;
-        }
+        if (bound is null) yield return null;
+        else
+            foreach (JsonNode? value in bound.Evaluate(input, context, environment))
+                yield return value;
     }
 }
 

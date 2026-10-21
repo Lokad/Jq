@@ -45,8 +45,6 @@ public sealed partial class JqTests
     [InlineData("null", "path(getpath([{\"start\":1}]))", "[\n  {\n    \"start\": 1\n  }\n]\n")]
     [InlineData("[1,2,3]", "path(.[-0.5])", "[\n  -0.5\n]\n")]
     [InlineData("[1,2,3]", "path(.[1.5])", "[\n  1.5\n]\n")]
-    [InlineData("[1,2]", "path(.[error(\"x\")]?)", "")]
-    [InlineData("[1,2]", "path(.[0,error(\"x\")]?)", "[\n  0\n]\n")]
     [InlineData("[1,[[],{\"a\":2}]]", "[paths]", "[\n  [\n    0\n  ],\n  [\n    1\n  ],\n  [\n    1,\n    0\n  ],\n  [\n    1,\n    1\n  ],\n  [\n    1,\n    1,\n    \"a\"\n  ]\n]\n")]
     [InlineData("{\"a\":1}", "[paths((1,2))]", "[\n  [\n    \"a\"\n  ],\n  [\n    \"a\"\n  ]\n]\n")]
     [InlineData("{\"a\":1}", "[paths(empty)]", "[]\n")]

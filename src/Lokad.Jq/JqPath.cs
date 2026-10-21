@@ -272,7 +272,7 @@ internal static class JqPaths
         return true;
     }
 
-    private static bool TrySliceBoundValue(JsonNode? bound, out double? value)
+    internal static bool TrySliceBoundValue(JsonNode? bound, out double? value)
     {
         if (bound is null)
         {
@@ -554,6 +554,93 @@ internal static class JqPathUpdates
 
 internal static class JqPathReads
 {
+    internal static bool TryIndex(JsonNode? value, JsonNode? key, bool optional, JqContext context, out JsonNode? result)
+    {
+        context.Budget.CheckCancellation();
+        result = null;
+        if (value is JsonArray array && TryGetArrayIndex(key, out long index))
+        {
+            long resolved = index < 0 ? array.Count + index : index;
+            result = resolved >= 0 && resolved < array.Count ? array[(int)resolved] : null;
+        }
+        else if (value is JsonArray && key is JsonValue nan && nan.TryGetValue<double>(out double number) && double.IsNaN(number)) return true;
+        else if (value is JsonArray && key is JsonArray pattern)
+            result = context.Runtime.Indices(value, pattern);
+        else if (key is JsonObject slice && (value is JsonArray || TryGetString(value, out _)))
+        {
+            if (!JqPaths.TryGetSliceObjectBounds(slice, out double? lower, out double? upper))
+            {
+                if (optional) return false;
+                throw new JqException("Array/string slice indices must be integers");
+            }
+            result = Slice(value, lower, upper, context);
+        }
+        else if (value is JsonObject obj && TryGetString(key, out string name))
+            result = obj.TryGetPropertyValue(name, out JsonNode? child) ? child : null;
+        else if (value is null && key is not null && key is not JsonArray
+            && !(key is JsonValue scalar && scalar.TryGetValue<bool>(out _))) return true;
+        else
+        {
+            if (optional) return false;
+            if (key is JsonObject objectKey && value is not null)
+                throw new JqRuntimeException("Cannot index " + TypeName(value) + " with object (" + context.Runtime.Serialize(objectKey, false, null, false) + ")");
+            throw new JqRuntimeException("cannot index " + TypeName(value));
+        }
+        return true;
+    }
+
+    internal static bool TrySlice(JsonNode? value, JsonNode? lower, JsonNode? upper, bool optional,
+        JqContext context, out JsonNode? result)
+    {
+        context.Budget.CheckCancellation();
+        result = null;
+        if (value is null) return true;
+        if (value is JsonArray || TryGetString(value, out _))
+        {
+            if (!JqPaths.TrySliceBoundValue(lower, out double? start) || !JqPaths.TrySliceBoundValue(upper, out double? end))
+            {
+                if (optional) return false;
+                throw new JqException("Array/string slice indices must be integers");
+            }
+            result = Slice(value, start, end, context);
+            return true;
+        }
+        if (optional) return false;
+        throw new JqRuntimeException("Cannot index " + TypeName(value) + " with object ("
+            + context.Runtime.Serialize(SliceKey(lower, upper, context), false, null, false) + ")");
+    }
+
+    internal static JsonObject SliceKey(JsonNode? lower, JsonNode? upper, JqContext context)
+    {
+        context.Budget.ReserveBytes(384);
+        return new JsonObject
+        {
+            ["start"] = context.Budget.CopyValue(lower, 1),
+            ["end"] = context.Budget.CopyValue(upper, 1),
+        };
+    }
+
+    private static JsonNode? Slice(JsonNode? value, double? lower, double? upper, JqContext context)
+    {
+        if (value is JsonArray array)
+        {
+            JqPaths.ResolveSlice(array.Count, lower, upper, out int from, out int to);
+            context.Budget.ReserveBytes(64 + 24L * (to - from));
+            var result = new JsonArray();
+            for (int index = from; index < to; index++)
+            {
+                context.Budget.ReserveArrayItem(array[index]);
+                result.Add(context.Budget.CopyValue(array[index], 1));
+            }
+            return result;
+        }
+        if (TryGetString(value, out string text)) return JsonValue.Create(context.Runtime.SliceString(text, lower, upper));
+        if (value is null) return null;
+        throw new JqRuntimeException("Cannot index " + TypeName(value) + " with object ("
+            + context.Runtime.Serialize(SliceKey(lower.HasValue ? CreateNumber(lower.Value) : null,
+                upper.HasValue ? CreateNumber(upper.Value) : null, context), false, null, false) + ")");
+    }
+
     // Read traversal mirroring value semantics: missing reads null,
     // mistyped containers raise the same errors as ordinary reads.
     internal static JsonNode? GetPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JqContext context)
@@ -593,52 +680,10 @@ internal static class JqPathReads
                         throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with number (" + (index.IsNaN ? "null" : index.Index.ToString(System.Globalization.CultureInfo.InvariantCulture)) + ")");
                     break;
                 case SliceSegment slice:
-                    if (current is JsonArray array)
-                    {
-                        JqPaths.ResolveSlice(array.Count, slice.Start, slice.End, out int from, out int to);
-                        context.Budget.ReserveBytes(64 + 24L * (to - from));
-                        var part = new JsonArray();
-                        for (int position = from; position < to; position++)
-                        {
-                            context.Budget.ReserveArrayItem(array[position]);
-                            part.Add(context.Budget.CopyValue(array[position], 1));
-                        }
-                        current = part;
-                    }
-                    else if (current is JsonValue scalar && scalar.TryGetValue<string>(out string? text) && text is not null)
-                    {
-                        current = JsonValue.Create(context.Runtime.SliceString(text, slice.Start, slice.End));
-                    }
-                    else if (current is null)
-                        current = null;
-                    else
-                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.Serialize(slice.ToJson(), false, null, false) + ")");
+                    current = Slice(current, slice.Start, slice.End, context);
                     break;
                 case SliceObjectSegment raw:
-                    if (current is JsonArray rawArray)
-                    {
-                        if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? rawStart, out double? rawEnd))
-                            throw new JqException("Array/string slice indices must be integers");
-                        JqPaths.ResolveSlice(rawArray.Count, rawStart, rawEnd, out int rawFrom, out int rawTo);
-                        context.Budget.ReserveBytes(64 + 24L * (rawTo - rawFrom));
-                        var rawPart = new JsonArray();
-                        for (int position = rawFrom; position < rawTo; position++)
-                        {
-                            context.Budget.ReserveArrayItem(rawArray[position]);
-                            rawPart.Add(context.Budget.CopyValue(rawArray[position], 1));
-                        }
-                        current = rawPart;
-                    }
-                    else if (current is JsonValue rawScalar && rawScalar.TryGetValue<string>(out string? rawText) && rawText is not null)
-                    {
-                        if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? rawStart, out double? rawEnd))
-                            throw new JqException("Array/string slice indices must be integers");
-                        current = JsonValue.Create(context.Runtime.SliceString(rawText, rawStart, rawEnd));
-                    }
-                    else if (current is null)
-                        current = null;
-                    else
-                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.Serialize(raw.Raw, false, null, false) + ")");
+                    _ = TryIndex(current, raw.Raw, false, context, out current);
                     break;
                 default:
                     if (segment is InvalidSegment invalid && invalid.Raw is JsonArray pattern && current is JsonArray)
