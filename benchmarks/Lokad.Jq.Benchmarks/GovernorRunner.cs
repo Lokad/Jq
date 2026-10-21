@@ -442,6 +442,17 @@ internal static class GovernorRunner
                 broken ? "null\n" : "0\n");
         Add("label-caught-payloads", records, ["-nc", "range(1000) | label $out | try break $out catch .__jq"], "",
             string.Concat(Enumerable.Range(0, records).Select(i => i.ToString(CultureInfo.InvariantCulture) + "\n")));
+        Add("user-filter-forwarded", 50000, ["-nc",
+            "def f(g;$n): if $n==0 then g else f(g;$n-1) end; f(42;50000)"], "", "42\n");
+        Add("user-filter-unused", 50000, ["-nc",
+            "def f(g;$n): if $n==0 then . else f(42;$n-1) end; f(0;50000)"], "", "null\n");
+        Add("binding-scope-reuse", 10000, ["-nc", "range(10000) | null as $x | $x"], "",
+            string.Concat(Enumerable.Repeat("null\n", 10000)));
+        Add("pattern-scope-reuse", 10000, ["-nc", "range(10000) | null as [$x,$y] | empty"], "", "");
+        Add("definition-scope-reuse", 10000, ["-nc", "range(10000) | (def local: null; local)"], "",
+            string.Concat(Enumerable.Repeat("null\n", 10000)));
+        Add("definition-tail-reuse", 10000, ["-nc",
+            "def f($n): if $n==0 then null else def local: $n-1; f(local) end; f(10000)"], "", "null\n");
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>

@@ -224,14 +224,13 @@ internal sealed class AsFilter(
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(body);
-        JqEnvironment prebound = environment;
-        foreach (string name in allNames)
-            prebound = prebound.Extend(name, null);
+        using var storage = new JqScopeStorage(context.Budget);
+        JqEnvironment prebound = Prebind(alternatives, allNames, environment, context, storage);
         bool completed = false;
         for (int index = 0; index < alternatives.Count && !completed; index++)
         {
             bool isLast = index == alternatives.Count - 1;
-            using IEnumerator<JqEnvironment> scopes = Match(alternatives[index], bound, prebound, context).GetEnumerator();
+            using IEnumerator<JqEnvironment> scopes = Match(alternatives[index], bound, prebound, context, storage, 1).GetEnumerator();
             while (true)
             {
                 bool moved;
@@ -276,30 +275,48 @@ internal sealed class AsFilter(
         }
     }
 
-    private static IEnumerable<JqEnvironment> Match(BindingPattern pattern, JsonNode? value, JqEnvironment scope, JqContext context) =>
-        Match(pattern, value, scope, context, 1);
+    private static JqEnvironment Prebind(IReadOnlyList<BindingPattern> alternatives, HashSet<string> names, JqEnvironment environment, JqContext context, JqScopeStorage storage)
+    {
+        // A single variable always binds before the body and has no key
+        // expressions that could observe a provisional null binding.
+        if (alternatives.Count == 1 && alternatives[0] is VariablePattern) return environment;
+        storage.Reserve(128L * names.Count, names.Count);
+        foreach (string name in names)
+        {
+            context.Budget.CheckCancellation();
+            environment = environment.Extend(name, null);
+        }
+        return environment;
+    }
 
-    private static IEnumerable<JqEnvironment> Match(BindingPattern pattern, JsonNode? value, JqEnvironment scope, JqContext context, int depth)
+    private static IEnumerable<JqEnvironment> Match(BindingPattern pattern, JsonNode? value, JqEnvironment scope, JqContext context, JqScopeStorage storage, int depth)
     {
         context.Budget.CheckCancellation();
         JqRecursion.CheckDepth(depth, "pattern nesting limit exceeded");
         switch (pattern)
         {
             case VariablePattern variable:
-                yield return scope.Extend(variable.Name, value);
+                storage.Reserve(128, 1);
+                try { yield return scope.Extend(variable.Name, value); }
+                finally { storage.Release(128); }
                 break;
             case AliasPattern alias:
-                JqEnvironment aliased = scope.Extend(alias.Name, value);
-                foreach (JqEnvironment inner in Match(alias.Inner, value, aliased, context, depth + 1))
-                    yield return inner;
+                storage.Reserve(128, 1);
+                try
+                {
+                    JqEnvironment aliased = scope.Extend(alias.Name, value);
+                    foreach (JqEnvironment inner in Match(alias.Inner, value, aliased, context, storage, depth + 1))
+                        yield return inner;
+                }
+                finally { storage.Release(128); }
                 break;
             case ArrayPattern array:
-                foreach (JqEnvironment bound in MatchSequence(array.Items.Count, scope, context,
-                    (index, current) => Match(array.Items[index], ElementAt(value, index), current, context, depth + 1)))
+                foreach (JqEnvironment bound in MatchSequence(array.Items.Count, scope, context, storage,
+                    (index, current) => Match(array.Items[index], ElementAt(value, index), current, context, storage, depth + 1)))
                     yield return bound;
                 break;
             case ObjectPattern obj:
-                foreach (JqEnvironment bound in MatchSequence(obj.Properties.Count, scope, context,
+                foreach (JqEnvironment bound in MatchSequence(obj.Properties.Count, scope, context, storage,
                     (index, current) => MatchProperty(obj.Properties[index], current)))
                     yield return bound;
                 break;
@@ -314,13 +331,13 @@ internal sealed class AsFilter(
                 if (!TryGetString(keyValue, out string key))
                     throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
                 JsonNode? field = ExtractField(value, key);
-                foreach (JqEnvironment bound in Match(property.Value, field, current, context, depth + 1))
+                foreach (JqEnvironment bound in Match(property.Value, field, current, context, storage, depth + 1))
                     yield return bound;
             }
         }
     }
 
-    private static IEnumerable<JqEnvironment> MatchSequence(int count, JqEnvironment scope, JqContext context,
+    private static IEnumerable<JqEnvironment> MatchSequence(int count, JqEnvironment scope, JqContext context, JqScopeStorage storage,
         Func<int, JqEnvironment, IEnumerable<JqEnvironment>> step)
     {
         if (count == 0)
@@ -328,7 +345,8 @@ internal sealed class AsFilter(
             yield return scope;
             yield break;
         }
-        context.Budget.ReserveBytes(64 + 256L * count);
+        long bytes = 64 + 128L * count;
+        storage.Reserve(bytes, count);
         var iterators = new IEnumerator<JqEnvironment>?[count];
         JqEnvironment current = scope;
         int index = 0;
@@ -358,8 +376,12 @@ internal sealed class AsFilter(
         }
         finally
         {
-            for (int remaining = count - 1; remaining >= 0; remaining--)
-                iterators[remaining]?.Dispose();
+            try
+            {
+                for (int remaining = count - 1; remaining >= 0; remaining--)
+                    iterators[remaining]?.Dispose();
+            }
+            finally { storage.Release(bytes); }
         }
     }
 
@@ -385,9 +407,8 @@ internal sealed class AsFilter(
         // source leaves path state alone and the stored pointer is compared
         // against the outer value downstream, which is what the reference
         // check in the variable rule reproduces.
-        JqEnvironment prebound = environment;
-        foreach (string name in _allNames)
-            prebound = prebound.Extend(name, null);
+        using var storage = new JqScopeStorage(context.Budget);
+        JqEnvironment prebound = Prebind(alternatives, _allNames, environment, context, storage);
         foreach (JqValuePath sourcePair in source.EvaluatePaths(pair, context, environment))
         {
             JsonNode? bound = sourcePair.Value;
@@ -395,7 +416,7 @@ internal sealed class AsFilter(
             for (int index = 0; index < alternatives.Count && !completed; index++)
             {
                 bool isLast = index == alternatives.Count - 1;
-                using IEnumerator<JqValuePath> results = RunPathAlternative(alternatives[index], bound, prebound, pair, context).GetEnumerator();
+                using IEnumerator<JqValuePath> results = RunPathAlternative(alternatives[index], bound, prebound, pair, context, storage).GetEnumerator();
                 while (true)
                 {
                     bool moved;
@@ -420,9 +441,9 @@ internal sealed class AsFilter(
         }
     }
 
-    private IEnumerable<JqValuePath> RunPathAlternative(BindingPattern alternative, JsonNode? bound, JqEnvironment prebound, JqValuePath pair, JqContext context)
+    private IEnumerable<JqValuePath> RunPathAlternative(BindingPattern alternative, JsonNode? bound, JqEnvironment prebound, JqValuePath pair, JqContext context, JqScopeStorage storage)
     {
-        foreach (JqEnvironment scope in Match(alternative, bound, prebound, context))
+        foreach (JqEnvironment scope in Match(alternative, bound, prebound, context, storage, 1))
             foreach (JqValuePath next in body.EvaluatePaths(new JqValuePath(pair.Segments, pair.Value, pair.Tracked), context, scope))
                 yield return next;
     }
@@ -434,26 +455,48 @@ internal sealed class AsFilter(
 // observes exactly the bindings visible at its own site.
 internal sealed class DefFilter(JqFunctionDefinition Definition, JqFilter Continuation) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
-        var (extended, continuation) = Bind(environment, context);
-        foreach (JsonNode? value in continuation.Evaluate(input, context, extended))
-            yield return value;
-    }
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        Run(environment, context, (scope, continuation) => continuation.Evaluate(input, context, scope));
 
-    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        Run(environment, context, (scope, continuation) => continuation.EvaluatePaths(pair, context, scope));
+
+    private IEnumerable<T> Run<T>(JqEnvironment environment, JqContext context,
+        Func<JqEnvironment, JqFilter, IEnumerable<T>> evaluate)
     {
-        var (extended, continuation) = Bind(environment, context);
-        foreach (JqValuePath next in continuation.EvaluatePaths(pair, context, extended))
-            yield return next;
+        JqScopeStorage? storage = new JqScopeStorage(context.Budget);
+        try
+        {
+            var (extended, continuation) = Bind(environment, context, storage);
+            using IEnumerator<T> results = evaluate(extended, continuation).GetEnumerator();
+            while (true)
+            {
+                bool moved;
+                try { moved = results.MoveNext(); }
+                catch (TailCallSignal next)
+                {
+                    next.RetainScope(storage);
+                    storage = null;
+                    throw;
+                }
+                if (!moved) yield break;
+                yield return results.Current;
+            }
+        }
+        finally { storage?.Dispose(); }
     }
 
     internal JqFunctionDefinition FunctionDefinition => Definition;
 
-    private (JqEnvironment Environment, JqFilter Continuation) Bind(JqEnvironment environment, JqContext context)
+    private (JqEnvironment Environment, JqFilter Continuation) Bind(JqEnvironment environment, JqContext context, JqScopeStorage storage)
     {
+        int count = 0;
+        for (JqFilter probe = this; probe is DefFilter definition; probe = definition.ContinuationBody)
+        {
+            context.Budget.CheckCancellation();
+            count = checked(count + 1);
+        }
+        storage.Reserve(128L * count, count);
         JqFilter current = this;
         while (current is DefFilter definition)
         {
@@ -519,6 +562,19 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
     private sealed record CallFrame(JsonNode? Input, JsonNode?[] Values, IReadOnlyList<int> Positions,
         JqFilterClosure?[] Filters, JqValuePath? Path);
 
+    private sealed class CallCursor(IEnumerator<CallFrame> frames, TailCallSignal request) : IEnumerator<CallFrame>
+    {
+        public CallFrame Current => frames.Current;
+        object System.Collections.IEnumerator.Current => Current;
+        public bool MoveNext() => frames.MoveNext();
+        public void Reset() => throw new NotSupportedException();
+        public void Dispose()
+        {
+            try { frames.Dispose(); }
+            finally { request.ReleaseScopes(); }
+        }
+    }
+
     internal static IEnumerable<JsonNode?> EvaluateCallLoop(JqUserClosure closure, JsonNode? input,
         IReadOnlyList<JqFilter> args, JqEnvironment environment, JqContext context) =>
         RunCalls(closure, new TailCallSignal(closure.Definition, input, environment, args, null, null), context,
@@ -552,6 +608,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
             ?? throw new InvalidOperationException("Missing call storage owner.");
         long arenaBytes = 0;
         long capturedBytes = 0;
+        JqScopeStorage? capturedScopes = null;
         var pending = new List<(IEnumerator<CallFrame> Cursor, bool Single)>();
         IEnumerator<CallFrame>? current = null;
         IEnumerator<T>? outputs = null;
@@ -568,29 +625,38 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         finally
         {
             try { DisposeAll(null); }
-            finally { storage.DiscardBytes(checked(arenaBytes + capturedBytes)); }
+            finally
+            {
+                try { JqScopeStorage.DisposeAll(capturedScopes); }
+                finally { storage.DiscardBytes(checked(arenaBytes + capturedBytes)); }
+            }
         }
 
         void Start(TailCallSignal next)
         {
-            if (next.Args.Count != definition.Arity)
-                throw new JqException($"undefined function {definition.Name}/{definition.Arity}");
-            if (pending.Count + 2 > pending.Capacity)
+            try
             {
-                int capacity = checked(Math.Max(2, pending.Capacity * 2));
-                long bytes = checked(capacity * (1024L + 256L * definition.Arity));
-                context.Budget.CheckCancellation();
-                storage.ReserveBytes(bytes, capacity);
-                try { pending.Capacity = capacity; }
-                catch { storage.DiscardBytes(bytes); throw; }
-                storage.DiscardBytes(arenaBytes);
-                arenaBytes = bytes;
+                if (next.Args.Count != definition.Arity)
+                    throw new JqException($"undefined function {definition.Name}/{definition.Arity}");
+                if (pending.Count + 2 > pending.Capacity)
+                {
+                    int capacity = checked(Math.Max(2, pending.Capacity * 2));
+                    long bytes = checked(capacity * (1024L + 256L * definition.Arity));
+                    context.Budget.CheckCancellation();
+                    storage.ReserveBytes(bytes, capacity);
+                    try { pending.Capacity = capacity; }
+                    catch { storage.DiscardBytes(bytes); throw; }
+                    storage.DiscardBytes(arenaBytes);
+                    arenaBytes = bytes;
+                }
+                single = next.InputSource is null || next.InputSource.IsSingleValued(next.Environment, 0);
+                for (int i = 0; i < definition.Arity && single; i++)
+                    if (definition.Parameters[i].IsValue)
+                        single = next.Args[i].IsSingleValued(next.Environment, 0);
+                IEnumerator<CallFrame> frames = Frames(next).GetEnumerator();
+                current = next.HasScopes ? new CallCursor(frames, next) : frames;
             }
-            single = next.InputSource is null || next.InputSource.IsSingleValued(next.Environment, 0);
-            for (int i = 0; i < definition.Arity && single; i++)
-                if (definition.Parameters[i].IsValue)
-                    single = next.Args[i].IsSingleValued(next.Environment, 0);
-            current = Frames(next).GetEnumerator();
+            catch { next.ReleaseScopes(); throw; }
         }
 
         bool Advance()
@@ -606,24 +672,28 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                         try { moved = outputs.MoveNext(); }
                         catch (TailCallSignal next) when (next.Definition.Name == definition.Name && next.Definition.Arity == definition.Arity)
                         {
-                            IEnumerator<T> completed = outputs;
-                            outputs = null;
-                            completed.Dispose();
-                            if (current is not null)
+                            try
                             {
-                                if (single)
+                                IEnumerator<T> completed = outputs;
+                                outputs = null;
+                                completed.Dispose();
+                                if (current is not null)
                                 {
-                                    IEnumerator<CallFrame> exhausted = current;
-                                    current = null;
-                                    exhausted.Dispose();
+                                    if (single)
+                                    {
+                                        IEnumerator<CallFrame> exhausted = current;
+                                        current = null;
+                                        exhausted.Dispose();
+                                    }
+                                    else
+                                    {
+                                        pending.Add((current, single));
+                                        current = null;
+                                    }
                                 }
-                                else
-                                {
-                                    pending.Add((current, single));
-                                    current = null;
-                                }
+                                Start(next);
                             }
-                            Start(next);
+                            catch { next.ReleaseScopes(); throw; }
                             continue;
                         }
                         if (moved) return true;
@@ -693,6 +763,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                         long bytes = 256L + 192L * definition.Arity;
                         storage.ReserveBytes(bytes, definition.Arity + 1);
                         capturedBytes = checked(capturedBytes + bytes);
+                        next.TransferScopes(ref capturedScopes);
                         break;
                     }
                 }
@@ -836,6 +907,33 @@ internal sealed class FilterParamCallFilter(string Name) : JqFilter
 internal sealed class TailCallSignal(JqFunctionDefinition definition, JsonNode? input, JqEnvironment environment,
     IReadOnlyList<JqFilter> args, JqFilter? source, JqValuePath? path) : Exception
 {
+    private JqScopeStorage? _scopes;
+
+    internal bool HasScopes => _scopes is not null;
+
+    internal void RetainScope(JqScopeStorage scope)
+    {
+        scope.Next = _scopes;
+        _scopes = scope;
+    }
+
+    internal void TransferScopes(ref JqScopeStorage? captured)
+    {
+        while (_scopes is JqScopeStorage scope)
+        {
+            _scopes = scope.Next;
+            scope.Next = captured;
+            captured = scope;
+        }
+    }
+
+    internal void ReleaseScopes()
+    {
+        JqScopeStorage? scopes = _scopes;
+        _scopes = null;
+        JqScopeStorage.DisposeAll(scopes);
+    }
+
     internal JqFunctionDefinition Definition { get; } = definition;
     internal JsonNode? Input { get; } = input;
     internal JqEnvironment Environment { get; } = environment;
