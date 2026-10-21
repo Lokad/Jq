@@ -492,15 +492,9 @@ internal sealed class JqParser(
 
     private bool PeekIsDef() => Peek() is { Kind: TokenKind.Identifier, Text: "def" };
 
-    // Marks direct self-calls in tail positions so long recursive runs loop
-    // on the heap instead of nesting evaluator frames. Sound positions hold
-    // no pending output work when the call fires: the body root, `if` branch
-    // bodies (conditions yield no outputs), comma right-hand sides (the left
-    // side is fully drained), `//` right-hand sides (same), postfix `?`, and
-    // nested definition continuations. Pipe right-hand sides become dedicated
-    // per-value loops so sources are never abandoned. Sources, arguments,
-    // collected positions, and binding bodies stay regular depth-bounded
-    // calls; a nested rebinding stops the descent.
+    // Direct self-calls may replace a frame only when no pending work is lost.
+    // A bare pipe tail transfers its complete source cursor to the call driver.
+    // Other pipe/if rewrites require proven single-valued sources/conditions.
     private JqFilter RewriteTailCalls(JqFilter node, JqFunctionDefinition definition) =>
         RewriteTail(node, definition, 1);
 
@@ -517,13 +511,14 @@ internal sealed class JqParser(
             return new TailSelfCallFilter(definition, call.CallArgs);
         if (node is PipeFilter pipe)
         {
-            JqFilter right = RewriteTail(pipe.Right, definition, depth + 1);
-            if (right is TailSelfCallFilter tail)
-                return new PipeTailLoop(pipe.Left, tail.TailDefinition, tail.TailArgs);
-            return pipe.WithRight(right);
+            if (pipe.Right is UserCallFilter direct
+                && direct.FunctionName == definition.Name && direct.FunctionArity == definition.Arity)
+                return new PipeTailLoop(pipe.Left, definition, direct.CallArgs);
+            if (!pipe.Left.IsSingleValued(_environment, 0)) return pipe;
+            return pipe.WithRight(RewriteTail(pipe.Right, definition, depth + 1));
         }
         if (node is IfFilter iff)
-            return iff.WithTails(branch => RewriteTail(branch, definition, depth + 1));
+            return iff.WithTails(_environment, branch => RewriteTail(branch, definition, depth + 1));
         if (node is TryFilter attempted)
             return attempted.WithOperands(operand => RewriteTail(operand, definition, depth + 1));
         if (node is LabelFilter labeled)

@@ -833,8 +833,6 @@ internal sealed class TailSelfCallFilter(JqFunctionDefinition Definition, IReadO
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
         throw new TailCallSignal(Definition, pair.Value, environment, Args, null, pair);
 
-    internal JqFunctionDefinition TailDefinition => Definition;
-    internal IReadOnlyList<JqFilter> TailArgs => Args;
 }
 
 internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
@@ -1760,9 +1758,10 @@ internal sealed class IfFilter(
         }
     }
 
-    internal IfFilter WithTails(Func<JqFilter, JqFilter> rewrite)
+    internal IfFilter WithTails(JqEnvironment environment, Func<JqFilter, JqFilter> rewrite)
     {
         ArgumentNullException.ThrowIfNull(rewrite);
+        if (!branches.All(branch => branch.Condition.IsSingleValued(environment, 0))) return this;
         var resolved = new List<(JqFilter Condition, JqFilter Then)>();
         foreach (var (condition, then) in branches)
             resolved.Add((condition, rewrite(then)));
