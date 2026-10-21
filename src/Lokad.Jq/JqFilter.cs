@@ -1318,72 +1318,31 @@ internal sealed class RecursiveDescentFilter : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        // Iterative pre-order: depth follows value nesting, which setpath-built
-        // trees push far past the ingress depth cap, so nested enumerator frames
-        // are not an option.
-        var stack = new Stack<JsonNode?>();
-        stack.Push(input);
-        while (stack.Count > 0)
+        yield return input;
+        using var cursor = new JqTreeCursor(context.Budget);
+        JsonNode? current = input;
+        while (true)
         {
-            context.Budget.CheckCancellation();
-            JsonNode? current = stack.Pop();
+            if (current is JsonArray { Count: > 0 } or JsonObject { Count: > 0 }) cursor.Push(current);
+            while (cursor.Count != 0 && !cursor.TryNext(out current)) cursor.Pop();
+            if (cursor.Count == 0) yield break;
             yield return current;
-            if (current is JsonArray array)
-            {
-                for (int index = array.Count - 1; index >= 0; index--)
-                    stack.Push(array[index]);
-            }
-            else if (current is JsonObject obj)
-            {
-                context.Budget.ReserveBytes(24L * obj.Count);
-                var values = new List<JsonNode?>();
-                foreach (var property in obj)
-                    values.Add(property.Value);
-                for (int index = values.Count - 1; index >= 0; index--)
-                    stack.Push(values[index]);
-            }
         }
     }
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        foreach (JqValuePath descendant in Expand(pair, context))
-            yield return descendant;
-
-    }
-    // Pre-order structural threading: the pair itself, then each child with
-    // an extended path. Trackedness flows through untouched; scalars and
-    // nulls simply have no children. Children ride a heap stack so deep value
-    // trees never cost CLR frames.
-    private static IEnumerable<JqValuePath> Expand(JqValuePath pair, JqContext context)
-    {
-        ArgumentNullException.ThrowIfNull(pair);
-        ArgumentNullException.ThrowIfNull(context);
-        var stack = new Stack<JqValuePath>();
-        stack.Push(pair);
-        while (stack.Count > 0)
+        yield return pair;
+        if (pair.Value is not null && !pair.Tracked)
+            throw new JqException(InvalidIterate(pair.Value, context));
+        using var cursor = new JqTreeCursor(context.Budget);
+        JsonNode? current = pair.Value;
+        while (true)
         {
-            context.Budget.CheckCancellation();
-            JqValuePath current = stack.Pop();
-            yield return current;
-            if (current.Value is null)
-                continue;
-            if (!current.Tracked)
-                throw new JqException(InvalidIterate(current.Value, context));
-            if (current.Value is JsonArray arr)
-            {
-                for (int index = arr.Count - 1; index >= 0; index--)
-                    stack.Push(new JqValuePath(Extend(current.Segments, new IndexSegment(index, false), context.Budget), arr[index], true));
-            }
-            else if (current.Value is JsonObject obj)
-            {
-                context.Budget.ReserveBytes(48L * obj.Count);
-                var entries = new List<(string Key, JsonNode? Value)>();
-                foreach (var property in obj)
-                    entries.Add((property.Key, property.Value));
-                for (int index = entries.Count - 1; index >= 0; index--)
-                    stack.Push(new JqValuePath(Extend(current.Segments, new KeySegment(entries[index].Key), context.Budget), entries[index].Value, true));
-            }
+            if (current is JsonArray { Count: > 0 } or JsonObject { Count: > 0 }) cursor.Push(current);
+            while (cursor.Count != 0 && !cursor.TryNext(out current)) cursor.Pop();
+            if (cursor.Count == 0) yield break;
+            yield return new JqValuePath(cursor.CopySegments(pair.Segments), current, true);
         }
     }
 }
