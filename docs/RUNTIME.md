@@ -3,7 +3,9 @@
 `Jq.TryParse(JqCommandInvocation)` recognizes the command name and borrows the
 invocation. `ExecuteAsync` binds arguments, compiles the filter and streams results
 through `IJqHost`, using the supplied cancellation token and optional shared
-`IMemoryBudget`. Each execution has fresh evaluation state.
+`IMemoryBudget`. Each execution has fresh evaluation state. Its argument values are owned once by
+`$ARGS`; named variables borrow the corresponding entries. Updates copy borrowed
+branches, keeping reused and overlapping executions independent.
 
 ## Host I/O
 
@@ -61,8 +63,10 @@ factories admit before copying and return false/null on refusal.
 Keep the invocation and borrowed inputs alive through reused/concurrent executions.
 Ordinary argument errors remain status 2; admission refusal remains status 5.
 
-Coarse owners track executions, records, buffers, results and caches. Completed
-temporary work reconciles demand at proven lifetime boundaries; shared values and
+Coarse owners track executions, records, buffers, results and caches. Object
+construction workspace ends with enumeration; constant metadata builds private
+children once and releases traversal scratch. Completed temporary work reconciles
+demand at proven lifetime boundaries; shared values and
 escaping errors retain their charge. Other construction within one record can
 remain conservatively charged, so a long loop may refuse despite a bounded live
 set.
@@ -80,9 +84,12 @@ User-function arguments and pipeline sources stream once in demand order.
 Direct filter-parameter forwarding reuses the captured argument without adding
 another environment wrapper. Lexical scope batches admit before construction and
 release completed demand. Suspended continuations and captures retain scope
-admission until completion or abandonment; proven single-result tails run flat. Recursive calls under handlers, optional
-suppression or labels retain their scopes and use the evaluation depth safeguard.
-Early output closure stops deferred work.
+admission until completion or abandonment; proven single-result tails run flat.
+Recursive calls under handlers, optional suppression or labels retain their scopes and use the evaluation depth safeguard.
+Computed index/slice keys evaluate against the enclosing input before source
+results, in the same order for reads, paths and updates. Optional access suppresses
+read failures; errors in key/bound expressions propagate. Early output closure
+stops deferred work.
 Iterative tree/path operations retain ancestor cursors rather than whole traversal
 inventories. Recursive consumers still enforce their construction depth.
 

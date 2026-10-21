@@ -453,6 +453,19 @@ internal static class GovernorRunner
             string.Concat(Enumerable.Repeat("null\n", 10000)));
         Add("definition-tail-reuse", 10000, ["-nc",
             "def f($n): if $n==0 then null else def local: $n-1; f(local) end; f(10000)"], "", "null\n");
+        Add("object-empty-workspace-one", 10000, ["-nc", "range(10000) | {a:empty}"], "", "");
+        Add("object-empty-workspace-two", 10000, ["-nc", "range(10000) | {a:empty,b:1}"], "", "");
+        Add("constant-metadata-wide", 2000, ["-nc",
+            "module {items:[" + string.Join(',', Enumerable.Repeat("[0]", 2000)) + "]}; 0"], "", "0\n");
+        Add("computed-path-context", records, ["-c", "[path(.a[.b]),path(.a[.b:.c])]"],
+            string.Concat(Enumerable.Repeat("{\"a\":[10,20,30],\"b\":1,\"c\":2}\n", records)),
+            string.Concat(Enumerable.Repeat("[[\"a\",1],[\"a\",{\"start\":1,\"end\":2}]]\n", records)));
+        Add("computed-path-order", 4, ["-nc", "{a:[10,20,30],d:[40,50,60]} | path((.a,.d)[(1,2)])"], "",
+            "[\"a\",1]\n[\"d\",1]\n[\"a\",2]\n[\"d\",2]\n");
+        Add("argument-alias-path", 1, ["-nc", "--argjson", "data", "{\"a\":1}", "$ARGS.named.data | path($data)"], "", "[]\n");
+        string argumentArray = "[" + string.Join(',', Enumerable.Repeat("null", 10000)) + "]";
+        Add("argument-named-tree", 10000, ["-nc", "--argjson", "data", argumentArray, "$data | length"], "", "10000\n");
+        Add("argument-positional-tree", 10000, ["-nc", "$ARGS.positional[0] | length", "--jsonargs", argumentArray], "", "10000\n");
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>

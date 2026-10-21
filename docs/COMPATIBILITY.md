@@ -7,7 +7,8 @@ are 95 implemented rows, eight intentionally different and one partial (regex).
 The runtime uses UTF-8 I/O, Unicode-scalar string operations and `JsonNode` values
 with C# null representing JSON null. Objects preserve insertion order and resolve
 duplicate keys last-wins. Bindings, value parameters and pass-through operations
-retain aliases, including `getpath` and selected extrema. Updates rebuild
+retain aliases, including named arguments and their `$ARGS.named` entries,
+`getpath` and selected extrema. Updates rebuild
 containers while preserving the tested path rules and independent source values.
 All I/O, modules, environment, clock and timezone inputs come from the embedding host.
 String search indices count Unicode scalars. String and array searches report
@@ -17,7 +18,9 @@ Path-mode `label`/`break`, `try` and `?` preserve earlier outputs and payload
 identity. Labels retain lexical binding across shadowing and captured calls;
 intervening catch/optional scopes can intercept breaks. Keyed collections require arrays after evaluating key effects; `min_by`
 keeps the first minimum and `max_by` the last maximum. Slice deletion preserves
-slice-relative indices and mixed path forms. `join` requires array input; null
+slice-relative indices and mixed path forms. Computed index/slice paths and
+updates preserve the enclosing input and key-major effects/results; `?` leaves
+key-expression errors visible. `join` requires array input; null
 elements and empty arrays remain valid.
 
 ## Known differences and limits

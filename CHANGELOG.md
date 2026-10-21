@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Correct computed index/slice paths and updates: preserve the enclosing input,
+  key-major effects/results, and errors in optional index expressions.
+- Share named argument identity with `$ARGS`, avoid duplicate argument/constant
+  metadata trees, and release completed object-construction workspace.
 - Reuse directly forwarded filter arguments, preserving lexical bindings, lazy
   effects and path identity across long tail calls. Admit runtime scope batches
   before construction and release completed demand while retaining captures and

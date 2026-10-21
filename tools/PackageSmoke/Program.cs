@@ -56,6 +56,23 @@ if (args.Length != 0)
 int checks = 0;
 {
     var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    host.SetInput("{\"a\":[10,20,30],\"b\":1,\"c\":2}");
+    Check("computed paths", await Command(["-c", "[path(.a[.b]),path(.a[.b:.c])]"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[[\"a\",1],[\"a\",{\"start\":1,\"end\":2}]]\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    Check("named argument identity", await Command(["-nc", "--argjson", "data", "{\"a\":1}",
+        "$ARGS.named.data | path($data)"], []).ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[]\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
     host.SetInput("{\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}");
     Check("JSON", await Command([".items[].name"], []).ExecuteAsync(host, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "\"a\"\n\"b\"\n" && host.Output(JqFileDescriptor.StdErr) == "");
