@@ -8,7 +8,7 @@ namespace Lokad.Jq;
 
 /// <summary>
 /// Cancellation, structural safeguards and coarse storage owners. Admitted
-/// storage is refunded at record or execution lifetime boundaries.
+/// storage is refunded at proven lifetime boundaries.
 /// </summary>
 internal sealed class JqBudget : IDisposable
 {

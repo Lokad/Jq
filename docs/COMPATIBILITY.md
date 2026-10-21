@@ -42,7 +42,10 @@ elements and empty arrays remain valid.
   `modulemeta` synchronously waits for host reads during evaluation.
 - **Recursion:** direct tails and proven single-valued control paths flatten.
   Recursive calls with active handlers, optional suppression or labels retain
-  their scopes and use the evaluation depth safeguard.
+  their scopes and use the evaluation depth safeguard. Direct filter forwarding
+  stays flat; composite captured-filter chains retain the depth guard.
+- **Bindings:** object-pattern key expressions can see provisional null bindings
+  when the pattern shadows an outer variable used by its key expression.
 - **Other edges:** NaN `range` bounds yield no values. Range validates numeric
   arguments before iteration; a nonnumeric step can error where jq yields nothing.
   Local-time conversion is constrained by .NET's date range. Partial `strptime`

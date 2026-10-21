@@ -70,12 +70,17 @@ set.
 Reads and pass-through results borrow existing values. Writes copy borrowed
 branches; private accumulators such as `add` and `fromstream` update their owned
 containers directly. Emitted stream values stay independent of later updates.
-Data imports parse directly into their owning array. Module exports stay charged
-with their cache; linked bindings and temporary merge metadata admit separately.
+Data imports parse directly into their owning array. Cached function modules and
+module metadata reuse loaded sources while preserving search precedence; data
+imports read fresh contents. Module exports stay charged with their cache; linked
+bindings and temporary merge metadata admit separately. Interpolation fragments
+borrow visible compiler scopes and keep their declarations private.
 
 User-function arguments and pipeline sources stream once in demand order.
-Suspended continuations retain admitted capacity until completion or abandonment;
-proven single-result tails run flat. Recursive calls under handlers, optional
+Direct filter-parameter forwarding reuses the captured argument without adding
+another environment wrapper. Lexical scope batches admit before construction and
+release completed demand. Suspended continuations and captures retain scope
+admission until completion or abandonment; proven single-result tails run flat. Recursive calls under handlers, optional
 suppression or labels retain their scopes and use the evaluation depth safeguard.
 Early output closure stops deferred work.
 Iterative tree/path operations retain ancestor cursors rather than whole traversal

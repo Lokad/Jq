@@ -215,8 +215,6 @@ internal sealed class JqModuleLoader(
         CancellationToken cancellationToken)
     {
         using var storage = budget.UseExecutionStorage();
-        if (_cache.TryGetValue(canonicalPath, out JqLoadedModule? cached))
-            return cached;
         // Cache keys must survive a record-local modulemeta search path.
         budget.ReserveString(canonicalPath.Length);
         canonicalPath = new string(canonicalPath.AsSpan());

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Reuse directly forwarded filter arguments, preserving lexical bindings, lazy
+  effects and path identity across long tail calls. Admit runtime scope batches
+  before construction and release completed demand while retaining captures and
+  pending consumers.
+- Borrow visible compiler scopes for interpolation while keeping fragment
+  declarations private. Reuse cached function modules and module metadata before
+  source reads; preserve search precedence and fresh data imports. Refund source
+  buffers when descriptor closure fails before publication.
 - Preserve pending source/condition outputs and active control scopes around
   recursive calls. Resolve labels lexically across captures and shadowing;
   allow catch/optional scopes to intercept breaks. Deep recursion retaining
