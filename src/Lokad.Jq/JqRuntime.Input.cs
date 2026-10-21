@@ -7,8 +7,8 @@ namespace Lokad.Jq;
 internal sealed partial class JqRuntime
 {
     // Keeps the standard JSON reader and DOM stack across host reads. The cursor
-    // retains the original bytes until a value completes, so extended literals
-    // and malformed input can use the established whole-value reader/diagnostics.
+    // retains the original bytes until a value completes. Extended literals share
+    // the whole-value token reader; malformed final input keeps its diagnostics.
     internal sealed class InputReader(JqRuntime runtime, JqBudget budget)
     {
         private static readonly JsonReaderOptions Options = new()
@@ -22,7 +22,8 @@ internal sealed partial class JqRuntime
         private JsonReaderState _state = new(Options);
         private int _offset;
         private JsonNode? _root;
-        private bool _fallback;
+        private JsonReaderState _propertyState;
+        private bool _propertyConsumesComma;
 
         private readonly record struct Frame(JsonNode Container, string? Key);
 
@@ -32,21 +33,45 @@ internal sealed partial class JqRuntime
             _offset = 0;
             _root = null;
             _frames.Clear();
-            _fallback = false;
         }
 
         internal bool TryRead(ReadOnlySpan<byte> source, bool isFinal, out JsonNode? value, out int consumed)
         {
             value = null;
             consumed = 0;
-            if (!_fallback)
+            // Root literals stop at their own boundary, leaving following
+            // whitespace and line accounting to the input cursor.
+            if (_frames.Count == 0 && TryMatchNonFinite(source, 0, out double number, out int end)
+                && (isFinal || end < source.Length))
             {
-                try
+                budget.ReserveValueNode();
+                value = JsonValue.Create(number);
+                consumed = end;
+                Reset();
+                return true;
+            }
+            int checkpoint = _offset;
+            JsonReaderState checkpointState = _state;
+            try
+            {
+                int consumedBase = _offset;
+                var reader = new Utf8JsonReader(source[_offset..], isFinal, _state);
+                while (true)
                 {
-                    var reader = new Utf8JsonReader(source[_offset..], isFinal, _state);
-                    while (reader.Read())
+                    checkpoint = consumedBase + (int)reader.BytesConsumed;
+                    checkpointState = reader.CurrentState;
+                    JsonTokenType previous = reader.TokenType;
+                    bool propertyValue = _frames.Count != 0 && _frames[^1].Key is not null;
+                    runtime.ReadToken(ref reader, source, ref consumedBase,
+                        propertyValue ? _propertyState : checkpointState,
+                        propertyValue ? _propertyConsumesComma : previous == JsonTokenType.StartArray,
+                        out bool hasToken, out JsonNode? nonFinite);
+                    if (!hasToken) break;
+                    budget.CheckCancellation();
+                    if (nonFinite is not null)
+                        Attach(nonFinite);
+                    else
                     {
-                        budget.CheckCancellation();
                         switch (reader.TokenType)
                         {
                             case JsonTokenType.StartArray:
@@ -68,6 +93,8 @@ internal sealed partial class JqRuntime
                             case JsonTokenType.PropertyName:
                                 Frame frame = _frames[^1];
                                 _frames[^1] = frame with { Key = runtime.ReadAdmittedString(ref reader) };
+                                _propertyState = checkpointState;
+                                _propertyConsumesComma = previous == JsonTokenType.StartObject;
                                 break;
                             case JsonTokenType.EndArray:
                             case JsonTokenType.EndObject:
@@ -77,28 +104,31 @@ internal sealed partial class JqRuntime
                                 Attach(runtime.ReadScalar(ref reader));
                                 break;
                         }
-                        if (_frames.Count == 0)
-                        {
-                            consumed = _offset + (int)reader.BytesConsumed;
-                            budget.CheckCancellation();
-                            value = _root;
-                            Reset();
-                            return true;
-                        }
                     }
-                    _offset += (int)reader.BytesConsumed;
-                    _state = reader.CurrentState;
-                    if (!isFinal)
-                        return false;
+                    if (_frames.Count == 0)
+                    {
+                        consumed = consumedBase + (int)reader.BytesConsumed;
+                        budget.CheckCancellation();
+                        value = _root;
+                        Reset();
+                        return true;
+                    }
                 }
-                catch (System.Exception exception) when (exception is JsonException or System.InvalidOperationException)
-                {
-                    // Quotas and cancellation never take the compatibility fallback.
-                }
-                _fallback = true;
-                _root = null;
-                _frames.Clear();
+                _offset = consumedBase + (int)reader.BytesConsumed;
+                _state = reader.CurrentState;
+                if (!isFinal) return false;
             }
+            catch (System.Exception exception) when (exception is JsonException or System.InvalidOperationException
+                || exception is JqException and not JqQuotaException)
+            {
+                if (!isFinal)
+                {
+                    _offset = checkpoint;
+                    _state = checkpointState;
+                    return false;
+                }
+            }
+            // Only malformed final input needs the established diagnostic path.
             value = runtime.ReadJsonValue(source, out consumed);
             Reset();
             return true;

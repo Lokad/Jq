@@ -276,10 +276,14 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return true;
     }
 
-    // consumeComma mirrors the restored state kind: array starts and object values expect a value, so a trailing comma belongs to the resumed reader, while later array elements sit in a post-value state that consumes the comma itself. A resume preserves the state kind, so callers must not flip the flag on resumed values.
+    // A restored state expecting a value needs the following comma consumed
+    // here. A post-value state consumes it itself. Resumed values preserve
+    // that state kind, including across incremental host reads.
     private void ReadToken(ref Utf8JsonReader reader, ReadOnlySpan<byte> source, ref int consumedBase, JsonReaderState restoreState, bool consumeComma, out bool hasToken, out JsonNode? nonFinite)
         {
             nonFinite = null;
+            int checkpoint = consumedBase + (int)reader.BytesConsumed;
+            JsonReaderState checkpointState = reader.CurrentState;
             try
             {
                 hasToken = reader.Read();
@@ -293,8 +297,16 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 if (IsValuePreceded(source, failure)
                     && TryMatchNonFinite(source, failure, out double number, out int end))
                 {
-                    budget.ReserveValueNode();
                     int resume = SkipJsonWhitespace(source, end);
+                    // A token or separator may continue in the next host read.
+                    if (!reader.IsFinalBlock && (end == source.Length || consumeComma && resume == source.Length))
+                    {
+                        reader = new Utf8JsonReader(source[checkpoint..], false, checkpointState);
+                        consumedBase = checkpoint;
+                        hasToken = false;
+                        return;
+                    }
+                    budget.ReserveValueNode();
                     if (consumeComma && resume < source.Length && source[resume] == (byte)',')
                         resume++;
                     reader = new Utf8JsonReader(source.Slice(resume), reader.IsFinalBlock, restoreState);
