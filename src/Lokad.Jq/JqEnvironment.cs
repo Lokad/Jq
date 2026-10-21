@@ -234,17 +234,19 @@ internal sealed class JqEnvironment
         }
     }
 
-    internal void CollectFunctionClosures(IDictionary<(string Name, int Arity), JqUserClosure> closures)
+    internal void CollectFunctionClosures(IDictionary<(string Name, int Arity), JqUserClosure> closures, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(closures);
         JqEnvironment? scope = this;
         while (scope is not null)
         {
+            budget.CheckCancellation();
             if (scope._isFunction && scope._name is not null)
             {
                 var key = (scope._name, scope._arity);
                 if (!closures.ContainsKey(key))
                 {
+                    budget.ReserveMetadata(256, 1);
                     if (scope._closure is not null)
                         closures[key] = scope._closure;
                     else if (scope._definition is not null)

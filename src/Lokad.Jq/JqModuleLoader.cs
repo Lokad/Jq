@@ -15,18 +15,21 @@ internal sealed class JqLoadedModule
         JsonObject? metadata,
         IReadOnlyList<JqModuleImport> imports,
         IReadOnlyList<JqFunctionDefinition> definitions,
-        JqEnvironment moduleEnv)
+        JqEnvironment moduleEnv,
+        IReadOnlyDictionary<(string Name, int Arity), JqUserClosure> exports)
     {
         Metadata = metadata;
         Imports = imports;
         Definitions = definitions;
         ModuleEnv = moduleEnv;
+        Exports = exports;
     }
 
     internal JsonObject? Metadata { get; }
     internal IReadOnlyList<JqModuleImport> Imports { get; }
     internal IReadOnlyList<JqFunctionDefinition> Definitions { get; }
     internal JqEnvironment ModuleEnv { get; }
+    internal IReadOnlyDictionary<(string Name, int Arity), JqUserClosure> Exports { get; }
 }
 
 internal sealed class JqModuleLoader(
@@ -70,6 +73,7 @@ internal sealed class JqModuleLoader(
             if (data is null)
                 return env;
             string alias = import.Alias ?? string.Empty;
+            budget.ReserveMetadata(256, 2);
             env = env.Extend(alias, data);
             env = env.Extend(alias + "::" + alias, data);
             return env;
@@ -79,18 +83,11 @@ internal sealed class JqModuleLoader(
             var included = await TryLoadFuncModuleAsync(import, importerDir, depth, cancellationToken).ConfigureAwait(false);
             if (included is null)
                 return env;
-            var closures = new Dictionary<(string Name, int Arity), JqUserClosure>();
-            included.ModuleEnv.CollectFunctionClosures(closures);
-            // Deterministic order for reviewable shadowing: later includes win
-            // through environment order, independent of dictionary order.
-            var ordered = new List<KeyValuePair<(string Name, int Arity), JqUserClosure>>(closures);
-            ordered.Sort((left, right) =>
+            foreach (var entry in included.Exports)
             {
-                int name = string.CompareOrdinal(left.Key.Name, right.Key.Name);
-                return name != 0 ? name : left.Key.Arity.CompareTo(right.Key.Arity);
-            });
-            foreach (var entry in ordered)
+                budget.ReserveMetadata(128, 1);
                 env = env.ExtendClosure(entry.Key.Name, entry.Key.Arity, entry.Value);
+            }
             return env;
         }
         {
@@ -103,25 +100,30 @@ internal sealed class JqModuleLoader(
             // ones do not define.
             if (env.TryGetModule(alias, out JqEnvironment? existing) && existing is not null)
             {
+                using var scratch = new JqStorage(budget.MemoryBudget);
                 var merged = new Dictionary<(string Name, int Arity), JqUserClosure>();
-                existing.CollectFunctionClosures(merged);
-                var incoming = new Dictionary<(string Name, int Arity), JqUserClosure>();
-                module.ModuleEnv.CollectFunctionClosures(incoming);
-                foreach (var entry in incoming)
-                    merged[entry.Key] = entry.Value;
-                JqEnvironment mergedEnv = rootEnvironment;
-                var ordered = new List<KeyValuePair<(string Name, int Arity), JqUserClosure>>(merged);
-                ordered.Sort((left, right) =>
+                using (budget.UseStorage(scratch))
                 {
-                    int name = string.CompareOrdinal(left.Key.Name, right.Key.Name);
-                    return name != 0 ? name : left.Key.Arity.CompareTo(right.Key.Arity);
-                });
-                foreach (var entry in ordered)
+                    existing.CollectFunctionClosures(merged, budget);
+                    foreach (var entry in module.Exports)
+                    {
+                        budget.CheckCancellation();
+                        if (!merged.ContainsKey(entry.Key)) budget.ReserveMetadata(256, 1);
+                        merged[entry.Key] = entry.Value;
+                    }
+                }
+                JqEnvironment mergedEnv = rootEnvironment;
+                foreach (var entry in merged)
+                {
+                    budget.ReserveMetadata(128, 1);
                     mergedEnv = mergedEnv.ExtendClosure(entry.Key.Name, entry.Key.Arity, entry.Value);
+                }
+                budget.ReserveMetadata(128, 1);
                 env = env.ExtendModule(alias, mergedEnv);
             }
             else
             {
+                budget.ReserveMetadata(128, 1);
                 env = env.ExtendModule(alias, module.ModuleEnv);
             }
             return env;
@@ -238,10 +240,12 @@ internal sealed class JqModuleLoader(
             var definitions = new JqParser(tokens, programSource, env, budget).ParseDefinitions(bodyIndex);
             foreach (JqFunctionDefinition definition in definitions)
             {
-                budget.CheckCancellation();
+                budget.ReserveMetadata(128, 1);
                 env = env.ExtendFunction(definition.Name, definition.Arity, definition);
             }
-            var loaded = new JqLoadedModule(metadata, imports, definitions, env);
+            var exports = new Dictionary<(string Name, int Arity), JqUserClosure>();
+            env.CollectFunctionClosures(exports, budget);
+            var loaded = new JqLoadedModule(metadata, imports, definitions, env, exports);
             _cache[canonicalPath] = loaded;
             return loaded;
         }
