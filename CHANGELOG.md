@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Stream recursive descent and `tostream` from admitted ancestor cursors,
+  preserving path order, close events and cancellation. Flatten leaves directly
+  and sort borrowed arrays without preliminary source vectors.
+- Write JSON directly from borrowed trees, normalizing nonfinite numbers during
+  writing and reusing admitted key buffers for sorted properties. Preserve output
+  bytes, depth protection and pending I/O lifetimes.
 - Stream `while`/`until`/`recurse` branches lazily, preserving condition
   multiplicity and deferred errors/effects. Admit pending continuations and keep
   proven single-result tails bounded, with cancellation and cleanup coverage.
@@ -49,8 +55,7 @@
   ownership. Add ordering cases to governor diagnostics.
 - Reuse execution-private argument bindings and index names once, preserving
   first-wins semantics and concurrent command isolation. Emit LF directly from
-  the JSON writer, normalize the owned sorted tree once, and format diagnostics
-  from borrowed values and owned UTF-8 bytes.
+  the JSON writer and format diagnostics from borrowed values and owned UTF-8 bytes.
 - Add shared admission for invocation snapshots, compilation, construction,
   retained values and I/O buffers. Every refusal fails with status 5 outside jq
   `try`/`?`, preserving earlier output, pending borrows and owned cleanup.

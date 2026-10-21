@@ -73,15 +73,17 @@ body outputs until final object construction, after all body effects finish.
 Loop branches stream depth-first. Proven single-result tails run flat; other
 branches retain admitted continuation capacity for the traversal. `walk` uses admitted
 container cursors and builds parents directly from completed child outputs.
+Recursive descent and `tostream` retain admitted ancestor cursors and produce paths
+on demand. Flattening appends leaves directly; sorting borrows its source array.
 Transpose columns/padding and JOIN pairs admit their container storage before
 construction, including null cells and missing lookups.
 String search, trimming and scalar slicing scan borrowed text without full-input
 indexes. CSV admits expanded fields before construction. JSON escape casing
 changes only inside owned buffers after writer release; URI/base64 scratch is
 admitted separately and refunded after conversion.
-Comparison keys also borrow values without adding JSON containers. Ordering
-owns reusable key buffers for its duration, admits their growth and replacement
-peaks, and refunds them when comparison/sorting finishes.
+JSON output orders borrowed properties and normalizes nonfinite numbers during
+writing. Comparisons and JSON key ordering reuse admitted scratch, covering growth
+and replacement peaks. Buffers refund when their operation or output renderer ends.
 
 Already-admitted credit amortizes host calls and stays charged. Cold small charges
 and large payload copies stay exact; repeated small headers can round in 256-byte
