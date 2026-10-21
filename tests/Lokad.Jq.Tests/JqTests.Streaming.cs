@@ -66,6 +66,33 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData("1.5", "[[[1,2],\"x\"],[[1,2]]]\n")]
+    [InlineData("0.5", "[[[0,1,2],\"x\"],[[0,1,2]]]\n")]
+    [InlineData("-0.5", "[[[2],\"x\"],[[2]],[null],[null],[null,1],[[],1]]\n")]
+    [InlineData("null", "[[[0,1,2],\"x\"],[[0,1,2]],[null],[null],[null,1],[[],1]]\n")]
+    [InlineData("-1", "[[[2],\"x\"],[[2]],[null],[null],[null,1],[[],1]]\n")]
+    public async Task Jq_TruncateStreamUsesSharedSliceAndEventRules(string depth, string expected)
+    {
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", depth +
+            " | [truncate_stream([[0,1,2],\"x\"], [[0,1,2]], null, [], [null,1], [[],1])]")));
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Fact]
+    public async Task Jq_TruncateStreamDoesNotValidateUnusedDepthOrReadLaterErrors()
+    {
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
+            "true | truncate_stream(empty), first(0.5 | truncate_stream(([[0],1], error(\"late\"))))")));
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal("[[0],1]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
     [InlineData(1)]
     [InlineData(5)]
     public async Task Jq_StreamTokensSplitAcrossChunks(int chunk)

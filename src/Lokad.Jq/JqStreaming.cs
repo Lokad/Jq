@@ -94,48 +94,35 @@ internal sealed class TruncateStreamFilter(JqFilter Stream) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (!JqRuntime.TryGetInt(input, out int depth))
-            throw new JqException("truncate_stream requires a numeric depth");
+        IReadOnlyList<JqValueSegment> first = [new IndexSegment(0, false)];
+        IReadOnlyList<JqValueSegment>? slice = null;
         foreach (JsonNode? item in Stream.Evaluate(null, context, environment))
         {
-            if (item is not JsonArray pair || pair.Count == 0)
+            JsonNode? path = JqPathReads.GetPath(item, first, context);
+            if (context.Runtime.Compare(context.Runtime.Length(path), input) <= 0)
                 continue;
-            int pathLength;
-            JsonArray? path;
-            if (pair[0] is null)
+            if (slice is null)
             {
-                path = null;
-                pathLength = 0;
+                double? depth = null;
+                if (input is not null)
+                {
+                    if (!FlattenFilter.TryDepthLevel(input, out double number))
+                        throw new JqException("Array/string slice indices must be integers");
+                    if (!double.IsNaN(number)) depth = number;
+                }
+                slice = [new SliceSegment(depth, null)];
             }
-            else if (pair[0] is JsonArray array)
-            {
-                path = array;
-                pathLength = array.Count;
-            }
-            else
-            {
-                throw new JqException("truncate_stream path must be an array");
-            }
-            if (depth >= 0 && pathLength <= depth)
-                continue;
-            int start = depth < 0 ? Math.Max(0, pathLength + depth) : Math.Min(depth, pathLength);
-            context.Budget.ReserveBytes(128 + 24L * pair.Count);
-            var truncated = new JsonArray();
-            for (int i = start; i < pathLength; i++)
-            {
-                JsonNode? segment = path is { } actualPath ? actualPath[i] : null;
-                context.Budget.ReserveArrayItem(segment);
-                truncated.Add(context.Budget.CopyValue(segment, 1));
-            }
-            context.Budget.CheckCancellation();
+            JsonNode? truncated = JqPathReads.GetPath(path, slice, context);
+            int count = item is JsonArray pair ? pair.Count : 0;
+            context.Budget.ReserveBytes(64 + 24L * Math.Max(1, count));
             var reshaped = new JsonArray { truncated };
-            for (int i = 1; i < pair.Count; i++)
-            {
-                context.Budget.ReserveArrayItem(pair[i]);
-                reshaped.Add(context.Runtime.Clone(pair[i]));
-            }
+            if (item is JsonArray source)
+                for (int i = 1; i < source.Count; i++)
+                {
+                    context.Budget.ReserveArrayItem(source[i]);
+                    reshaped.Add(context.Budget.CopyValue(source[i], 1));
+                }
             yield return reshaped;
         }
     }
 }
-
