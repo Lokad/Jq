@@ -227,7 +227,7 @@ internal static class JqMatch
         }
         string message = TypeName(value) + " not a string or array";
         context.Budget.ReserveString(message.Length);
-        throw new JqErrorException(JsonValue.Create(message), "error: " + message);
+        throw new JqErrorException(JsonValue.Create(message));
     }
 
     internal static int ScalarOffset(string text, int utf16Index)

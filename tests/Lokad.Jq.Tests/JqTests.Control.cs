@@ -98,7 +98,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_TryDiscardsPartialOutputs()
+    public async Task Jq_TryDiscardsUnfinishedArray()
     {
         var host = new MockFileSystem();
         host.SetStandardInput("{\"a\": [\"b\"], \"c\": [\"d\"]}");

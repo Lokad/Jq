@@ -25,6 +25,8 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData("try error catch .", "[null,[null]]\n", false)]
+    [InlineData("try error catch .", "[null,[null]]\n", true)]
     [InlineData(".. | select(type == \"null\")", "null\n", false)]
     [InlineData(".. | select(type == \"null\")", "null\n", true)]
     [InlineData("paths", "[0]\n", false)]

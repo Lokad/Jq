@@ -97,9 +97,9 @@ public sealed partial class JqTests
         var parser = new JqParser(operation + "(1; error(\"x\" * 8192))", JqProgramSource.Inline, context.RootEnvironment, budget);
         var filter = parser.Parse();
         long compilation = memory.ReservedBytes;
-        var error = Assert.ThrowsAny<JqException>(() => filter.Evaluate(null, context, context.RootEnvironment).ToArray());
+        var error = Assert.Throws<JqErrorException>(() => filter.Evaluate(null, context, context.RootEnvironment).ToArray());
         Assert.True(memory.ReservedBytes >= compilation + 2 * 8192);
-        Assert.Contains(new string('x', 8192), error.Message);
+        Assert.Equal(new string('x', 8192), error.Payload?.GetValue<string>());
         budget.Dispose();
         Assert.Equal(0, memory.ReservedBytes);
     }

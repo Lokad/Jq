@@ -1600,8 +1600,22 @@ internal sealed class OptionalFilter(JqFilter inner) : JqFilter
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        foreach (JqValuePath next in inner.EvaluatePaths(pair, context, environment))
-            yield return next;
+        using IEnumerator<JqValuePath> results = inner.EvaluatePaths(pair, context, environment).GetEnumerator();
+        while (true)
+        {
+            bool moved;
+            try
+            {
+                moved = results.MoveNext();
+            }
+            catch (Exception exception) when (JqErrors.IsCatchable(exception))
+            {
+                yield break;
+            }
+            if (!moved)
+                yield break;
+            yield return results.Current;
+        }
     }
 
     internal JqFilter Inner => inner;
@@ -1811,9 +1825,9 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             // value wins and the rest never runs. An empty argument stream
             // yields nothing at all.
             if (args.Count == 0)
-                throw NewError(context, input);
+                throw new JqErrorException(input);
             foreach (var value in args[0].Evaluate(input, context, environment))
-                throw NewError(context, value);
+                throw new JqErrorException(value);
             yield break;
         }
 
@@ -1879,17 +1893,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 : TryGetString(input, out string? raw) ? raw
                 : context.Runtime.Serialize(input, false, null, false) + "\n";
             return new JqHaltException(code, text);
-        }
-
-        static JqErrorException NewError(JqContext context, JsonNode? payload)
-        {
-            JsonNode? held = context.Runtime.Clone(payload);
-            string rendered = held is null ? "null"
-                : TryGetString(held, out string? text) ? text
-                : context.Runtime.ToJqString(held);
-            string message = "error: " + rendered;
-            context.Budget.ReserveString(message.Length);
-            return new JqErrorException(held, message);
         }
 
         // Like the reference indices definition, only array inputs and

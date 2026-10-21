@@ -5,9 +5,9 @@ using System.Text.Json.Nodes;
 namespace Lokad.Jq;
 
 // An explicit `error` or `error(message)` failure. The payload, not the
-// message, is what `catch` handlers observe; the message only renders when
-// the error reaches the top level uncaught.
-internal sealed class JqErrorException(JsonNode? payload, string message) : JqException(message)
+// message, is what `catch` handlers observe. The executor renders uncaught
+// payloads; borrowing keeps their identity and existing storage ownership.
+internal sealed class JqErrorException(JsonNode? payload) : JqException("error")
 {
     internal JsonNode? Payload { get; } = payload;
 }
@@ -37,8 +37,8 @@ internal sealed class JqBreakException(string Label) : Exception("break")
 }
 
 // `try BODY` or `try BODY catch HANDLER`: catchable evaluation failures
-// discard partial body outputs and either vanish (no handler) or run the
-// handler with the error payload as input. Quota, compile, cancellation,
+// keep earlier outputs and either vanish (no handler) or run the handler
+// with the error payload as input. Quota, compile, cancellation,
 // host, halt, break, and tail-call signals always propagate.
 internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
 {
@@ -63,7 +63,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
                 {
                     faulted = true;
                     failure = exception is JqErrorException user
-                        ? context.Runtime.Clone(user.Payload)
+                        ? user.Payload
                         : JsonValue.Create(exception.Message);
                 }
             }
@@ -98,7 +98,11 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
                 if (Handler is not null)
                 {
                     faulted = true;
-                    failure = new JqValuePath(pair.Segments, exception is JqErrorException user ? context.Runtime.Clone(user.Payload) : JsonValue.Create(exception.Message), pair.Tracked);
+                    JsonNode? payload = exception is JqErrorException user ? user.Payload : JsonValue.Create(exception.Message);
+                    bool identical = ReferenceEquals(payload, pair.Value)
+                        || ((payload is null || (payload is JsonValue scalar && !JqRuntime.TryGetString(scalar, out _)))
+                            && PathIntact(context.Runtime, pair.Value, payload));
+                    failure = new JqValuePath(pair.Segments, payload, pair.Tracked && identical);
                 }
             }
             if (faulted && failure is not null && Handler is JqFilter handler)
@@ -151,8 +155,22 @@ internal sealed class LabelFilter(string Name, JqFilter Body) : JqFilter
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        foreach (JqValuePath next in Body.EvaluatePaths(pair, context, environment))
-            yield return next;
+        using IEnumerator<JqValuePath> results = Body.EvaluatePaths(pair, context, environment).GetEnumerator();
+        while (true)
+        {
+            bool moved;
+            try
+            {
+                moved = results.MoveNext();
+            }
+            catch (JqBreakException broken) when (broken.Label == Name)
+            {
+                yield break;
+            }
+            if (!moved)
+                yield break;
+            yield return results.Current;
+        }
     }
 
     internal JqFilter LabelBody => Body;
