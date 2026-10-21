@@ -31,9 +31,9 @@ internal sealed class JqHaltException(int ExitCode, string? StderrText) : Except
 // `break $label`: abandons the current computation up to the matching
 // `label`, which then yields nothing further. Never an error value, so
 // `try`, `?`, quotas, and cancellation never interact with it.
-internal sealed class JqBreakException(string Label) : Exception("break")
+internal sealed class JqBreakException(JqEnvironment target) : Exception("break")
 {
-    internal string Label { get; } = Label ?? throw new ArgumentNullException(nameof(Label));
+    internal JqEnvironment Target { get; } = target;
 }
 
 // `try BODY` or `try BODY catch HANDLER`: catchable evaluation failures
@@ -128,68 +128,53 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
 // `label $name | BODY`: streams body outputs until a matching `break`
 // abandons the rest. Prior outputs are kept; the break itself yields
 // nothing. Non-matching breaks propagate to outer labels.
-internal sealed class LabelFilter(string Name, JqFilter Body) : JqFilter
+internal sealed class LabelFilter(object Label, JqFilter Body) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
-        using IEnumerator<JsonNode?> results = Body.Evaluate(input, context, environment).GetEnumerator();
-        while (true)
-        {
-            bool moved;
-            try
-            {
-                moved = results.MoveNext();
-            }
-            catch (JqBreakException broken) when (broken.Label == Name)
-            {
-                moved = false;
-                break;
-            }
-            if (!moved)
-                yield break;
-            yield return results.Current;
-        }
-    }
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        Run(context, environment, scope => Body.Evaluate(input, context, scope));
 
-    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        Run(context, environment, scope => Body.EvaluatePaths(pair, context, scope));
+
+    private IEnumerable<T> Run<T>(JqContext context, JqEnvironment environment,
+        Func<JqEnvironment, IEnumerable<T>> evaluate)
     {
-        using IEnumerator<JqValuePath> results = Body.EvaluatePaths(pair, context, environment).GetEnumerator();
-        while (true)
+        using var ownedStorage = context.Budget.TemporaryStorage is null ? new JqStorage(context.Budget.MemoryBudget) : null;
+        JqStorage storage = context.Budget.TemporaryStorage ?? ownedStorage
+            ?? throw new InvalidOperationException("Missing label storage owner.");
+        context.Budget.CheckCancellation();
+        storage.ReserveBytes(128, 1);
+        try
         {
-            bool moved;
-            try
+            JqEnvironment scope = environment.ExtendLabel(Label);
+            using IEnumerator<T> results = evaluate(scope).GetEnumerator();
+            while (true)
             {
-                moved = results.MoveNext();
+                bool moved;
+                try { moved = results.MoveNext(); }
+                catch (JqBreakException broken) when (ReferenceEquals(broken.Target, scope)) { yield break; }
+                if (!moved) yield break;
+                yield return results.Current;
             }
-            catch (JqBreakException broken) when (broken.Label == Name)
-            {
-                yield break;
-            }
-            if (!moved)
-                yield break;
-            yield return results.Current;
         }
+        finally { storage.DiscardBytes(128); }
     }
 
     internal JqFilter LabelBody => Body;
 
-    internal LabelFilter WithBody(JqFilter next)
-    {
-        ArgumentNullException.ThrowIfNull(next);
-        return new LabelFilter(Name, next);
-    }
+    internal LabelFilter WithBody(JqFilter next) => new(Label, next);
 }
 
 // `break $name`: throws to the lexically matching label. Yields nothing
 // itself; unknown labels are rejected at parse time.
-internal sealed class BreakFilter(string Name) : JqFilter
+internal sealed class BreakFilter(object Label) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        throw new JqBreakException(Name);
+        if (!environment.TryGetLabel(Label, out JqEnvironment? target) || target is null)
+            throw new InvalidOperationException("Missing lexical label activation.");
+        throw new JqBreakException(target);
     }
 }

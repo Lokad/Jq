@@ -8,10 +8,11 @@ namespace Lokad.Jq;
 // each binding extends a new scope. Sibling generator branches hold their
 // own environments, so captures can never leak across branches.
 //
-// Bindings come in four namespaces. Variables (`$name`) hold JSON values,
+// Bindings have separate namespaces. Variables (`$name`) hold JSON values,
 // filters (bare `name`) hold unevaluated argument closures, functions
 // (`name/arity`) hold user definitions, and module aliases (`alias`)
-// hold imported module scopes for qualified `alias::name` lookup. A function node carries its own
+// hold imported module scopes for qualified `alias::name` lookup. Labels retain
+// lexical identity and an activation node. A function node carries its own
 // definition environment by construction: the node itself extends the
 // captured parent, so lookups forge a correctly scoped closure without
 // mutable cells or statics, and recursion resolves through the same path.
@@ -26,6 +27,7 @@ internal sealed class JqEnvironment
     private readonly JqFilterClosure? _filter;
     private readonly JqUserClosure? _closure;
     private readonly JqEnvironment? _moduleScope;
+    private readonly object? _label;
     private readonly bool _isFunction;
     private readonly bool _isFilter;
     private readonly bool _isModule;
@@ -84,6 +86,28 @@ internal sealed class JqEnvironment
 
     internal static JqEnvironment CreateRoot(IReadOnlyDictionary<string, JsonNode?> variables) =>
         new(variables);
+
+    private JqEnvironment(JqEnvironment parent, object label)
+    {
+        _root = parent._root;
+        _parent = parent;
+        _label = label;
+    }
+
+    // The environment node identifies one activation of a lexical label.
+    internal JqEnvironment ExtendLabel(object label) => new(this, label);
+
+    internal bool TryGetLabel(object label, out JqEnvironment? activation)
+    {
+        for (JqEnvironment? scope = this; scope is not null; scope = scope._parent)
+            if (ReferenceEquals(scope._label, label))
+            {
+                activation = scope;
+                return true;
+            }
+        activation = null;
+        return false;
+    }
 
     internal JqEnvironment Extend(string name, JsonNode? value) =>
         new(this, name, value);

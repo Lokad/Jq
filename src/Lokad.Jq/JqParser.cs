@@ -264,7 +264,7 @@ internal sealed class JqParser(
     {
         internal readonly HashSet<string> Variables = new(StringComparer.Ordinal);
         internal readonly HashSet<string> FilterParams = new(StringComparer.Ordinal);
-        internal readonly HashSet<string> Labels = new(StringComparer.Ordinal);
+        internal readonly Dictionary<string, object> Labels = new(StringComparer.Ordinal);
         internal readonly Dictionary<(string Name, int Arity), JqFunctionDefinition> Functions = new();
     }
 
@@ -367,8 +367,8 @@ internal sealed class JqParser(
                 clone.Variables.Add(name);
             foreach (string name in scope.FilterParams)
                 clone.FilterParams.Add(name);
-            foreach (string name in scope.Labels)
-                clone.Labels.Add(name);
+            foreach (var label in scope.Labels)
+                clone.Labels.Add(label.Key, label.Value);
             foreach (var entry in scope.Functions)
                 clone.Functions[entry.Key] = entry.Value;
             piece._scopes.Push(clone);
@@ -956,8 +956,9 @@ internal sealed class JqParser(
             EnterScope();
             try
             {
-                _scopes.Peek().Labels.Add(name.Text);
-                return new LabelFilter(name.Text, ParseQuery());
+                var label = new object();
+                _scopes.Peek().Labels.Add(name.Text, label);
+                return new LabelFilter(label, ParseQuery());
             }
             finally
             {
@@ -970,16 +971,10 @@ internal sealed class JqParser(
             if (dollar.Kind != TokenKind.Symbol || dollar.Text != "$")
                 throw Error($"expected $, got {dollar.Text}", dollar.Span);
             Token name = Expect(TokenKind.Identifier);
-            bool bound = false;
             foreach (var scope in _scopes)
-                if (scope.Labels.Contains(name.Text))
-                {
-                    bound = true;
-                    break;
-                }
-            if (!bound)
-                throw Error($"undefined label ${name.Text}", dollar.Span);
-            return new BreakFilter(name.Text);
+                if (scope.Labels.TryGetValue(name.Text, out object? label))
+                    return new BreakFilter(label);
+            throw Error($"undefined label ${name.Text}", dollar.Span);
         }
         if (MatchIdentifier("reduce"))
             return ParseReduce(isForeach: false);
