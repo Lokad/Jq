@@ -120,7 +120,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     // Single-pass decode: builds values while charging, so duplicate object
     // keys resolve last-wins at first position like object assignment.
-    internal JsonNode? ReadJsonValue(ReadOnlySpan<byte> text, out int consumed)
+    internal JsonNode? ReadJsonValue(ReadOnlySpan<byte> text, out int consumed) =>
+        ReadJsonValue(text, 0, out consumed);
+
+    internal JsonNode? ReadJsonValue(ReadOnlySpan<byte> text, int depth, out int consumed)
     {
         try
         {
@@ -145,7 +148,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             if (!reader.Read())
                 throw new JqException("expected a JSON value");
             int consumedBase = 0;
-            JsonNode? value = ReadValue(ref reader, text, ref consumedBase, 0);
+            JsonNode? value = ReadValue(ref reader, text, ref consumedBase, depth);
             consumed = consumedBase + (int)reader.BytesConsumed;
             budget.CheckCancellation();
             return value;

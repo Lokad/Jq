@@ -160,9 +160,9 @@ internal sealed class JqModuleLoader(
         using var ownedContent = found.Value.Content;
         ReadOnlyMemory<byte> content = ownedContent.Content;
         string canonical = found.Value.CanonicalPath;
-        budget.ReserveString(Encoding.UTF8.GetCharCount(content.Span));
         if (import.IsRaw)
         {
+            budget.ReserveString(Encoding.UTF8.GetCharCount(content.Span));
             string rawText;
             try
             {
@@ -178,16 +178,17 @@ internal sealed class JqModuleLoader(
         }
         try
         {
+            budget.ReserveBytes(64);
             var array = new JsonArray();
             int offset = 0;
             while (offset < content.Length)
             {
                 if (IsWhitespaceOnly(content.Span[offset..]))
                     break;
-                JsonNode? node = runtime.ReadJsonValue(content.Span[offset..], out int consumed);
+                JsonNode? node = runtime.ReadJsonValue(content.Span[offset..], 1, out int consumed);
                 offset += consumed;
                 budget.ReserveArrayItem(node);
-                array.Add(budget.CopyValue(node, 1));
+                array.Add(node);
             }
             return array;
         }

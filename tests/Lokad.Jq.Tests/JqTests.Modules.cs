@@ -17,6 +17,40 @@ public sealed partial class JqTests
         return (exit, fs.GetOutput(JqFileDescriptor.StdOut), fs.GetOutput(JqFileDescriptor.StdErr));
     }
 
+    [Theory]
+    [InlineData(63, 0)]
+    [InlineData(64, 5)]
+    public async Task Jq_DataImportCountsItsContainingArrayDepth(int depth, int expectedStatus)
+    {
+        var host = new MockFileSystem();
+        host.AddFile("/lib/data.json", new string('[', depth) + "0" + new string(']', depth));
+        var memory = new Lokad.Jq.Benchmarking.BenchmarkMemoryBudget(1024 * 1024);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-nc", "-L", "/lib",
+            "import \"data\" as $d; $d | length")));
+        Assert.Equal(expectedStatus, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(expectedStatus == 0 ? "1\n" : "", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(expectedStatus == 0 ? "" : "jq: value nesting limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.Single(host.ClosedDescriptors);
+    }
+
+    [Fact]
+    public async Task Jq_DataImportBuildsLargeValuesOnceWithinSharedAdmission()
+    {
+        var host = new MockFileSystem();
+        host.AddFile("/lib/data.json", "[" + string.Join(',', Enumerable.Repeat("0", 10000)) + "]");
+        var memory = new Lokad.Jq.Benchmarking.BenchmarkMemoryBudget(1280 * 1024);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-nc", "-L", "/lib",
+            "import \"data\" as $d; [$d[0] | (length, .[0], .[-1])]")));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("[10000,0,0]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.Single(host.ClosedDescriptors);
+    }
+
     [Fact]
     public async Task Jq_Modules_ResumedBodiesUseLinkedFunctionsAndRetainMetadata()
     {

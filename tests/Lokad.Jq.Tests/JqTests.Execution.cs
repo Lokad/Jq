@@ -167,7 +167,7 @@ public sealed partial class JqTests
     public async Task Jq_DataImportQuotasKeepTheirTerminalCategory(bool optional)
     {
         var host = new MockFileSystem();
-        host.AddFile("/data.json", "[" + string.Join(',', Enumerable.Repeat("0", 200)) + "]");
+        host.AddFile("/data.json", "[" + string.Join(',', Enumerable.Repeat("0", 1000)) + "]");
         string metadata = optional ? " {\"optional\":true}" : "";
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-L", "/",
             "import \"data\" as $data" + metadata + "; empty")));
