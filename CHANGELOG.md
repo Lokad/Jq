@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Correct mixed and nested slice deletion. Reuse admitted ancestor frames and
+  shared path ranges; borrow raw path keys without deep copies or normalization
+  walks. Preserve nonfinite bounds, cancellation, deep paths and pending I/O.
+- Copy compound-assignment values at writeback and sort precomputed keys through
+  borrowed indices. Preserve generator effects, stable ties and independent
+  results. Reject null `join` inputs after required separator effects.
 - Correct path-mode labels, optional suppression and catch trackedness. Keep
   caught error payloads borrowed and format uncaught payloads at the boundary.
 - Reject object inputs to keyed collections after required key effects. Reuse

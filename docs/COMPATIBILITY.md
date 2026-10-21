@@ -15,7 +15,9 @@ overlapping matches.
 Loops preserve depth-first condition multiplicity, effects and lazy termination.
 Path-mode `label`/`break`, `try` and `?` preserve earlier outputs and payload
 identity. Keyed collections require arrays after evaluating key effects; `min_by`
-keeps the first minimum and `max_by` the last maximum.
+keeps the first minimum and `max_by` the last maximum. Slice deletion preserves
+slice-relative indices and mixed path forms. `join` requires array input; null
+elements and empty arrays remain valid.
 
 ## Known differences and limits
 
@@ -105,7 +107,7 @@ semantic gaps. References are the jq 1.8.2 manual and its parser/builtin registr
 | `as $x`, destructuring, `$ARGS`, lexical scope | implemented | JqTests.Bindings |
 | `def f: ...`, `def f(a;b): ...`, closures, recursion | implemented | JqTests.Functions |
 | `try/catch`, `?` suppression, `error`, `halt`, `halt_error`, `label`/`break` | implemented | JqTests.Control, JqTests.ErrorPaths |
-| Path expressions, `=`, `\|=`, `//=`, arithmetic updates | implemented | JqTests.Paths |
+| Path expressions, `=`, `\|=`, `//=`, arithmetic updates | implemented | JqTests.Paths, JqTests.DeletionStorage, JqTests.CompoundUpdates |
 | `reduce`/`foreach`, `limit`, `first`, `last`, `nth`, `isempty`, `while`, `until`, `repeat`, `recurse`, `walk` | implemented | JqTests.Reduction, JqTests.Iteration |
 | `import`/`include`, `module`, `modulemeta`, `$__loc__` | implemented | JqTests.Modules |
 | Comments `#`, multiline, string escapes | implemented | JqTests |

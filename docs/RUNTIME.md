@@ -68,7 +68,10 @@ remain conservatively charged, so a long loop may refuse despite a bounded live
 set. Identity, variable, child and ordinary `getpath` reads borrow existing values,
 as do caught error payloads, pass-through selectors, diagnostics, unchanged `abs`,
 extrema and adding null.
-Path writes copy replacements at the write boundary; merges copy selected branches.
+Path reads borrow raw keys and inspect slice bounds without copying ignored fields.
+Compound updates borrow evaluated values until the write boundary; merges copy
+selected branches. Deletion reuses admitted ancestor frames and shared path ranges,
+applying deeper paths to slice views before writing them back.
 `add` appends to its private array accumulator; `with_entries` retains borrowed
 body outputs until final object construction, after all body effects finish.
 Loop branches stream depth-first. Proven single-result tails run flat; other
@@ -78,7 +81,8 @@ Recursive descent and `tostream` retain admitted ancestor cursors and produce pa
 on demand. Flattening appends leaves directly; sorting borrows its source array.
 Keyed extrema reuse current/best key vectors; generated key values keep their
 record ownership. `keys_unsorted` enumerates properties directly and `keys` reuses
-admitted Unicode ordering scratch.
+admitted Unicode ordering scratch. Precomputed keyed collections sort borrowed
+indices and admit result/group construction separately.
 Transpose columns/padding and JOIN pairs admit their container storage before
 construction, including null cells and missing lookups.
 String search, trimming and scalar slicing scan borrowed text without full-input
