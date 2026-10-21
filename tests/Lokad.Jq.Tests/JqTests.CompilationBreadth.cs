@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 namespace Lokad.Jq.Tests;
 
@@ -80,4 +81,50 @@ public sealed partial class JqTests
         Assert.Equal(0, host.OpenFileCount);
         Assert.Equal(0, memory.ReservedBytes);
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Jq_CompilerSeedingStopsBeforeUnadmittedOrCanceledCopies(bool cancel)
+    {
+        var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        for (int i = 0; i < 100000; i++)
+            env = env.ExtendFunction("f" + i, 0, new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
+        using var compiler = new JqBudget(CancellationToken.None);
+        var tokens = Lexer.Tokenize(".", JqProgramSource.Inline, compiler);
+        using var cancellation = new CancellationTokenSource();
+        if (cancel) cancellation.Cancel();
+        var root = new BenchmarkMemoryBudget(0);
+        var memory = new CountingMemoryBudget(root);
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        {
+            var parser = new JqParser(tokens, JqProgramSource.Inline, env, budget);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            if (cancel) Assert.ThrowsAny<OperationCanceledException>(() => parser.ParseBody(0));
+            else Assert.True(Assert.Throws<JqQuotaException>(() => parser.ParseBody(0)).IsMemoryAdmission);
+            Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 32768);
+        }
+        Assert.Equal(cancel ? 0 : 1, memory.Counts.Refusals);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public void Jq_CompilerSeedsNearestFunctionsWithAmortizedAdmission()
+    {
+        var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        for (int i = 0; i < 1000; i++)
+            env = env.ExtendFunction("f" + i, 0, new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
+        env = env.ExtendFunction("f0", 1, new JqFunctionDefinition("f0", [new JqFunctionParameter("x", true)], new VariableFilter("x")));
+        env = env.ExtendFunction("f0", 0, new JqFunctionDefinition("f0", [], new LiteralFilter(JsonValue.Create(42))));
+        var root = new BenchmarkMemoryBudget(1024 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
+        {
+            var filter = new JqParser("f0 + f0(1)", JqProgramSource.Inline, env, context.Budget).Parse();
+            Assert.Equal(43, JqRuntime.Number(filter.Evaluate(null, context, env).Single()));
+            Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 100);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
 }

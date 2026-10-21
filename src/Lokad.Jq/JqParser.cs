@@ -334,13 +334,9 @@ internal sealed class JqParser(
     // Nearest bindings win.
     private void SeedFunctionsFromEnvironment()
     {
-        var collected = new Dictionary<(string Name, int Arity), JqFunctionDefinition>();
-        _environment.CollectFunctions(collected);
-        if (collected.Count == 0)
-            return;
         var scope = new ParserScope();
-        foreach (var entry in collected)
-            scope.Functions[entry.Key] = entry.Value;
+        _environment.CollectFunctions(scope.Functions, _budget);
+        if (scope.Functions.Count == 0) return;
         _scopes.Push(scope);
     }
 

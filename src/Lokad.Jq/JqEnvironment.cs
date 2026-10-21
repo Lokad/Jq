@@ -214,12 +214,13 @@ internal sealed class JqEnvironment
 
     // Seeds compilation of interpolation fragments with visible module
     // definitions. Nearest bindings win; fragments compile once at definition.
-    internal void CollectFunctions(IDictionary<(string Name, int Arity), JqFunctionDefinition> definitions)
+    internal void CollectFunctions(IDictionary<(string Name, int Arity), JqFunctionDefinition> definitions, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(definitions);
         JqEnvironment? scope = this;
         while (scope is not null)
         {
+            budget.CheckCancellation();
             if (scope._isFunction && scope._name is not null)
             {
                 JqFunctionDefinition? definition = scope._closure?.Definition ?? scope._definition;
@@ -227,7 +228,10 @@ internal sealed class JqEnvironment
                 {
                     var key = (scope._name, scope._arity);
                     if (!definitions.ContainsKey(key))
+                    {
+                        budget.ReserveMetadata(128, 1);
                         definitions[key] = definition;
+                    }
                 }
             }
             scope = scope._parent;
