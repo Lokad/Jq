@@ -466,6 +466,20 @@ internal static class GovernorRunner
         string argumentArray = "[" + string.Join(',', Enumerable.Repeat("null", 10000)) + "]";
         Add("argument-named-tree", 10000, ["-nc", "--argjson", "data", argumentArray, "$data | length"], "", "10000\n");
         Add("argument-positional-tree", 10000, ["-nc", "$ARGS.positional[0] | length", "--jsonargs", argumentArray], "", "10000\n");
+        string emptyObjects = string.Join(',', Enumerable.Repeat("{}", 100));
+        string containmentNeedles = string.Join(',', Enumerable.Repeat("{\"x\":{}}", 100));
+        Add("contains-empty-containers", 100, ["-c", ". as $d | .haystack | contains($d.needles)"],
+            "{\"haystack\":[" + emptyObjects + ",{\"x\":{}}],\"needles\":[" + containmentNeedles + "]}", "true\n");
+        string zeros = string.Join(',', Enumerable.Repeat("0", 5000));
+        Add("json-nan-leading", 5000, ["-c", "length"], "[nan," + zeros + "]", "5001\n");
+        Add("json-infinity-trailing", 5000, ["-c", "length"], "[" + zeros + ",infinity]", "5001\n");
+        Add("json-nonfinite-records", records, ["-c", "length"],
+            string.Concat(Enumerable.Repeat("[nan,-inf,+Infinity,0]\n", records)), string.Concat(Enumerable.Repeat("4\n", records)));
+        Add("join-array-search", records, ["-c", "JOIN([1,2,1]; .[]; [1]) | .[1]"], nullRows,
+            string.Concat(Enumerable.Repeat("[0,2]\n", records)));
+        Add("entries-boundary-depth", records, ["-c", "to_entries | length"],
+            string.Concat(Enumerable.Repeat(new string('[', 63) + "0" + new string(']', 63) + "\n", records)),
+            string.Concat(Enumerable.Repeat("1\n", records)));
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>

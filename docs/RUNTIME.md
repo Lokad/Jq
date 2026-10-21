@@ -30,8 +30,8 @@ closure or failure. Cancellation alone does not end a pending buffer borrow.
 
 Outer iteration and `input`/`inputs` share one pull cursor. File operands open
 lazily; `-` uses borrowed stdin at its current position. UTF-8 JSON values and raw
-lines may span reads. LF splits raw input; CR is data. Slurp aggregates the cursor;
-JSON decoding retains completed nodes across reads, including non-finite literals.
+lines may span reads. JSON decoding retains completed nodes across reads,
+including non-finite literals. LF splits raw input; CR is data. Slurp aggregates the cursor;
 `--stream` emits path/leaf events, and `--seq` separates records at RS and recovers
 after malformed records.
 
