@@ -237,6 +237,26 @@ internal static class GovernorRunner
         Add("range-bound-products", 13, ["-nc", "[range((0,1);(2,3);(1,2))]"], "", "[0,1,0,0,1,2,0,2,1,1,1,2,1]\n");
         Add("borrowed-selectors", 1000, ["-c", "arrays | values | abs | length"], payload, "1000\n");
         Add("borrowed-extrema", 1000, ["-c", "min | length"], "[" + payload + "]", "1000\n");
+        Add("caught-error-payload", 1000, ["-c", "try error catch length"], payload, "1000\n");
+        Add("caught-error-records", records, ["-c", "try error catch length"],
+            string.Concat(Enumerable.Repeat("[1,2]\n", records)), string.Concat(Enumerable.Repeat("2\n", records)));
+        foreach (string operation in new[] { "min_by", "max_by" })
+            Add(operation + "-identity-keys", records, ["-c", operation + "(.)"], payload,
+                operation == "min_by" ? "0\n" : "999\n");
+        foreach (bool sorted in new[] { false, true })
+        {
+            IEnumerable<string> names = Enumerable.Range(0, 1024).Select(index => "k" + index.ToString(CultureInfo.InvariantCulture));
+            if (sorted) names = names.Order(StringComparer.Ordinal);
+            Add(sorted ? "object-keys-sorted" : "object-keys-unsorted", 1024,
+                ["-c", sorted ? "keys" : "keys_unsorted"], wideObject,
+                "[" + string.Join(',', names.Select(name => "\"" + name + "\"")) + "]\n");
+        }
+        foreach (bool optional in new[] { false, true })
+            Add(optional ? "path-optional-records" : "path-label-records", records,
+                ["-c", optional ? "path((.a,error(\"late\"))?)" : "path(label $out | (.a,break $out))"],
+                string.Concat(Enumerable.Repeat("{\"a\":1}\n", records)), string.Concat(Enumerable.Repeat("[\"a\"]\n", records)));
+        Add("zero-argument-floor", records, ["-nc", "range(1000) | floor"], "",
+            string.Concat(Enumerable.Range(0, records).Select(value => value.ToString(CultureInfo.InvariantCulture) + "\n")));
         Add("descent-first-child", records, ["-c", "limit(2; ..) | null"], nullRows, "null\nnull\n");
         Add("paths-first-child", records, ["-c", "first(paths)"], nullRows, "[0]\n");
         Add("tostream-first-event", 1024, ["-c", "first(tostream)"], wideObject, "[[\"k0\"],0]\n");
