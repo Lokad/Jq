@@ -410,6 +410,22 @@ internal static class GovernorRunner
             Add("tojson-heat-" + count.ToString(CultureInfo.InvariantCulture), count,
                 ["-nr", "range(" + count.ToString(CultureInfo.InvariantCulture) + ") | \"a\" | tojson"], "",
                 string.Concat(Enumerable.Repeat("\"a\"\n", count)));
+        Add("user-tail-flat", 50000, ["-nc", "def f($n): if $n==0 then 0 else . | f($n-1) end; f(50000)"], "", "0\n");
+        Add("user-tail-first-borrowed", 10000, ["-nc", "--argjson", "values", "[" + string.Join(',', Enumerable.Repeat("null", 10000)) + "]",
+            "def f($x): if $x==1 then f($values[]) else . end; first(f(1))"], "", "null\n");
+        Add("user-tail-source-order", records, ["-nc", "def f($n): if $n==0 then . else range(1000) | f(0) end; f(1)"], "",
+            string.Concat(Enumerable.Range(0, records).Select(i => i.ToString(CultureInfo.InvariantCulture) + "\n")));
+        AddDiagnostic("user-tail-effects", 2, ["-nc", "def f($n): if $n==0 then . else (1,2) | f(0|debug) end; f(1)"], "",
+            "1\n2\n", "[\"DEBUG:\",0]\n[\"DEBUG:\",0]\n");
+        Add("fromstream-private-array", 2000, ["-nc", "fromstream((range(2000)|[[.],null]), [[1999]]) | length"], "", "2000\n");
+        Add("fromstream-records", records, ["-c", "fromstream(.[])"],
+            string.Concat(Enumerable.Repeat("[[[0],1],[[1],2],[[1]]]\n", records)), string.Concat(Enumerable.Repeat("[1,2]\n", records)));
+        Add("truncate-stream-fractional", records, ["-c", "[truncate_stream([[0,1,2],1])]"],
+            string.Concat(Enumerable.Repeat("1.5\n", records)), string.Concat(Enumerable.Repeat("[[[1,2],1]]\n", records)));
+        Add("date-remainder", records, ["-c", "strptime(\"%Y-%m-%d\") | .[8]"],
+            string.Concat(Enumerable.Repeat("\"2024-01-02 text\"\n", records)), string.Concat(Enumerable.Repeat("\" text\"\n", records)));
+        Add("date-caught-message", records, ["-c", "try strptime(\"%Y\") catch startswith(\"date\")"],
+            string.Concat(Enumerable.Repeat("\"" + new string('x', 1000) + "\"\n", records)), string.Concat(Enumerable.Repeat("true\n", records)));
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>

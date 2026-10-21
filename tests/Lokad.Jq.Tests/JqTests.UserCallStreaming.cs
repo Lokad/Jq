@@ -156,4 +156,18 @@ public sealed partial class JqTests
         Assert.Single(host.ClosedDescriptors);
     }
 
+    [Fact]
+    public async Task Jq_UserTailContinuationGrowthRefusalIsTerminalAfterPrefix()
+    {
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
+            "\"ready\", (def f($n): if $n==0 then 0 else f(($n-1),0) end; try f(10000) catch 42)")));
+        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("\"ready\"\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+        Assert.Equal(0, memory.ActiveScopes);
+    }
+
 }

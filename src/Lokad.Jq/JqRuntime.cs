@@ -854,29 +854,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return false;
     }
 
-    // JsonValue conversions are storage-strict for created values but
-    // convertible for parsed ones, so probe each integral storage in turn.
-    internal static bool TryGetInt(JsonNode? node, out int value)
-    {
-        value = 0;
-        if (node is JsonValue v && v.TryGetValue<int>(out int direct))
-        {
-            value = direct;
-            return true;
-        }
-        if (node is JsonValue l && l.TryGetValue<long>(out long whole) && whole >= int.MinValue && whole <= int.MaxValue)
-        {
-            value = (int)whole;
-            return true;
-        }
-        if (node is JsonValue d && d.TryGetValue<double>(out var number))
-        {
-            value = (int)number;
-            return Math.Abs(number - value) < double.Epsilon;
-        }
-        return false;
-    }
-
     internal static bool Truthy(JsonNode? node)
     {
         if (node == null) return false;
