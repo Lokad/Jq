@@ -1281,12 +1281,36 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // fail cleanly instead of consuming CLR frames.
     private bool ContainsSameKind(JsonNode? container, JsonNode? contained, int depth)
     {
+        budget.CheckCancellation();
         JqRecursion.CheckValueDepth(container, depth);
         JqRecursion.CheckValueDepth(contained, depth);
         if (container is JsonObject obj && contained is JsonObject needle)
-            return needle.All(kv => obj.TryGetPropertyValue(kv.Key, out var value) && ContainsSameKind(value, kv.Value, depth + 1));
+        {
+            for (int index = 0; index < needle.Count; index++)
+            {
+                budget.CheckCancellation();
+                var property = needle.GetAt(index);
+                if (!obj.TryGetPropertyValue(property.Key, out JsonNode? value)
+                    || !ContainsSameKind(value, property.Value, depth + 1)) return false;
+            }
+            return true;
+        }
         if (container is JsonArray haystack && contained is JsonArray needles)
-            return needles.All(needle => haystack.Any(candidate => ContainsSameKind(candidate, needle, depth + 1)));
+        {
+            for (int index = 0; index < needles.Count; index++)
+            {
+                budget.CheckCancellation();
+                bool found = false;
+                for (int candidate = 0; candidate < haystack.Count; candidate++)
+                    if (ContainsSameKind(haystack[candidate], needles[index], depth + 1))
+                    {
+                        found = true;
+                        break;
+                    }
+                if (!found) return false;
+            }
+            return true;
+        }
         if (TryGetString(container, out var text) && TryGetString(contained, out var fragment))
             return fragment.Length == 0 || text.Contains(fragment, StringComparison.Ordinal);
         return JsonEquals(container, contained);
