@@ -350,29 +350,22 @@ internal sealed class JqParser(
     // Parses string-interpolation pieces once at construction with the
     // definition-site scopes, so unknown names fail at compile time (stage 3)
     // instead of surfacing per evaluation as stage 5. The sub-parser shares
-    // the program source, environment, and budget; scope snapshots are deep
-    // copies so defs inside pieces stay local to the piece.
+    // the program source, environment, and budget. Parent scopes are borrowed
+    // only during synchronous parsing; declarations use a private top scope.
     private JqFilter ParseInterpolationPiece(string source)
     {
         ArgumentNullException.ThrowIfNull(source);
         var piece = new JqParser(source, _programSource, _environment, _budget);
         piece._depth = _depth + 1;
-        piece.SeedFunctionsFromEnvironment();
-        var snapshot = _scopes.ToArray();
-        for (int index = snapshot.Length - 1; index >= 0; index--)
+        _budget.CheckCancellation();
+        _budget.ReserveMetadata(384 + 32L * _scopes.Count, _scopes.Count + 1);
+        var visible = _scopes.ToArray();
+        for (int index = visible.Length - 1; index >= 0; index--)
         {
-            var scope = snapshot[index];
-            var clone = new ParserScope();
-            foreach (string name in scope.Variables)
-                clone.Variables.Add(name);
-            foreach (string name in scope.FilterParams)
-                clone.FilterParams.Add(name);
-            foreach (var label in scope.Labels)
-                clone.Labels.Add(label.Key, label.Value);
-            foreach (var entry in scope.Functions)
-                clone.Functions[entry.Key] = entry.Value;
-            piece._scopes.Push(clone);
+            _budget.CheckCancellation();
+            piece._scopes.Push(visible[index]);
         }
+        piece.EnterScope();
         return piece.ParseFragment();
     }
 

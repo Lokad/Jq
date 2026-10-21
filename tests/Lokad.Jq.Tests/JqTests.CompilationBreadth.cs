@@ -127,4 +127,51 @@ public sealed partial class JqTests
         Assert.Equal(0, root.ReservedBytes);
     }
 
+    [Fact]
+    public void Jq_InterpolationBorrowsWideVisibleScopes()
+    {
+        var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        for (int i = 0; i < 10000; i++)
+            env = env.ExtendFunction("f" + i, 0, new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
+        var root = new BenchmarkMemoryBudget(4 * 1024 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
+        {
+            string source = "\"" + string.Concat(Enumerable.Repeat("\\(f0)", 20)) + "\"";
+            var filter = new JqParser(source, JqProgramSource.Inline, env, context.Budget).Parse();
+            Assert.Equal(new string('1', 20), context.Runtime.ToJqString(filter.Evaluate(JsonValue.Create(1), context, env).Single()));
+            Assert.True(root.PeakBytes < 2 * 1024 * 1024);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+        Assert.Equal(0, memory.Counts.Refusals);
+    }
+
+    [Theory]
+    [InlineData("def f:1; \"\\(def f:2; f)-\\(f)\"", "\"2-1\"\n")]
+    [InlineData("def f:1; \"\\(def g:2; g)\", f", "\"2\"\n1\n")]
+    [InlineData("label $out | \"\\(def f: break $out; f)\",42", "")]
+    public async Task Jq_InterpolationKeepsPrivateDeclarationsAndLexicalParents(string source, string expected)
+    {
+        var root = new BenchmarkMemoryBudget(128 * 1024);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
+        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_InterpolationDefinitionsStayPrivateAcrossFragments()
+    {
+        var root = new BenchmarkMemoryBudget(128 * 1024);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "\"\\(def g:2; g)-\\(g)\"")));
+        Assert.Equal(3, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Contains("unsupported function g", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
 }
