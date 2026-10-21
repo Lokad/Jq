@@ -485,14 +485,14 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
     internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
         // Prove a directly called simple definition, without expanding its call graph.
         depth == 0 && Args.All(arg => arg.IsSingleValued(environment, depth + 1))
-        && TryResolve(environment, Name, Arity, out JqUserClosure? closure) && closure is not null
+        && environment.TryGetFunctionQualified(Name, Arity, out JqUserClosure? closure) && closure is not null
         && closure.Definition.Body.IsSingleValued(closure.Environment, depth + 1);
 
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (!TryResolve(environment, Name, Arity, out JqUserClosure? closure) || closure is null)
+        if (!environment.TryGetFunctionQualified(Name, Arity, out JqUserClosure? closure) || closure is null)
             throw new JqException($"undefined function {Name}/{Arity}");
         if (Args.Count != closure.Definition.Arity)
             throw new JqException($"undefined function {Name}/{Arity}");
@@ -504,7 +504,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (!TryResolve(environment, Name, Arity, out JqUserClosure? closure) || closure is null)
+        if (!environment.TryGetFunctionQualified(Name, Arity, out JqUserClosure? closure) || closure is null)
             throw new JqException($"undefined function {Name}/{Arity}");
         if (Args.Count != closure.Definition.Arity)
             throw new JqException($"undefined function {Name}/{Arity}");
@@ -512,249 +512,259 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
             yield return next;
     }
 
-    private static bool TryResolve(JqEnvironment environment, string name, int arity, out JqUserClosure? closure)
-    {
-        ArgumentNullException.ThrowIfNull(environment);
-        ArgumentNullException.ThrowIfNull(name);
-        if (name.Contains("::", System.StringComparison.Ordinal))
-            return environment.TryGetFunctionQualified(name, arity, out closure);
-
-        return environment.TryGetFunction(name, arity, out closure);
-    }
-
-    // Shared call driver: streams one body run per value combination and
-    // chains tail-position self-calls on an explicit heap stack instead of
-    // nesting evaluator frames. Pipe right-hand sides reuse this per left
-    // value so abandoned sources can never lose values.
-    internal static IEnumerable<JsonNode?> EvaluateCallLoop(JqUserClosure closure, JsonNode? callInput, IReadOnlyList<JqFilter> args, JqEnvironment callerEnvironment, JqContext context)
-    {
-        ArgumentNullException.ThrowIfNull(closure);
-        ArgumentNullException.ThrowIfNull(args);
-        ArgumentNullException.ThrowIfNull(callerEnvironment);
-        ArgumentNullException.ThrowIfNull(context);
-        JqFunctionDefinition definition = closure.Definition;
-        PartitionArgs(definition, args, callerEnvironment, out List<JqFilter> values, out List<int> valuePositions, out JqFilterClosure?[] filters);
-
-        // The initial value combinations stream lazily; only tail-call
-        // argument lists materialize (bounded by per-frame budget charges).
-        // A pending stack preserves argument order across tail chains.
-        var pending = new Stack<CallFrame>();
-        foreach (JsonNode?[] combo in EvaluateValueCombos(values, callInput, context, callerEnvironment))
-        {
-            CallFrame? current = new(callInput, combo, valuePositions, filters);
-            while (true)
-            {
-                if (current is null)
-                {
-                    if (!pending.TryPop(out current))
-                        break;
-                }
-                using IEnumerator<JsonNode?> outputs = EvaluateFrame(definition, closure, current, context).GetEnumerator();
-                while (true)
-                {
-                    bool moved;
-                    try
-                    {
-                        moved = outputs.MoveNext();
-                    }
-                    catch (TailCallSignal signal) when (signal.Definition.Name == definition.Name && signal.Definition.Arity == definition.Arity)
-                    {
-                        current = PushSignalFrames(signal, context, pending);
-                        break;
-                    }
-                    if (!moved)
-                    {
-                        current = null;
-                        break;
-                    }
-                    yield return outputs.Current;
-                }
-            }
-        }
-    }
-
     internal string FunctionName => Name;
-
     internal int FunctionArity => Arity;
-
     internal IReadOnlyList<JqFilter> CallArgs => Args;
 
-    private sealed record CallFrame(JsonNode? Input, JsonNode?[] Values, IReadOnlyList<int> ValuePositions, JqFilterClosure?[] Filters);
+    private sealed record CallFrame(JsonNode? Input, JsonNode?[] Values, IReadOnlyList<int> Positions,
+        JqFilterClosure?[] Filters, JqValuePath? Path);
 
-    // Path-mode call driver: mirrors the value loop, threading segment
-    // lists through body runs and tail chains instead of bare values.
-    internal static IEnumerable<JqValuePath> EvaluatePathsCallLoop(JqUserClosure closure, JqValuePath pair, IReadOnlyList<JqFilter> args, JqEnvironment callerEnvironment, JqContext context)
+    internal static IEnumerable<JsonNode?> EvaluateCallLoop(JqUserClosure closure, JsonNode? input,
+        IReadOnlyList<JqFilter> args, JqEnvironment environment, JqContext context) =>
+        RunCalls(closure, new TailCallSignal(closure.Definition, input, environment, args, null, null), context,
+            frame => closure.Definition.Body.Evaluate(frame.Input, context, Bind(frame, closure)));
+
+    internal static IEnumerable<JqValuePath> EvaluatePathsCallLoop(JqUserClosure closure, JqValuePath pair,
+        IReadOnlyList<JqFilter> args, JqEnvironment environment, JqContext context) =>
+        RunCalls(closure, new TailCallSignal(closure.Definition, pair.Value, environment, args, null, pair), context,
+            frame => closure.Definition.Body.EvaluatePaths(frame.Path ?? throw new InvalidOperationException("Missing call path."),
+                context, Bind(frame, closure)));
+
+    private static JqEnvironment Bind(CallFrame frame, JqUserClosure closure)
     {
-        ArgumentNullException.ThrowIfNull(closure);
-        ArgumentNullException.ThrowIfNull(pair);
-        ArgumentNullException.ThrowIfNull(args);
-        ArgumentNullException.ThrowIfNull(callerEnvironment);
-        ArgumentNullException.ThrowIfNull(context);
+        JqEnvironment scope = closure.Environment;
+        for (int i = 0; i < frame.Positions.Count; i++)
+            scope = scope.Extend(closure.Definition.Parameters[frame.Positions[i]].Name, frame.Values[i]);
+        for (int i = 0; i < frame.Filters.Length; i++)
+            if (frame.Filters[i] is JqFilterClosure filter)
+                scope = scope.ExtendFilter(closure.Definition.Parameters[i].Name, filter);
+        return scope;
+    }
+
+    // The driver owns suspended sources and argument cursors. Proven single
+    // calls replace their predecessor without probing for another result.
+    private static IEnumerable<T> RunCalls<T>(JqUserClosure closure, TailCallSignal request, JqContext context,
+        Func<CallFrame, IEnumerable<T>> evaluate)
+    {
         JqFunctionDefinition definition = closure.Definition;
-        PartitionArgs(definition, args, callerEnvironment, out List<JqFilter> values, out List<int> valuePositions, out JqFilterClosure?[] filters);
-        var pending = new Stack<PathCallFrame>();
-        foreach (JsonNode?[] combo in EvaluateValueCombos(values, pair.Value, context, callerEnvironment))
+        bool capturesFilters = definition.Parameters.Any(p => !p.IsValue);
+        using var memory = new JqMemoryReservation(context.Budget.MemoryBudget);
+        var pending = new List<(IEnumerator<CallFrame> Cursor, bool Single)>();
+        IEnumerator<CallFrame>? current = null;
+        IEnumerator<T>? outputs = null;
+        bool single = false;
+        try
         {
-            PathCallFrame? current = new(pair, combo, valuePositions, filters);
-            while (true)
+            Start(request);
+            while (Advance())
             {
-                if (current is null)
-                {
-                    if (!pending.TryPop(out current))
-                        break;
-                }
-                using IEnumerator<JqValuePath> outputs = EvaluatePathsFrame(definition, closure, current, context).GetEnumerator();
+                if (outputs is null) throw new InvalidOperationException("Missing call output cursor.");
+                yield return outputs.Current;
+            }
+        }
+        finally { DisposeAll(null); }
+
+        void Start(TailCallSignal next)
+        {
+            if (next.Args.Count != definition.Arity)
+                throw new JqException($"undefined function {definition.Name}/{definition.Arity}");
+            if (pending.Count + 2 > pending.Capacity)
+            {
+                int capacity = checked(Math.Max(4, pending.Capacity * 2));
+                long bytes = checked(capacity * (1024L + 256L * definition.Arity));
+                long previous = memory.LastAdmittedBytes;
+                memory.Resize(checked(previous + bytes));
+                pending.Capacity = capacity;
+                if (previous != 0) memory.Resize(bytes);
+            }
+            single = next.InputSource is null || next.InputSource.IsSingleValued(next.Environment, 0);
+            for (int i = 0; i < definition.Arity && single; i++)
+                if (definition.Parameters[i].IsValue)
+                    single = next.Args[i].IsSingleValued(next.Environment, 0);
+            current = Frames(next).GetEnumerator();
+        }
+
+        bool Advance()
+        {
+            try
+            {
                 while (true)
                 {
-                    bool moved;
-                    try
+                    context.Budget.CheckCancellation();
+                    if (outputs is not null)
                     {
-                        moved = outputs.MoveNext();
+                        bool moved;
+                        try { moved = outputs.MoveNext(); }
+                        catch (TailCallSignal next) when (next.Definition.Name == definition.Name && next.Definition.Arity == definition.Arity)
+                        {
+                            IEnumerator<T> completed = outputs;
+                            outputs = null;
+                            completed.Dispose();
+                            if (capturesFilters)
+                                // New filter arguments can retain the preceding lexical scope.
+                                context.Budget.ReserveMetadata(256L + 192L * definition.Arity, definition.Arity + 1);
+                            if (current is not null)
+                            {
+                                if (single)
+                                {
+                                    IEnumerator<CallFrame> exhausted = current;
+                                    current = null;
+                                    exhausted.Dispose();
+                                }
+                                else
+                                {
+                                    pending.Add((current, single));
+                                    current = null;
+                                }
+                            }
+                            Start(next);
+                            continue;
+                        }
+                        if (moved) return true;
+                        IEnumerator<T> exhaustedOutputs = outputs;
+                        outputs = null;
+                        exhaustedOutputs.Dispose();
                     }
-                    catch (TailCallSignal signal) when (signal.Definition.Name == definition.Name && signal.Definition.Arity == definition.Arity)
+                    if (current is null)
                     {
-                        current = PushSignalPathFrames(signal, pair, context, pending);
-                        break;
+                        if (pending.Count == 0) return false;
+                        (current, single) = pending[^1];
+                        pending.RemoveAt(pending.Count - 1);
                     }
-                    if (!moved)
+                    if (current.MoveNext())
+                        outputs = evaluate(current.Current).GetEnumerator();
+                    else
                     {
+                        IEnumerator<CallFrame> exhausted = current;
                         current = null;
-                        break;
+                        exhausted.Dispose();
                     }
-                    yield return outputs.Current;
+                }
+            }
+            catch (Exception exception)
+            {
+                DisposeAll(exception);
+                throw;
+            }
+        }
+
+        void DisposeAll(Exception? primary)
+        {
+            Exception? failure = primary;
+            Dispose(outputs);
+            outputs = null;
+            Dispose(current);
+            current = null;
+            for (int i = pending.Count - 1; i >= 0; i--) Dispose(pending[i].Cursor);
+            pending.Clear();
+            if (failure is not null && !ReferenceEquals(failure, primary))
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+
+            void Dispose(IDisposable? cursor)
+            {
+                try { cursor?.Dispose(); }
+                catch (Exception exception)
+                {
+                    if (failure is null || JqErrors.IsCatchable(failure) && !JqErrors.IsCatchable(exception))
+                        failure = exception;
                 }
             }
         }
-    }
 
-    private sealed record PathCallFrame(JqValuePath Pair, JsonNode?[] Values, IReadOnlyList<int> ValuePositions, JqFilterClosure?[] Filters);
-
-    private static IEnumerable<JqValuePath> EvaluatePathsFrame(JqFunctionDefinition definition, JqUserClosure closure, PathCallFrame frame, JqContext context)
-    {
-        JqEnvironment scope = closure.Environment;
-        for (int position = 0; position < frame.ValuePositions.Count; position++)
+        IEnumerable<CallFrame> Frames(TailCallSignal next)
         {
-            scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, frame.Values[position]);
-        }
-        for (int index = 0; index < frame.Filters.Length; index++)
-            if (frame.Filters[index] is not null)
-                scope = scope.ExtendFilter(definition.Parameters[index].Name, frame.Filters[index]!);
-        foreach (JqValuePath next in definition.Body.EvaluatePaths(new JqValuePath(frame.Pair.Segments, frame.Pair.Value, frame.Pair.Tracked), context, scope))
-            yield return next;
-    }
-
-    private static PathCallFrame? PushSignalPathFrames(TailCallSignal signal, JqValuePath pair, JqContext context, Stack<PathCallFrame> pending)
-    {
-        var combos = new List<JsonNode?[]>();
-        foreach (JsonNode?[] combo in EvaluateValueCombos(signal.ValueArgs, signal.Input, context, signal.Environment))
-        {
-            context.Budget.CheckCancellation();
-            combos.Add(combo);
-        }
-        // Tail frames restart the body against the signal input but keep
-        // accumulating onto the call-site segments, exactly like the
-        // initial frames do.
-        for (int index = combos.Count - 1; index >= 1; index--)
-        {
-            context.Budget.CheckCancellation();
-            pending.Push(new PathCallFrame(new JqValuePath(pair.Segments, signal.Input, pair.Tracked), combos[index], signal.ValuePositions, signal.FilterArgs));
-        }
-        if (combos.Count == 0)
-            return null;
-        context.Budget.CheckCancellation();
-        return new PathCallFrame(new JqValuePath(pair.Segments, signal.Input, pair.Tracked), combos[0], signal.ValuePositions, signal.FilterArgs);
-    }
-
-    // Peeks up to two value combinations (budget-charged) to decide whether
-    // a final pipe value may unwind flat. Returns false unless exactly one
-    // combination exists; multi-combination tails stay nested and ordered.
-    internal static bool TryPeekSingleCall(JqFunctionDefinition definition, IReadOnlyList<JqFilter> args, JsonNode? input, JqEnvironment environment, JqContext context, out List<JqFilter> values, out List<int> valuePositions, out JqFilterClosure?[] filters)
-    {
-        PartitionArgs(definition, args, environment, out values, out valuePositions, out filters);
-        using IEnumerator<JsonNode?[]> combos = EvaluateValueCombos(values, input, context, environment).GetEnumerator();
-        if (!combos.MoveNext())
-            return false;
-        context.Budget.CheckCancellation();
-        return !combos.MoveNext();
-    }
-
-    internal static void PartitionArgs(JqFunctionDefinition definition, IReadOnlyList<JqFilter> args, JqEnvironment environment, out List<JqFilter> values, out List<int> valuePositions, out JqFilterClosure?[] filters)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-        ArgumentNullException.ThrowIfNull(args);
-        ArgumentNullException.ThrowIfNull(environment);
-        if (args.Count != definition.Arity)
-            throw new JqException($"undefined function {definition.Name}/{definition.Arity}");
-        filters = new JqFilterClosure?[definition.Arity];
-        values = new List<JqFilter>();
-        valuePositions = new List<int>();
-        for (int index = 0; index < definition.Arity; index++)
-        {
-            if (definition.Parameters[index].IsValue)
+            var values = new List<JqFilter>();
+            var positions = new List<int>();
+            var filters = new JqFilterClosure?[definition.Arity];
+            for (int i = 0; i < definition.Arity; i++)
             {
-                values.Add(args[index]);
-                valuePositions.Add(index);
+                context.Budget.CheckCancellation();
+                if (definition.Parameters[i].IsValue)
+                {
+                    values.Add(next.Args[i]);
+                    positions.Add(i);
+                }
+                else filters[i] = new JqFilterClosure(next.Args[i], next.Environment);
             }
-            else
+            foreach (var source in Sources())
+                foreach (JsonNode?[] combo in Combine(source.Value))
+                    yield return new CallFrame(source.Value, combo, positions, filters, source.Path);
+
+            IEnumerable<(JsonNode? Value, JqValuePath? Path)> Sources()
             {
-                filters[index] = new JqFilterClosure(args[index], environment);
+                if (next.InputSource is not JqFilter source)
+                    yield return (next.Input, next.Path);
+                else if (next.Path is JqValuePath path)
+                    foreach (JqValuePath value in source.EvaluatePaths(path, context, next.Environment))
+                        yield return (value.Value, value);
+                else
+                    foreach (JsonNode? value in source.Evaluate(next.Input, context, next.Environment))
+                        yield return (value, null);
             }
-        }
-    }
 
-    private static IEnumerable<JsonNode?> EvaluateFrame(JqFunctionDefinition definition, JqUserClosure closure, CallFrame frame, JqContext context)
-    {
-        JqEnvironment scope = closure.Environment;
-        for (int position = 0; position < frame.ValuePositions.Count; position++)
-        {
-            scope = scope.Extend(definition.Parameters[frame.ValuePositions[position]].Name, frame.Values[position]);
-        }
-        for (int index = 0; index < frame.Filters.Length; index++)
-            if (frame.Filters[index] is not null)
-                scope = scope.ExtendFilter(definition.Parameters[index].Name, frame.Filters[index]!);
-        foreach (JsonNode? value in definition.Body.Evaluate(frame.Input, context, scope))
-            yield return value;
-    }
-
-    private static CallFrame? PushSignalFrames(TailCallSignal signal, JqContext context, Stack<CallFrame> pending)
-    {
-        var combos = new List<JsonNode?[]>();
-        foreach (JsonNode?[] combo in EvaluateValueCombos(signal.ValueArgs, signal.Input, context, signal.Environment))
-        {
-            context.Budget.CheckCancellation();
-            combos.Add(combo);
-        }
-        for (int index = combos.Count - 1; index >= 1; index--)
-        {
-            context.Budget.CheckCancellation();
-            pending.Push(new CallFrame(signal.Input, combos[index], signal.ValuePositions, signal.FilterArgs));
-        }
-        if (combos.Count == 0)
-            return null;
-        context.Budget.CheckCancellation();
-        return new CallFrame(signal.Input, combos[0], signal.ValuePositions, signal.FilterArgs);
-    }
-
-    // User-call value arguments combine first-argument-outer like the
-    // reference range/3 vector, unlike the last-argument-outer generic
-    // builtin prelude that the remaining builtins share with the reference.
-    private static IEnumerable<JsonNode?[]> EvaluateValueCombos(IReadOnlyList<JqFilter> values, JsonNode? input, JqContext context, JqEnvironment environment)
-    {
-        var current = new JsonNode?[values.Count];
-        return Combine(0);
-
-        IEnumerable<JsonNode?[]> Combine(int index)
-        {
-            if (index >= values.Count)
+            // First argument varies slowest. One reusable vector and iterative
+            // cursors avoid both a cartesian inventory and an arity-sized C# stack.
+            IEnumerable<JsonNode?[]> Combine(JsonNode? input)
             {
-                yield return (JsonNode?[])current.Clone();
-                yield break;
-            }
-            foreach (JsonNode? value in values[index].Evaluate(input, context, environment))
-            {
-                current[index] = value;
-                foreach (JsonNode?[] combo in Combine(index + 1))
-                    yield return combo;
+                var currentValues = new JsonNode?[values.Count];
+                if (values.Count == 0)
+                {
+                    yield return currentValues;
+                    yield break;
+                }
+                var iterators = new IEnumerator<JsonNode?>?[values.Count];
+                int index = 0;
+                Exception? primary = null;
+                try
+                {
+                    while (index >= 0)
+                    {
+                        if (index == values.Count)
+                        {
+                            yield return currentValues;
+                            index--;
+                            continue;
+                        }
+                        try
+                        {
+                            context.Budget.CheckCancellation();
+                            IEnumerator<JsonNode?> iterator = iterators[index] ??=
+                                values[index].Evaluate(input, context, next.Environment).GetEnumerator();
+                            if (iterator.MoveNext())
+                            {
+                                currentValues[index] = iterator.Current;
+                                index++;
+                            }
+                            else
+                            {
+                                iterators[index] = null;
+                                currentValues[index] = null;
+                                iterator.Dispose();
+                                index--;
+                            }
+                        }
+                        catch (Exception exception)
+                        {
+                            primary = exception;
+                            throw;
+                        }
+                    }
+                }
+                finally
+                {
+                    Exception? failure = primary;
+                    for (int i = iterators.Length - 1; i >= 0; i--)
+                    {
+                        try { iterators[i]?.Dispose(); }
+                        catch (Exception exception)
+                        {
+                            if (failure is null || JqErrors.IsCatchable(failure) && !JqErrors.IsCatchable(exception))
+                                failure = exception;
+                        }
+                    }
+                    if (failure is not null && !ReferenceEquals(failure, primary))
+                        System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+                }
             }
         }
     }
@@ -789,37 +799,26 @@ internal sealed class FilterParamCallFilter(string Name) : JqFilter
 // nesting another evaluator frame, so tail-recursive runs take heap and
 // budget rather than C# stack. Deliberately not a JqException: quota,
 // cancellation, and language-error boundaries must never observe it.
-internal sealed class TailCallSignal(
-    JqFunctionDefinition Definition,
-    JsonNode? Input,
-    JqEnvironment Environment,
-    IReadOnlyList<JqFilter> ValueArgs,
-    IReadOnlyList<int> ValuePositions,
-    JqFilterClosure?[] FilterArgs) : Exception
+internal sealed class TailCallSignal(JqFunctionDefinition definition, JsonNode? input, JqEnvironment environment,
+    IReadOnlyList<JqFilter> args, JqFilter? source, JqValuePath? path) : Exception
 {
-    internal JqFunctionDefinition Definition { get; } = Definition ?? throw new ArgumentNullException(nameof(Definition));
-    internal JsonNode? Input { get; } = Input;
-    internal JqEnvironment Environment { get; } = Environment ?? throw new ArgumentNullException(nameof(Environment));
-    internal IReadOnlyList<JqFilter> ValueArgs { get; } = ValueArgs ?? throw new ArgumentNullException(nameof(ValueArgs));
-    internal IReadOnlyList<int> ValuePositions { get; } = ValuePositions ?? throw new ArgumentNullException(nameof(ValuePositions));
-    internal JqFilterClosure?[] FilterArgs { get; } = FilterArgs ?? throw new ArgumentNullException(nameof(FilterArgs));
+    internal JqFunctionDefinition Definition { get; } = definition;
+    internal JsonNode? Input { get; } = input;
+    internal JqEnvironment Environment { get; } = environment;
+    internal IReadOnlyList<JqFilter> Args { get; } = args;
+    internal JqFilter? InputSource { get; } = source;
+    internal JqValuePath? Path { get; } = path;
 }
 
-// A syntactically marked tail call: partitions arguments exactly like a
-// regular call, then signals the owning loop with unevaluated value
-// arguments and use-site input so the next frame restarts flat.
 internal sealed class TailSelfCallFilter(JqFunctionDefinition Definition, IReadOnlyList<JqFilter> Args) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
-        UserCallFilter.PartitionArgs(Definition, Args, environment, out List<JqFilter> values, out List<int> valuePositions, out JqFilterClosure?[] filters);
-        throw new TailCallSignal(Definition, input, environment, values, valuePositions, filters);
-    }
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        throw new TailCallSignal(Definition, input, environment, Args, null, null);
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        throw new TailCallSignal(Definition, pair.Value, environment, Args, null, pair);
 
     internal JqFunctionDefinition TailDefinition => Definition;
-
     internal IReadOnlyList<JqFilter> TailArgs => Args;
 }
 
@@ -853,41 +852,15 @@ internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
     }
 }
 
-// A pipe whose right-hand side is a tail-position self-call on the pure tail
-// spine (the rewrite only descends through positions that hold no pending
-// output work, so every ancestor up to the owning call loop is abandonment-
-// free by construction). A lookahead separates the final source value from
-// earlier ones: earlier values run nested per-value loops, while a final
-// value with a single argument combination unwinds to the owning loop and
-// runs flat. Anything else stays a correct depth-bounded call.
+// Source iteration transfers to the call driver before it starts. Pending
+// siblings remain owned there while the selected call runs, without lookahead.
 internal sealed class PipeTailLoop(JqFilter Source, JqFunctionDefinition Definition, IReadOnlyList<JqFilter> Args) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
-        if (!environment.TryGetFunction(Definition.Name, Definition.Arity, out JqUserClosure? closure) || closure is null)
-            throw new JqException($"undefined function {Definition.Name}/{Definition.Arity}");
-        if (Args.Count != closure.Definition.Arity)
-            throw new JqException($"undefined function {Definition.Name}/{Definition.Arity}");
-        using IEnumerator<JsonNode?> sources = Source.Evaluate(input, context, environment).GetEnumerator();
-        if (!sources.MoveNext())
-            yield break;
-        while (true)
-        {
-            JsonNode? current = sources.Current;
-            if (!sources.MoveNext())
-            {
-                if (UserCallFilter.TryPeekSingleCall(closure.Definition, Args, current, environment, context, out List<JqFilter> values, out List<int> valuePositions, out JqFilterClosure?[] filters))
-                    throw new TailCallSignal(closure.Definition, current, environment, values, valuePositions, filters);
-                foreach (JsonNode? value in UserCallFilter.EvaluateCallLoop(closure, current, Args, environment, context))
-                    yield return value;
-                yield break;
-            }
-            foreach (JsonNode? value in UserCallFilter.EvaluateCallLoop(closure, current, Args, environment, context))
-                yield return value;
-        }
-    }
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        throw new TailCallSignal(Definition, input, environment, Args, Source, null);
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        throw new TailCallSignal(Definition, pair.Value, environment, Args, Source, pair);
 }
 
 internal sealed class CommaFilter(JqFilter left, JqFilter right) : JqFilter
