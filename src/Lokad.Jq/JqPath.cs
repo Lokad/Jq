@@ -1208,35 +1208,25 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
         }
         foreach (JsonNode? value in Values.Evaluate(input, context, environment))
         {
-            if (Op == "=")
+            JsonNode? state = input;
+            foreach (IReadOnlyList<JqValueSegment> segments in paths)
             {
-                JsonNode? assigned = input;
-                foreach (IReadOnlyList<JqValueSegment> segments in paths)
-                    assigned = JqPathUpdates.SetPath(assigned, segments, value, context);
-                yield return assigned;
+                context.Budget.CheckCancellation();
+                JsonNode? replacement = value;
+                if (Op != "=")
+                {
+                    JsonNode? current = JqPathReads.GetPath(state, segments, context);
+                    replacement = Op == "//=" ? (Truthy(current) ? current : value)
+                        : BinaryFilter.Apply(context, Op switch
+                        {
+                            "+=" => "+", "-=" => "-", "*=" => "*", "/=" => "/", "%=" => "%",
+                            _ => throw new JqException($"unsupported assignment {Op}")
+                        }, current, value);
+                }
+                state = JqPathUpdates.SetPath(state, segments, replacement, context);
             }
-            else
-            {
-                yield return ModifyLoop(paths, UpdateFor(value), input, context, environment);
-            }
+            yield return state;
         }
-    }
-
-    private JqFilter UpdateFor(JsonNode? value)
-    {
-        var literal = new LiteralFilter(value);
-        if (Op == "//=")
-            return new AlternativeFilter(new IdentityFilter(), literal);
-        string symbol = Op switch
-        {
-            "+=" => "+",
-            "-=" => "-",
-            "*=" => "*",
-            "/=" => "/",
-            "%=" => "%",
-            _ => throw new JqException($"unsupported assignment {Op}"),
-        };
-        return new BinaryFilter(new IdentityFilter(), symbol, literal);
     }
 
     internal static JsonNode? ModifyLoop(IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqFilter update, JsonNode? input, JqContext context, JqEnvironment environment)

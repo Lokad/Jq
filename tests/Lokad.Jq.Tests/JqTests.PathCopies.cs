@@ -9,6 +9,8 @@ public sealed partial class JqTests
     [InlineData("setpath([]; $value)")]
     [InlineData(". = $value")]
     [InlineData(". |= $value")]
+    [InlineData(". += $value")]
+    [InlineData(". //= $value")]
     [InlineData("fromstream($events[])")]
     public void Jq_PathWritesCopyBorrowedReplacementsAtOneBoundary(string source)
     {

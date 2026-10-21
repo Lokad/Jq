@@ -1507,69 +1507,69 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
         {
             foreach (var r in right.Evaluate(input, context, environment))
                 foreach (var l in left.Evaluate(input, context, environment))
-                    yield return Eval(l, r);
+                    yield return Apply(context, op, l, r);
+        }
+    }
+
+    internal static JsonNode? Apply(JqContext context, string op, JsonNode? l, JsonNode? r)
+    {
+        context.Budget.CheckCancellation();
+        return op switch
+        {
+            "+" => context.Runtime.Add(l, r),
+            "-" => context.Runtime.Subtract(l, r),
+            "*" => context.Runtime.Multiply(l, r),
+            "/" => Divide(l, r),
+            "%" => Modulo(l, r),
+            "==" => JsonValue.Create(context.Runtime.JsonEquals(l, r)),
+            "!=" => JsonValue.Create(!context.Runtime.JsonEquals(l, r)),
+            "<" => JsonValue.Create(context.Runtime.Compare(l, r) < 0),
+            "<=" => JsonValue.Create(context.Runtime.Compare(l, r) <= 0),
+            ">" => JsonValue.Create(context.Runtime.Compare(l, r) > 0),
+            ">=" => JsonValue.Create(context.Runtime.Compare(l, r) >= 0),
+            _ => throw new JqException($"unsupported operator {op}")
+        };
+
+        JsonNode? Divide(JsonNode? l, JsonNode? r)
+        {
+            if (TypeName(l) == "number" && TypeName(r) == "number")
+            {
+                double divisor = Number(r);
+                if (divisor == 0.0)
+                    throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided because the divisor is zero"));
+                return JsonValue.Create(Number(l) / divisor);
+            }
+            if (TryGetString(l, out _) && TryGetString(r, out _))
+                return context.Runtime.Split(l, r);
+            throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided"));
         }
 
-        JsonNode? Eval(JsonNode? l, JsonNode? r)
+        // Integer remainder matching the reference: operands truncate
+        // toward zero with clamping, NaN propagates, zero divisors fail.
+        JsonNode? Modulo(JsonNode? l, JsonNode? r)
         {
-            return op switch
-            {
-                "+" => context.Runtime.Add(l, r),
-                "-" => context.Runtime.Subtract(l, r),
-                "*" => context.Runtime.Multiply(l, r),
-                "/" => Divide(l, r),
-                "%" => Modulo(l, r),
-                "==" => JsonValue.Create(context.Runtime.JsonEquals(l, r)),
-                "!=" => JsonValue.Create(!context.Runtime.JsonEquals(l, r)),
-                "<" => JsonValue.Create(context.Runtime.Compare(l, r) < 0),
-                "<=" => JsonValue.Create(context.Runtime.Compare(l, r) <= 0),
-                ">" => JsonValue.Create(context.Runtime.Compare(l, r) > 0),
-                ">=" => JsonValue.Create(context.Runtime.Compare(l, r) >= 0),
-                _ => throw new JqException($"unsupported operator {op}")
-            };
+            if (TypeName(l) != "number" || TypeName(r) != "number")
+                throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided (remainder)"));
+            double left = Number(l);
+            double right = Number(r);
+            if (double.IsNaN(left) || double.IsNaN(right))
+                return JsonValue.Create(double.NaN);
+            long divisor = Truncate(right);
+            if (divisor == 0)
+                throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided (remainder) because the divisor is zero"));
+            if (divisor == -1)
+                return JsonValue.Create(0L);
+            return JsonValue.Create(Truncate(left) % divisor);
+        }
 
-                
-            JsonNode? Divide(JsonNode? l, JsonNode? r)
-            {
-                if (TypeName(l) == "number" && TypeName(r) == "number")
-                {
-                    double divisor = Number(r);
-                    if (divisor == 0.0)
-                        throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided because the divisor is zero"));
-                    return JsonValue.Create(Number(l) / divisor);
-                }
-                if (TryGetString(l, out _) && TryGetString(r, out _))
-                    return context.Runtime.Split(l, r);
-                throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided"));
-            }
-
-            // Integer remainder matching the reference: operands truncate
-            // toward zero with clamping, NaN propagates, zero divisors fail.
-            JsonNode? Modulo(JsonNode? l, JsonNode? r)
-            {
-                if (TypeName(l) != "number" || TypeName(r) != "number")
-                    throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided (remainder)"));
-                double left = Number(l);
-                double right = Number(r);
-                if (double.IsNaN(left) || double.IsNaN(right))
-                    return JsonValue.Create(double.NaN);
-                long divisor = Truncate(right);
-                if (divisor == 0)
-                    throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided (remainder) because the divisor is zero"));
-                if (divisor == -1)
-                    return JsonValue.Create(0L);
-                return JsonValue.Create(Truncate(left) % divisor);
-            }
-
-            static long Truncate(double value)
-            {
-                const double MinAsDouble = -9223372036854775808.0;
-                if (value < MinAsDouble)
-                    return long.MinValue;
-                if (-value <= MinAsDouble)
-                    return long.MaxValue;
-                return (long)value;
-            }
+        static long Truncate(double value)
+        {
+            const double MinAsDouble = -9223372036854775808.0;
+            if (value < MinAsDouble)
+                return long.MinValue;
+            if (-value <= MinAsDouble)
+                return long.MaxValue;
+            return (long)value;
         }
     }
 }
