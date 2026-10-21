@@ -59,6 +59,18 @@ internal sealed class JqTreeCursor(JqBudget budget) : IDisposable
         return path;
     }
 
+    internal JsonArray CopyJsonPath()
+    {
+        budget.ReserveBytes(64 + 88L * _frames.Count);
+        var path = new JsonArray();
+        foreach (Frame frame in _frames)
+        {
+            budget.CheckCancellation();
+            path.Add(frame.PathValue());
+        }
+        return path;
+    }
+
     public void Dispose()
     {
         while (_frames.Count != 0) Pop();
@@ -70,6 +82,7 @@ internal sealed class JqTreeCursor(JqBudget budget) : IDisposable
         private readonly JsonNode _container;
         private readonly IEnumerator<KeyValuePair<string, JsonNode?>>? _properties;
         private int _index;
+        private string? _key;
         private JqValueSegment? _segment;
 
         internal Frame(JsonNode container)
@@ -77,22 +90,28 @@ internal sealed class JqTreeCursor(JqBudget budget) : IDisposable
             _container = container;
             _properties = container is JsonObject obj ? obj.GetEnumerator() : null;
             _index = -1;
+            _key = null;
             _segment = null;
         }
 
-        internal JqValueSegment Segment => _segment ??= _properties is { } properties
-            ? new KeySegment(properties.Current.Key) : new IndexSegment(_index, false);
+        internal JqValueSegment Segment => _segment ??= _key is { } key
+            ? new KeySegment(key) : new IndexSegment(_index, false);
+
+        internal JsonNode PathValue() => _key is { } key
+            ? JsonValue.Create(key) : JsonValue.Create((long)_index);
 
         internal bool TryNext(out JsonNode? child)
         {
-            _segment = null;
-            if (_container is JsonArray array && ++_index < array.Count)
+            if (_container is JsonArray array && _index + 1 < array.Count)
             {
-                child = array[_index];
+                _segment = null;
+                child = array[++_index];
                 return true;
             }
             if (_properties is not null && _properties.MoveNext())
             {
+                _segment = null;
+                _key = _properties.Current.Key;
                 child = _properties.Current.Value;
                 return true;
             }

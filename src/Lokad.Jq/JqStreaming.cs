@@ -12,110 +12,29 @@ internal sealed class TostreamFilter : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        if (input is not JsonArray array || array.Count == 0)
-        {
-            if (input is not JsonObject obj || obj.Count == 0)
-            {
-                context.Budget.CheckCancellation();
-                context.Budget.ReserveBytes(176);
-                yield return new JsonArray { new JsonArray(), context.Runtime.Clone(input) };
-                yield break;
-            }
-        }
-        var segments = new List<JsonNode?>();
-        var frames = new Stack<ContainerFrame>();
-        JsonNode? node = input;
+        using var cursor = new JqTreeCursor(context.Budget);
+        JsonNode? current = input;
         while (true)
         {
-            if (node is JsonArray items && items.Count > 0)
-            {
-                frames.Push(new ContainerFrame(items, new List<string>(), 0));
-                segments.Add(JsonValue.Create(0L));
-                node = items[0];
-                continue;
-            }
-            if (node is JsonObject props && props.Count > 0)
-            {
-                context.Budget.ReserveBytes(24L * props.Count);
-                var keys = new List<string>();
-                foreach (var property in props)
-                    keys.Add(property.Key);
-                frames.Push(new ContainerFrame(props, keys, 0));
-                segments.Add(JsonValue.Create(keys[0]));
-                node = props[keys[0]];
-                continue;
-            }
             context.Budget.CheckCancellation();
-            yield return StreamLeaf(segments, context.Runtime.Clone(node), context.Budget);
-            while (true)
+            if (current is JsonArray { Count: > 0 } or JsonObject { Count: > 0 })
             {
-                if (frames.Count == 0)
-                    yield break;
-                ContainerFrame frame = frames.Peek();
-                if (frame.Container is JsonArray parent)
-                {
-                    int next = frame.Position + 1;
-                    if (next < parent.Count)
-                    {
-                        frames.Pop();
-                        frames.Push(frame.Advance(next));
-                        segments[segments.Count - 1] = JsonValue.Create((long)next);
-                        node = parent[next];
-                        break;
-                    }
-                    frames.Pop();
-                    context.Budget.CheckCancellation();
-                    yield return StreamClose(segments, context.Budget);
-                    segments.RemoveAt(segments.Count - 1);
-                    node = parent;
-                    continue;
-                }
-                else
-                {
-                    var objParent = (JsonObject)frame.Container;
-                    if (frame.Position + 1 < frame.Keys.Count)
-                    {
-                        int next = frame.Position + 1;
-                        string key = frame.Keys[next];
-                        frames.Pop();
-                        frames.Push(frame.Advance(next));
-                        segments[segments.Count - 1] = JsonValue.Create(key);
-                        node = objParent[key];
-                        break;
-                    }
-                    frames.Pop();
-                    context.Budget.CheckCancellation();
-                    yield return StreamClose(segments, context.Budget);
-                    segments.RemoveAt(segments.Count - 1);
-                    node = objParent;
-                    continue;
-                }
+                cursor.Push(current);
+                if (!cursor.TryNext(out current)) throw new InvalidOperationException("A nonempty container changed during traversal.");
+                continue;
             }
+            JsonNode? leaf = context.Runtime.Clone(current);
+            context.Budget.ReserveBytes(112);
+            yield return new JsonArray { cursor.CopyJsonPath(), leaf };
+            while (cursor.Count != 0)
+            {
+                if (cursor.TryNext(out current)) break;
+                context.Budget.ReserveBytes(88);
+                yield return new JsonArray { cursor.CopyJsonPath() };
+                cursor.Pop();
+            }
+            if (cursor.Count == 0) yield break;
         }
-    }
-
-    private static JsonArray StreamLeaf(List<JsonNode?> segments, JsonNode? leaf, JqBudget budget)
-    {
-        budget.ReserveBytes(176 + 88L * segments.Count);
-        var path = new JsonArray();
-        foreach (JsonNode? segment in segments)
-            path.Add(segment?.DeepClone());
-        return new JsonArray { path, leaf };
-    }
-
-    private static JsonArray StreamClose(List<JsonNode?> segments, JqBudget budget)
-    {
-        budget.ReserveBytes(152 + 88L * segments.Count);
-        var path = new JsonArray();
-        foreach (JsonNode? segment in segments)
-            path.Add(segment?.DeepClone());
-        return new JsonArray { path };
-    }
-
-    private sealed record ContainerFrame(JsonNode Container, List<string> Keys, int Position)
-    {
-        public ContainerFrame Advance(int position) => this with { Position = position };
     }
 }
 
