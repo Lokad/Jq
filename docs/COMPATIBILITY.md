@@ -41,7 +41,10 @@ elements and empty arrays remain valid.
   `modulemeta` synchronously waits for host reads during evaluation.
 - **Other edges:** NaN `range` bounds yield no values. Range validates numeric
   arguments before iteration; a nonnumeric step can error where jq yields nothing.
-  Local-time conversion is constrained by .NET's date range. Focused regression
+  Local-time conversion is constrained by .NET's date range. Partial `strptime`
+  fields can retain weekday 8 / year-day 367 sentinels; C-library defaults and
+  epoch directives can differ across jq builds. A whitespace boundary permits
+  trailing date text, returned as the ninth element. Focused regression
   tests record accepted coercions, ordering, empty-stream behavior and error shapes.
 
 Resource safeguards are separate from jq language errors: shared memory refusal

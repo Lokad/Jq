@@ -65,33 +65,24 @@ Coarse owners track executions, records, buffers, results and caches. Completed
 temporary work reconciles demand at proven lifetime boundaries; shared values and
 escaping errors retain their charge. Other construction within one record can
 remain conservatively charged, so a long loop may refuse despite a bounded live
-set. Identity, variable, child and ordinary `getpath` reads borrow existing values,
-as do caught error payloads, pass-through selectors, diagnostics, unchanged `abs`,
-extrema and adding null.
-Path reads borrow raw keys and inspect slice bounds without copying ignored fields.
-Compound updates borrow evaluated values until the write boundary; merges copy
-selected branches. Deletion reuses admitted ancestor frames and shared path ranges,
-applying deeper paths to slice views before writing them back.
-`add` appends to its private array accumulator; `with_entries` retains borrowed
-body outputs until final object construction, after all body effects finish.
-Loop branches stream depth-first. Proven single-result tails run flat; other
-branches retain admitted continuation capacity for the traversal. `walk` uses admitted
-container cursors and builds parents directly from completed child outputs.
-Recursive descent and `tostream` retain admitted ancestor cursors and produce paths
-on demand. Flattening appends leaves directly; sorting borrows its source array.
-Keyed extrema reuse current/best key vectors; generated key values keep their
-record ownership. `keys_unsorted` enumerates properties directly and `keys` reuses
-admitted Unicode ordering scratch. Precomputed keyed collections sort borrowed
-indices and admit result/group construction separately.
-Transpose columns/padding and JOIN pairs admit their container storage before
-construction, including null cells and missing lookups.
-String search, trimming and scalar slicing scan borrowed text without full-input
-indexes. CSV admits expanded fields before construction. JSON escape casing
-changes only inside owned buffers after writer release; URI/base64 scratch is
-admitted separately and refunded after conversion.
-JSON output orders borrowed properties and normalizes nonfinite numbers during
-writing. Comparisons and JSON key ordering reuse admitted scratch, covering growth
-and replacement peaks. Buffers refund when their operation or output renderer ends.
+set.
+
+Reads and pass-through results borrow existing values. Writes copy borrowed
+branches; private accumulators such as `add` and `fromstream` update their owned
+containers directly. Emitted stream values stay independent of later updates.
+Data imports parse directly into their owning array. Module exports stay charged
+with their cache; linked bindings and temporary merge metadata admit separately.
+
+User-function arguments and pipeline sources stream once in demand order.
+Suspended continuations retain admitted capacity until completion or abandonment;
+proven single-result tails run flat. Early output closure stops deferred work.
+Iterative tree/path operations retain ancestor cursors rather than whole traversal
+inventories. Recursive consumers still enforce their construction depth.
+
+Comparisons, ordering, serialization and regex subjects reuse admitted scratch
+where its lifetime is known. Replacements cover overlapping old/new capacity.
+Fresh strings, date remainders and constructed error messages admit before copying;
+long scans observe cancellation. Shared error payloads keep their existing charge.
 
 Already-admitted credit amortizes host calls and stays charged. Cold small charges
 and large payload copies stay exact; repeated small headers can round in 256-byte
