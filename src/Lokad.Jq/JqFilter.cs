@@ -548,7 +548,11 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
     {
         JqFunctionDefinition definition = closure.Definition;
         bool capturesFilters = definition.Parameters.Any(p => !p.IsValue);
-        using var memory = new JqMemoryReservation(context.Budget.MemoryBudget);
+        using var ownedStorage = context.Budget.TemporaryStorage is null ? new JqStorage(context.Budget.MemoryBudget) : null;
+        JqStorage storage = context.Budget.TemporaryStorage ?? ownedStorage
+            ?? throw new InvalidOperationException("Missing call storage owner.");
+        long arenaBytes = 0;
+        long capturedBytes = 0;
         var pending = new List<(IEnumerator<CallFrame> Cursor, bool Single)>();
         IEnumerator<CallFrame>? current = null;
         IEnumerator<T>? outputs = null;
@@ -562,7 +566,11 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                 yield return outputs.Current;
             }
         }
-        finally { DisposeAll(null); }
+        finally
+        {
+            try { DisposeAll(null); }
+            finally { storage.DiscardBytes(checked(arenaBytes + capturedBytes)); }
+        }
 
         void Start(TailCallSignal next)
         {
@@ -570,12 +578,14 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                 throw new JqException($"undefined function {definition.Name}/{definition.Arity}");
             if (pending.Count + 2 > pending.Capacity)
             {
-                int capacity = checked(Math.Max(4, pending.Capacity * 2));
+                int capacity = checked(Math.Max(2, pending.Capacity * 2));
                 long bytes = checked(capacity * (1024L + 256L * definition.Arity));
-                long previous = memory.LastAdmittedBytes;
-                memory.Resize(checked(previous + bytes));
-                pending.Capacity = capacity;
-                if (previous != 0) memory.Resize(bytes);
+                context.Budget.CheckCancellation();
+                storage.ReserveBytes(bytes, capacity);
+                try { pending.Capacity = capacity; }
+                catch { storage.DiscardBytes(bytes); throw; }
+                storage.DiscardBytes(arenaBytes);
+                arenaBytes = bytes;
             }
             single = next.InputSource is null || next.InputSource.IsSingleValued(next.Environment, 0);
             for (int i = 0; i < definition.Arity && single; i++)
@@ -601,8 +611,13 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                             outputs = null;
                             completed.Dispose();
                             if (capturesFilters)
-                                // New filter arguments can retain the preceding lexical scope.
-                                context.Budget.ReserveMetadata(256L + 192L * definition.Arity, definition.Arity + 1);
+                            {
+                                // Filter arguments retain earlier lexical scopes until this driver ends.
+                                long bytes = 256L + 192L * definition.Arity;
+                                context.Budget.CheckCancellation();
+                                storage.ReserveBytes(bytes, definition.Arity + 1);
+                                capturedBytes = checked(capturedBytes + bytes);
+                            }
                             if (current is not null)
                             {
                                 if (single)

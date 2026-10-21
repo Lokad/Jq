@@ -170,4 +170,35 @@ public sealed partial class JqTests
         Assert.Equal(0, memory.ActiveScopes);
     }
 
+    [Fact]
+    public async Task Jq_SequentialUserCallsReuseCoarseRecordCredit()
+    {
+        var root = new BenchmarkMemoryBudget(64 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
+            "def step: .+1; 0 | until(.==10000; step)")));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("10000\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 100);
+        Assert.Equal(0, memory.Counts.SameSizeResizes);
+        Assert.Equal(0, memory.Counts.BytesReads);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_CompletedUserCallsReleaseCapturedFilterScopes()
+    {
+        var memory = new BenchmarkMemoryBudget(256 * 1024);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
+            "def f(g;$n): if $n==0 then g else f(1;$n-1) end; range(1000) | f(0;100)")));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(string.Concat(Enumerable.Repeat("1\n", 1000)), host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+        Assert.Equal(0, memory.ActiveScopes);
+    }
+
 }
