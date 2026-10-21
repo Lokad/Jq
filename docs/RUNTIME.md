@@ -75,7 +75,9 @@ with their cache; linked bindings and temporary merge metadata admit separately.
 
 User-function arguments and pipeline sources stream once in demand order.
 Suspended continuations retain admitted capacity until completion or abandonment;
-proven single-result tails run flat. Early output closure stops deferred work.
+proven single-result tails run flat. Calls retaining handlers, optional suppression,
+labels or unproven branching use the evaluation depth safeguard. Early output
+closure stops deferred work.
 Iterative tree/path operations retain ancestor cursors rather than whole traversal
 inventories. Recursive consumers still enforce their construction depth.
 

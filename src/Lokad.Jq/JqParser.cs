@@ -495,6 +495,7 @@ internal sealed class JqParser(
     // Direct self-calls may replace a frame only when no pending work is lost.
     // A bare pipe tail transfers its complete source cursor to the call driver.
     // Other pipe/if rewrites require proven single-valued sources/conditions.
+    // Try, optional and label scopes stay active through ordinary guarded calls.
     private JqFilter RewriteTailCalls(JqFilter node, JqFunctionDefinition definition) =>
         RewriteTail(node, definition, 1);
 
@@ -519,16 +520,10 @@ internal sealed class JqParser(
         }
         if (node is IfFilter iff)
             return iff.WithTails(_environment, branch => RewriteTail(branch, definition, depth + 1));
-        if (node is TryFilter attempted)
-            return attempted.WithOperands(operand => RewriteTail(operand, definition, depth + 1));
-        if (node is LabelFilter labeled)
-            return labeled.WithBody(RewriteTail(labeled.LabelBody, definition, depth + 1));
         if (node is CommaFilter comma)
             return comma.WithRight(RewriteTail(comma.Right, definition, depth + 1));
         if (node is AlternativeFilter alternative)
             return alternative.WithRight(RewriteTail(alternative.Right, definition, depth + 1));
-        if (node is OptionalFilter optional)
-            return optional.WithInner(RewriteTail(optional.Inner, definition, depth + 1));
         if (node is DefFilter nested)
         {
             if (nested.FunctionDefinition.Name == definition.Name

@@ -14,7 +14,7 @@ String search indices count Unicode scalars. String and array searches report
 overlapping matches.
 Loops preserve depth-first condition multiplicity, effects and lazy termination.
 Path-mode `label`/`break`, `try` and `?` preserve earlier outputs and payload
-identity. Keyed collections require arrays after evaluating key effects; `min_by`
+identity. Labels retain lexical binding across shadowing and captured calls. Keyed collections require arrays after evaluating key effects; `min_by`
 keeps the first minimum and `max_by` the last maximum. Slice deletion preserves
 slice-relative indices and mixed path forms. `join` requires array input; null
 elements and empty arrays remain valid.
@@ -39,6 +39,9 @@ elements and empty arrays remain valid.
   Automatic `~/.jq`, home expansion and `$ORIGIN` lookup are excluded. Main-file
   `$__loc__` reports the file path; qualified calls use hierarchical scopes.
   `modulemeta` synchronously waits for host reads during evaluation.
+- **Recursion:** direct tails and proven single-valued control paths flatten.
+  Calls with active handlers, optional suppression, labels or unproven branching
+  retain their scopes and use the evaluation depth safeguard.
 - **Other edges:** NaN `range` bounds yield no values. Range validates numeric
   arguments before iteration; a nonnumeric step can error where jq yields nothing.
   Local-time conversion is constrained by .NET's date range. Partial `strptime`

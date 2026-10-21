@@ -117,12 +117,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
         }
     }
 
-    internal TryFilter WithOperands(Func<JqFilter, JqFilter> rewrite)
-    {
-        ArgumentNullException.ThrowIfNull(rewrite);
-        JqFilter? handler = Handler is null ? null : rewrite(Handler);
-        return new TryFilter(rewrite(Body), handler);
-    }
+
 }
 
 // `label $name | BODY`: streams body outputs until a matching `break`
@@ -160,9 +155,7 @@ internal sealed class LabelFilter(object Label, JqFilter Body) : JqFilter
         finally { storage.DiscardBytes(128); }
     }
 
-    internal JqFilter LabelBody => Body;
 
-    internal LabelFilter WithBody(JqFilter next) => new(Label, next);
 }
 
 // `break $name`: throws to the lexically matching label. Yields nothing

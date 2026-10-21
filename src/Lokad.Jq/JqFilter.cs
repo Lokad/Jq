@@ -1604,13 +1604,7 @@ internal sealed class OptionalFilter(JqFilter inner) : JqFilter
         }
     }
 
-    internal JqFilter Inner => inner;
 
-    internal OptionalFilter WithInner(JqFilter next)
-    {
-        ArgumentNullException.ThrowIfNull(next);
-        return new OptionalFilter(next);
-    }
 }
 
 // Defined-or: non-false, non-null left outputs pass through; the right side

@@ -223,16 +223,7 @@ public sealed partial class JqTests
         Assert.Equal("jq: error (at <stdin>:1): ho\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
-    [Fact]
-    public async Task Jq_TryBodyTailCallsStayFlat()
-    {
-        var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "def f($n): if $n == 0 then 0 else try f($n - 1) catch -1 end; f(5000)")));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("0\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
-    }
 
     [Fact]
     public async Task Jq_TryBindsTightly()
@@ -332,14 +323,5 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
-    [Fact]
-    public async Task Jq_LabelBodyTailCallsStayFlat()
-    {
-        var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "def f($n): if $n == 0 then 0 else label $l | f($n - 1) end; f(5000)")));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("0\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
-    }
 }
