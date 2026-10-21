@@ -426,6 +426,22 @@ internal static class GovernorRunner
             string.Concat(Enumerable.Repeat("\"2024-01-02 text\"\n", records)), string.Concat(Enumerable.Repeat("\" text\"\n", records)));
         Add("date-caught-message", records, ["-c", "try strptime(\"%Y\") catch startswith(\"date\")"],
             string.Concat(Enumerable.Repeat("\"" + new string('x', 1000) + "\"\n", records)), string.Concat(Enumerable.Repeat("true\n", records)));
+        Add("user-tail-wrapped-routes", 1000, ["-nc",
+            "def f($n): if $n==0 then . else range(1000) | if true then f(0) else empty end end; f(1)"], "",
+            string.Concat(Enumerable.Range(0, records).Select(i => i.ToString(CultureInfo.InvariantCulture) + "\n")));
+        Add("user-tail-condition-routes", 2, ["-nc",
+            "def f($n): if $n==0 then . else if (true,false) then f(0) else 99 end end; f(1)"], "", "null\n99\n");
+        Add("user-call-active-catch", records, ["-nc",
+            "def f($n): if $n==0 then error(\"x\") else try f($n-1) catch $n end; range(1000) | f(2)"], "",
+            string.Concat(Enumerable.Repeat("1\n", records)));
+        Add("label-captured-shadow", 1, ["-nc",
+            "[label $out | def f: break $out; (label $out | f),42]"], "", "[]\n");
+        foreach (bool broken in new[] { false, true })
+            Add(broken ? "label-break-reuse" : "label-scope-reuse", 10000, ["-nc",
+                "reduce range(10000) as $i (0; label $out | " + (broken ? "break $out" : ".") + ")"], "",
+                broken ? "null\n" : "0\n");
+        Add("label-caught-payloads", records, ["-nc", "range(1000) | label $out | try break $out catch .__jq"], "",
+            string.Concat(Enumerable.Range(0, records).Select(i => i.ToString(CultureInfo.InvariantCulture) + "\n")));
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>

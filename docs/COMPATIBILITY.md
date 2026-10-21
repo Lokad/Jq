@@ -41,8 +41,8 @@ elements and empty arrays remain valid.
   `$__loc__` reports the file path; qualified calls use hierarchical scopes.
   `modulemeta` synchronously waits for host reads during evaluation.
 - **Recursion:** direct tails and proven single-valued control paths flatten.
-  Calls with active handlers, optional suppression, labels or unproven branching
-  retain their scopes and use the evaluation depth safeguard.
+  Recursive calls with active handlers, optional suppression or labels retain
+  their scopes and use the evaluation depth safeguard.
 - **Other edges:** NaN `range` bounds yield no values. Range validates numeric
   arguments before iteration; a nonnumeric step can error where jq yields nothing.
   Local-time conversion is constrained by .NET's date range. Partial `strptime`
