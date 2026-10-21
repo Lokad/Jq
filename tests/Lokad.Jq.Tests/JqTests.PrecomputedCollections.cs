@@ -6,17 +6,21 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
-    [InlineData("_sort_by_impl", "[\"c\",\"a\",\"b\"]\n")]
-    [InlineData("_group_by_impl", "[[\"c\"],[\"a\",\"b\"]]\n")]
-    [InlineData("_unique_by_impl", "[\"c\",\"a\"]\n")]
-    public async Task Jq_PrecomputedKeysKeepStableTiesAndEffects(string operation, string expected)
+    [InlineData("_sort_by_impl", "[1,1,0] | debug", "[\"c\",\"a\",\"b\"]\n", "[\"DEBUG:\",[1,1,0]]\n")]
+    [InlineData("_group_by_impl", "[1,1,0] | debug", "[[\"c\"],[\"a\",\"b\"]]\n", "[\"DEBUG:\",[1,1,0]]\n")]
+    [InlineData("_unique_by_impl", "[1,1,0] | debug", "[\"c\",\"a\"]\n", "[\"DEBUG:\",[1,1,0]]\n")]
+    // Retain the documented stable managed order for NaN keys.
+    [InlineData("_sort_by_impl", "[nan,nan,nan]", "[\"a\",\"b\",\"c\"]\n", "")]
+    [InlineData("_group_by_impl", "[nan,nan,nan]", "[[\"a\"],[\"b\"],[\"c\"]]\n", "")]
+    [InlineData("_unique_by_impl", "[nan,nan,nan]", "[\"a\",\"b\",\"c\"]\n", "")]
+    public async Task Jq_PrecomputedKeysKeepStableTiesAndEffects(string operation, string keys, string expected, string error)
     {
         var host = new MockFileSystem();
         host.SetStandardInput("[\"a\",\"b\",\"c\"]\n");
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", operation + "([1,1,0] | debug)")));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", operation + "(" + keys + ")")));
         Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("[\"DEBUG:\",[1,1,0]]\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(error, host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Theory]
