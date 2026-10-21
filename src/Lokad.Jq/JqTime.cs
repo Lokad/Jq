@@ -478,13 +478,8 @@ internal static class JqTime
             budget.CheckCancellation();
             if (!ParseFormat(format))
                 return false;
-            for (int index = _position; index < text.Length; index++)
-            {
-                if ((index & 4095) == 0) budget.CheckCancellation();
-                if (!IsSpace(text[index]))
-                    return false;
-            }
-            return true;
+            // A whitespace boundary can introduce an unconsumed remainder.
+            return _position == text.Length || IsSpace(text[_position]);
         }
 
         internal JsonNode BuildResult(JqContext context)
@@ -585,6 +580,11 @@ internal static class JqTime
                 if ((index & 4095) == 0) budget.CheckCancellation();
                 if (pattern[index] != (char)37)
                 {
+                    if (IsSpace(pattern[index]))
+                    {
+                        TakeSpaces();
+                        continue;
+                    }
                     if (_position >= text.Length || text[_position] != pattern[index])
                         return false;
                     _position++;
@@ -616,14 +616,13 @@ internal static class JqTime
             return count > 0;
         }
 
-        private bool TakeSpaces()
+        private void TakeSpaces()
         {
-            while (_position < text.Length && text[_position] == (char)32)
+            while (_position < text.Length && IsSpace(text[_position]))
             {
                 if ((_position & 4095) == 0) budget.CheckCancellation();
                 _position++;
             }
-            return true;
         }
 
         private static bool StartsWithIgnoreCase(string text, int position, string word)
@@ -862,11 +861,7 @@ internal static class JqTime
                     return ParseFormat("%H:%M:%S");
                 case "n":
                 case "t":
-                    while (_position < text.Length && IsSpace(text[_position]))
-                    {
-                        if ((_position & 4095) == 0) budget.CheckCancellation();
-                        _position++;
-                    }
+                    TakeSpaces();
                     return true;
                 default:
                     return false;

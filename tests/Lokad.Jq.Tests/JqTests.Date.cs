@@ -6,6 +6,22 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData("2024-01-02 trailing", "%Y-%m-%d", "[2024,0,2,0,0,0,2,1,\" trailing\"]\n")]
+    [InlineData("2024-01-02\ttext", "%Y-%m-%d", "[2024,0,2,0,0,0,2,1,\"\\ttext\"]\n")]
+    [InlineData("2024-01-02\t01", "%Y-%m-%d %H", "[2024,0,2,1,0,0,2,1]\n")]
+    [InlineData("2024-01-02\n01", "%Y-%m-%d %H", "[2024,0,2,1,0,0,2,1]\n")]
+    [InlineData("2024-01-0201", "%Y-%m-%d %H", "[2024,0,2,1,0,0,2,1]\n")]
+    public async Task Jq_DatePrefixAndFormatWhitespace(string text, string format, string expected)
+    {
+        var host = new MockFileSystem();
+        host.SetStandardInput(System.Text.Json.JsonSerializer.Serialize(text));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "--arg", "format", format, "strptime($format)")));
+        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+    }
+
+    [Theory]
     [InlineData("0 | gmtime", "[\n  1970,\n  0,\n  1,\n  0,\n  0,\n  0,\n  4,\n  0\n]\n")]
     [InlineData("1425599507 | gmtime", "[\n  2015,\n  2,\n  5,\n  23,\n  51,\n  47,\n  4,\n  63\n]\n")]
     [InlineData("0.5 | gmtime", "[\n  1970,\n  0,\n  1,\n  0,\n  0,\n  0.5,\n  4,\n  0\n]\n")]
