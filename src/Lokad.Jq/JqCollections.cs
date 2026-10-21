@@ -169,7 +169,7 @@ internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         if (Depth is null)
         {
-            yield return context.Runtime.Flatten(input, -1);
+            yield return context.Runtime.Flatten(input, JsonValue.Create(-1));
             yield break;
         }
         foreach (JsonNode? depth in Depth.Evaluate(input, context, environment))
@@ -178,16 +178,12 @@ internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
             {
                 if (level < 0 || double.IsNaN(level))
                     throw new JqException("flatten depth must not be negative");
-                yield return context.Runtime.Flatten(input, level);
             }
             else if (depth is null || IsBooleanValue(depth))
             {
                 throw new JqException("flatten depth must not be negative");
             }
-            else
-            {
-                yield return context.Runtime.Flatten(input, depth);
-            }
+            yield return context.Runtime.Flatten(input, depth);
         }
     }
 }
@@ -736,10 +732,7 @@ internal sealed class FlattenImplFilter(JqFilter Depth) : JqFilter
             // _flatten carries no negative guard upstream; numeric depths
             // recurse by decrementing while non-numeric depths recurse
             // through depth - 1 and fail staged at the first nested array.
-            if (FlattenFilter.TryDepthLevel(depth, out double level))
-                yield return context.Runtime.Flatten(input, level);
-            else
-                yield return context.Runtime.Flatten(input, depth);
+            yield return context.Runtime.Flatten(input, depth);
         }
     }
 }
