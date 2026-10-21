@@ -64,7 +64,7 @@ internal sealed class JqModuleLoader(
         CancellationToken cancellationToken)
     {
         JqRecursion.CheckDepth(depth, "module nesting limit exceeded");
-        string? validation = JqModulePathValidation.Validate(import.RelPath);
+        string? validation = JqModulePathValidation.Validate(import.RelPath, budget);
         if (validation is not null)
             throw new JqException(validation);
         if (import.IsData)
@@ -261,27 +261,28 @@ internal sealed class JqModuleLoader(
         string suffix,
         CancellationToken cancellationToken)
     {
-        List<string?> searchDirs = BuildSearchDirs(import, importerDir);
+        cancellationToken.ThrowIfCancellationRequested();
         string rel = import.RelPath;
-        string baseName = rel.Contains((char)47, StringComparison.Ordinal) ? rel[(rel.LastIndexOf((char)47) + 1)..] : rel;
-        foreach (string? dir in searchDirs)
+        int baseStart = rel.LastIndexOf((char)47) + 1;
+        foreach (string dir in SearchDirs())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (dir is null)
-                break;
             if (dir.Length == 0)
                 continue;
-            string prefix = dir == "/" ? "/" : dir + "/";
-            string[] candidates =
-            [
-                prefix + rel + suffix,
-                prefix + rel + "/jq/main" + suffix,
-                prefix + rel + "/" + baseName + suffix,
-            ];
-            foreach (string candidate in candidates)
+            for (int variant = 0; variant < 3; variant++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                budget.ReserveBytes(128 + 64L * candidate.Length);
+                long length = dir.Length + (dir == "/" ? 0L : 1L) + rel.Length + suffix.Length
+                    + (variant == 1 ? 8L : variant == 2 ? 1L + rel.Length - baseStart : 0L);
+                // Cover path normalization and overlapping strings before any copy.
+                budget.ReserveBytes(128 + 64L * length);
+                string prefix = dir == "/" ? "/" : dir + "/";
+                string candidate = variant switch
+                {
+                    0 => prefix + rel + suffix,
+                    1 => prefix + rel + "/jq/main" + suffix,
+                    _ => prefix + rel + "/" + rel[baseStart..] + suffix,
+                };
                 JqPath path;
                 try
                 {
@@ -315,74 +316,48 @@ internal sealed class JqModuleLoader(
             }
         }
         return null;
-    }
 
-    private List<string?> BuildSearchDirs(JqModuleImport import, string importerDir)
-    {
-        var dirs = new List<string?>();
-        List<JsonNode?> searchNodes = [];
-        if (import.Metadata is not null && import.Metadata.TryGetPropertyValue("search", out JsonNode? searchValue))
+        IEnumerable<string> SearchDirs()
         {
-            if (searchValue is null)
-                searchNodes.Add(null);
-            else if (searchValue is JsonArray array)
+            if (import.Metadata is not null && import.Metadata.TryGetPropertyValue("search", out JsonNode? search))
             {
-                foreach (JsonNode? item in array)
-                    searchNodes.Add(item);
+                if (search is JsonArray array)
+                {
+                    foreach (JsonNode? item in array)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (item is null) yield break;
+                        if (Resolve(item) is string dir) yield return dir;
+                    }
+                }
+                else
+                {
+                    if (search is null) yield break;
+                    if (Resolve(search) is string dir) yield return dir;
+                }
             }
-            else
-                searchNodes.Add(searchValue);
-        }
-        else
-        {
-            searchNodes.Add(JsonValue.Create("."));
-        }
-        foreach (JsonNode? node in searchNodes)
-        {
-            if (node is null)
+            else yield return importerDir;
+            foreach (string lib in libraryDirs)
             {
-                dirs.Add(null);
-                break;
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return lib;
             }
-            if (node is JsonValue scalar && scalar.TryGetValue<string>(out string? text))
-            {
-                if (text.Length == 0)
-                    continue;
-                string? resolved = ResolveSearchDir(text, importerDir);
-                if (resolved is not null)
-                    dirs.Add(resolved);
-                continue;
-            }
-            continue;
         }
-        // Top-level -L directories follow per-import search entries.
-        foreach (string lib in libraryDirs)
-            dirs.Add(lib);
-        return dirs;
-    }
 
-    private static string? ResolveSearchDir(string entry, string importerDir)
-    {
-        ArgumentNullException.ThrowIfNull(entry);
-        ArgumentNullException.ThrowIfNull(importerDir);
-        if (entry == ".")
-            return importerDir;
-        if (entry.StartsWith("~/", StringComparison.Ordinal) || entry == "~")
-            return null;
-        if (entry.StartsWith("$ORIGIN/", StringComparison.Ordinal) || entry == "$ORIGIN")
-            return null;
-        string combined = entry.StartsWith((char)47)
-            ? entry
-            : importerDir == "/" ? "/" + entry : importerDir + "/" + entry;
-        try
+        string? Resolve(JsonNode node)
         {
-            var raw = JqRawPath.Parse(combined);
-            var absolute = raw.ToAbsolute(JqPath.Root);
-            return absolute.Path;
-        }
-        catch (Exception ex) when (ex is FormatException or ArgumentException)
-        {
-            return null;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (node is not JsonValue scalar || !scalar.TryGetValue<string>(out string? entry)
+                || entry.Length == 0) return null;
+            if (entry == ".") return importerDir;
+            if (entry.StartsWith("~/", StringComparison.Ordinal) || entry == "~"
+                || entry.StartsWith("$ORIGIN/", StringComparison.Ordinal) || entry == "$ORIGIN") return null;
+            budget.ReserveBytes(128 + 64L * (entry.Length + (long)importerDir.Length + 1));
+            string combined = entry.StartsWith((char)47) ? entry
+                : importerDir == "/" ? "/" + entry : importerDir + "/" + entry;
+            if (!JqRawPath.TryParse(combined, out JqRawPath? raw)) return null;
+            try { return raw.ToAbsolute(JqPath.Root).Path; }
+            catch (ArgumentException) { return null; }
         }
     }
 
@@ -408,7 +383,7 @@ internal sealed class JqModuleLoader(
     internal async Task<JsonObject> GetModuleMetadataAsync(string relPath, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(relPath);
-        string? validation = JqModulePathValidation.Validate(relPath);
+        string? validation = JqModulePathValidation.Validate(relPath, budget);
         if (validation is not null)
             throw new JqException(validation);
         var probe = new JqModuleImport(relPath, null, false, null);

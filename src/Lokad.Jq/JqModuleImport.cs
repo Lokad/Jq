@@ -48,21 +48,43 @@ internal sealed record JqModuleImport(
 // Relative module path validation matching the reference messages.
 internal static class JqModulePathValidation
 {
-    internal static string? Validate(string relPath)
+    internal static string? Validate(string relPath, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(relPath);
-        if (relPath.Contains((char)0))
-            return "Module path contains a NUL byte";
-        if (relPath.Contains((char)92))
-            return "Modules must be named by relative paths using \'/\', not \'\\\' (" + relPath + ")";
-        var components = relPath.Split((char)47);
-        for (var i = 0; i < components.Length; i++)
+        bool backslash = false;
+        for (int i = 0; i < relPath.Length; i++)
         {
-            if (components[i] == "..")
-                return "Relative paths to modules may not traverse to parent directories (" + relPath + ")";
-            if (i > 0 && string.Equals(components[i], components[i - 1], StringComparison.Ordinal))
-                return "module names must not have equal consecutive components: " + relPath;
+            if ((i & 4095) == 0) budget.CheckCancellation();
+            if (relPath[i] == (char)0) return "Module path contains a NUL byte";
+            backslash |= relPath[i] == (char)92;
+        }
+        if (backslash)
+            return Failure("Modules must be named by relative paths using \'/\', not \'\\\' (");
+        int previousStart = 0, previousLength = -1, start = 0;
+        for (int i = 0; i <= relPath.Length; i++)
+        {
+            if ((i & 4095) == 0) budget.CheckCancellation();
+            if (i < relPath.Length && relPath[i] != '/') continue;
+            ReadOnlySpan<char> component = relPath.AsSpan(start, i - start);
+            if (component.SequenceEqual(".."))
+                return Failure("Relative paths to modules may not traverse to parent directories (");
+            if (previousLength == component.Length
+                && component.SequenceEqual(relPath.AsSpan(previousStart, previousLength)))
+            {
+                const string prefix = "module names must not have equal consecutive components: ";
+                budget.ReserveString(prefix.Length + (long)relPath.Length);
+                return prefix + relPath;
+            }
+            previousStart = start;
+            previousLength = component.Length;
+            start = i + 1;
         }
         return null;
+
+        string Failure(string prefix)
+        {
+            budget.ReserveString(prefix.Length + (long)relPath.Length + 1);
+            return prefix + relPath + ")";
+        }
     }
 }
