@@ -340,7 +340,14 @@ internal static class JqPathUpdates
 {
     private sealed record Frame(JqValueSegment Segment, JsonNode Container, int Index, int From, int To);
 
-    internal static JsonNode? SetPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JsonNode? value, JqContext context)
+    internal static JsonNode? SetPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JsonNode? value, JqContext context) =>
+        UpdatePath(root, segments, value, context, false);
+
+    // The caller owns the complete tree and has not exposed it to a consumer.
+    internal static JsonNode? SetOwnedPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JsonNode? value, JqContext context) =>
+        UpdatePath(root, segments, value, context, true);
+
+    private static JsonNode? UpdatePath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JsonNode? value, JqContext context, bool owned)
     {
         ArgumentNullException.ThrowIfNull(segments);
         ArgumentNullException.ThrowIfNull(context);
@@ -353,14 +360,14 @@ internal static class JqPathUpdates
         var frames = new Stack<Frame>();
         JsonNode? current = root;
         for (int depth = 0; depth < segments.Count; depth++)
-            current = Descend(current, JqPaths.TruncateFractional(JqPaths.UpdateSegment(segments[depth])), frames, context);
+            current = Descend(current, JqPaths.TruncateFractional(JqPaths.UpdateSegment(segments[depth])), frames, context, owned);
         JsonNode? leaf = context.Runtime.Clone(value);
         while (frames.TryPop(out Frame? frame))
             leaf = ApplyFrame(frame, leaf, context);
         return leaf;
     }
 
-    private static JsonNode? Descend(JsonNode? current, JqValueSegment segment, Stack<Frame> frames, JqContext context)
+    private static JsonNode? Descend(JsonNode? current, JqValueSegment segment, Stack<Frame> frames, JqContext context, bool owned)
     {
         switch (segment)
         {
@@ -372,7 +379,7 @@ internal static class JqPathUpdates
                 }
                 if (current is JsonObject obj)
                 {
-                    frames.Push(new Frame(segment, CloneObject(obj, context), 0, 0, 0));
+                    frames.Push(new Frame(segment, owned ? obj : (JsonObject)context.Budget.CopyValue(obj, 0), 0, 0, 0));
                     return obj.TryGetPropertyValue(key.Key, out JsonNode? child) ? child : null;
                 }
                 // Like the reference probe read inside jv_setpath, indexing a
@@ -387,7 +394,7 @@ internal static class JqPathUpdates
                         throw new JqException("Out of bounds negative array index");
                     if (index.Index >= Array.MaxLength)
                         throw new JqException("Array index too large");
-                    frames.Push(new Frame(segment, PaddedArray(null, index.Index, context), (int)index.Index, 0, 0));
+                    frames.Push(new Frame(segment, PaddedArray(null, index.Index, context, owned), (int)index.Index, 0, 0));
                     return null;
                 }
                 if (current is JsonArray arr)
@@ -397,7 +404,7 @@ internal static class JqPathUpdates
                         throw new JqException("Out of bounds negative array index");
                     if (resolved >= Array.MaxLength)
                         throw new JqException("Array index too large");
-                    frames.Push(new Frame(segment, PaddedArray(arr, resolved, context), (int)resolved, 0, 0));
+                    frames.Push(new Frame(segment, PaddedArray(arr, resolved, context, owned), (int)resolved, 0, 0));
                     return resolved < arr.Count ? arr[(int)resolved] : null;
                 }
                 // Like the reference probe read inside jv_setpath, indexing a
@@ -414,7 +421,7 @@ internal static class JqPathUpdates
                 if (current is JsonArray target)
                 {
                     JqPaths.ResolveSlice(target.Count, slice.Start, slice.End, out int from, out int to);
-                    frames.Push(new Frame(segment, CloneArray(target, context), 0, from, to));
+                    frames.Push(new Frame(segment, owned ? target : (JsonArray)context.Budget.CopyValue(target, 0), 0, from, to));
                     return SliceCopy(target, from, to, context);
                 }
                 if (current is JsonValue scalar && scalar.TryGetValue<string>(out _))
@@ -439,7 +446,7 @@ internal static class JqPathUpdates
                     if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? rawStart, out double? rawEnd))
                         throw new JqException("Array/string slice indices must be integers");
                     JqPaths.ResolveSlice(rawTarget.Count, rawStart, rawEnd, out int rawFrom, out int rawTo);
-                    frames.Push(new Frame(new SliceSegment(rawStart, rawEnd), CloneArray(rawTarget, context), 0, rawFrom, rawTo));
+                    frames.Push(new Frame(new SliceSegment(rawStart, rawEnd), owned ? rawTarget : (JsonArray)context.Budget.CopyValue(rawTarget, 0), 0, rawFrom, rawTo));
                     return SliceCopy(rawTarget, rawFrom, rawTo, context);
                 }
                 if (current is JsonValue rawScalar && rawScalar.TryGetValue<string>(out _))
@@ -462,9 +469,11 @@ internal static class JqPathUpdates
         {
             case KeySegment key when frame.Container is JsonObject obj:
                 if (!obj.ContainsKey(key.Key)) context.Budget.ReserveObjectItem(leaf);
+                else if (ReferenceEquals(obj[key.Key], leaf)) return obj;
                 obj[key.Key] = context.Runtime.Detach(leaf);
                 return obj;
             case IndexSegment when frame.Container is JsonArray arr:
+                if (ReferenceEquals(arr[frame.Index], leaf)) return arr;
                 arr[frame.Index] = context.Runtime.Detach(leaf);
                 return arr;
             case SliceSegment when frame.Container is JsonArray arr:
@@ -498,19 +507,9 @@ internal static class JqPathUpdates
         return new JsonObject();
     }
 
-    private static JsonObject CloneObject(JsonObject source, JqContext context)
-    {
-        return (JsonObject)context.Budget.CopyValue(source, 0);
-    }
-
-    private static JsonArray CloneArray(JsonArray source, JqContext context)
-    {
-        return (JsonArray)context.Budget.CopyValue(source, 0);
-    }
-
     // Pads through the resolved index so frame application always lands
     // in range; every pad element is budget-charged.
-    private static JsonArray PaddedArray(JsonArray? source, long resolved, JqContext context)
+    private static JsonArray PaddedArray(JsonArray? source, long resolved, JqContext context, bool owned)
     {
         long padding = Math.Max(0, resolved + 1 - (source?.Count ?? 0));
         // Admit all additional backing slots before copying or adding any padding.
@@ -518,7 +517,7 @@ internal static class JqPathUpdates
         context.Budget.ReserveBytes(checked(24L * padding));
         JsonArray padded;
         if (source is not null)
-            padded = (JsonArray)context.Budget.CopyValue(source, 0);
+            padded = owned ? source : (JsonArray)context.Budget.CopyValue(source, 0);
         else
         {
             context.Budget.ReserveBytes(64);

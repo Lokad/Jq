@@ -63,7 +63,7 @@ internal sealed class FromstreamFilter(JqFilter Stream) : JqFilter
             {
                 List<JqValueSegment> segments = EventPath(pair[0], context);
                 emit = segments.Count == 0;
-                state = JqPathUpdates.SetPath(state, segments, pair[1], context);
+                state = JqPathUpdates.SetOwnedPath(state, segments, pair[1], context);
             }
             else
             {
