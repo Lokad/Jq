@@ -10,6 +10,8 @@ public sealed partial class JqTests
     [InlineData("paths", "[0]\n[1]\n[1,0]\n")]
     [InlineData("tostream", "[[0],null]\n[[1,0],null]\n[[1,0]]\n[[1]]\n")]
     [InlineData("flatten", "[null,null]\n")]
+    [InlineData("del(.[0:2][0])", "[[null]]\n")]
+    [InlineData("del(.[0:1],getpath([{start:1,end:2}]))", "[]\n")]
     public async Task Jq_TreeOperationsKeepLongInputStreamsBounded(string source, string expectedRecord)
     {
         var root = new BenchmarkMemoryBudget(64 * 1024);
@@ -25,6 +27,8 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData("del(.[0:2][0])", "[[null]]\n", false)]
+    [InlineData("del(.[0:2][0])", "[[null]]\n", true)]
     [InlineData("try error catch .", "[null,[null]]\n", false)]
     [InlineData("try error catch .", "[null,[null]]\n", true)]
     [InlineData(".. | select(type == \"null\")", "null\n", false)]

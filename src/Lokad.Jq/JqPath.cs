@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Nodes;
 using static Lokad.Jq.JqRuntime;
 
@@ -173,11 +174,11 @@ internal static class JqPaths
                 segments.Add(new IndexSegment(index, isNaN));
             else if (element is JsonObject slice)
             {
-                segments.Add(new SliceObjectSegment(JqPaths.CloneSliceObject(slice, context.Budget)));
+                segments.Add(new SliceObjectSegment(slice));
             }
             else
             {
-                segments.Add(new InvalidSegment(context.Budget.CopyValue(element, 0)));
+                segments.Add(new InvalidSegment(element));
             }
         }
         return segments;
@@ -239,10 +240,10 @@ internal static class JqPaths
     // the reference re-parses path values at every update boundary with
     // objects reading as slices; carry those segments raw so the use sites
     // can apply the reference container-dependent dispatch.
-    internal static JqValueSegment UpdateSegment(JqValueSegment segment, JqBudget budget)
+    internal static JqValueSegment UpdateSegment(JqValueSegment segment)
     {
         if (segment is InvalidSegment invalid && invalid.Raw is JsonObject slice)
-            return new SliceObjectSegment(CloneSliceObject(slice, budget));
+            return new SliceObjectSegment(slice);
         return segment;
     }
 
@@ -253,47 +254,6 @@ internal static class JqPaths
         if (segment is FractionalSegment fractional)
             return new IndexSegment(TruncateIndex(fractional.Value), false);
         return segment;
-    }
-
-    // Clones a path-value slice object with NaN bounds normalized to null,
-    // matching how both the reference printer and the local serializer
-    // render NaN (resolution defaults NaN the same way, so grouping and
-    // rendering stay deterministic without changing any accepted read).
-    internal static JsonObject CloneSliceObject(JsonObject source, JqBudget budget)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        var clone = (JsonObject)budget.CopyValue(source, 0);
-        NormalizeSliceNaN(clone);
-        return clone;
-    }
-
-    private static void NormalizeSliceNaN(JsonNode? node)
-    {
-        if (node is JsonObject obj)
-        {
-            var keys = new List<string>();
-            foreach (var property in obj)
-                keys.Add(property.Key);
-            foreach (string key in keys)
-            {
-                JsonNode? child = obj[key];
-                if (child is JsonValue real && real.TryGetValue<double>(out double candidate) && double.IsNaN(candidate))
-                    obj[key] = null;
-                else
-                    NormalizeSliceNaN(child);
-            }
-        }
-        else if (node is JsonArray arr)
-        {
-            for (int index = 0; index < arr.Count; index++)
-            {
-                JsonNode? child = arr[index];
-                if (child is JsonValue real && real.TryGetValue<double>(out double candidate) && double.IsNaN(candidate))
-                    arr[index] = null;
-                else
-                    NormalizeSliceNaN(child);
-            }
-        }
     }
 
     // Reads slice-object bounds like the reference parse_slice key lookup:
@@ -388,19 +348,12 @@ internal static class JqPathUpdates
             throw new JqException("Path too deep");
         if (segments.Count == 0)
             return context.Runtime.Clone(value);
-        context.Budget.ReserveBytes(24L * segments.Count);
-        var normalized = new List<JqValueSegment>(segments.Count);
-        foreach (JqValueSegment existing in segments)
-        {
-            context.Budget.CheckCancellation();
-            JqValueSegment segment = JqPaths.TruncateFractional(JqPaths.UpdateSegment(existing, context.Budget));
-            normalized.Add(segment);
-        }
-        segments = normalized;
+        // Frame objects and geometrically replaced backing slots.
+        context.Budget.ReserveBytes(80L * segments.Count);
         var frames = new Stack<Frame>();
         JsonNode? current = root;
         for (int depth = 0; depth < segments.Count; depth++)
-            current = Descend(current, segments[depth], frames, context);
+            current = Descend(current, JqPaths.TruncateFractional(JqPaths.UpdateSegment(segments[depth])), frames, context);
         JsonNode? leaf = context.Runtime.Clone(value);
         while (frames.TryPop(out Frame? frame))
             leaf = ApplyFrame(frame, leaf, context);
@@ -424,7 +377,7 @@ internal static class JqPathUpdates
                 }
                 // Like the reference probe read inside jv_setpath, indexing a
                 // non-object with a key reports the container and key kinds.
-                throw new JqException("Cannot index " + JqRuntime.TypeName(current) + " with string (" + System.Text.Json.Nodes.JsonValue.Create(key.Key).ToJsonString() + ")");
+                throw new JqException("Cannot index " + JqRuntime.TypeName(current) + " with string (" + context.Runtime.Serialize(JsonValue.Create(key.Key), false, null, false) + ")");
             case IndexSegment index:
                 if (index.IsNaN)
                     throw new JqException("Cannot set array element at NaN index");
@@ -609,17 +562,11 @@ internal static class JqPathReads
         ArgumentNullException.ThrowIfNull(segments);
         ArgumentNullException.ThrowIfNull(context);
         context.Budget.CheckCancellation();
-        var normalized = new List<JqValueSegment>(segments.Count);
+        JsonNode? current = root;
         foreach (JqValueSegment existing in segments)
         {
             context.Budget.CheckCancellation();
-            normalized.Add(JqPaths.TruncateFractional(JqPaths.UpdateSegment(existing, context.Budget)));
-        }
-        segments = normalized;
-        JsonNode? current = root;
-        foreach (JqValueSegment segment in segments)
-        {
-            context.Budget.CheckCancellation();
+            JqValueSegment segment = JqPaths.TruncateFractional(JqPaths.UpdateSegment(existing));
             switch (segment)
             {
                 case KeySegment key:
@@ -628,7 +575,7 @@ internal static class JqPathReads
                     else if (current is null)
                         current = null;
                     else
-                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with string (" + System.Text.Json.Nodes.JsonValue.Create(key.Key).ToJsonString() + ")");
+                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with string (" + context.Runtime.Serialize(JsonValue.Create(key.Key), false, null, false) + ")");
                     break;
                 case IndexSegment index:
                     if (current is JsonArray arr)
@@ -702,15 +649,15 @@ internal static class JqPathReads
                         current = context.Runtime.Indices(current, pattern);
                         break;
                     }
-                    throw MismatchError(current, segment);
+                    throw MismatchError(current, segment, context);
             }
         }
         return current;
     }
 
-    private static JqException MismatchError(JsonNode? current, JqValueSegment segment)
+    private static JqException MismatchError(JsonNode? current, JqValueSegment segment, JqContext context)
     {
-        string raw = segment.ToJson()?.ToJsonString() ?? "null";
+        string raw = context.Runtime.Serialize(segment.ToJson(), false, null, false);
         if (current is JsonArray)
             return new JqException("expected a number for indexing an array but got: " + raw);
         return new JqException("expected a string for object key but got: " + raw);
@@ -718,374 +665,390 @@ internal static class JqPathReads
 }
 internal static class JqPathDeletes
 {
-    // Sorted grouped deletion: whole keys drop at once (so array indices
-    // never shift mid-run), deeper paths recurse through the shared read
-    // step. Missing containers skip; mistyped reads fail staged like the
-    // reference get, and terminal removals on scalars fail staged like the
-    // reference dels. NaN segments flow through: they read null (skipped)
-    // under arrays and null, and fail staged everywhere else.
     internal static JsonNode? DeletePaths(JsonNode? root, IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(context);
-        var resolvedPaths = new List<IReadOnlyList<JqValueSegment>>(paths.Count);
-        foreach (IReadOnlyList<JqValueSegment> path in paths)
-        {
-            var mapped = new List<JqValueSegment>(path.Count);
-            foreach (JqValueSegment segment in path)
-                mapped.Add(JqPaths.UpdateSegment(segment, context.Budget));
-            resolvedPaths.Add(mapped);
-        }
-        paths = resolvedPaths;
-        var effective = new List<IReadOnlyList<JqValueSegment>>();
+        context.Budget.CheckCancellation();
+        if (paths.Count == 0) return root;
         foreach (var path in paths)
         {
-            if (path.Count == 0)
-                return null;
-            effective.Add(path);
+            context.Budget.CheckCancellation();
+            if (path.Count == 0) return null;
         }
-        if (effective.Count == 0)
-            return root;
-        effective.Sort(ComparePaths);
-        return DeleteGrouped(root, effective, 0, context);
-    }
-
-    private static int ComparePaths(IReadOnlyList<JqValueSegment>? left, IReadOnlyList<JqValueSegment>? right)
-    {
-        int count = Math.Min(left?.Count ?? 0, right?.Count ?? 0);
-        for (int index = 0; index < count; index++)
-        {
-            int order = CompareSegment(left![index], right![index]);
-            if (order != 0)
-                return order;
-        }
-        return (left?.Count ?? 0).CompareTo(right?.Count ?? 0);
-    }
-
-    private static int CompareSegment(JqValueSegment left, JqValueSegment right)
-    {
-        int rank = Rank(left).CompareTo(Rank(right));
-        if (rank != 0)
-            return rank;
-        if (left is IndexSegment li && right is IndexSegment ri && !li.IsNaN && !ri.IsNaN)
-            return li.Index.CompareTo(ri.Index);
-        if (Rank(left) == 0 && Rank(right) == 0)
-            return SegmentNumber(left).CompareTo(SegmentNumber(right));
-        if (left is KeySegment lk && right is KeySegment rk)
-            return string.Compare(lk.Key, rk.Key, StringComparison.Ordinal);
-        if (left is SliceSegment ls && right is SliceSegment rs)
-        {
-            int start = Nullable.Compare(ls.Start, rs.Start);
-            return start != 0 ? start : Nullable.Compare(ls.End, rs.End);
-        }
-        if (left is SliceObjectSegment lraw && right is SliceObjectSegment rraw)
-            return string.Compare(lraw.Raw.ToJsonString(), rraw.Raw.ToJsonString(), StringComparison.Ordinal);
-        return 0;
-    }
-
-    private static int Rank(JqValueSegment segment) => segment switch
-    {
-        IndexSegment => 0,
-        FractionalSegment => 0,
-        KeySegment => 1,
-        SliceSegment => 2,
-        SliceObjectSegment => 2,
-        _ => 3,
-    };
-
-    private static double SegmentNumber(JqValueSegment segment) => segment switch
-    {
-        IndexSegment index => index.IsNaN ? double.NaN : index.Index,
-        FractionalSegment fractional => fractional.Value,
-        _ => double.NaN,
-    };
-
-    // Heap-allocated frame for iterative grouped deletion. Deletion depth is path
-    // length, which must not translate into unbounded CLR stack depth, so
-    // nested call frames are not an option. A frame resumes exactly where a child
-    // call would return, preserving group order and error precedence.
-    private sealed class DeleteFrame(JsonNode? node, List<IReadOnlyList<JqValueSegment>> paths, int depth)
-    {
-        public JsonNode? Node = node;
-        public List<IReadOnlyList<JqValueSegment>> Paths = paths;
-        public int Depth = depth;
-        public JqValueSegment? Slot;
-        public int First;
-        public List<(JqValueSegment Key, JsonNode? Value)> Replacements = new();
-        public List<JqValueSegment> Removals = new();
-        public JsonArray? SliceArray;
-        public List<IReadOnlyList<JqValueSegment>> SliceDeeper = new();
-        public int SliceTo;
-        public int SlicePos = -1;
-        public JsonNode? Result;
-    }
-
-    private static JsonNode? DeleteGrouped(JsonNode? root, List<IReadOnlyList<JqValueSegment>> paths, int depth, JqContext context)
-    {
-        ArgumentNullException.ThrowIfNull(paths);
-        ArgumentNullException.ThrowIfNull(context);
-        var stack = new Stack<DeleteFrame>();
-        stack.Push(new DeleteFrame(root, paths, depth));
-        while (stack.Count > 0)
+        using var storage = new JqStorage(context.Budget.MemoryBudget);
+        // Sorting workspace and the retained index vector. Paths stay borrowed.
+        storage.ReserveBytes(64 + 32L * paths.Count);
+        using var order = new PathOrder(context, storage);
+        int[] sorted = JqComparer.OrderBy(Enumerable.Range(0, paths.Count), index => paths[index], order).ToArray();
+        var frames = new List<DeleteFrame>();
+        int active = 0;
+        Push(root, 0, sorted.Length, 0, null);
+        while (active != 0)
         {
             context.Budget.CheckCancellation();
-            DeleteFrame frame = stack.Peek();
-            if (!AdvanceDeleteFrame(frame, stack, context))
-                continue;
-            stack.Pop();
-            if (stack.Count == 0)
-                return frame.Result;
-            JqValueSegment? slot = frame.Slot;
-            if (slot is null)
-                throw new InvalidOperationException("Grouped deletion lost its result slot.");
-            JsonNode? result = frame.Result;
-            if (result is not null && ReferenceEquals(result, frame.Node))
+            DeleteFrame frame = frames[active - 1];
+            if (frame.Next < frame.Last)
             {
-                // An unchanged subtree keeps its parent; detach the copy the
-                // rebuilt parent adopts so missing or invalid paths that
-                // delete nothing still settle staged instead of escaping.
-                result = context.Budget.CopyValue(result, 0);
+                int first = frame.Next;
+                int last = first + 1;
+                JqValueSegment key = JqPaths.UpdateSegment(paths[sorted[first]][frame.Depth]);
+                while (last < frame.Last && order.Equal(key, JqPaths.UpdateSegment(paths[sorted[last]][frame.Depth]))) last++;
+                frame.Next = last;
+                if (paths[sorted[first]].Count == frame.Depth + 1)
+                {
+                    frame.Remove(key);
+                    continue;
+                }
+                if (frame.IsArray && TrySlice(key, out double? start, out double? end))
+                {
+                    JqPaths.ResolveSlice(frame.Count, start, end, out int from, out int to);
+                    Push(frame.Node, first, last, frame.Depth + 1, key).BorrowSlice(frame, from, to);
+                }
+                else
+                {
+                    JsonNode? child = frame.Read(key);
+                    if (child is not null) Push(child, first, last, frame.Depth + 1, key);
+                }
+                continue;
             }
-            stack.Peek().Replacements.Add((slot, result));
+            JsonNode? result = frame.Complete();
+            active--;
+            if (active == 0) return result;
+            frames[active - 1].Write(frame.Slot ?? throw new InvalidOperationException("Missing deletion slot."), result);
         }
-        throw new InvalidOperationException("Grouped deletion left no result.");
+        throw new InvalidOperationException("Deletion left no result.");
+
+        DeleteFrame Push(JsonNode? node, int first, int last, int depth, JqValueSegment? slot)
+        {
+            context.Budget.CheckCancellation();
+            if (active == frames.Count)
+            {
+                if (frames.Count == frames.Capacity)
+                {
+                    int previous = frames.Capacity;
+                    int capacity = JqBudget.BufferCapacity((long)frames.Count + 1, Math.Max(4, 2L * previous));
+                    storage.ReserveBytes(8L * capacity, 1);
+                    frames.Capacity = capacity;
+                    if (previous != 0) storage.DiscardBytes(8L * previous);
+                }
+                storage.ReserveBytes(256, 1);
+                frames.Add(new DeleteFrame(context, storage));
+            }
+            DeleteFrame frame = frames[active++];
+            frame.Reset(node, first, last, depth, slot);
+            return frame;
+        }
     }
 
-    // Expands one validated slice key over its array target like the
-    // reference dels array branch: with no deeper paths the range removes
-    // at once, otherwise deletion descends per element. Returns true when
-    // the frame should keep scanning its groups.
-    private static bool ExpandSliceDeletion(DeleteFrame frame, Stack<DeleteFrame> stack, int first, int last, int from, int to, JsonArray targets, JqContext context)
+    private static bool TrySlice(JqValueSegment key, out double? start, out double? end)
     {
-        ArgumentNullException.ThrowIfNull(frame);
-        ArgumentNullException.ThrowIfNull(stack);
-        ArgumentNullException.ThrowIfNull(targets);
-        ArgumentNullException.ThrowIfNull(context);
-        var deeper = new List<IReadOnlyList<JqValueSegment>>();
-        for (int index = first; index < last; index++)
-            if (frame.Paths[index].Count > frame.Depth + 1)
-                deeper.Add(frame.Paths[index]);
-        frame.First = last;
-        if (deeper.Count == 0)
+        if (key is SliceSegment slice)
         {
-            for (int position = from; position < to; position++)
-                frame.Removals.Add(new IndexSegment(position, false));
+            start = slice.Start;
+            end = slice.End;
             return true;
         }
-        if (from >= to)
+        if (key is SliceObjectSegment raw)
+        {
+            if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out start, out end))
+                throw new JqException("Array/string slice indices must be integers");
             return true;
-        frame.SliceArray = targets;
-        frame.SliceDeeper = deeper;
-        frame.SliceTo = to;
-        frame.SlicePos = from + 1;
-        stack.Push(new DeleteFrame(targets[from], deeper, frame.Depth + 1) { Slot = new IndexSegment(from, false) });
+        }
+        start = null;
+        end = null;
         return false;
     }
 
-    // Runs one frame until it needs a child result or finishes. Returns true with
-    // Result set when the frame is complete.
-    private static bool AdvanceDeleteFrame(DeleteFrame frame, Stack<DeleteFrame> stack, JqContext context)
+    // Frames and their backing capacities are reused at each ancestor depth.
+    // Child ranges refer to the one sorted vector; slice views borrow references.
+    private sealed class DeleteFrame(JqContext context, JqStorage storage)
     {
-        ArgumentNullException.ThrowIfNull(frame);
-        ArgumentNullException.ThrowIfNull(stack);
-        ArgumentNullException.ThrowIfNull(context);
-        if (frame.SlicePos >= 0)
+        internal JsonNode? Node;
+        internal int Next;
+        internal int Last;
+        internal int Depth;
+        internal JqValueSegment? Slot;
+        private IList<JsonNode?>? _source;
+        private int _offset;
+        private int _count;
+        private bool _slice;
+        private bool _written;
+        private List<JsonNode?>? _items;
+        private List<JqValueSegment>? _removals;
+        private Dictionary<string, Change>? _changes;
+        private int _changeCapacity;
+        private bool[] _removed = [];
+
+        internal bool IsArray => _source is not null;
+        internal int Count => _written ? Items.Count : _count;
+        private List<JsonNode?> Items => _items ?? throw new InvalidOperationException("Missing deletion array.");
+        private JsonNode? At(int index) => _written ? Items[index] : _source?[_offset + index];
+
+        internal void Reset(JsonNode? node, int first, int last, int depth, JqValueSegment? slot)
         {
-            JsonArray? sliced = frame.SliceArray;
-            if (sliced is null)
-                throw new InvalidOperationException("Grouped deletion lost its slice target.");
-            if (frame.SlicePos < frame.SliceTo)
-            {
-                int position = frame.SlicePos;
-                frame.SlicePos++;
-                stack.Push(new DeleteFrame(sliced[position], frame.SliceDeeper, frame.Depth + 1) { Slot = new IndexSegment(position, false) });
-                return false;
-            }
-            frame.SlicePos = -1;
+            Node = node;
+            Next = first;
+            Last = last;
+            Depth = depth;
+            Slot = slot;
+            _source = node as JsonArray;
+            _offset = 0;
+            _count = (node as JsonArray)?.Count ?? 0;
+            _slice = false;
+            _written = false;
+            _items?.Clear();
+            _removals?.Clear();
+            _changes?.Clear();
         }
-        while (frame.First < frame.Paths.Count)
+
+        internal void BorrowSlice(DeleteFrame parent, int from, int to)
         {
-            int first = frame.First;
-            int last = first + 1;
-            while (last < frame.Paths.Count && CompareSegment(frame.Paths[last][frame.Depth], frame.Paths[first][frame.Depth]) == 0)
-                last++;
-            JqValueSegment key = frame.Paths[first][frame.Depth];
-            if (key is SliceSegment range && frame.Node is JsonArray targets)
+            _source = parent._written ? parent.Items : parent._source;
+            _offset = (parent._written ? 0 : parent._offset) + from;
+            _count = to - from;
+            _slice = true;
+        }
+
+        internal JsonNode? Read(JqValueSegment key)
+        {
+            key = JqPaths.TruncateFractional(key);
+            if (Node is JsonObject obj && key is KeySegment name)
+                return _changes is not null && _changes.TryGetValue(name.Key, out Change change) ? change.Value
+                    : obj.TryGetPropertyValue(name.Key, out JsonNode? child) ? child : null;
+            if (IsArray)
             {
-                JqPaths.ResolveSlice(targets.Count, range.Start, range.End, out int from, out int to);
-                if (ExpandSliceDeletion(frame, stack, first, last, from, to, targets, context))
-                    continue;
-                return false;
-            }
-            if (key is SliceObjectSegment rawSlice && frame.Node is JsonArray rawTargets)
-            {
-                if (!JqPaths.TryGetSliceObjectBounds(rawSlice.Raw, out double? rawStart, out double? rawEnd))
-                    throw new JqException("Array/string slice indices must be integers");
-                JqPaths.ResolveSlice(rawTargets.Count, rawStart, rawEnd, out int rawFrom, out int rawTo);
-                if (ExpandSliceDeletion(frame, stack, first, last, rawFrom, rawTo, rawTargets, context))
-                    continue;
-                return false;
-            }
-            bool whole = false;
-            for (int index = first; index < last; index++)
-                if (frame.Paths[index].Count == frame.Depth + 1)
-                    whole = true;
-            if (whole)
-            {
-                if (key is not KeySegment and not IndexSegment and not SliceSegment and not SliceObjectSegment and not FractionalSegment)
+                if (key is IndexSegment index)
                 {
-                    // Invalid segments (e.g. null) cannot delete: mirror
-                    // TryGetChild, skipping under null nodes and failing
-                    // staged otherwise like the reference nested descent.
-                    if (frame.Node is null)
+                    long at = index.Index < 0 ? Count + index.Index : index.Index;
+                    return !index.IsNaN && at >= 0 && at < Count ? At((int)at) : null;
+                }
+                if (key is InvalidSegment)
+                    throw new JqException("expected a number for indexing an array but got: " + Render(key));
+            }
+            return JqPathReads.GetPath(Node, new[] { key }, context);
+        }
+
+        internal void Write(JqValueSegment key, JsonNode? value)
+        {
+            context.Budget.CheckCancellation();
+            key = JqPaths.TruncateFractional(key);
+            if (Node is JsonObject && key is KeySegment name)
+            {
+                ChangeObject(name.Key, new Change(value, false));
+                return;
+            }
+            if (IsArray)
+            {
+                EnsureItems(Count);
+                if (key is IndexSegment index)
+                {
+                    long at = index.Index < 0 ? Items.Count + index.Index : index.Index;
+                    Items[(int)at] = value;
+                    return;
+                }
+                if (TrySlice(key, out double? start, out double? end))
+                {
+                    if (value is not JsonArray pieces)
+                        throw new JqException("A slice of an array can only be assigned another array");
+                    JqPaths.ResolveSlice(Items.Count, start, end, out int from, out int to);
+                    EnsureItems(checked(Items.Count - (to - from) + pieces.Count));
+                    Items.RemoveRange(from, to - from);
+                    Items.InsertRange(from, pieces);
+                    // Completed slice views are private results; transfer children.
+                    pieces.Clear();
+                    return;
+                }
+            }
+            throw new JqException("Cannot update string slices");
+        }
+
+        internal void Remove(JqValueSegment key)
+        {
+            context.Budget.CheckCancellation();
+            if (_removals is null) { storage.ReserveBytes(32, 1); _removals = []; }
+            if (_removals.Count == _removals.Capacity)
+            {
+                int previous = _removals.Capacity;
+                int capacity = JqBudget.BufferCapacity((long)_removals.Count + 1, Math.Max(4, 2L * previous));
+                storage.ReserveBytes(8L * capacity, 1);
+                _removals.Capacity = capacity;
+                if (previous != 0) storage.DiscardBytes(8L * previous);
+            }
+            _removals.Add(key);
+        }
+
+        internal JsonNode? Complete()
+        {
+            bool changed = _written || _changes is { Count: > 0 };
+            if (_removals is { Count: > 0 } removals && Node is not null)
+            {
+                if (IsArray)
+                {
+                    if (_removed.Length < Count)
                     {
-                        frame.First = last;
-                        continue;
+                        storage.ReserveBytes(Count, 1);
+                        int previous = _removed.Length;
+                        _removed = new bool[Count];
+                        if (previous != 0) storage.DiscardBytes(previous);
                     }
-                    if (frame.Node is JsonArray)
-                        throw new JqException("expected a number for indexing an array but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
-                    throw new JqException("expected a string for object key but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
+                    Array.Clear(_removed, 0, Count);
+                    foreach (JqValueSegment key in removals)
+                    {
+                        context.Budget.CheckCancellation();
+                        if (key is IndexSegment index)
+                        {
+                            long at = index.Index < 0 ? Count + index.Index : index.Index;
+                            if (!index.IsNaN && at >= 0 && at < Count) { _removed[(int)at] = true; changed = true; }
+                        }
+                        else if (key is FractionalSegment fractional)
+                        {
+                            long at = fractional.Value < 0 ? Count + JqPaths.TruncateIndex(fractional.Value) : JqPaths.TruncateIndex(fractional.Value);
+                            if (at >= 0 && at < Count) { _removed[(int)at] = true; changed = true; }
+                        }
+                        else if (TrySlice(key, out double? start, out double? end))
+                        {
+                            JqPaths.ResolveSlice(Count, start, end, out int from, out int to);
+                            for (int at = from; at < to; at++) { context.Budget.CheckCancellation(); _removed[at] = true; changed = true; }
+                        }
+                        else throw new JqException("expected a number for indexing an array but got: " + Render(key));
+                    }
                 }
-                if (frame.Node is JsonObject && key is not KeySegment)
+                else if (Node is JsonObject)
                 {
-                    // Like the reference dels object branch, slice keys
-                    // report the container shape instead of the key shape.
-                    if (key is SliceSegment || key is SliceObjectSegment)
-                        throw new JqException("Cannot delete object field of object");
-                    // Like the reference dels, only string keys delete from
-                    // objects; numbers and fractions fail staged.
-                    // NaN renders as null like the reference printer, since
-                    // raw NaN values cannot serialize to JSON.
-                    string raw = key is IndexSegment nanIndex && nanIndex.IsNaN ? "null" : (key.ToJson()?.ToJsonString() ?? "null");
-                    throw new JqException("expected a string for object key but got: " + raw);
+                    foreach (JqValueSegment key in removals)
+                    {
+                        context.Budget.CheckCancellation();
+                        if (key is KeySegment name) ChangeObject(name.Key, new Change(null, true));
+                        else if (key is SliceSegment or SliceObjectSegment) throw new JqException("Cannot delete object field of object");
+                        else throw new JqException("expected a string for object key but got: " + Render(key));
+                    }
+                    changed = true;
                 }
-                frame.Removals.Add(key);
-                frame.First = last;
-                continue;
+                else
+                {
+                    JqValueSegment key = removals[0];
+                    if (key is InvalidSegment)
+                        throw new JqException("expected a string for object key but got: " + Render(key));
+                    throw new JqException("Cannot delete fields from " + JqRuntime.TypeName(Node));
+                }
             }
-            if (TryGetChild(frame.Node, key, out JsonNode? child, out bool missing, context))
+            if (!changed && !_slice) return Node;
+            context.Budget.ReserveBytes(64);
+            if (IsArray)
             {
-                if (!missing && child is not null)
+                var result = new JsonArray();
+                for (int index = 0; index < Count; index++)
                 {
-                    var subpaths = new List<IReadOnlyList<JqValueSegment>>();
-                    for (int index = first; index < last; index++)
-                        subpaths.Add(frame.Paths[index]);
-                    frame.First = last;
-                    stack.Push(new DeleteFrame(child, subpaths, frame.Depth + 1) { Slot = key });
-                    return false;
+                    context.Budget.CheckCancellation();
+                    if (_removals is { Count: > 0 } && _removed[index]) continue;
+                    JsonNode? value = At(index);
+                    context.Budget.ReserveArrayItem(value);
+                    result.Add(value?.Parent is null ? value : context.Budget.CopyValue(value, 1));
                 }
+                return result;
             }
-            frame.First = last;
+            if (Node is JsonObject obj)
+            {
+                var result = new JsonObject();
+                foreach (var property in obj)
+                {
+                    context.Budget.CheckCancellation();
+                    JsonNode? value = property.Value;
+                    if (_changes is not null && _changes.TryGetValue(property.Key, out Change change))
+                    {
+                        if (change.Removed) continue;
+                        value = change.Value;
+                    }
+                    context.Budget.ReserveObjectItem(value);
+                    result.Add(property.Key, value?.Parent is null ? value : context.Budget.CopyValue(value, 1));
+                }
+                return result;
+            }
+            return Node;
         }
-        frame.Result = Rebuild(frame.Node, frame.Replacements, frame.Removals, context);
-        return true;
-    }
-    private static bool TryGetChild(JsonNode? node, JqValueSegment key, out JsonNode? child, out bool missing, JqContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        child = null;
-        missing = true;
-        if (key is InvalidSegment && node is JsonArray)
+
+        private string Render(JqValueSegment key) => context.Runtime.Serialize(key.ToJson(), false, null, false);
+
+        private void EnsureItems(int required)
         {
-            // Like the reference set, array keys cannot address into arrays
-            // for deletion: fail staged instead of searching subsequences.
-            throw new JqException("expected a number for indexing an array but got: " + (key.ToJson()?.ToJsonString() ?? "null"));
+            if (_items is null) { storage.ReserveBytes(32, 1); _items = []; }
+            if (required > _items.Capacity)
+            {
+                int previous = _items.Capacity;
+                int capacity = JqBudget.BufferCapacity(required, Math.Max(4, 2L * previous));
+                storage.ReserveBytes(8L * capacity, 1);
+                _items.Capacity = capacity;
+                if (previous != 0) storage.DiscardBytes(8L * previous);
+            }
+            if (_written) return;
+            for (int index = 0; index < _count; index++) { context.Budget.CheckCancellation(); _items.Add(_source?[_offset + index]); }
+            _written = true;
         }
-        // Slice-on-array groups never reach here (the frame expands them
-        // first). Every other deeper read shares the reference get step, so
-        // kind mismatches fail staged, substrings recurse, and missing or
-        // NaN reads skip like the reference nulls.
-        JsonNode? read = JqPathReads.GetPath(node, new[] { key }, context);
-        if (read is null)
-            return true;
-        child = read;
-        missing = false;
-        return true;
+
+        private void ChangeObject(string key, Change change)
+        {
+            if (_changes is null) { storage.ReserveBytes(64, 1); _changes = new(StringComparer.Ordinal); }
+            if (_changes.Count == _changeCapacity && !_changes.ContainsKey(key))
+            {
+                int requested = JqBudget.BufferCapacity((long)_changes.Count + 1, Math.Max(4, 2L * _changeCapacity));
+                // Dictionary prime rounding is below twice the requested size.
+                storage.ReserveBytes(128L * requested, 1);
+                int capacity = _changes.EnsureCapacity(requested);
+                storage.DiscardBytes(128L * requested - 64L * capacity + 64L * _changeCapacity);
+                _changeCapacity = capacity;
+            }
+            _changes[key] = change;
+        }
+
+        private readonly record struct Change(JsonNode? Value, bool Removed);
     }
 
-    private static JsonNode? Rebuild(JsonNode? node, List<(JqValueSegment Key, JsonNode? Value)> replacements, List<JqValueSegment> removals, JqContext context)
+    // Reuse jq value ordering for raw segments. Two small private objects adapt
+    // syntax slices without allocating JSON containers for every comparison.
+    private sealed class PathOrder(JqContext context, JqStorage storage) : IComparer<IReadOnlyList<JqValueSegment>>, IDisposable
     {
-        context.Budget.ReserveBytes(64 + 64L * (replacements.Count + removals.Count));
-        var placed = new List<(JqValueSegment Key, JsonNode? Value)>(replacements.Count);
-        foreach (var (key, value) in replacements)
-            placed.Add((JqPaths.TruncateFractional(key), value));
-        replacements = placed;
-        if (node is JsonObject obj)
+        private readonly JqComparer _values = new(context.Budget);
+        private JsonObject? _left;
+        private JsonObject? _right;
+
+        public int Compare(IReadOnlyList<JqValueSegment>? left, IReadOnlyList<JqValueSegment>? right)
         {
-            var removed = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var removal in removals)
-                if (removal is KeySegment name)
-                    removed.Add(name.Key);
-            var replaced = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
-            foreach (var (key, value) in replacements)
-                if (key is KeySegment name)
-                    replaced[name.Key] = value;
-            if (removed.Count == 0 && replaced.Count == 0)
-                return node;
-            context.Budget.CheckCancellation();
-            var rebuilt = new JsonObject();
-            foreach (var property in obj)
+            ArgumentNullException.ThrowIfNull(left);
+            ArgumentNullException.ThrowIfNull(right);
+            int count = Math.Min(left.Count, right.Count);
+            for (int index = 0; index < count; index++)
             {
-                if (removed.Contains(property.Key))
-                    continue;
-                context.Budget.ReserveObjectItem(property.Value);
-                rebuilt.Add(property.Key, replaced.TryGetValue(property.Key, out JsonNode? next) ? context.Runtime.Detach(next) : context.Budget.CopyValue(property.Value, 1));
+                context.Budget.CheckCancellation();
+                JqValueSegment first = JqPaths.UpdateSegment(left[index]);
+                JqValueSegment second = JqPaths.UpdateSegment(right[index]);
+                int order;
+                if (first is IndexSegment a && second is IndexSegment b && !a.IsNaN && !b.IsNaN) order = a.Index.CompareTo(b.Index);
+                else if (first is KeySegment x && second is KeySegment y) order = JqComparer.CompareStrings(x.Key, y.Key, context.Budget.CancellationToken);
+                else order = _values.Compare(Value(first, ref _left), Value(second, ref _right));
+                if (order != 0) return order;
             }
-            foreach (var entry in replaced)
-                if (!rebuilt.ContainsKey(entry.Key))
-                {
-                    context.Budget.ReserveObjectItem(entry.Value);
-                    rebuilt.Add(entry.Key, context.Runtime.Detach(entry.Value));
-                }
-            return rebuilt;
+            return left.Count.CompareTo(right.Count);
         }
-        if (node is JsonArray arr)
+
+        internal bool Equal(JqValueSegment left, JqValueSegment right)
         {
-            var removed = new HashSet<int>();
-            foreach (var removal in removals)
-                if (removal is IndexSegment index && !index.IsNaN)
-                {
-                    long resolved = index.Index < 0 ? arr.Count + index.Index : index.Index;
-                    if (resolved >= 0 && resolved < arr.Count)
-                        removed.Add((int)resolved);
-                }
-                else if (removal is FractionalSegment fractional)
-                {
-                    // Like the reference deletion loop, negative doubles
-                    // bucket from the end before truncating toward zero.
-                    double at = fractional.Value;
-                    long position = at < 0 ? arr.Count + JqPaths.TruncateIndex(at) : JqPaths.TruncateIndex(at);
-                    if (position >= 0 && position < arr.Count)
-                        removed.Add((int)position);
-                }
-            var replaced = new Dictionary<int, JsonNode?>();
-            foreach (var (key, value) in replacements)
-                if (key is IndexSegment index && !index.IsNaN)
-                {
-                    long resolved = index.Index < 0 ? arr.Count + index.Index : index.Index;
-                    if (resolved >= 0 && resolved < arr.Count)
-                        replaced[(int)resolved] = value;
-                }
-            if (removed.Count == 0 && replaced.Count == 0)
-                return node;
             context.Budget.CheckCancellation();
-            var rebuilt = new JsonArray();
-            for (int position = 0; position < arr.Count; position++)
-            {
-                if (removed.Contains(position))
-                    continue;
-                context.Budget.ReserveArrayItem(arr[position]);
-                rebuilt.Add(replaced.TryGetValue(position, out JsonNode? next) ? context.Runtime.Detach(next) : context.Budget.CopyValue(arr[position], 1));
-            }
-            return rebuilt;
+            if (left is IndexSegment a && right is IndexSegment b) return !a.IsNaN && !b.IsNaN && a.Index == b.Index;
+            if (left is KeySegment x && right is KeySegment y) return x.Key == y.Key;
+            return context.Runtime.JsonEquals(Value(left, ref _left), Value(right, ref _right));
         }
-        if (node is not null && removals.Count != 0)
+
+        private JsonNode? Value(JqValueSegment segment, ref JsonObject? synthetic)
         {
-            // Like the reference dels, deleting fields from a scalar fails
-            // staged; null roots no-op like the reference null branch.
-            throw new JqException("Cannot delete fields from " + JqRuntime.TypeName(node));
+            if (segment is not SliceSegment slice) return segment.ToJson();
+            if (synthetic is null) { storage.ReserveBytes(384, 1); synthetic = new JsonObject(); }
+            synthetic["start"] = slice.Start is { } start ? JqRuntime.CreateNumber(start) : null;
+            synthetic["end"] = slice.End is { } end ? JqRuntime.CreateNumber(end) : null;
+            return synthetic;
         }
-        return node;
+
+        public void Dispose() => _values.Dispose();
     }
 }
 
