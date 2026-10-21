@@ -451,6 +451,25 @@ internal static class CollectionKeys
         }
     }
 
+    internal static IEnumerable<(JsonNode? Element, JsonNode? Key)> OrderPrecomputed(JsonNode? input, JsonNode? keysValue, JqContext context)
+    {
+        if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
+            throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and "
+                + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
+        context.Budget.ReserveBytes(32L * elements.Count);
+        return Ordered();
+
+        IEnumerable<(JsonNode? Element, JsonNode? Key)> Ordered()
+        {
+            using var comparer = new JqComparer(context.Budget);
+            foreach (int index in JqComparer.OrderBy(Enumerable.Range(0, elements.Count), index => keys[index], (IComparer<JsonNode?>)comparer))
+            {
+                context.Budget.CheckCancellation();
+                yield return (elements[index], keys[index]);
+            }
+        }
+    }
+
     internal static bool Equal(IReadOnlyList<JsonNode?> left, IReadOnlyList<JsonNode?> right, JqRuntime runtime)
     {
         if (left.Count != right.Count) return false;
@@ -609,19 +628,11 @@ internal sealed class SortByImplFilter(JqFilter Keys) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
         {
-            if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
-                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
-            context.Budget.ReserveBytes(80L * elements.Count);
-            var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
-            for (int index = 0; index < elements.Count; index++)
-            {
-                context.Budget.CheckCancellation();
-                pairs.Add((elements[index], keys[index]));
-            }
+            var ordered = CollectionKeys.OrderPrecomputed(input, keysValue, context);
+            context.Budget.ReserveBytes(64);
             var result = new JsonArray();
             context.Budget.CheckCancellation();
-            using var comparer = new JqComparer(context.Budget);
-            foreach (var pair in JqComparer.OrderBy(pairs, static item => item.Key, (IComparer<JsonNode?>)comparer))
+            foreach (var pair in ordered)
             {
                 context.Budget.CheckCancellation();
                 context.Budget.ReserveArrayItem(pair.Element);
@@ -643,17 +654,8 @@ internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
         {
-            if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
-                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
-            context.Budget.ReserveBytes(80L * elements.Count);
-            var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
-            for (int index = 0; index < elements.Count; index++)
-            {
-                context.Budget.CheckCancellation();
-                pairs.Add((elements[index], keys[index]));
-            }
-            using var comparer = new JqComparer(context.Budget);
-            var ordered = JqComparer.OrderBy(pairs, static item => item.Key, (IComparer<JsonNode?>)comparer);
+            var ordered = CollectionKeys.OrderPrecomputed(input, keysValue, context);
+            context.Budget.ReserveBytes(64);
             var result = new JsonArray();
             context.Budget.CheckCancellation();
             JsonArray? group = null;
@@ -662,6 +664,7 @@ internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
             {
                 if (group is null || !context.Runtime.JsonEquals(current, pair.Key))
                 {
+                    context.Budget.ReserveBytes(88);
                     group = new JsonArray();
                     context.Budget.CheckCancellation();
                     result.Add(group);
@@ -687,17 +690,8 @@ internal sealed class UniqueByImplFilter(JqFilter Keys) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
         {
-            if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
-                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
-            context.Budget.ReserveBytes(80L * elements.Count);
-            var pairs = new List<(JsonNode? Element, JsonNode? Key)>();
-            for (int index = 0; index < elements.Count; index++)
-            {
-                context.Budget.CheckCancellation();
-                pairs.Add((elements[index], keys[index]));
-            }
-            using var comparer = new JqComparer(context.Budget);
-            var ordered = JqComparer.OrderBy(pairs, static item => item.Key, (IComparer<JsonNode?>)comparer);
+            var ordered = CollectionKeys.OrderPrecomputed(input, keysValue, context);
+            context.Budget.ReserveBytes(64);
             var result = new JsonArray();
             context.Budget.CheckCancellation();
             JsonNode? current = null;
