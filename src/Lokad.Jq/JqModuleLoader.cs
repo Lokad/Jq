@@ -136,15 +136,15 @@ internal sealed class JqModuleLoader(
         int depth,
         CancellationToken cancellationToken)
     {
-        var found = await FindModuleFileAsync(import, importerDir, ".jq", cancellationToken).ConfigureAwait(false);
-        if (found is null)
+        foreach (JqPath path in ModulePaths(import, importerDir, ".jq", cancellationToken))
         {
-            if (import.IsOptional)
-                return null;
-            throw new JqException("module not found: " + import.RelPath);
+            if (_cache.TryGetValue(path.Path, out JqLoadedModule? cached)) return cached;
+            using var content = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
+            if (content is not null)
+                return await LoadFuncModuleAtPathAsync(path.Path, content.Content, depth, cancellationToken).ConfigureAwait(false);
         }
-        using var content = found.Value.Content;
-        return await LoadFuncModuleAtPathAsync(found.Value.CanonicalPath, content.Content, depth, cancellationToken).ConfigureAwait(false);
+        if (import.IsOptional) return null;
+        throw new JqException("module not found: " + import.RelPath);
     }
 
     private async Task<JsonNode?> TryLoadDataAsync(
@@ -152,16 +152,22 @@ internal sealed class JqModuleLoader(
         string importerDir,
         CancellationToken cancellationToken)
     {
-        var found = await FindModuleFileAsync(import, importerDir, ".json", cancellationToken).ConfigureAwait(false);
-        if (found is null)
+        JqReadResult.Complete? loaded = null;
+        string canonical = string.Empty;
+        foreach (JqPath path in ModulePaths(import, importerDir, ".json", cancellationToken))
         {
-            if (import.IsOptional)
-                return null;
+            loaded = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
+            if (loaded is null) continue;
+            canonical = path.Path;
+            break;
+        }
+        if (loaded is null)
+        {
+            if (import.IsOptional) return null;
             throw new JqException("module not found: " + import.RelPath);
         }
-        using var ownedContent = found.Value.Content;
+        using var ownedContent = loaded;
         ReadOnlyMemory<byte> content = ownedContent.Content;
-        string canonical = found.Value.CanonicalPath;
         if (import.IsRaw)
         {
             budget.ReserveString(Encoding.UTF8.GetCharCount(content.Span));
@@ -255,7 +261,7 @@ internal sealed class JqModuleLoader(
         }
     }
 
-    private async Task<(string CanonicalPath, JqReadResult.Complete Content)?> FindModuleFileAsync(
+    private IEnumerable<JqPath> ModulePaths(
         JqModuleImport import,
         string importerDir,
         string suffix,
@@ -292,30 +298,9 @@ internal sealed class JqModuleLoader(
                 {
                     continue;
                 }
-                var opened = await JqHostExtensions.GuardedOpenAsync(host, path, cancellationToken).ConfigureAwait(false);
-                if (opened.Error is not null || opened.FileDescriptor is null)
-                    continue;
-                Exception? failure = null;
-                try
-                {
-                    var result = await host.TryReadAllBytesAsync(
-                        opened.FileDescriptor.Value, budget, cancellationToken).ConfigureAwait(false);
-                    if (result is JqReadResult.Complete complete)
-                        return (path.Path, complete);
-                    continue;
-                }
-                catch (Exception ex)
-                {
-                    failure = ex;
-                    throw;
-                }
-                finally
-                {
-                    await host.CloseOwnedDescriptorAsync(opened.FileDescriptor.Value, failure).ConfigureAwait(false);
-                }
+                yield return path;
             }
         }
-        return null;
 
         IEnumerable<string> SearchDirs()
         {
@@ -361,6 +346,30 @@ internal sealed class JqModuleLoader(
         }
     }
 
+    private async Task<JqReadResult.Complete?> TryReadModuleFileAsync(JqPath path, CancellationToken cancellationToken)
+    {
+        var opened = await JqHostExtensions.GuardedOpenAsync(host, path, cancellationToken).ConfigureAwait(false);
+        if (opened.Error is not null || opened.FileDescriptor is null) return null;
+        Exception? failure = null;
+        JqReadResult.Complete? content = null;
+        try
+        {
+            content = await host.TryReadAllBytesAsync(opened.FileDescriptor.Value, budget, cancellationToken).ConfigureAwait(false)
+                as JqReadResult.Complete;
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+            throw;
+        }
+        finally
+        {
+            try { await host.CloseOwnedDescriptorAsync(opened.FileDescriptor.Value, failure).ConfigureAwait(false); }
+            catch { content?.Dispose(); throw; }
+        }
+        return content;
+    }
+
     private static string ParentDir(string canonicalPath)
     {
         ArgumentNullException.ThrowIfNull(canonicalPath);
@@ -387,11 +396,8 @@ internal sealed class JqModuleLoader(
         if (validation is not null)
             throw new JqException(validation);
         var probe = new JqModuleImport(relPath, null, false, null);
-        var found = await FindModuleFileAsync(probe, workingDirectory, ".jq", cancellationToken).ConfigureAwait(false);
-        if (found is null)
-            throw new JqException("module not found: " + relPath);
-        using var content = found.Value.Content;
-        var loaded = await LoadFuncModuleAtPathAsync(found.Value.CanonicalPath, content.Content, 0, cancellationToken).ConfigureAwait(false);
+        var loaded = await TryLoadFuncModuleAsync(probe, workingDirectory, 0, cancellationToken).ConfigureAwait(false);
+        if (loaded is null) throw new JqException("module not found: " + relPath);
         return BuildMetadataObject(loaded);
     }
 

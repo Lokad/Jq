@@ -162,4 +162,124 @@ public sealed partial class JqTests
         Assert.Equal(0, root.ReservedBytes);
     }
 
+    [Fact]
+    public async Task Jq_CachedModulesAndMetadataAvoidSourceReadsUnderPressure()
+    {
+        const long allowance = 64 * 1024 * 1024;
+        var root = new BenchmarkMemoryBudget(allowance);
+        var host = new MockFileSystem();
+        host.AddFile("/lib/m.jq", "def f:42;" + new string(' ', 1024 * 1024));
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        {
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var import = new JqModuleImport("m", null, false, null);
+            _ = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
+            int reads = host.ReadBytesCallCount;
+            host.BeforeByteRead = _ => throw new InvalidOperationException("Cached source must stay unread.");
+            Assert.True(root.TryReserve(allowance - root.ReservedBytes - 65536, out var pressure));
+            using (pressure)
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                    var env = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
+                    Assert.Equal(42, JqRuntime.Number(new UserCallFilter("f", 0, []).Evaluate(null, context, env).Single()));
+                }
+                var metadata = await loader.GetModuleMetadataAsync("m", CancellationToken.None);
+                Assert.Equal("f/0", metadata["defs"]?[0]?.GetValue<string>());
+                Assert.Equal(reads, host.ReadBytesCallCount);
+                Assert.Single(host.ClosedDescriptors);
+            }
+        }
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_ModuleCacheKeepsSearchPrecedence()
+    {
+        var root = new BenchmarkMemoryBudget(1024 * 1024);
+        var host = new MockFileSystem();
+        host.AddFile("/second/m.jq", "def f:2;");
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        {
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], "/");
+            var first = new JqModuleImport("m", null, false, new JsonObject { ["search"] = "/second" });
+            _ = await loader.LoadMainImportsAsync([first], "/", CancellationToken.None);
+            host.AddFile("/first/m.jq", "def f:1;");
+            var second = new JqModuleImport("m", null, false, new JsonObject { ["search"] = new JsonArray("/first", "/second") });
+            var env = await loader.LoadMainImportsAsync([second], "/", CancellationToken.None);
+            Assert.Equal(1, JqRuntime.Number(new UserCallFilter("f", 0, []).Evaluate(null, context, env).Single()));
+            Assert.Equal(2, host.ReadBytesCallCount);
+        }
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_DataImportsReadCurrentContentsInsteadOfFunctionCache()
+    {
+        var root = new BenchmarkMemoryBudget(1024 * 1024);
+        var host = new MockFileSystem();
+        host.AddFile("/lib/m.json", "1");
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        {
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var import = new JqModuleImport("m", "data", true, null);
+            var first = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
+            host.AddFile("/lib/m.json", "2");
+            var second = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
+            Assert.True(first.TryGetValue("data", out var a));
+            Assert.True(second.TryGetValue("data", out var b));
+            Assert.Equal("[1]", a?.ToJsonString());
+            Assert.Equal("[2]", b?.ToJsonString());
+            Assert.Equal(2, host.ReadBytesCallCount);
+        }
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_CachedModuleLookupStillObservesCancellation()
+    {
+        var root = new BenchmarkMemoryBudget(1024 * 1024);
+        var host = new MockFileSystem();
+        host.AddFile("/lib/m.jq", "def f:42;");
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        {
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var import = new JqModuleImport("m", null, false, null);
+            _ = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => loader.LoadMainImportsAsync([import], "/", cancellation.Token));
+            Assert.Equal(1, host.ReadBytesCallCount);
+        }
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_ModuleReadRefundsUnpublishedContentWhenCloseFails()
+    {
+        var root = new BenchmarkMemoryBudget(1024 * 1024);
+        var host = new MockFileSystem { CloseFailuresRemaining = 2 };
+        host.AddFile("/lib/m.jq", "def f:42;");
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        {
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var error = await Assert.ThrowsAsync<JqException>(() =>
+                loader.LoadMainImportsAsync([new JqModuleImport("m", null, false, null)], "/", CancellationToken.None));
+            Assert.Equal("input close failed", error.Message);
+            Assert.Equal(2, host.ClosedDescriptors.Count);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+        Assert.Equal(0, await host.CloseDescriptorAsync(host.ClosedDescriptors[0], CancellationToken.None));
+        Assert.Equal(0, host.OpenFileCount);
+    }
+
 }
