@@ -165,7 +165,7 @@ internal sealed class JqParser(
         ArgumentNullException.ThrowIfNull(filter);
         if (filter is LiteralFilter literal)
         {
-            value = _budget.CopyValue(literal.Value, 0, false);
+            value = _budget.CopyValue(literal.Value, 0);
             return true;
         }
         if (filter is ArrayFilter array)
@@ -176,7 +176,7 @@ internal sealed class JqParser(
                 foreach (var item in items)
                 {
                     _budget.ReserveArrayItem(item);
-                    result.Add(_budget.CopyValue(item, 1, false));
+                    result.Add(_budget.CopyValue(item, 1));
                 }
                 value = result;
                 return true;
@@ -229,7 +229,7 @@ internal sealed class JqParser(
             }
             if (!TryGetConstant(current, out JsonNode? value)) return false;
             _budget.ReserveBytes(24);
-            collected.Add(_budget.CopyValue(value, 0, false));
+            collected.Add(_budget.CopyValue(value, 0));
         }
         return true;
     }
@@ -251,7 +251,7 @@ internal sealed class JqParser(
                 return false;
             }
             _budget.ReserveObjectItem(value);
-            result[property.StaticKey] = _budget.CopyValue(value, 1, false);
+            result[property.StaticKey] = _budget.CopyValue(value, 1);
         }
         built = result;
         return true;

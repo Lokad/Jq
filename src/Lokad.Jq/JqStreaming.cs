@@ -125,7 +125,7 @@ internal sealed class TruncateStreamFilter(JqFilter Stream) : JqFilter
             {
                 JsonNode? segment = path is { } actualPath ? actualPath[i] : null;
                 context.Budget.ReserveArrayItem(segment);
-                truncated.Add(context.Budget.CopyValue(segment, 1, false));
+                truncated.Add(context.Budget.CopyValue(segment, 1));
             }
             context.Budget.CheckCancellation();
             var reshaped = new JsonArray { truncated };

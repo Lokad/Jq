@@ -467,7 +467,7 @@ internal sealed class JqStreamScanner : IDisposable
         foreach (JsonNode? segment in path)
         {
             if (JqRuntime.TryGetString(segment, out string key)) bytes += 2L * key.Length;
-            snapshot.Add(_budget.CopyValue(segment, 0, false));
+            snapshot.Add(_budget.CopyValue(segment, 0));
         }
         _stashedBytes = bytes;
         return new JsonArray { snapshot };

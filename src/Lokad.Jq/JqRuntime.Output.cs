@@ -12,6 +12,7 @@ internal sealed partial class JqRuntime
     // filter diagnostics and tojson may serialize while an output is retained.
     internal sealed class OutputRenderer(JqRuntime runtime, JqBudget budget, JqInvocation invocation) : IDisposable
     {
+        private readonly JqComparer? _keyOrder = invocation.SortKeys ? new JqComparer(budget) : null;
         private JqJsonBuffer? _buffer;
         private Utf8JsonWriter? _writer;
         private byte[] _rawBuffer = [];
@@ -21,13 +22,12 @@ internal sealed partial class JqRuntime
         {
             if (invocation.RawOutput && TryGetString(node, out var text))
                 return RenderRaw(text);
-            JsonNode? clean = runtime.PrepareJson(node, invocation.SortKeys);
             JqJsonBuffer buffer = _buffer ??= new JqJsonBuffer(budget);
             Utf8JsonWriter writer = _writer ??= new Utf8JsonWriter(buffer,
                 CreateWriterOptions(invocation.AsciiOutput, invocation.Indent, invocation.UseTabs));
             buffer.Reset();
             writer.Reset(buffer);
-            try { runtime.WriteJson(clean, invocation.AsciiOutput, writer); }
+            try { runtime.WriteJson(node, invocation.AsciiOutput, writer, _keyOrder); }
             finally { writer.Reset(); }
             buffer.LowercaseUnicodeEscapes();
             ReadOnlyMemory<byte> body = buffer.WrittenMemory;
@@ -79,6 +79,7 @@ internal sealed partial class JqRuntime
             }
             _buffer?.Dispose();
             _rawMemory.Dispose();
+            _keyOrder?.Dispose();
             _rawBuffer = [];
         }
     }

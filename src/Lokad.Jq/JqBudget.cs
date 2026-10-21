@@ -154,7 +154,7 @@ internal sealed class JqBudget : IDisposable
     // wrappers are untracked; container clones account for all stored wrappers
     // and backing slots, without charging borrowed strings a second time.
     [return: NotNullIfNotNull(nameof(value))]
-    internal JsonNode? CopyValue(JsonNode? value, int depth, bool sortKeys)
+    internal JsonNode? CopyValue(JsonNode? value, int depth)
     {
         CheckCancellation();
         JqRecursion.CheckValueDepth(value, depth);
@@ -165,22 +165,18 @@ internal sealed class JqBudget : IDisposable
             foreach (JsonNode? child in array)
             {
                 if (child is JsonValue) ReserveBytes(64);
-                copy.Add(CopyValue(child, depth + 1, sortKeys));
+                copy.Add(CopyValue(child, depth + 1));
             }
             return copy;
         }
         if (value is JsonObject obj)
         {
             ReserveBytes(64 + 96L * obj.Count);
-            if (sortKeys) ReserveBytes(32L * obj.Count);
-            using var comparer = sortKeys ? new JqComparer(this) : null;
-            IEnumerable<KeyValuePair<string, JsonNode?>> entries = comparer is null
-                ? obj : JqComparer.OrderBy(obj, static property => property.Key, (IComparer<string>)comparer);
             var copy = new JsonObject();
-            foreach (var entry in entries)
+            foreach (var entry in obj)
             {
                 if (entry.Value is JsonValue) ReserveBytes(64);
-                copy.Add(entry.Key, CopyValue(entry.Value, depth + 1, sortKeys));
+                copy.Add(entry.Key, CopyValue(entry.Value, depth + 1));
             }
             return copy;
         }

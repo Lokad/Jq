@@ -221,7 +221,7 @@ internal sealed class TransposeFilter : JqFilter
                 context.Budget.CheckCancellation();
                 JsonNode? cell = row is JsonArray cells && column < cells.Count ? cells[column] : null;
                 if (cell is JsonValue) context.Budget.ReserveBytes(64);
-                line.Add(context.Budget.CopyValue(cell, 2, false));
+                line.Add(context.Budget.CopyValue(cell, 2));
             }
             result.Add(line);
         }
@@ -806,13 +806,13 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
             context.Budget.ReserveBytes(88 + (row is JsonValue ? 64 : 0));
             var pair = new JsonArray
             {
-                context.Budget.CopyValue(row, depth + 1, false)
+                context.Budget.CopyValue(row, depth + 1)
             };
             foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
             {
                 JsonNode? lookup = LookupIndex(idx, key);
                 context.Budget.ReserveArrayItem(lookup);
-                pair.Add(context.Budget.CopyValue(lookup, depth + 1, false));
+                pair.Add(context.Budget.CopyValue(lookup, depth + 1));
             }
             return pair;
         }

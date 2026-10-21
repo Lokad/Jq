@@ -1085,7 +1085,7 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
             return new FractionalSegment(fractional);
         if (TryGetIndex(key, out long index, out bool isNaN))
             return new IndexSegment(index, isNaN);
-        return new InvalidSegment(context.Budget.CopyValue(key, 0, false));
+        return new InvalidSegment(context.Budget.CopyValue(key, 0));
     }
 }
 
@@ -1207,7 +1207,7 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                         for (int position = from; position < to; position++)
                         {
                             context.Budget.ReserveArrayItem(arr[position]);
-                            part.Add(context.Budget.CopyValue(arr[position], 1, false));
+                            part.Add(context.Budget.CopyValue(arr[position], 1));
                         }
                         yield return new JqValuePath(Extend(pair.Segments, segment, context.Budget), part, true);
                     }
@@ -1415,7 +1415,7 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
                 context.Budget.ReserveBytes(64L * fields.Values.Count(value => value is JsonValue));
                 var result = new JsonObject();
                 foreach (var field in fields)
-                    result.Add(field.Key, context.Budget.CopyValue(field.Value, 1, false));
+                    result.Add(field.Key, context.Budget.CopyValue(field.Value, 1));
                 yield return result;
             }
         }

@@ -53,9 +53,9 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_SortedNonFiniteOutputFitsOneTreeCopyAndPreservesBorrowedInput()
+    public void Jq_SortedNonFiniteOutputBorrowsItsInputWithinSmallAdmission()
     {
-        var memory = new BenchmarkMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(16 * 1024);
         var items = new JsonArray(double.NaN, double.PositiveInfinity, double.NegativeInfinity);
         for (int index = 3; index < 1000; index++) items.Add(index);
         var input = new JsonObject { ["z"] = items, ["a"] = "kept" };

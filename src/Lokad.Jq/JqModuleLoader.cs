@@ -187,7 +187,7 @@ internal sealed class JqModuleLoader(
                 JsonNode? node = runtime.ReadJsonValue(content.Span[offset..], out int consumed);
                 offset += consumed;
                 budget.ReserveArrayItem(node);
-                array.Add(budget.CopyValue(node, 1, false));
+                array.Add(budget.CopyValue(node, 1));
             }
             return array;
         }
@@ -429,7 +429,7 @@ internal sealed class JqModuleLoader(
         ArgumentNullException.ThrowIfNull(loaded);
         budget.ReserveBytes(192);
         JsonObject baseObject = loaded.Metadata is not null
-            ? (JsonObject)budget.CopyValue(loaded.Metadata, 0, false)
+            ? (JsonObject)budget.CopyValue(loaded.Metadata, 0)
             : new JsonObject();
         var deps = new JsonArray();
         foreach (JqModuleImport import in loaded.Imports)
@@ -437,7 +437,7 @@ internal sealed class JqModuleLoader(
             budget.CheckCancellation();
             budget.ReserveBytes(64 + 160 * 3);
             JsonObject dep = import.Metadata is not null
-                ? (JsonObject)budget.CopyValue(import.Metadata, 2, false)
+                ? (JsonObject)budget.CopyValue(import.Metadata, 2)
                 : new JsonObject();
             dep["relpath"] = JsonValue.Create(import.RelPath);
             if (import.Alias is not null)

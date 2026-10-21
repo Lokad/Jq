@@ -36,6 +36,29 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
     int IComparer<string>.Compare(string? left, string? right) =>
         CompareStrings(left, right, budget.CancellationToken);
 
+    internal IEnumerable<KeyValuePair<string, JsonNode?>> OrderProperties(JsonObject obj, int depth)
+    {
+        _keys ??= new KeyStorage(budget);
+        KeyBuffers buffers = _keys.Get(depth, obj.Count, 0);
+        try
+        {
+            int index = 0;
+            foreach (var property in obj)
+            {
+                budget.CheckCancellation();
+                buffers.Left[index++] = property.Key;
+            }
+            Sort(buffers.Left, obj.Count, _keys.StringOrder);
+            for (index = 0; index < obj.Count; index++)
+            {
+                budget.CheckCancellation();
+                string key = buffers.Left[index];
+                yield return new KeyValuePair<string, JsonNode?>(key, obj[key]);
+            }
+        }
+        finally { Array.Clear(buffers.Left, 0, obj.Count); }
+    }
+
     // Scalar/array comparisons allocate no owner unless object scratch is needed.
     internal static int CompareValues(JsonNode? left, JsonNode? right, JqBudget budget)
     {

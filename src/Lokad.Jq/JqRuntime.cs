@@ -27,13 +27,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted)
     {
-        JsonNode? clean = PrepareJson(node, sorted);
+        using var keyOrder = sorted ? new JqComparer(budget) : null;
         JqJsonBuffer buffer = budget.RentSerializationBuffer();
         try
         {
             using (var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs)))
             {
-                try { WriteJson(clean, ascii, writer); }
+                try { WriteJson(node, ascii, writer, keyOrder); }
                 finally { writer.Reset(); }
             }
             buffer.LowercaseUnicodeEscapes();
@@ -46,21 +46,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
     }
 
-    private JsonNode? PrepareJson(JsonNode? node, bool sorted)
-    {
-        JsonNode? shaped = sorted ? budget.CopyValue(node, 0, true) : node;
-        // The JSON writer rejects non-finite doubles while the reference
-        // renders NaN as null and clamps infinities to the finite
-        // extremes. Sorted containers are already private; otherwise copy only
-        // when normalization needs to change a borrowed container.
-        if (!ContainsNonFinite(shaped, 0)) return shaped;
-        if (shaped is JsonValue scalar && scalar.TryGetValue<double>(out double number))
-            return double.IsNaN(number) ? null : JsonValue.Create(number > 0 ? double.MaxValue : double.MinValue);
-        if (!sorted) shaped = Clone(shaped);
-        SanitizeInPlace(shaped);
-        return shaped;
-    }
-
     private static JsonWriterOptions CreateWriterOptions(bool ascii, int? indent, bool tabs) => new()
         {
             Encoder = ascii ? JavaScriptEncoder.Default : JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -71,73 +56,55 @@ internal sealed partial class JqRuntime(JqBudget budget)
             NewLine = "\n"
         };
 
-    private void WriteJson(JsonNode? clean, bool ascii, Utf8JsonWriter writer)
+    private void WriteJson(JsonNode? node, bool ascii, Utf8JsonWriter writer, JqComparer? keyOrder)
     {
-        if (clean == null) writer.WriteNullValue();
-        else clean.WriteTo(writer, ascii ? AsciiJson : CompactJson);
+        WriteValue(node, 0, budget, ascii, writer, keyOrder);
         writer.Flush();
         budget.CheckCancellation();
-    }
 
-    private bool ContainsNonFinite(JsonNode? node, int depth)
-    {
-        budget.CheckCancellation();
-        JqRecursion.CheckValueDepth(node, depth);
-        if (node is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
-            return true;
-        if (node is JsonArray array)
+        static void WriteValue(JsonNode? value, int depth, JqBudget budget, bool ascii,
+            Utf8JsonWriter writer, JqComparer? keyOrder)
         {
-            foreach (JsonNode? child in array)
-                if (ContainsNonFinite(child, depth + 1))
-                    return true;
-            return false;
-        }
-        if (node is JsonObject obj)
-        {
-            foreach (var property in obj)
-                if (ContainsNonFinite(property.Value, depth + 1))
-                    return true;
-            return false;
-        }
-        return false;
-    }
-
-    private void SanitizeInPlace(JsonNode? node)
-    {
-        budget.CheckCancellation();
-        if (node is JsonArray array)
-        {
-            for (var index = 0; index < array.Count; index++)
+            budget.CheckCancellation();
+            JqRecursion.CheckValueDepth(value, depth);
+            if (value is JsonArray array)
             {
-                JsonNode? child = array[index];
-                if (child is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
-                    array[index] = double.IsNaN(number) ? null : JsonValue.Create(number > 0 ? double.MaxValue : double.MinValue);
-                else
-                    SanitizeInPlace(child);
+                writer.WriteStartArray();
+                foreach (JsonNode? child in array) WriteValue(child, depth + 1, budget, ascii, writer, keyOrder);
+                writer.WriteEndArray();
             }
-        }
-        else if (node is JsonObject obj)
-        {
-            List<string> keys = new List<string>(obj.Count);
-            foreach (var property in obj)
-                keys.Add(property.Key);
-            foreach (string key in keys)
+            else if (value is JsonObject obj)
             {
-                JsonNode? child = obj[key];
-                if (child is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
-                    obj[key] = double.IsNaN(number) ? null : JsonValue.Create(number > 0 ? double.MaxValue : double.MinValue);
-                else
-                    SanitizeInPlace(child);
+                writer.WriteStartObject();
+                IEnumerable<KeyValuePair<string, JsonNode?>> properties = keyOrder is not null && obj.Count > 1
+                    ? keyOrder.OrderProperties(obj, depth) : obj;
+                foreach (var property in properties)
+                {
+                    budget.CheckCancellation();
+                    writer.WritePropertyName(property.Key);
+                    WriteValue(property.Value, depth + 1, budget, ascii, writer, keyOrder);
+                }
+                writer.WriteEndObject();
             }
+            else if (value is null)
+            {
+                writer.WriteNullValue();
+            }
+            else if (value is JsonValue scalar && scalar.TryGetValue<double>(out double number) && !double.IsFinite(number))
+            {
+                if (double.IsNaN(number)) writer.WriteNullValue();
+                else writer.WriteNumberValue(number > 0 ? double.MaxValue : double.MinValue);
+            }
+            else value.WriteTo(writer, ascii ? AsciiJson : CompactJson);
         }
     }
 
     internal JsonNode? Clone(JsonNode? node)
     {
-        return budget.CopyValue(node, 0, false);
+        return budget.CopyValue(node, 0);
     }
 
-    internal JsonNode? Clone(JsonNode? node, int depth) => budget.CopyValue(node, depth, false);
+    internal JsonNode? Clone(JsonNode? node, int depth) => budget.CopyValue(node, depth);
 
     // Embeds a possibly-shared node into a fresh container. Pass-through
     // evaluation can now yield live references (identity shares its input
@@ -148,7 +115,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (node is null || node.Parent is null)
             return node;
-        return budget.CopyValue(node, 0, false);
+        return budget.CopyValue(node, 0);
     }
 
     // Single-pass decode: builds values while charging, so duplicate object
@@ -644,7 +611,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             {
                 JsonNode? selected = replaced ? incoming : property.Value;
                 if (selected is JsonValue) budget.ReserveBytes(64);
-                merged.Add(property.Key, budget.CopyValue(selected, depth + 1, false));
+                merged.Add(property.Key, budget.CopyValue(selected, depth + 1));
             }
         }
         foreach (var property in right)
@@ -652,7 +619,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             budget.CheckCancellation();
             if (left.ContainsKey(property.Key)) continue;
             budget.ReserveObjectItem(property.Value);
-            merged.Add(property.Key, budget.CopyValue(property.Value, depth + 1, false));
+            merged.Add(property.Key, budget.CopyValue(property.Value, depth + 1));
         }
         return merged;
     }

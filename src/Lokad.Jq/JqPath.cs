@@ -139,9 +139,9 @@ internal static class JqPaths
         foreach (JqValueSegment segment in segments)
         {
             if (segment is SliceObjectSegment slice)
-                path.Add(budget.CopyValue(slice.Raw, 1, false));
+                path.Add(budget.CopyValue(slice.Raw, 1));
             else if (segment is InvalidSegment invalid)
-                path.Add(budget.CopyValue(invalid.Raw, 1, false));
+                path.Add(budget.CopyValue(invalid.Raw, 1));
             else
             {
                 if (segment is SliceSegment) budget.ReserveBytes(384);
@@ -177,7 +177,7 @@ internal static class JqPaths
             }
             else
             {
-                segments.Add(new InvalidSegment(context.Budget.CopyValue(element, 0, false)));
+                segments.Add(new InvalidSegment(context.Budget.CopyValue(element, 0)));
             }
         }
         return segments;
@@ -262,7 +262,7 @@ internal static class JqPaths
     internal static JsonObject CloneSliceObject(JsonObject source, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(source);
-        var clone = (JsonObject)budget.CopyValue(source, 0, false);
+        var clone = (JsonObject)budget.CopyValue(source, 0);
         NormalizeSliceNaN(clone);
         return clone;
     }
@@ -522,17 +522,17 @@ internal static class JqPathUpdates
                 for (int index = 0; index < frame.From; index++)
                 {
                     context.Budget.ReserveArrayItem(arr[index]);
-                    rebuilt.Add(context.Budget.CopyValue(arr[index], 1, false));
+                    rebuilt.Add(context.Budget.CopyValue(arr[index], 1));
                 }
                 foreach (JsonNode? piece in pieces)
                 {
                     context.Budget.ReserveArrayItem(piece);
-                    rebuilt.Add(context.Budget.CopyValue(piece, 1, false));
+                    rebuilt.Add(context.Budget.CopyValue(piece, 1));
                 }
                 for (int index = frame.To; index < arr.Count; index++)
                 {
                     context.Budget.ReserveArrayItem(arr[index]);
-                    rebuilt.Add(context.Budget.CopyValue(arr[index], 1, false));
+                    rebuilt.Add(context.Budget.CopyValue(arr[index], 1));
                 }
                 return rebuilt;
             default:
@@ -547,12 +547,12 @@ internal static class JqPathUpdates
 
     private static JsonObject CloneObject(JsonObject source, JqContext context)
     {
-        return (JsonObject)context.Budget.CopyValue(source, 0, false);
+        return (JsonObject)context.Budget.CopyValue(source, 0);
     }
 
     private static JsonArray CloneArray(JsonArray source, JqContext context)
     {
-        return (JsonArray)context.Budget.CopyValue(source, 0, false);
+        return (JsonArray)context.Budget.CopyValue(source, 0);
     }
 
     // Pads through the resolved index so frame application always lands
@@ -565,7 +565,7 @@ internal static class JqPathUpdates
         context.Budget.ReserveBytes(checked(24L * padding));
         JsonArray padded;
         if (source is not null)
-            padded = (JsonArray)context.Budget.CopyValue(source, 0, false);
+            padded = (JsonArray)context.Budget.CopyValue(source, 0);
         else
         {
             context.Budget.ReserveBytes(64);
@@ -586,7 +586,7 @@ internal static class JqPathUpdates
         for (int index = from; index < to; index++)
         {
             if (source[index] is JsonValue) context.Budget.ReserveBytes(64);
-            slice.Add(context.Budget.CopyValue(source[index], 1, false));
+            slice.Add(context.Budget.CopyValue(source[index], 1));
         }
         return slice;
     }
@@ -655,7 +655,7 @@ internal static class JqPathReads
                         for (int position = from; position < to; position++)
                         {
                             context.Budget.ReserveArrayItem(array[position]);
-                            part.Add(context.Budget.CopyValue(array[position], 1, false));
+                            part.Add(context.Budget.CopyValue(array[position], 1));
                         }
                         current = part;
                     }
@@ -679,7 +679,7 @@ internal static class JqPathReads
                         for (int position = rawFrom; position < rawTo; position++)
                         {
                             context.Budget.ReserveArrayItem(rawArray[position]);
-                            rawPart.Add(context.Budget.CopyValue(rawArray[position], 1, false));
+                            rawPart.Add(context.Budget.CopyValue(rawArray[position], 1));
                         }
                         current = rawPart;
                     }
@@ -844,7 +844,7 @@ internal static class JqPathDeletes
                 // An unchanged subtree keeps its parent; detach the copy the
                 // rebuilt parent adopts so missing or invalid paths that
                 // delete nothing still settle staged instead of escaping.
-                result = context.Budget.CopyValue(result, 0, false);
+                result = context.Budget.CopyValue(result, 0);
             }
             stack.Peek().Replacements.Add((slot, result));
         }
@@ -1029,7 +1029,7 @@ internal static class JqPathDeletes
                 if (removed.Contains(property.Key))
                     continue;
                 context.Budget.ReserveObjectItem(property.Value);
-                rebuilt.Add(property.Key, replaced.TryGetValue(property.Key, out JsonNode? next) ? context.Runtime.Detach(next) : context.Budget.CopyValue(property.Value, 1, false));
+                rebuilt.Add(property.Key, replaced.TryGetValue(property.Key, out JsonNode? next) ? context.Runtime.Detach(next) : context.Budget.CopyValue(property.Value, 1));
             }
             foreach (var entry in replaced)
                 if (!rebuilt.ContainsKey(entry.Key))
@@ -1075,7 +1075,7 @@ internal static class JqPathDeletes
                 if (removed.Contains(position))
                     continue;
                 context.Budget.ReserveArrayItem(arr[position]);
-                rebuilt.Add(replaced.TryGetValue(position, out JsonNode? next) ? context.Runtime.Detach(next) : context.Budget.CopyValue(arr[position], 1, false));
+                rebuilt.Add(replaced.TryGetValue(position, out JsonNode? next) ? context.Runtime.Detach(next) : context.Budget.CopyValue(arr[position], 1));
             }
             return rebuilt;
         }
