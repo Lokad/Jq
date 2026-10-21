@@ -16,6 +16,9 @@ internal sealed class JqContext(
     public JqRuntime Runtime { get; } = new(budget);
     public JqRegexCache Regexes { get; } = new(budget);
 
+    private uint _nextLabel;
+    internal uint NextLabel() => unchecked(_nextLabel++);
+
     // Explicit host clock for time builtins; null means the capability is absent.
     public JqClock? Clock { get; init; }
 

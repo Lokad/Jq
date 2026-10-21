@@ -298,8 +298,8 @@ public sealed partial class JqTests
     [InlineData("0", "[label $o | (label $i | (1, break $i)), 2]", "[\n  1,\n  2\n]\n")]
     [InlineData("0", "[label $o | (label $i | (1, break $o)), 2]", "[\n  1\n]\n")]
     [InlineData("0", "5 | label $x | (1 | break $x)", "")]
-    [InlineData("0", "[label $o | ((1, break $o)?), 2]", "[\n  1\n]\n")]
-    [InlineData("0", "[label $o | (try break $o catch 42)]", "[]\n")]
+    [InlineData("0", "[label $o | ((1, break $o)?), 2]", "[\n  1,\n  2\n]\n")]
+    [InlineData("0", "[label $o | (try break $o catch 42)]", "[\n  42\n]\n")]
     [InlineData("0", "label $x | def f: break $x; f", "")]
     public async Task Jq_LabelBreakAbandonsCleanly(string input, string filter, string expected)
     {

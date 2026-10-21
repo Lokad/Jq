@@ -87,15 +87,17 @@ internal sealed class JqEnvironment
     internal static JqEnvironment CreateRoot(IReadOnlyDictionary<string, JsonNode?> variables) =>
         new(variables);
 
-    private JqEnvironment(JqEnvironment parent, object label)
+    private JqEnvironment(JqEnvironment parent, object label, uint labelId)
     {
         _root = parent._root;
         _parent = parent;
         _label = label;
+        LabelId = labelId;
     }
 
     // The environment node identifies one activation of a lexical label.
-    internal JqEnvironment ExtendLabel(object label) => new(this, label);
+    internal uint LabelId { get; }
+    internal JqEnvironment ExtendLabel(object label, uint labelId) => new(this, label, labelId);
 
     internal bool TryGetLabel(object label, out JqEnvironment? activation)
     {

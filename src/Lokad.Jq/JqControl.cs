@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
@@ -29,9 +30,9 @@ internal sealed class JqHaltException(int ExitCode, string? StderrText) : Except
 }
 
 // `break $label`: abandons the current computation up to the matching
-// `label`, which then yields nothing further. Never an error value, so
-// `try`, `?`, quotas, and cancellation never interact with it.
-internal sealed class JqBreakException(JqEnvironment target) : Exception("break")
+// `label`, which then yields nothing further. Like the reference label error,
+// an intervening try/optional scope can intercept it.
+internal sealed class JqBreakException(JqEnvironment target) : JqException("break")
 {
     internal JqEnvironment Target { get; } = target;
 }
@@ -39,7 +40,7 @@ internal sealed class JqBreakException(JqEnvironment target) : Exception("break"
 // `try BODY` or `try BODY catch HANDLER`: catchable evaluation failures
 // keep earlier outputs and either vanish (no handler) or run the handler
 // with the error payload as input. Quota, compile, cancellation,
-// host, halt, break, and tail-call signals always propagate.
+// host, halt, and tail-call signals always propagate.
 internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
@@ -62,9 +63,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
                 if (Handler is not null)
                 {
                     faulted = true;
-                    failure = exception is JqErrorException user
-                        ? user.Payload
-                        : JsonValue.Create(exception.Message);
+                    failure = JqErrors.Payload(exception, context.Budget);
                 }
             }
             if (faulted)
@@ -98,7 +97,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
                 if (Handler is not null)
                 {
                     faulted = true;
-                    JsonNode? payload = exception is JqErrorException user ? user.Payload : JsonValue.Create(exception.Message);
+                    JsonNode? payload = JqErrors.Payload(exception, context.Budget);
                     bool identical = ReferenceEquals(payload, pair.Value)
                         || ((payload is null || (payload is JsonValue scalar && !JqRuntime.TryGetString(scalar, out _)))
                             && PathIntact(context.Runtime, pair.Value, payload));
@@ -141,13 +140,17 @@ internal sealed class LabelFilter(object Label, JqFilter Body) : JqFilter
         storage.ReserveBytes(128, 1);
         try
         {
-            JqEnvironment scope = environment.ExtendLabel(Label);
+            JqEnvironment scope = environment.ExtendLabel(Label, context.NextLabel());
             using IEnumerator<T> results = evaluate(scope).GetEnumerator();
             while (true)
             {
                 bool moved;
                 try { moved = results.MoveNext(); }
                 catch (JqBreakException broken) when (ReferenceEquals(broken.Target, scope)) { yield break; }
+                catch (JqErrorException error) when (error.Payload is JsonObject { Count: 1 } payload
+                    && payload.TryGetPropertyValue("__jq", out JsonNode? id)
+                    && id?.GetValueKind() == JsonValueKind.Number && JqRuntime.Number(id) == scope.LabelId)
+                { yield break; }
                 if (!moved) yield break;
                 yield return results.Current;
             }

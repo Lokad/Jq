@@ -14,7 +14,8 @@ String search indices count Unicode scalars. String and array searches report
 overlapping matches.
 Loops preserve depth-first condition multiplicity, effects and lazy termination.
 Path-mode `label`/`break`, `try` and `?` preserve earlier outputs and payload
-identity. Labels retain lexical binding across shadowing and captured calls. Keyed collections require arrays after evaluating key effects; `min_by`
+identity. Labels retain lexical binding across shadowing and captured calls;
+intervening catch/optional scopes can intercept breaks. Keyed collections require arrays after evaluating key effects; `min_by`
 keeps the first minimum and `max_by` the last maximum. Slice deletion preserves
 slice-relative indices and mixed path forms. `join` requires array input; null
 elements and empty arrays remain valid.

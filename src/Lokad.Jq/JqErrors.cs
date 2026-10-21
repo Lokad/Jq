@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
@@ -9,6 +10,18 @@ namespace Lokad.Jq;
 // failures are catchable by optional suppression, pattern alternation and try/catch.
 internal static class JqErrors
 {
+    internal static JsonNode? Payload(Exception exception, JqBudget budget)
+    {
+        if (exception is JqErrorException user) return user.Payload;
+        if (exception is JqBreakException broken)
+        {
+            // Only an observing catch needs a JSON representation of the label.
+            budget.ReserveBytes(224);
+            return new JsonObject { ["__jq"] = JsonValue.Create((long)broken.Target.LabelId) };
+        }
+        return JsonValue.Create(exception.Message);
+    }
+
     internal static bool IsCatchable(Exception exception) =>
         exception is JsonException or FormatException or ArgumentException or OverflowException
         || (exception is JqException && exception is not JqQuotaException && exception is not JqCompileException);

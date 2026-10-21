@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Preserve pending source/condition outputs and active control scopes around
+  recursive calls. Resolve labels lexically across captures and shadowing;
+  allow catch/optional scopes to intercept breaks. Deep recursion retaining
+  scopes now obeys the existing depth guard; proven tails remain flat.
+- Resolve module candidates lazily and seed compiler functions into one admitted
+  dictionary. Preflight path copies, scan components without split inventories,
+  and observe cancellation before copying large metadata sets.
+
 - Correct mixed and nested slice deletion. Reuse admitted ancestor frames and
   shared path ranges; borrow raw path keys without deep copies or normalization
   walks. Preserve nonfinite bounds, cancellation, deep paths and pending I/O.
