@@ -1580,10 +1580,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode Join(JsonNode? input, JsonNode? separator)
     {
-        if (input is null)
-            return JsonValue.Create(string.Empty);
         if (input is not JsonArray arr)
-            throw new JqRuntimeException("cannot iterate over " + TypeName(input));
+            throw new JqRuntimeException("Cannot iterate over " + TypeName(input) + " (" + TruncatedDump(input) + ")");
         bool hasSepText = separator is null;
         string sepText = string.Empty;
         if (separator is not null && TryGetString(separator, out string? sepCandidate) && sepCandidate is not null)
