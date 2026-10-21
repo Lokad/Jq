@@ -237,6 +237,14 @@ internal static class GovernorRunner
         Add("range-bound-products", 13, ["-nc", "[range((0,1);(2,3);(1,2))]"], "", "[0,1,0,0,1,2,0,2,1,1,1,2,1]\n");
         Add("borrowed-selectors", 1000, ["-c", "arrays | values | abs | length"], payload, "1000\n");
         Add("borrowed-extrema", 1000, ["-c", "min | length"], "[" + payload + "]", "1000\n");
+        Add("descent-first-child", records, ["-c", "limit(2; ..) | null"], nullRows, "null\nnull\n");
+        Add("paths-first-child", records, ["-c", "first(paths)"], nullRows, "[0]\n");
+        Add("tostream-first-event", 1024, ["-c", "first(tostream)"], wideObject, "[[\"k0\"],0]\n");
+        Add("flatten-flat-nulls", records, ["-c", "flatten | length"], nullRows, "1000\n");
+        Add("flatten-nested-nulls", records, ["-c", "flatten | length"], "[" + nullRows + "]", "1000\n");
+        Add("sorted-borrowed-outputs", records, ["-ncS", "{z:1,a:2} as $x | range(1000) | $x"], "",
+            string.Concat(Enumerable.Repeat("{\"a\":2,\"z\":1}\n", records)));
+        Add("sort-nulls", records, ["-c", "sort | length"], nullRows, "1000\n");
         Add("add-array-fragments", records, ["-c", "add | length"],
             "[" + string.Join(',', Enumerable.Range(0, records).Select(value => "[" + value.ToString(CultureInfo.InvariantCulture) + "]")) + "]", "1000\n");
         Add("walk-null-cursors", records, ["-c", "walk(.) | length"], nullRows, "1000\n");
