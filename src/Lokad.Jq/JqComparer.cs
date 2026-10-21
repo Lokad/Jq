@@ -8,7 +8,7 @@ namespace Lokad.Jq;
 // One ordering operation reuses its scratch. Recursive object comparisons need
 // separate key buffers at each live depth; no input or sorted-key cache survives.
 internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
-    IComparer<IReadOnlyList<JsonNode?>>, IComparer<string>, IDisposable
+    IComparer<IReadOnlyList<JsonNode?>>, IDisposable
 {
     private KeyStorage? _keys;
 
@@ -32,9 +32,6 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
         }
         return left.Count.CompareTo(right.Count);
     }
-
-    int IComparer<string>.Compare(string? left, string? right) =>
-        CompareStrings(left, right, budget.CancellationToken);
 
     internal IEnumerable<KeyValuePair<string, JsonNode?>> OrderProperties(JsonObject obj, int depth)
     {

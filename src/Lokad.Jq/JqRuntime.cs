@@ -1051,21 +1051,14 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (input is JsonObject obj)
         {
-            budget.ReserveBytes(112L * obj.Count);
-            var names = new List<string>();
-            foreach (var property in obj)
-            {
-                budget.CheckCancellation();
-                names.Add(property.Key);
-            }
+            budget.ReserveBytes(64 + 88L * obj.Count);
             using var comparer = sorted ? new JqComparer(budget) : null;
-            IEnumerable<string> ordered = comparer is null ? names
-                : JqComparer.OrderBy(names, static name => name, (IComparer<string>)comparer);
+            IEnumerable<KeyValuePair<string, JsonNode?>> properties = comparer is null ? obj : comparer.OrderProperties(obj, 0);
             var keys = new JsonArray();
-            foreach (string name in ordered)
+            foreach (var property in properties)
             {
                 budget.CheckCancellation();
-                keys.Add(JsonValue.Create(name));
+                keys.Add(JsonValue.Create(property.Key));
             }
             return keys;
         }
