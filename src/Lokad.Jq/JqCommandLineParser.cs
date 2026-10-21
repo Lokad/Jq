@@ -134,10 +134,21 @@ internal static class JqCommandLineParser
                 libraryDirs.Add(JqPathResolution.ResolveArgument(library, currentDirectory));
             }
 
+            // Argument values are private to this binding. ARGS owns their
+            // parent links; the variable dictionary borrows the same values.
+            var positionalArguments = new JsonArray();
+            foreach (JsonNode? value in special.Positional)
+            {
+                budget.CheckCancellation();
+                positionalArguments.Add(value);
+            }
             var namedArguments = new JsonObject();
-            var argsObject = new JsonObject { ["positional"] = new JsonArray(special.Positional.Select(value => runtime.Clone(value)).ToArray()), ["named"] = namedArguments };
+            var argsObject = new JsonObject { ["positional"] = positionalArguments, ["named"] = namedArguments };
             foreach (var (key, value) in special.Variables)
-                namedArguments[key] = runtime.Clone(value);
+            {
+                budget.CheckCancellation();
+                namedArguments[key] = value;
+            }
             special.Variables["ARGS"] = argsObject;
             // Snapshot exported variables for $ENV unless the caller bound the name explicitly.
             if (!special.Variables.ContainsKey("ENV"))

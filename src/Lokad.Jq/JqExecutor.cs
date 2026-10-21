@@ -387,7 +387,7 @@ internal static class JqExecutor
                     && argsObject.TryGetPropertyValue("named", out JsonNode? named)
                     && named is JsonObject namedObject)
                 {
-                    namedObject[name] = context.Runtime.Clone(value);
+                    namedObject[name] = value;
                 }
             }
             catch (Exception exception) when (exception is not OperationCanceledException
