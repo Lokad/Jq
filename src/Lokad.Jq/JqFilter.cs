@@ -547,7 +547,6 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         Func<CallFrame, IEnumerable<T>> evaluate)
     {
         JqFunctionDefinition definition = closure.Definition;
-        bool capturesFilters = definition.Parameters.Any(p => !p.IsValue);
         using var ownedStorage = context.Budget.TemporaryStorage is null ? new JqStorage(context.Budget.MemoryBudget) : null;
         JqStorage storage = context.Budget.TemporaryStorage ?? ownedStorage
             ?? throw new InvalidOperationException("Missing call storage owner.");
@@ -610,14 +609,6 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                             IEnumerator<T> completed = outputs;
                             outputs = null;
                             completed.Dispose();
-                            if (capturesFilters)
-                            {
-                                // Filter arguments retain earlier lexical scopes until this driver ends.
-                                long bytes = 256L + 192L * definition.Arity;
-                                context.Budget.CheckCancellation();
-                                storage.ReserveBytes(bytes, definition.Arity + 1);
-                                capturedBytes = checked(capturedBytes + bytes);
-                            }
                             if (current is not null)
                             {
                                 if (single)
@@ -688,6 +679,24 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
 
         IEnumerable<CallFrame> Frames(TailCallSignal next)
         {
+            // Direct forwarding borrows the original closure; it does not retain
+            // another invocation environment. Only new lexical expressions can
+            // keep the preceding frame alive after a tail replacement.
+            if (!ReferenceEquals(next, request))
+            {
+                for (int i = 0; i < definition.Arity; i++)
+                {
+                    context.Budget.CheckCancellation();
+                    if (!definition.Parameters[i].IsValue
+                        && next.Args[i] is not (FilterParamCallFilter or IdentityFilter or LiteralFilter))
+                    {
+                        long bytes = 256L + 192L * definition.Arity;
+                        storage.ReserveBytes(bytes, definition.Arity + 1);
+                        capturedBytes = checked(capturedBytes + bytes);
+                        break;
+                    }
+                }
+            }
             var values = new List<JqFilter>();
             var positions = new List<int>();
             var filters = new JqFilterClosure?[definition.Arity];
@@ -699,7 +708,12 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                     values.Add(next.Args[i]);
                     positions.Add(i);
                 }
-                else filters[i] = new JqFilterClosure(next.Args[i], next.Environment);
+                else filters[i] = next.Args[i] switch
+                {
+                    FilterParamCallFilter forwarded => forwarded.Resolve(next.Environment),
+                    IdentityFilter or LiteralFilter => new JqFilterClosure(next.Args[i], context.RootEnvironment),
+                    _ => new JqFilterClosure(next.Args[i], next.Environment),
+                };
             }
             foreach (var source in Sources())
                 foreach (JsonNode?[] combo in Combine(source.Value))
@@ -793,8 +807,7 @@ internal sealed class FilterParamCallFilter(string Name) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (!environment.TryGetFilter(Name, out JqFilterClosure? closure) || closure is null)
-            throw new JqException($"undefined filter {Name}");
+        JqFilterClosure closure = Resolve(environment);
         foreach (JsonNode? value in closure.Filter.Evaluate(input, context, closure.Environment))
             yield return value;
     }
@@ -803,10 +816,16 @@ internal sealed class FilterParamCallFilter(string Name) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (!environment.TryGetFilter(Name, out JqFilterClosure? closure) || closure is null)
-            throw new JqException($"undefined filter {Name}");
+        JqFilterClosure closure = Resolve(environment);
         foreach (JqValuePath next in closure.Filter.EvaluatePaths(pair, context, closure.Environment))
             yield return next;
+    }
+
+    internal JqFilterClosure Resolve(JqEnvironment environment)
+    {
+        if (!environment.TryGetFilter(Name, out JqFilterClosure? closure) || closure is null)
+            throw new JqException($"undefined filter {Name}");
+        return closure;
     }
 }
 

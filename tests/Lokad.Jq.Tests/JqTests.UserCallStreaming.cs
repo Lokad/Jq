@@ -201,4 +201,60 @@ public sealed partial class JqTests
         Assert.Equal(0, memory.ActiveScopes);
     }
 
+    [Theory]
+    [InlineData("g", "g", "42\n")]
+    [InlineData("g", "42", "42\n")]
+    [InlineData(".", "g", "null\n")]
+    [InlineData(".", "42", "null\n")]
+    public async Task Jq_ForwardedFiltersStayFlatUnderSmallAllowance(string result, string next, string expected)
+    {
+        var root = new BenchmarkMemoryBudget(64 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
+            "def f(g;$n): if $n==0 then " + result + " else f(" + next + ";$n-1) end; f(42;50000)")));
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 150);
+        Assert.Equal(0, memory.Counts.Refusals);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData("def f(g;$n): if $n==0 then g,g else f(g;$n-1) end; 7 as $x | f($x|debug;1000)", "7\n7\n", "[\"DEBUG:\",7]\n[\"DEBUG:\",7]\n")]
+    [InlineData("def f(g;$n): if $n==0 then g else f(g;$n-1) end; {a:42} | path(f(.a;1000))", "[\"a\"]\n", "")]
+    [InlineData("def f(g;$n): if $n==0 then g else f(g;$n-1) end; first(f((1,error(\"late\"));1000))", "1\n", "")]
+    [InlineData("def f(g;h;$n): if $n==0 then g,h else f(h;g;$n-1) end; f(1;2;1001)", "2\n1\n", "")]
+    [InlineData("def f(g;$n): if $n==0 then g else f($n;$n-1) end; f(0;3)", "1\n", "")]
+    public async Task Jq_ForwardedFiltersKeepLexicalLazyAndPathBehavior(string source, string expected, string diagnostic)
+    {
+        var root = new BenchmarkMemoryBudget(128 * 1024);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
+        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task Jq_ForwardedInfiniteFilterTailObservesCancellation()
+    {
+        var root = new BenchmarkMemoryBudget(64 * 1024);
+        using var cancellation = new CancellationTokenSource();
+        var host = new MockFileSystem();
+        host.AddFile("/input", "null");
+        host.BeforeByteAppend = () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(50));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
+            "\"ready\", (def f(g): f(g); f(.))", "/input")));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Task.Run(() => command.ExecuteAsync(host, root, cancellation.Token)).WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal("\"ready\"\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
 }
