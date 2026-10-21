@@ -1236,19 +1236,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         if (input is not JsonArray arr)
             throw new JqException("cannot be sorted, as it is not an array");
-        budget.ReserveBytes(40L * arr.Count);
-        var ordered = new List<JsonNode?>(arr.Count);
-        foreach (JsonNode? element in arr)
-        {
-            budget.CheckCancellation();
-            ordered.Add(element);
-        }
+        budget.ReserveBytes(32L * arr.Count);
         var result = new JsonArray();
         budget.CheckCancellation();
         using var comparer = new JqComparer(budget);
         JsonNode? previous = null;
         bool first = true;
-        foreach (JsonNode? element in JqComparer.OrderBy(ordered, static element => element, (IComparer<JsonNode?>)comparer))
+        foreach (JsonNode? element in JqComparer.OrderBy(arr, static element => element, (IComparer<JsonNode?>)comparer))
         {
             budget.CheckCancellation();
             if (unique && !first && JsonEquals(previous, element)) continue;
