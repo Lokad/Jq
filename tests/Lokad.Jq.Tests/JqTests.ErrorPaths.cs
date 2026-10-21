@@ -79,13 +79,19 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("try error catch length")]
+    [InlineData("min_by(.)")]
+    [InlineData("max_by(.)")]
+    [InlineData("keys | length")]
+    [InlineData("keys_unsorted | length")]
+    [InlineData("length | floor")]
     [InlineData("[path(label $out | (.a,break $out))] | length")]
     [InlineData("[path((.a,error(\"late\"))?)] | length")]
     public async Task Jq_ErrorAndPathControlKeepLongStreamsBounded(string source)
     {
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
-        host.AddFile("/input", string.Concat(Enumerable.Repeat("{\"a\":1}\n", 2500)));
+        bool extrema = source is "min_by(.)" or "max_by(.)";
+        host.AddFile("/input", string.Concat(Enumerable.Repeat(extrema ? "[1,1]\n" : "{\"a\":1}\n", 2500)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", source, "/input")));
         Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("1\n", 2500)), host.GetOutput(JqFileDescriptor.StdOut));

@@ -1848,6 +1848,13 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
         }
 
 
+        if (args.Count == 0)
+        {
+            foreach (JsonNode? output in EvaluateWith(Array.Empty<JsonNode?>()))
+                yield return output;
+            yield break;
+        }
+
         // Cartesian argument streams: the last argument is outer (slow) and
         // the first argument inner (fast), matching reversed call prelude
         // order with backtracking. An empty argument yields no outputs.
@@ -1866,7 +1873,8 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             {
                 if (index < 0)
                 {
-                    yield return (JsonNode?[])current.Clone();
+                    // EvaluateWith finishes before this vector is advanced.
+                    yield return current;
                     yield break;
                 }
                 foreach (var value in args[index].Evaluate(input, context, environment))
