@@ -1485,7 +1485,8 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
             yield return new JsonObject();
             yield break;
         }
-        context.Budget.ReserveBytes(128L * properties.Count);
+        using var workspace = new JqScopeStorage(context.Budget);
+        workspace.Reserve(128L * properties.Count, properties.Count);
         var fields = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
         var iterators = new IEnumerator<(string Key, JsonNode? Value)>?[properties.Count];
         var keys = new string?[properties.Count];
