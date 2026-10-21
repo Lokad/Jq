@@ -22,6 +22,7 @@ slice-relative indices and mixed path forms. Computed index/slice paths and
 updates preserve the enclosing input and key-major effects/results; `?` leaves
 key-expression errors visible. `join` requires array input; null
 elements and empty arrays remain valid.
+`JOIN` lookups follow ordinary indexing, including array searches and slice keys.
 
 ## Known differences and limits
 

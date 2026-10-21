@@ -4,6 +4,8 @@
 
 - Check cancellation throughout containment searches and avoid per-comparison
   closures and boxed enumerators.
+- Use ordinary indexing in `JOIN`, including array searches, slice keys and
+  invalid-key errors on null.
 - Correct computed index/slice paths and updates: preserve the enclosing input,
   key-major effects/results, and errors in optional index expressions.
 - Share named argument identity with `$ARGS`, avoid duplicate argument/constant

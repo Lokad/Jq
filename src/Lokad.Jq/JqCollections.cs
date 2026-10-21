@@ -840,7 +840,7 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
             };
             foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
             {
-                JsonNode? lookup = LookupIndex(idx, key);
+                _ = JqPathReads.TryIndex(idx, key, false, context, out JsonNode? lookup);
                 context.Budget.ReserveArrayItem(lookup);
                 pair.Add(context.Budget.CopyValue(lookup, depth + 1));
             }
@@ -848,21 +848,6 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
         }
     }
 
-    private static JsonNode? LookupIndex(JsonNode? idx, JsonNode? key)
-    {
-        if (idx is null)
-            return null;
-        if (idx is JsonObject obj && TryGetString(key, out string? name) && name is not null)
-            return obj.TryGetPropertyValue(name, out JsonNode? child) ? child : null;
-        if (idx is JsonArray arr && JqPaths.TryGetIndex(key, out long index, out bool isNaN))
-        {
-            if (isNaN)
-                return null;
-            long resolved = index < 0 ? arr.Count + index : index;
-            return resolved >= 0 && resolved < arr.Count ? arr[(int)resolved] : null;
-        }
-        throw new JqRuntimeException("cannot index " + TypeName(idx));
-    }
 }
 
 // `any(generator; condition)`: true on the first truthy condition output,
