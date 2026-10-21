@@ -162,99 +162,80 @@ internal sealed class JqParser(
 
     private bool TryGetConstant(JqFilter filter, out JsonNode? value)
     {
-        ArgumentNullException.ThrowIfNull(filter);
-        if (filter is LiteralFilter literal)
-        {
-            value = _budget.CopyValue(literal.Value, 0);
-            return true;
-        }
-        if (filter is ArrayFilter array)
-        {
-            if (TryCollectConstantValues(array, out List<JsonNode?>? items) && items is not null)
-            {
-                var result = new JsonArray();
-                foreach (var item in items)
-                {
-                    _budget.ReserveArrayItem(item);
-                    result.Add(_budget.CopyValue(item, 1));
-                }
-                value = result;
-                return true;
-            }
-            value = null;
-            return false;
-        }
-        if (filter is ObjectFilter obj)
-        {
-            if (TryGetConstantObject(obj, out JsonObject? built) && built is not null)
-            {
-                value = built;
-                return true;
-            }
-            value = null;
-            return false;
-        }
-        value = null;
-        return false;
-    }
-
-    private bool TryCollectConstantValues(ArrayFilter array, out List<JsonNode?>? values)
-    {
-        ArgumentNullException.ThrowIfNull(array);
-        var collected = new List<JsonNode?>();
-        if (!TryCollectCommaValues(array.Item, collected))
-        {
-            values = null;
-            return false;
-        }
-        values = collected;
-        return true;
-    }
-
-    private bool TryCollectCommaValues(JqFilter filter, List<JsonNode?> collected)
-    {
-        ArgumentNullException.ThrowIfNull(filter);
-        ArgumentNullException.ThrowIfNull(collected);
-        _budget.ReserveBytes(16L * _tokens.Count);
+        // Build each private constant once. A shared pending stack flattens
+        // comma generators without sizing every nested array to the program.
+        using var traversal = new JqScopeStorage(_budget);
         var pending = new Stack<JqFilter>();
-        pending.Push(filter);
-        while (pending.TryPop(out var current))
+        long stackBytes = 0;
+        int stackCapacity = 0;
+        return Build(filter, 0, out value);
+
+        bool Build(JqFilter node, int depth, out JsonNode? built)
         {
             _budget.CheckCancellation();
-            if (current is CommaFilter comma)
+            built = null;
+            if (node is LiteralFilter literal)
             {
-                pending.Push(comma.Right);
-                pending.Push(comma.Left);
-                continue;
+                built = _budget.CopyValue(literal.Value, depth);
+                return true;
             }
-            if (!TryGetConstant(current, out JsonNode? value)) return false;
-            _budget.ReserveBytes(24);
-            collected.Add(_budget.CopyValue(value, 0));
+            if (node is ArrayFilter array)
+            {
+                JqRecursion.CheckDepth(depth + 1, "value nesting limit exceeded");
+                _budget.ReserveBytes(64);
+                var result = new JsonArray();
+                int boundary = pending.Count;
+                Push(array.Item);
+                while (pending.Count > boundary)
+                {
+                    _budget.CheckCancellation();
+                    JqFilter current = pending.Pop();
+                    if (current is CommaFilter comma)
+                    {
+                        Push(comma.Right);
+                        Push(comma.Left);
+                        continue;
+                    }
+                    if (!Build(current, depth + 1, out JsonNode? child)) return false;
+                    _budget.ReserveArrayItem(child);
+                    result.Add(child);
+                }
+                built = result;
+                return true;
+            }
+            if (node is ObjectFilter obj)
+            {
+                JqRecursion.CheckDepth(depth + 1, "value nesting limit exceeded");
+                _budget.ReserveBytes(64);
+                var result = new JsonObject();
+                foreach (ObjectProperty property in obj.Properties)
+                {
+                    _budget.CheckCancellation();
+                    if (property.StaticKey is null || property.KeyFilter is not null
+                        || !Build(property.Value, depth + 1, out JsonNode? child)) return false;
+                    _budget.ReserveObjectItem(child);
+                    result[property.StaticKey] = child;
+                }
+                built = result;
+                return true;
+            }
+            return false;
         }
-        return true;
-    }
 
-    private bool TryGetConstantObject(ObjectFilter obj, out JsonObject? built)
-    {
-        ArgumentNullException.ThrowIfNull(obj);
-        var result = new JsonObject();
-        foreach (ObjectProperty property in obj.Properties)
+        void Push(JqFilter node)
         {
-            if (property.StaticKey is null || property.KeyFilter is not null)
+            if (pending.Count == stackCapacity)
             {
-                built = null;
-                return false;
+                int capacity = JqBudget.BufferCapacity((long)pending.Count + 1, Math.Max(4, 2L * pending.Count));
+                long bytes = 64 + 8L * capacity;
+                traversal.Reserve(bytes, 1);
+                try { stackCapacity = pending.EnsureCapacity(capacity); }
+                catch { traversal.Release(bytes); throw; }
+                traversal.Release(stackBytes);
+                stackBytes = bytes;
             }
-            if (!TryGetConstant(property.Value, out JsonNode? value))
-            {
-                built = null;
-                return false;
-            }
-            _budget.ReserveObjectItem(value);
-            result[property.StaticKey] = _budget.CopyValue(value, 1);
+            pending.Push(node);
         }
-        built = result;
-        return true;
     }
 
     private JqCompileException Error(string message, JqSourceSpan span) =>
