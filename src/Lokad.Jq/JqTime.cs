@@ -407,9 +407,9 @@ internal static class JqTime
         ArgumentNullException.ThrowIfNull(context);
         if (!TryGetString(input, out string? text) || text is null || !TryGetString(formatNode, out string? format) || format is null)
             throw new JqException("strptime/1 requires string inputs and arguments");
-        var parser = new DateParser(text, format);
+        var parser = new DateParser(text, format, context.Budget);
         if (!parser.TryParse())
-            throw new JqException("date \"" + text + "\" does not match format \"" + format + "\"");
+            throw DateMismatch(context.Budget, text, format);
         return parser.BuildResult(context);
     }
 
@@ -419,10 +419,18 @@ internal static class JqTime
         if (!TryGetString(input, out string? text) || text is null)
             throw new JqException("strptime/1 requires string inputs and arguments");
         const string format = "%Y-%m-%dT%H:%M:%SZ";
-        var parser = new DateParser(text, format);
+        var parser = new DateParser(text, format, context.Budget);
         if (!parser.TryParse())
-            throw new JqException("date \"" + text + "\" does not match format \"" + format + "\"");
+            throw DateMismatch(context.Budget, text, format);
         return JsonValue.Create(parser.ToEpochSeconds());
+    }
+
+    private static JqException DateMismatch(JqBudget budget, string text, string format)
+    {
+        const string prefix = "date \"";
+        const string middle = "\" does not match format \"";
+        budget.ReserveString((long)prefix.Length + text.Length + middle.Length + format.Length + 1);
+        return new JqException(prefix + text + middle + format + "\"");
     }
 
     internal static string ToDateIso(JqContext context, JsonNode? input)
@@ -434,7 +442,7 @@ internal static class JqTime
     // Manual C-locale strptime covering the portable directive set. Week-based
     // and day-of-year directives resolve through civil arithmetic; zone offsets
     // validate shape but stay unused downstream like the timegm code path.
-    private sealed class DateParser(string text, string format)
+    private sealed class DateParser(string text, string format, JqBudget budget)
     {
         private int _position;
         private bool _hasYear;
@@ -467,10 +475,12 @@ internal static class JqTime
 
         internal bool TryParse()
         {
+            budget.CheckCancellation();
             if (!ParseFormat(format))
                 return false;
             for (int index = _position; index < text.Length; index++)
             {
+                if ((index & 4095) == 0) budget.CheckCancellation();
                 if (!IsSpace(text[index]))
                     return false;
             }
@@ -529,6 +539,7 @@ internal static class JqTime
                 weekday = WeekdaySunday0(DaysFromCivil(year, month0 + 1, day));
             if (yearday == 367 && day != 0 && month0 >= 0 && month0 <= 11)
                 yearday = (int)(DaysFromCivil(year, month0 + 1, day) - DaysFromCivil(year, 1, 1));
+            context.Budget.ReserveBytes(64 + 88L * (_position < text.Length ? 9 : 8));
             var array = new JsonArray(
                 JsonValue.Create(year),
                 JsonValue.Create(month0),
@@ -541,8 +552,8 @@ internal static class JqTime
             context.Budget.CheckCancellation();
             if (_position < text.Length)
             {
+                context.Budget.ReserveString(text.Length - _position);
                 string rest = text[_position..];
-                context.Budget.ReserveString(rest.Length);
                 array.Add(JsonValue.Create(rest));
             }
             return array;
@@ -571,6 +582,7 @@ internal static class JqTime
         {
             for (int index = 0; index < pattern.Length; index++)
             {
+                if ((index & 4095) == 0) budget.CheckCancellation();
                 if (pattern[index] != (char)37)
                 {
                     if (_position >= text.Length || text[_position] != pattern[index])
@@ -607,7 +619,10 @@ internal static class JqTime
         private bool TakeSpaces()
         {
             while (_position < text.Length && text[_position] == (char)32)
+            {
+                if ((_position & 4095) == 0) budget.CheckCancellation();
                 _position++;
+            }
             return true;
         }
 
@@ -848,7 +863,10 @@ internal static class JqTime
                 case "n":
                 case "t":
                     while (_position < text.Length && IsSpace(text[_position]))
+                    {
+                        if ((_position & 4095) == 0) budget.CheckCancellation();
                         _position++;
+                    }
                     return true;
                 default:
                     return false;
@@ -880,7 +898,10 @@ internal static class JqTime
         {
             int start = _position;
             while (_position < text.Length && IsZoneChar(text[_position]))
+            {
+                if ((_position & 4095) == 0) budget.CheckCancellation();
                 _position++;
+            }
             return _position > start;
         }
 
