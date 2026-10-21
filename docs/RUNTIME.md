@@ -66,7 +66,8 @@ temporary work reconciles demand at proven lifetime boundaries; shared values an
 escaping errors retain their charge. Other construction within one record can
 remain conservatively charged, so a long loop may refuse despite a bounded live
 set. Identity, variable, child and ordinary `getpath` reads borrow existing values,
-as do pass-through selectors, diagnostics, unchanged `abs`, extrema and adding null.
+as do caught error payloads, pass-through selectors, diagnostics, unchanged `abs`,
+extrema and adding null.
 Path writes copy replacements at the write boundary; merges copy selected branches.
 `add` appends to its private array accumulator; `with_entries` retains borrowed
 body outputs until final object construction, after all body effects finish.
@@ -75,6 +76,9 @@ branches retain admitted continuation capacity for the traversal. `walk` uses ad
 container cursors and builds parents directly from completed child outputs.
 Recursive descent and `tostream` retain admitted ancestor cursors and produce paths
 on demand. Flattening appends leaves directly; sorting borrows its source array.
+Keyed extrema reuse current/best key vectors; generated key values keep their
+record ownership. `keys_unsorted` enumerates properties directly and `keys` reuses
+admitted Unicode ordering scratch.
 Transpose columns/padding and JOIN pairs admit their container storage before
 construction, including null cells and missing lookups.
 String search, trimming and scalar slicing scan borrowed text without full-input

@@ -13,6 +13,9 @@ All I/O, modules, environment, clock and timezone inputs come from the embedding
 String search indices count Unicode scalars. String and array searches report
 overlapping matches.
 Loops preserve depth-first condition multiplicity, effects and lazy termination.
+Path-mode `label`/`break`, `try` and `?` preserve earlier outputs and payload
+identity. Keyed collections require arrays after evaluating key effects; `min_by`
+keeps the first minimum and `max_by` the last maximum.
 
 ## Known differences and limits
 
@@ -101,7 +104,7 @@ semantic gaps. References are the jq 1.8.2 manual and its parser/builtin registr
 | `if/then/elif/else/end` | implemented | JqTests.Conditionals |
 | `as $x`, destructuring, `$ARGS`, lexical scope | implemented | JqTests.Bindings |
 | `def f: ...`, `def f(a;b): ...`, closures, recursion | implemented | JqTests.Functions |
-| `try/catch`, `?` suppression, `error`, `halt`, `halt_error`, `label`/`break` | implemented | JqTests.Control |
+| `try/catch`, `?` suppression, `error`, `halt`, `halt_error`, `label`/`break` | implemented | JqTests.Control, JqTests.ErrorPaths |
 | Path expressions, `=`, `\|=`, `//=`, arithmetic updates | implemented | JqTests.Paths |
 | `reduce`/`foreach`, `limit`, `first`, `last`, `nth`, `isempty`, `while`, `until`, `repeat`, `recurse`, `walk` | implemented | JqTests.Reduction, JqTests.Iteration |
 | `import`/`include`, `module`, `modulemeta`, `$__loc__` | implemented | JqTests.Modules |
@@ -184,7 +187,7 @@ semantic gaps. References are the jq 1.8.2 manual and its parser/builtin registr
 | `strptime/1`, `strftime/1`, `strflocaltime/1`, `mktime/0`, `gmtime/0`, `localtime/0`, `now/0`, `fromdateiso8601/0`, `todateiso8601/0`, `fromdate/0`, `todate/0` | implemented | JqTests.Date |
 | `input/0`, `inputs/0`, `input_filename/0`, `input_line_number/0` | implemented | JqTests.Inputs |
 | `debug/0`, `debug/1`, `stderr/0` | implemented | JqTests.Time |
-| `error/0..1`, `halt/0`, `halt_error/0..1` | implemented | JqTests.Control |
+| `error/0..1`, `halt/0`, `halt_error/0..1` | implemented | JqTests.Control, JqTests.ErrorPaths |
 | `$ENV`, `env/0`, `$ARGS`, `$__loc__`, `builtins/0`, `modulemeta/0` | implemented | JqTests.Time, JqTests.Modules, JqTests.Inventory |
 | `get_search_list/0`, `get_prog_origin/0`, `get_jq_origin/0` | intentionally different | JqTests.Inventory |
 | `tostream/0`, `fromstream/1`, `truncate_stream/1` | implemented | JqTests.Streaming |

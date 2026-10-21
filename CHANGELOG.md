@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Correct path-mode labels, optional suppression and catch trackedness. Keep
+  caught error payloads borrowed and format uncaught payloads at the boundary.
+- Reject object inputs to keyed collections after required key effects. Reuse
+  bounded extrema key buffers and object-key ordering scratch; simplify builtin
+  argument dispatch while preserving generator order, cancellation and cleanup.
 - Stream recursive descent and `tostream` from admitted ancestor cursors,
   preserving path order, close events and cancellation. Flatten leaves directly
   and sort borrowed arrays without preliminary source vectors.
