@@ -555,22 +555,46 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        input = CollectionKeys.RequireArray(input, Keys, context, environment, false);
+        JsonArray array = CollectionKeys.RequireArray(input, Keys, context, environment, false);
+        if (array.Count == 0)
+        {
+            yield return null;
+            yield break;
+        }
+        using var memory = new JqMemoryReservation(context.Budget.MemoryBudget);
+        memory.Resize(128);
+        var current = new List<JsonNode?>();
+        var bestKeys = new List<JsonNode?>();
         JsonNode? best = null;
-        IReadOnlyList<JsonNode?> bestKeys = Array.Empty<JsonNode?>();
         bool empty = true;
         using var comparer = new JqComparer(context.Budget);
-        foreach (var (element, keys) in CollectionKeys.Keyed(input, Keys, context, environment))
+        foreach (JsonNode? element in array)
         {
-            int order = empty ? 0 : comparer.CompareKeys(keys, bestKeys);
+            current.Clear();
+            foreach (JsonNode? key in Keys.Evaluate(element, context, environment))
+            {
+                context.Budget.CheckCancellation();
+                if (current.Count == current.Capacity)
+                {
+                    int previous = current.Capacity;
+                    int capacity = JqBudget.BufferCapacity((long)current.Count + 1, Math.Max(4, 2L * previous));
+                    long retained = memory.LastAdmittedBytes;
+                    memory.Resize(checked(retained + 8L * capacity));
+                    current.Capacity = capacity;
+                    if (previous != 0) memory.Resize(retained + 8L * (capacity - previous));
+                }
+                current.Add(key);
+            }
+            context.Budget.CheckCancellation();
+            int order = empty ? 0 : comparer.CompareKeys(current, bestKeys);
             if (empty || (TakeMax ? order >= 0 : order < 0))
             {
                 best = element;
-                bestKeys = keys;
+                (current, bestKeys) = (bestKeys, current);
                 empty = false;
             }
         }
-        yield return empty ? null : best;
+        yield return best;
     }
 }
 

@@ -1,0 +1,91 @@
+using System.Text.Json.Nodes;
+using Lokad.Jq.Benchmarking;
+
+namespace Lokad.Jq.Tests;
+
+public sealed partial class JqTests
+{
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Jq_ExtremaKeyScratchDoesNotGrowWithInputLength(bool maximum)
+    {
+        var source = new JsonArray();
+        for (int index = 0; index < 100000; index++) source.Add((JsonNode?)null);
+        var root = new BenchmarkMemoryBudget(4096);
+        var counted = new CountingMemoryBudget(root);
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None)))
+        {
+            var filter = new MinMaxByFilter(new IdentityFilter(), maximum);
+            Assert.Null(filter.Evaluate(source, context, context.RootEnvironment).Single());
+            Assert.Equal(0, root.ReservedBytes);
+            Assert.InRange(root.PeakBytes, 128, 256);
+            Assert.InRange(counted.Counts.Reservations + counted.Counts.Resizes, 1, 3);
+            Assert.Equal(0, counted.Counts.BytesReads);
+            Assert.Equal(0, counted.Counts.SameSizeResizes);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 2)]
+    public void Jq_ExtremaKeepBorrowedTieIdentityAndAllKeyOutputs(bool maximum, int selected)
+    {
+        var source = new JsonArray(new JsonArray(1), new JsonArray(1), new JsonArray(1));
+        var root = new BenchmarkMemoryBudget(4096);
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        {
+            var parser = new JqParser(maximum ? "max_by((.,.))" : "min_by((.,.))", JqProgramSource.Inline,
+                context.RootEnvironment, context.Budget);
+            Assert.Same(source[selected], parser.Parse().Evaluate(source, context, context.RootEnvironment).Single());
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Jq_ExtremaCancelDuringKeyCollectionAndRefundScratch(bool maximum)
+    {
+        var root = new BenchmarkMemoryBudget(4096);
+        using var cancellation = new CancellationTokenSource();
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
+        {
+            var filter = new MinMaxByFilter(new CancellingKeys(cancellation), maximum);
+            Assert.ThrowsAny<OperationCanceledException>(() => filter.Evaluate(new JsonArray(1, 2), context, context.RootEnvironment).ToArray());
+            Assert.Equal(0, root.ReservedBytes);
+        }
+    }
+
+    [Theory]
+    [InlineData("try min_by(range(10000)) catch \"caught\"")]
+    [InlineData("max_by(range(10000))?")]
+    public async Task Jq_ExtremaKeyScratchRefusalIsTerminal(string source)
+    {
+        var root = new BenchmarkMemoryBudget(64 * 1024);
+        var host = new MockFileSystem();
+        host.AddFile("/input", "[1,2]\n");
+        host.AddFile("/later", "invalid JSON");
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "\"prefix\", (" + source + ")", "/input", "/later")));
+        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal("\"prefix\"\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
+    private sealed class CancellingKeys(CancellationTokenSource cancellation) : JqFilter
+    {
+        protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+        {
+            yield return input;
+            cancellation.Cancel();
+            yield return input;
+        }
+    }
+}
