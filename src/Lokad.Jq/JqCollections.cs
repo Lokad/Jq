@@ -20,7 +20,7 @@ internal sealed class MapFilter(JqFilter Body) : JqFilter
             foreach (JsonNode? value in Body.Evaluate(element, context, environment))
             {
                 context.Budget.ReserveArrayItem(value);
-                result.Add(context.Runtime.Clone(value));
+                result.Add(context.Budget.CopyValue(value, 1));
             }
         yield return result;
     }
@@ -52,7 +52,7 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
                 if (outputs.MoveNext())
                 {
                     context.Budget.ReserveArrayItem(outputs.Current);
-                    result.Add(context.Runtime.Clone(outputs.Current));
+                    result.Add(context.Budget.CopyValue(outputs.Current, 1));
                 }
             }
             yield return result;
@@ -68,7 +68,7 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
                 if (outputs.MoveNext())
                 {
                     context.Budget.ReserveObjectItem(outputs.Current);
-                    result.Add(property.Key, context.Runtime.Clone(outputs.Current));
+                    result.Add(property.Key, context.Budget.CopyValue(outputs.Current, 1));
                 }
             }
             yield return result;
@@ -364,7 +364,7 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
                 context.Budget.CheckCancellation();
                 JsonNode? value = RowAt(index)[positions[index]];
                 context.Budget.ReserveArrayItem(value);
-                combo.Add(context.Runtime.Clone(value));
+                combo.Add(context.Budget.CopyValue(value, 1));
             }
             yield return combo;
             int cursor = matrix.Count - 1;
@@ -497,7 +497,7 @@ internal sealed class SortByFilter(JqFilter Keys) : JqFilter
         {
             context.Budget.CheckCancellation();
             context.Budget.ReserveArrayItem(element);
-            result.Add(context.Runtime.Clone(element));
+            result.Add(context.Budget.CopyValue(element, 1));
         }
         yield return result;
     }
@@ -530,7 +530,7 @@ internal sealed class GroupByFilter(JqFilter Keys) : JqFilter
             }
             context.Budget.CheckCancellation();
             context.Budget.ReserveArrayItem(element);
-            group.Add(context.Runtime.Clone(element));
+            group.Add(context.Budget.CopyValue(element, 2));
         }
         yield return result;
     }
@@ -558,7 +558,7 @@ internal sealed class UniqueByFilter(JqFilter Keys) : JqFilter
             {
                 context.Budget.CheckCancellation();
                 context.Budget.ReserveArrayItem(element);
-                result.Add(context.Runtime.Clone(element));
+                result.Add(context.Budget.CopyValue(element, 1));
                 current = keys;
                 first = false;
             }
@@ -636,7 +636,7 @@ internal sealed class SortByImplFilter(JqFilter Keys) : JqFilter
             {
                 context.Budget.CheckCancellation();
                 context.Budget.ReserveArrayItem(pair.Element);
-                result.Add(context.Runtime.Clone(pair.Element));
+                result.Add(context.Budget.CopyValue(pair.Element, 1));
             }
             yield return result;
         }
@@ -672,7 +672,7 @@ internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
                 }
                 context.Budget.CheckCancellation();
                 context.Budget.ReserveArrayItem(pair.Element);
-                group.Add(context.Runtime.Clone(pair.Element));
+                group.Add(context.Budget.CopyValue(pair.Element, 2));
             }
             yield return result;
         }
@@ -702,7 +702,7 @@ internal sealed class UniqueByImplFilter(JqFilter Keys) : JqFilter
                 {
                     context.Budget.CheckCancellation();
                     context.Budget.ReserveArrayItem(pair.Element);
-                    result.Add(context.Runtime.Clone(pair.Element));
+                    result.Add(context.Budget.CopyValue(pair.Element, 1));
                     current = pair.Key;
                     first = false;
                 }
@@ -785,7 +785,7 @@ internal sealed class SqlIndexFilter(JqFilter? Stream, JqFilter IndexExpr) : JqF
                 context.Budget.CheckCancellation();
                 context.Budget.ReserveString(name.Length);
                 context.Budget.ReserveObjectItem(row);
-                result[name] = context.Runtime.Clone(row);
+                result[name] = context.Budget.CopyValue(row, 1);
             }
         }
         yield return result;

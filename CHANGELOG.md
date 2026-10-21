@@ -6,6 +6,8 @@
   closures and boxed enumerators.
 - Use ordinary indexing in `JOIN`, including array searches, slice keys and
   invalid-key errors on null.
+- Apply the existing depth guard to destination containers during recursive
+  collection construction, including when a scalar consumer follows.
 - Correct computed index/slice paths and updates: preserve the enclosing input,
   key-major effects/results, and errors in optional index expressions.
 - Share named argument identity with `$ARGS`, avoid duplicate argument/constant

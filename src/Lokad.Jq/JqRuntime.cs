@@ -518,7 +518,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             foreach (var value in la.Concat(ra))
             {
                 budget.ReserveArrayItem(value);
-                arr.Add(Clone(value));
+                arr.Add(budget.CopyValue(value, 1));
             }
             return arr;
         }
@@ -548,7 +548,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 if (!excluded)
                 {
                     budget.ReserveArrayItem(item);
-                    result.Add(Clone(item));
+                    result.Add(budget.CopyValue(item, 1));
                 }
             }
             return result;
@@ -1084,7 +1084,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 budget.ReserveObjectItem(property.Value);
                 var entry = new JsonObject();
                 entry["key"] = JsonValue.Create(property.Key);
-                entry["value"] = Clone(property.Value);
+                entry["value"] = budget.CopyValue(property.Value, 2);
                 entries.Add(entry);
             }
             return entries;
@@ -1098,7 +1098,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 budget.ReserveObjectItem(arr[index]);
                 var entry = new JsonObject();
                 entry["key"] = JsonValue.Create(index);
-                entry["value"] = Clone(arr[index]);
+                entry["value"] = budget.CopyValue(arr[index], 2);
                 entries.Add(entry);
             }
             return entries;
@@ -1135,7 +1135,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             JsonNode? value = entry.TryGetPropertyValue("value", out JsonNode? direct) ? direct
                 : entry.TryGetPropertyValue("Value", out JsonNode? capitalized) ? capitalized : null;
             budget.ReserveObjectItem(value);
-            result[keyName] = Clone(value);
+            result[keyName] = budget.CopyValue(value, 1);
         }
         return result;
     }
@@ -1153,7 +1153,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 foreach (JsonNode? item in incoming)
                 {
                     budget.ReserveArrayItem(item);
-                    accumulated.Add(Clone(item));
+                    accumulated.Add(budget.CopyValue(item, 1));
                 }
             }
             else
@@ -1196,7 +1196,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 }
             }
             budget.ReserveArrayItem(child);
-            result.Add(Clone(child));
+            result.Add(budget.CopyValue(child, 1));
         }
         return result;
     }
@@ -1220,7 +1220,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             budget.CheckCancellation();
             if (unique && !first && JsonEquals(previous, element)) continue;
             budget.ReserveArrayItem(element);
-            result.Add(Clone(element));
+            result.Add(budget.CopyValue(element, 1));
             previous = element;
             first = false;
         }
@@ -1256,7 +1256,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             for (var i = arr.Count - 1; i >= 0; i--)
             {
                 budget.ReserveArrayItem(arr[i]);
-                rev.Add(Clone(arr[i]));
+                rev.Add(budget.CopyValue(arr[i], 1));
             }
             return rev;
         }

@@ -25,7 +25,7 @@ internal sealed class DebugFilter(IReadOnlyList<JqFilter> args) : JqFilter
 
     private static void EmitDebug(JqContext context, JsonNode? value)
     {
-        var line = new JsonArray(JsonValue.Create("DEBUG:"), context.Runtime.Clone(value));
+        var line = new JsonArray(JsonValue.Create("DEBUG:"), context.Budget.CopyValue(value, 1));
         using var bytes = context.Runtime.SerializeUtf8(line, context.AsciiOutput, null, false, context.SortKeys);
         context.EmitStderr(bytes.Value, true);
     }

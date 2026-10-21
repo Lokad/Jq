@@ -125,7 +125,8 @@ materialized buffers, subject to checked CLR sizes and the guards below.
 | Host read request | 8 KiB |
 
 Depth guards apply at the operation that parses, copies, compares or renders a
-tree. Iterative paths and `walk` can process deeper runtime trees within shared
+tree. Recursive collection copies include their destination containers in that
+depth. Iterative paths and `walk` can process deeper runtime trees within shared
 admission; a later recursive consumer still applies its own guard.
 
 Structural/regex exhaustion is terminal status 5, including under `--seq`,
