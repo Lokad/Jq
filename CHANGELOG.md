@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Breaking host API: remove unused read failure payloads/status, append error
+  diagnostics and `JqOperationError`. Use `ReadFailure` and `Failure(exitCode)`;
+  successful reads still carry bytes and EOF, and append failures retain status.
 - Accumulate object and string `add` results without repeatedly copying prefixes.
 - Bound operand-error preview work, including large strings and object suffixes.
 - Accept object values in `from_entries` and `join`; preserve entry aliases,
