@@ -228,7 +228,9 @@ internal static class JqBuiltinRegistry
         ["JOIN"] = (2, 4),
     };
 
-    internal static IReadOnlyList<string> ListAll()
+    private static readonly IReadOnlyList<string> Names;
+
+    static JqBuiltinRegistry()
     {
         var names = new List<string>();
         foreach (var entry in Definitions)
@@ -239,8 +241,10 @@ internal static class JqBuiltinRegistry
                 names.Add(entry.Key + "/" + arity.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
         names.Sort(System.StringComparer.Ordinal);
-        return names;
+        Names = names.AsReadOnly();
     }
+
+    internal static IReadOnlyList<string> ListAll() => Names;
 
     internal static bool TryValidate(string name, int argumentCount, out string error)
     {

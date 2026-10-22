@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Accumulate object and string `add` results without repeatedly copying prefixes.
+- Bound operand-error preview work, including large strings and object suffixes.
+- Accept object values in `from_entries` and `join`; preserve entry aliases,
+  explicit null values and body effects before entry validation.
+- Reuse immutable builtin metadata and preflight fresh inventory result storage.
 - Preserve selected paths through stream selectors and loop transitions,
   including update targets, lazy termination and cancellation.
 - Compare path heap values by identity, rejecting equal fresh results without

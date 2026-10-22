@@ -1901,11 +1901,11 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "builtins":
                 {
                     var names = JqBuiltinRegistry.ListAll();
+                    context.Budget.ReserveBytes(64 + 88L * names.Count);
                     var array = new JsonArray();
                     foreach (var entry in names)
                     {
                         context.Budget.CheckCancellation();
-                        context.Budget.ReserveString(entry.Length);
                         array.Add(JsonValue.Create(entry));
                     }
                     yield return array;
