@@ -1,5 +1,3 @@
-using System.Runtime.ExceptionServices;
-
 namespace Lokad.Jq;
 
 internal static class JqHostExtensions
@@ -108,8 +106,10 @@ internal static class JqHostExtensions
             }
             catch (Exception exception)
             {
-                if (earlierException == null) ExceptionDispatchInfo.Capture(exception).Throw();
-                return;
+                if (earlierException is not null) return;
+                if (exception is ArgumentException or OverflowException)
+                    throw new JqHostFailureException("host operation violated its contract", exception);
+                throw;
             }
         }
         if (earlierException != null) return;
