@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep unexpected clock and regex callback CLR faults outside jq error handlers;
+  preserve provider-declared syntax, resource and cancellation outcomes.
+
 - Report definitive JSON syntax errors without waiting for EOF or buffering an
   irrelevant suffix; preserve fragmented tokens and non-finite literals.
 

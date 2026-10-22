@@ -141,7 +141,8 @@ Structural/regex exhaustion is terminal status 5, including under `--seq`,
 `--stream-errors` and `-e`. Reference path-length errors and invalid regex syntax
 remain catchable language errors. Copies check cancellation and depth while
 constructing. Cancellation propagates as `OperationCanceledException`; host
-contract failures and actual `OutOfMemoryException` remain distinct.
+contract failures and actual `OutOfMemoryException` remain distinct. Unexpected
+clock and regex callback faults escape jq handlers as host failures.
 
 Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`. The default is
 `JqUtf8RegexEngine.Instance`. The selected adapter receives the active token and

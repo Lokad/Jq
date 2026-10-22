@@ -56,7 +56,7 @@ internal static class JqMatch
         bool global = modifiers.Contains('g');
         IJqCompiledRegex compiled = context.Regexes.Get(pattern, options.Pattern);
         JqRegexMatchOptions matchOptions = options.Match;
-        IReadOnlyDictionary<int, string> names = compiled.GroupNames;
+        IReadOnlyDictionary<int, string> names = JqRegexCache.GetGroupNames(compiled);
         using var ownedSubject = context.Regexes.EncodeSubject(text);
         ReadOnlyMemory<byte> subject = ownedSubject.Value;
         context.Budget.ReserveMetadata(32, 1);

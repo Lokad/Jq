@@ -22,7 +22,10 @@ internal static class JqErrors
         return JsonValue.Create(exception.Message);
     }
 
+    internal static bool IsCatchableClr(Exception exception) =>
+        exception is JsonException or FormatException or ArgumentException or OverflowException;
+
     internal static bool IsCatchable(Exception exception) =>
-        exception is JsonException or FormatException or ArgumentException or OverflowException
+        IsCatchableClr(exception)
         || (exception is JqException && exception is not JqQuotaException && exception is not JqCompileException);
 }

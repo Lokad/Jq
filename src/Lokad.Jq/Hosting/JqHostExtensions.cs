@@ -2,14 +2,14 @@ namespace Lokad.Jq;
 
 internal static class JqHostExtensions
 {
-    // A host CLR failure (unexpected argument/overflow from IJqHost) escapes
+    // An unexpected host CLR failure escapes
     // the jq error boundary instead of being mislabeled as a filter or input
     // error. Cancellation and jq budgets always propagate unchanged.
     internal static async ValueTask<JqAppendResult> GuardedAppendAsync(
         IJqHost host, JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
     {
         try { return await host.AppendWhileOpenAsync(descriptor, content, cancellationToken).ConfigureAwait(false); }
-        catch (Exception exception) when (exception is ArgumentException or OverflowException)
+        catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
         { throw new JqHostFailureException("host operation violated its contract", exception); }
     }
 
@@ -17,7 +17,7 @@ internal static class JqHostExtensions
         IJqHost host, JqPath path, CancellationToken cancellationToken)
     {
         try { return await host.OpenReadAsync(path, cancellationToken).ConfigureAwait(false); }
-        catch (Exception exception) when (exception is ArgumentException or OverflowException)
+        catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
         { throw new JqHostFailureException("host operation violated its contract", exception); }
     }
 
@@ -26,7 +26,7 @@ internal static class JqHostExtensions
     {
         JqByteReadResult read;
         try { read = await host.ReadBytesAsync(descriptor, buffer, cancellationToken).ConfigureAwait(false); }
-        catch (Exception exception) when (exception is ArgumentException or OverflowException)
+        catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
         { throw new JqHostFailureException("host operation violated its contract", exception); }
         if (!read.IsError && read.BytesRead > buffer.Length)
         {
@@ -107,7 +107,7 @@ internal static class JqHostExtensions
             catch (Exception exception)
             {
                 if (earlierException is not null) return;
-                if (exception is ArgumentException or OverflowException)
+                if (JqErrors.IsCatchableClr(exception))
                     throw new JqHostFailureException("host operation violated its contract", exception);
                 throw;
             }

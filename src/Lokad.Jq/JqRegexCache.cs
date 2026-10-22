@@ -38,9 +38,14 @@ internal sealed class JqRegexCache : IDisposable
             _keys.Resize(checked(previousKeys + 128 + 2L * pattern.Length));
             _budget.CheckCancellation();
             string ownedPattern = new(pattern.AsSpan());
-            if (!_budget.RegexEngine.TryCompile(ownedPattern, options, _budget.MemoryBudget,
-                _budget.CancellationToken, out compiled, out string? error))
-                throw new JqException(error ?? "unsupported regex");
+            try
+            {
+                if (!_budget.RegexEngine.TryCompile(ownedPattern, options, _budget.MemoryBudget,
+                    _budget.CancellationToken, out compiled, out string? error))
+                    throw new JqException(error ?? "unsupported regex");
+            }
+            catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
+            { throw new JqHostFailureException("regex compilation violated its contract", exception); }
             _budget.CheckCancellation();
             cached = compiled;
             _patterns.Add((ownedPattern, options), cached);
@@ -88,7 +93,9 @@ internal sealed class JqRegexCache : IDisposable
         bool retained = false;
         try
         {
-            match = pattern.Match(input.Span, start, options, _budget.CancellationToken);
+            try { match = pattern.Match(input.Span, start, options, _budget.CancellationToken); }
+            catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
+            { throw new JqHostFailureException("regex matching violated its contract", exception); }
             _budget.CheckCancellation();
             var lifetime = new MatchLifetime(this, match.Owner);
             _borrowers++;
@@ -110,7 +117,16 @@ internal sealed class JqRegexCache : IDisposable
         try { return pattern.IsMatch(input.Span, options, _budget.CancellationToken); }
         catch (JqRegexResourceException exception) { throw Terminal(exception); }
         catch (NotSupportedException ex) { throw new JqException($"unsupported regex: {ex.Message}"); }
+        catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
+        { throw new JqHostFailureException("regex matching violated its contract", exception); }
         finally { _budget.CheckCancellation(); }
+    }
+
+    internal static IReadOnlyDictionary<int, string> GetGroupNames(IJqCompiledRegex pattern)
+    {
+        try { return pattern.GroupNames; }
+        catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
+        { throw new JqHostFailureException("regex metadata violated its contract", exception); }
     }
 
     private static JqQuotaException Terminal(JqRegexResourceException exception) =>

@@ -49,7 +49,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                         throw new JqException("gsub requires non-overlapping forward matches");
                     gapLength = match.Value.StartOffsetInUtf16 - previous;
                     long captureBefore = storage?.UsedBytes ?? 0;
-                    captures = JqMatch.FoldNamedCaptures(context, text, match, regex.GroupNames, match.CaptureSlotCount - 1);
+                    captures = JqMatch.FoldNamedCaptures(context, text, match, JqRegexCache.GetGroupNames(regex), match.CaptureSlotCount - 1);
                     captureDemand = storage is null ? 0 : storage.UsedBytes - captureBefore;
                 }
 

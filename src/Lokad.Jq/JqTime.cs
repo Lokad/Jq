@@ -17,7 +17,11 @@ internal static class JqTime
         ArgumentNullException.ThrowIfNull(context);
         if (context.Clock is null)
             throw new JqException("now requires an explicit host clock");
-        return (context.Clock.Clock.GetUtcNow() - DateTimeOffset.UnixEpoch).TotalSeconds;
+        DateTimeOffset now;
+        try { now = context.Clock.Clock.GetUtcNow(); }
+        catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
+        { throw new JqHostFailureException("host clock violated its contract", exception); }
+        return (now - DateTimeOffset.UnixEpoch).TotalSeconds;
     }
 
     // Days since 1970-01-01 from civil fields; month is 1-12.

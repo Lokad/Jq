@@ -115,16 +115,19 @@ public sealed partial class JqTests
             if (!JqUtf8RegexEngine.Instance.TryCompile(pattern, options, memoryBudget, cancellationToken, out var compiled, out error))
             { regex = null; return false; }
             Created++;
-            regex = new ObservedCompiled(compiled, memoryBudget, this, observe);
+            regex = new ObservedCompiled(compiled, memoryBudget, this, observe, cancellationToken);
             observe("compiled", memoryBudget, cancellationToken);
             return true;
         }
 
         private sealed class ObservedCompiled(IJqCompiledRegex inner, IMemoryBudget? budget,
-            ObservedRegexEngine owner, Action<string, IMemoryBudget?, CancellationToken> observe) : IJqCompiledRegex
+            ObservedRegexEngine owner, Action<string, IMemoryBudget?, CancellationToken> observe, CancellationToken compilationToken) : IJqCompiledRegex
         {
             private bool _disposed;
-            public IReadOnlyDictionary<int, string> GroupNames => inner.GroupNames;
+            public IReadOnlyDictionary<int, string> GroupNames
+            {
+                get { observe("names", budget, compilationToken); return inner.GroupNames; }
+            }
             public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
             {
                 observe("boolean", budget, cancellationToken);

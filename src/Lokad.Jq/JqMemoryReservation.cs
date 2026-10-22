@@ -32,7 +32,7 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
                 if (!admitted)
                     return false;
             }
-            catch (Exception exception) when (exception is ArgumentException or OverflowException)
+            catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
             {
                 throw new JqHostFailureException("memory admission violated its contract", exception);
             }
