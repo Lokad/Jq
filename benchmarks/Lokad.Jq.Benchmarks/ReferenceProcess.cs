@@ -83,7 +83,9 @@ internal static class ReferenceProcess
                 // stdin early. Keep the child's actual output and status.
                 await exit.ConfigureAwait(false);
             }
-            finally { process.StandardInput.Close(); }
+            // Only raw bytes were written. Disposing the text writer can try
+            // another flush after the child has already closed the pipe.
+            finally { process.StandardInput.BaseStream.Close(); }
 
             bool ClosedInput(IOException exception) =>
                 process.StandardInput.BaseStream is PipeStream { IsConnected: false }
