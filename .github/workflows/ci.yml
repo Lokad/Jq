@@ -34,6 +34,13 @@ jobs:
         run: dotnet test Lokad.Jq.slnx -c Release --no-build --logger trx --results-directory artifacts/test-results
       - name: Pack Release
         run: dotnet pack src/Lokad.Jq/Lokad.Jq.csproj -c Release --no-build --no-restore
+      - name: Verify package and symbols
+        shell: pwsh
+        run: |
+          $package = @(Get-ChildItem artifacts/nuget/*.nupkg)
+          $symbols = @(Get-ChildItem artifacts/nuget/*.snupkg)
+          if ($package.Count -ne 1 -or $symbols.Count -ne 1) { throw 'Expected one package and one symbol package.' }
+          ./tools/VerifyPackage.ps1 -PackagePath $package[0].FullName -SymbolPackagePath $symbols[0].FullName -SourceRoot $PWD.Path -ExpectedCommit '${{ github.sha }}'
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v6
