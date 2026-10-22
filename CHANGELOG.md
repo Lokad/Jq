@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Materialize only accepted `paths(filter)` results and retain only the last
+  `rindex` match, keeping rejected deep traversal and dense search bounded.
+- Parse command arguments in one pass: accept mixed option aliases, preserve
+  grouped `-f` argument modes and stop at information switches. Reject unsupported
+  inline long values (`--indent=4`, for example) and single-dash long aliases.
+- Keep argument-setup structural failures terminal with status 5.
 - Keep fresh path/INDEX/JOIN results untracked; preserve saved-binding recovery
   and JOIN path checks before later key or join effects.
 - Check cancellation throughout containment searches and avoid per-comparison

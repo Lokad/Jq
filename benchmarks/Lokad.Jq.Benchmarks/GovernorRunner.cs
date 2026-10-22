@@ -480,6 +480,20 @@ internal static class GovernorRunner
         Add("entries-boundary-depth", records, ["-c", "to_entries | length"],
             string.Concat(Enumerable.Repeat(new string('[', 63) + "0" + new string(']', 63) + "\n", records)),
             string.Concat(Enumerable.Repeat("1\n", records)));
+        foreach (string predicate in new[] { "false", "empty", "scalars" })
+            Add("paths-deep-" + predicate, 2000, ["-nc",
+                "null | setpath([range(2000)|0];0) | paths(" + predicate + ") | length"], "",
+                predicate == "scalars" ? "2000\n" : "");
+        Add("rindex-dense", 100000, ["-c", "rindex(\"a\")"], "\"" + new string('a', 100000) + "\"", "99999\n");
+        Add("paths-fresh-result", records, ["-c", "try path(paths) catch startswith(\"Invalid path expression\")"],
+            string.Concat(Enumerable.Repeat("[0]\n", records)), string.Concat(Enumerable.Repeat("true\n", records)));
+        Add("join-binding-path", records, ["-c", ". as $saved | path(JOIN(.;.;empty;$saved))"],
+            string.Concat(Enumerable.Repeat("[1,2]\n", records)),
+            string.Concat(Enumerable.Repeat("[]\n", records)));
+        AddDiagnostic("join-path-key-order", 1, ["-nc",
+            "[1,2] | try path(JOIN({a:2};.;((\"a\"|debug),(\"b\"|debug));debug)) catch startswith(\"Invalid path expression\")"],
+            "", "true\n", "[\"DEBUG:\",\"a\"]\n");
+        Add("mixed-option-aliases", 1, ["-n", "--null-input", "--raw-output", "-r", "-c", "1"], "", "1\n");
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>

@@ -42,6 +42,9 @@ equal contents; loading a saved original binding can restore its path.
   `--unbuffered`, `-M` and `-b` are inert; `-C`, internal tool switches and process
   search/origin queries are rejected. ANSI color and native OS filenames are
   outside the hosted API.
+  Mixed short/long aliases are idempotent. `-f` selects the first program operand
+  as a file, including in groups; use separate values for long options
+  (`--indent 4`, `--from-file program.jq`, `--library-path modules`).
 - **Modules:** hosted `import`, `include`, `-L` and `modulemeta` are supported.
   Automatic `~/.jq`, home expansion and `$ORIGIN` lookup are excluded. Main-file
   `$__loc__` reports the file path; qualified calls use hierarchical scopes.

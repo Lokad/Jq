@@ -62,7 +62,8 @@ The caller owns the supplied budget. Execution disposes its scope after evaluati
 pending I/O, enumeration and owned-descriptor cleanup finish. Governed invocation
 factories admit before copying and return false/null on refusal.
 Keep the invocation and borrowed inputs alive through reused/concurrent executions.
-Ordinary argument errors remain status 2; admission refusal remains status 5.
+Ordinary argument errors remain status 2; admission and structural failures during
+argument setup remain status 5.
 
 Coarse owners track executions, records, buffers, results and caches. Object
 construction workspace ends with enumeration; constant metadata builds private
@@ -92,7 +93,8 @@ results, in the same order for reads, paths and updates. Optional access suppres
 read failures; errors in key/bound expressions propagate. Early output closure
 stops deferred work.
 Iterative tree/path operations retain ancestor cursors rather than whole traversal
-inventories. Recursive consumers still enforce their construction depth.
+inventories. Filtered paths materialize only accepted results; `rindex` retains
+only the last match. Recursive consumers still enforce their construction depth.
 
 Comparisons, ordering, serialization and regex subjects reuse admitted scratch
 where its lifetime is known. Replacements cover overlapping old/new capacity.
