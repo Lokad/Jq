@@ -440,18 +440,6 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_IndentAcceptsInlineLongOptionValue()
-    {
-        var fileSystem = new MockFileSystem();
-
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "--indent=4", "{a:1}")));
-        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
-
-        Assert.Equal(0, exitCode);
-        Assert.Contains("\n    \"a\"", fileSystem.GetOutput(JqFileDescriptor.StdOut));
-    }
-
-    [Fact]
     public async Task Jq_AsciiOutputEscapesNonAscii()
     {
         var fileSystem = new MockFileSystem();

@@ -14,11 +14,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_UnknownOptionsReportSystemError()
     {
-        // Unknown options fail with exit 2 and empty stdout, naming the
-        // failing flag like the reference (`-Z` for `-cZ`). Only clusters
-        // interrupted by a value-taking short (`-cfZ`) keep the binder
-        // wording: upstream would take the rest as its file, which the
-        // binder rejects before that.
+        // Report the failing short flag, including within mixed clusters.
         foreach (var (flags, diagnostic) in new (string[], string)[]
         {
             (["--frobnicate", "."], "jq: Unknown option --frobnicate\n"),
@@ -27,10 +23,9 @@ public sealed partial class JqTests
             (["-rcZ", "."], "jq: Unknown option -Z\n"),
             (["-Zc", "."], "jq: Unknown option -Z\n"),
             (["-c", "-cZ", "."], "jq: Unknown option -Z\n"),
-            (["-cfZ", "."], "jq: Unknown option -c\n"),
-            (["-c1", "."], "jq: Unknown option -c\n"),
-            (["--null-input=false", "."], "jq: Unknown option --null-input\n"),
-            (["-cf", "-1", "."], "jq: Unknown option -1\n"),
+            (["-cfZ", "."], "jq: Unknown option -Z\n"),
+            (["-c1", "."], "jq: Unknown option -1\n"),
+            (["--null-input=false", "."], "jq: Unknown option --null-input=false\n"),
         })
         {
             var host = new MockFileSystem();
@@ -252,7 +247,7 @@ public sealed partial class JqTests
     public async Task Jq_IndentSignAndLeadingZerosSelectWidth(string value, string padding)
     {
         // The overflow-proof range check must accept signs and leading zeros
-        // with C-like numeric values before the binder sees them.
+        // with signed ASCII decimal values.
         var host = new MockFileSystem();
         var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--indent", value, "[1]");
         Assert.True(exit == 0, stderr);
@@ -276,16 +271,13 @@ public sealed partial class JqTests
         Assert.Empty(stderr);
     }
 
-    [Theory]
-    [InlineData("--indent", "-1")]
-    [InlineData("--indent=-1", null)]
-    public async Task Jq_IndentMinusOneSelectsTabs(string flag, string? value)
+    [Fact]
+    public async Task Jq_IndentMinusOneSelectsTabs()
     {
         var host = new MockFileSystem();
-        string[] args = value is null ? [flag, "-n", "[1]"] : [flag, value, "-n", "[1]"];
-        var (exit, stdout, stderr) = await RunCliAsync(host, args);
+        var (exit, stdout, stderr) = await RunCliAsync(host, "--indent", "-1", "-n", "[1]");
         Assert.True(exit == 0, stderr);
-        Assert.Equal("[" + "\n" + "\t1" + "\n" + "]" + "\n", stdout);
+        Assert.Equal("[\n\t1\n]\n", stdout);
     }
 
     [Theory]
@@ -305,16 +297,19 @@ public sealed partial class JqTests
         Assert.Equal("", stdout);
     }
 
-    [Fact]
-    public async Task Jq_IndentCombinedOverflowIsRangeError()
+    [Theory]
+    [InlineData("--indent=4")]
+    [InlineData("--indent=-1")]
+    [InlineData("--indent=9999999999")]
+    [InlineData("--from-file=program.jq")]
+    [InlineData("--library-path=modules")]
+    public async Task Jq_UnsupportedInlineLongOptionsFail(string option)
     {
-        // The combined spelling must report the reference diagnostic too,
-        // not a binder conversion error.
         var host = new MockFileSystem();
-        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--indent=9999999999", ".");
+        var (exit, stdout, stderr) = await RunCliAsync(host, "-n", option, ".");
         Assert.Equal(2, exit);
-        Assert.Contains("--indent takes a number between -1 and 7", stderr);
-        Assert.Equal("", stdout);
+        Assert.Empty(stdout);
+        Assert.Equal("jq: Unknown option " + option + "\n", stderr);
     }
 
     [Fact]

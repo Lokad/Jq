@@ -44,16 +44,16 @@ public sealed partial class JqTests
     [InlineData("  ", new string[] { })]
     [InlineData("", new[] { "--indent", "4", "-c" })]
     [InlineData("", new[] { "--tab", "--compact-output" })]
-    [InlineData("", new[] { "--indent=4", "-cr" })]
+    [InlineData("", new[] { "--indent", "4", "-cr" })]
     [InlineData("    ", new[] { "-c", "--indent", "4" })]
-    [InlineData("    ", new[] { "--tab", "-c", "--indent=4" })]
+    [InlineData("    ", new[] { "--tab", "-c", "--indent", "4" })]
     [InlineData("\t", new[] { "--compact-output", "--tab" })]
-    [InlineData("\t", new[] { "--indent=4", "-c", "--tab" })]
+    [InlineData("\t", new[] { "--indent", "4", "-c", "--tab" })]
     [InlineData("", new[] { "-c", "--tab", "-c" })]
     [InlineData("", new[] { "-c", "--compact-output" })]
     [InlineData("", new[] { "-cc" })]
     [InlineData("\t", new[] { "--tab", "-c", "--tab" })]
-    [InlineData("  ", new[] { "-c", "--indent=4", "-c", "--indent", "2" })]
+    [InlineData("  ", new[] { "-c", "--indent", "4", "-c", "--indent", "2" })]
     public async Task Jq_LastFormattingOptionWins(string indentation, string[] options)
     {
         var fileSystem = new MockFileSystem();
@@ -72,7 +72,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("--arg", "text", "-c", "{a:1}")]
     [InlineData("--", "{a:1}", "-c")]
-    [InlineData("-f=c")]
+    [InlineData("-f", "/c")]
     public async Task Jq_CompactOutputSpellingInOperandsDoesNotChangeFormatting(params string[] arguments)
     {
         var fileSystem = new MockFileSystem();
@@ -108,7 +108,6 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("--indent", "-c", "2")]
     [InlineData("--indent", "--tab", "2")]
-    [InlineData("-nf", "-c", "/filter.jq")]
     [InlineData("-ctab", "{a:1}")]
     [InlineData("-cversion", "{a:1}")]
     [InlineData("-cindent", "2", "{a:1}")]
@@ -128,7 +127,8 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("-ncf", "/filter.jq")]
     [InlineData("-nfc", "/filter.jq")]
-    [InlineData("-nccff", "/unused.jq", "/filter.jq")]
+    [InlineData("-nccff", "/filter.jq", "/unused.jq")]
+    [InlineData("-nf", "-c", "/filter.jq")]
     public async Task Jq_CompactOutputPreservesGroupedFilterFileOperands(params string[] arguments)
     {
         var fileSystem = new MockFileSystem();
