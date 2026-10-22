@@ -86,7 +86,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_NullModuleSearchDoesNotCopyItsUnusedTail()
+    public async Task Jq_NullModuleSearchScansWithoutCopyingOrUsingDefaults()
     {
         var search = new JsonArray();
         for (int i = 0; i < 100000; i++) search.Add((JsonNode?)null);

@@ -321,15 +321,14 @@ internal sealed class JqModuleLoader(
                     foreach (JsonNode? item in array)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        if (item is null) yield break;
                         if (Resolve(item) is string dir) yield return dir;
                     }
                 }
                 else
                 {
-                    if (search is null) yield break;
                     if (Resolve(search) is string dir) yield return dir;
                 }
+                yield break;
             }
             else yield return importerDir;
             foreach (string lib in libraryDirs)
@@ -339,7 +338,7 @@ internal sealed class JqModuleLoader(
             }
         }
 
-        string? Resolve(JsonNode node)
+        string? Resolve(JsonNode? node)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (node is not JsonValue scalar || !scalar.TryGetValue<string>(out string? entry)
