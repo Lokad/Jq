@@ -194,7 +194,7 @@ internal static class JqCommandLineParser
                 Clock = clock
             };
         }
-        catch (Exception ex) when (ex is not JqQuotaException { IsMemoryAdmission: true }
+        catch (Exception ex) when (ex is not JqQuotaException
             && ex is JqException or FormatException or JqPathException)
         {
             return Error($"jq: {ex.Message}");
@@ -449,7 +449,7 @@ internal static class JqCommandLineParser
                     continue;
                 }
                 try { variables[name] = runtime.ParseJson(args[++i]); }
-                catch (JqException ex) when (ex is not JqQuotaException { IsMemoryAdmission: true })
+                catch (JqException ex) when (ex is not JqQuotaException)
                 { return SpecialArguments.Failure($"jq: invalid JSON for --argjson {name}: {ex.Message}"); }
                 continue;
             }
@@ -619,7 +619,7 @@ internal static class JqCommandLineParser
             }
 
             try { positional.Add(runtime.ParseJson(entry.Text)); }
-            catch (JqException ex) when (ex is not JqQuotaException { IsMemoryAdmission: true })
+            catch (JqException ex) when (ex is not JqQuotaException)
             { return SpecialArguments.Failure($"jq: invalid JSON argument: {ex.Message}"); }
         }
 

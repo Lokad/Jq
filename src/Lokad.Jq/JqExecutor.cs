@@ -25,10 +25,10 @@ internal static class JqExecutor
                 commandInvocation.CurrentDirectory, commandInvocation.StdIn, commandInvocation.StdOut,
                 commandInvocation.StdErr, commandInvocation.Environment, commandInvocation.Clock, budget);
         }
-        catch (JqQuotaException exception) when (exception.IsMemoryAdmission)
+        catch (JqQuotaException exception)
         {
             await JqDiagnosticWriter.TryWriteAsync(host, commandInvocation.StdErr,
-                ["jq: memory budget exceeded"], true, memoryScope, cancellationToken).ConfigureAwait(false);
+                ["jq: ", exception.Message], true, memoryScope, cancellationToken).ConfigureAwait(false);
             return 5;
         }
         if (invocation.Error != null)
