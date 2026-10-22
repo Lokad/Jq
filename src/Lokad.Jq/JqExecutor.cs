@@ -104,6 +104,7 @@ internal static class JqExecutor
         }
 
         var stage = 2;
+        int stickyError = 0;
         try
         {
             var filterText = invocation.Filter ?? ".";
@@ -142,7 +143,6 @@ internal static class JqExecutor
                 await using var inputs = OuterInputsAsync(cursor, invocation, context).GetAsyncEnumerator();
                 bool sawOutput = false;
                 bool lastFalseNull = false;
-                int stickyError = 0;
                 while (true)
                 {
                     stage = 4;
@@ -159,7 +159,8 @@ internal static class JqExecutor
                                 || (output is JsonValue negative && negative.TryGetValue<bool>(out bool flag) && !flag);
                             ReadOnlyMemory<byte> rendered = outputRenderer.Render(output);
                             var appended = await JqHostExtensions.GuardedAppendAsync(host, invocation.StdOut, rendered, cancellationToken).ConfigureAwait(false);
-                            if (!appended.CanAcceptMore) return appended.ExitCode;
+                            if (!appended.CanAcceptMore)
+                                return appended.ExitCode == 0 ? stickyError : appended.ExitCode;
                         }
                     }
                     catch (Exception exception) when (JqErrors.IsCatchable(exception))
@@ -191,7 +192,7 @@ internal static class JqExecutor
         }
         catch (JqOutputClosedException ex)
         {
-            return ex.ExitCode;
+            return ex.ExitCode == 0 ? stickyError : ex.ExitCode;
         }
         catch (JqHaltException ex)
         {

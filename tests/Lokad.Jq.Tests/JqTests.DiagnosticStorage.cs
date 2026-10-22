@@ -7,6 +7,42 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(false, false, 0)]
+    [InlineData(false, true, 0)]
+    [InlineData(true, false, 0)]
+    [InlineData(true, true, 0)]
+    [InlineData(false, false, 7)]
+    [InlineData(false, true, 7)]
+    [InlineData(true, false, 7)]
+    [InlineData(true, true, 7)]
+    public async Task Jq_LaterOutputClosurePreservesEarlierDiagnosticFailure(bool previousError, bool diagnostic, int writeStatus)
+    {
+        var inner = new MockFileSystem();
+        inner.AddFile("/input", previousError ? "0\n1\n2\n" : "1\n2\n");
+        inner.AddFile("/later", "3\n");
+        JqAppendResult stopped = writeStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(writeStatus);
+        var host = new DiagnosticHost(inner)
+        {
+            ChunkBytes = 2,
+            StderrResult = diagnostic ? stopped : null,
+            StderrStopAfter = previousError ? 2 : 1,
+            StdoutResult = diagnostic ? null : stopped,
+        };
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        string expression = "if . == 0 then error(\"first\") else " + (diagnostic ? "debug" : ".") + " end";
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", expression, "/input", "/later")));
+        int expected = writeStatus != 0 ? writeStatus : previousError ? 5 : 0;
+        Assert.Equal(expected, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(diagnostic ? "" : "1\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal((previousError ? "jq: error (at /input:1): first\n" : "")
+            + (diagnostic ? "[\"DEBUG:\",1]\n" : ""), inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(previousError ? 2 : 1, inner.ReadBytesCallCount);
+        Assert.Single(inner.ClosedDescriptors);
+        Assert.Equal(0, inner.OpenFileCount);
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData(false, 0)]
     [InlineData(true, 0)]
     [InlineData(false, 7)]
@@ -245,6 +281,9 @@ public sealed partial class JqTests
         internal bool AwaitDiagnosticBeforeRead { get; init; }
         internal bool FirstReadNotFinal { get; init; }
         internal JqAppendResult? StderrResult { get; init; }
+        internal JqAppendResult? StdoutResult { get; init; }
+        internal int StderrStopAfter { get; init; } = 1;
+        private int _stderrWrites;
         internal Exception? CloseFailure { get; init; }
         internal int CloseCalls { get; private set; }
         internal List<JqFileDescriptor> Writes { get; } = [];
@@ -264,7 +303,9 @@ public sealed partial class JqTests
             Writes.Add(descriptor);
             if (descriptor == JqFileDescriptor.StdErr) _diagnostic.TrySetResult();
             JqAppendResult result = await inner.AppendWhileOpenAsync(descriptor, content, cancellationToken).ConfigureAwait(false);
-            return descriptor == JqFileDescriptor.StdErr && StderrResult is { } stderr ? stderr : result;
+            if (descriptor == JqFileDescriptor.StdErr && ++_stderrWrites >= StderrStopAfter && StderrResult is { } stderr)
+                return stderr;
+            return descriptor == JqFileDescriptor.StdOut && StdoutResult is { } stdout ? stdout : result;
         }
 
         public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) => inner.OpenReadAsync(path, cancellationToken);
