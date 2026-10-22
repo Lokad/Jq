@@ -19,6 +19,13 @@ internal sealed class JqErrorException(JsonNode? payload) : JqException("error")
 // Catchable by user code like other evaluation failures.
 internal sealed class JqSeqResyncException(string message) : JqException(message);
 
+// Stop producing after a host append closes or fails. This unwind signal is
+// separate from an evaluation failure, so owned cleanup faults remain observable.
+internal sealed class JqOutputClosedException(int exitCode) : Exception("output closed")
+{
+    internal int ExitCode { get; } = exitCode;
+}
+
 // `halt` or `halt_error[(code)]`: immediate termination that user code can
 // never observe or catch. The stderr text is rendered once at the throw
 // site (strings raw, other values as JSON) so the executor only writes.

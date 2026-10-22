@@ -178,13 +178,17 @@ internal static class JqExecutor
             }
             catch (Exception unwind)
             {
-                unwindError = unwind;
+                unwindError = unwind is JqOutputClosedException ? null : unwind;
                 throw;
             }
             finally
             {
                 await cursor.CloseAbandonedAsync(unwindError).ConfigureAwait(false);
             }
+        }
+        catch (JqOutputClosedException ex)
+        {
+            return ex.ExitCode;
         }
         catch (JqHaltException ex)
         {

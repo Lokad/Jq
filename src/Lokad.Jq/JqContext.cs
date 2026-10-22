@@ -86,7 +86,7 @@ internal sealed class JqContext(
             host, descriptor, content, Budget.CancellationToken).ConfigureAwait(false);
         Budget.CheckCancellation();
         if (!appended.CanAcceptMore)
-            throw new JqHaltException(appended.ExitCode, null);
+            throw new JqOutputClosedException(appended.ExitCode);
     }
 
     public void Dispose()

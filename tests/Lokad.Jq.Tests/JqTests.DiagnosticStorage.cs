@@ -75,6 +75,32 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(false, 7)]
+    [InlineData(true, 7)]
+    public async Task Jq_DiagnosticClosureDoesNotHideOwnedCloseFaults(bool overflow, int status)
+    {
+        Exception sentinel = overflow ? new OverflowException("close sentinel") : new ArgumentException("close sentinel");
+        var inner = new MockFileSystem();
+        inner.AddFile("/input", "42\n");
+        var host = new DiagnosticHost(inner)
+        {
+            StderrResult = status == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(status),
+            CloseFailure = sentinel,
+        };
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "try debug catch \"caught\"", "/input")));
+
+        var failure = await Assert.ThrowsAsync<JqHostFailureException>(() => command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Same(sentinel, failure.InnerException);
+        Assert.Equal(1, host.CloseCalls);
+        Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[\"DEBUG:\",42]\n", inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData("debug", "[\"DEBUG:\",\"é\"]\n")]
     [InlineData("stderr", "é")]
     [InlineData("stderr", "")]
@@ -136,6 +162,8 @@ public sealed partial class JqTests
         internal bool AwaitDiagnosticBeforeRead { get; init; }
         internal bool FirstReadNotFinal { get; init; }
         internal JqAppendResult? StderrResult { get; init; }
+        internal Exception? CloseFailure { get; init; }
+        internal int CloseCalls { get; private set; }
         internal List<JqFileDescriptor> Writes { get; } = [];
         private readonly TaskCompletionSource _diagnostic = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -157,6 +185,11 @@ public sealed partial class JqTests
         }
 
         public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) => inner.OpenReadAsync(path, cancellationToken);
-        public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) => inner.CloseDescriptorAsync(descriptor, cancellationToken);
+        public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+        {
+            CloseCalls++;
+            if (CloseFailure is { } failure) throw failure;
+            return inner.CloseDescriptorAsync(descriptor, cancellationToken);
+        }
     }
 }
