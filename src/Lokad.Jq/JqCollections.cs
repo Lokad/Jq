@@ -16,7 +16,7 @@ internal sealed class MapFilter(JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         var result = new JsonArray();
         context.Budget.CheckCancellation();
-        foreach (JsonNode? element in Iterate(input, context, environment))
+        foreach (JsonNode? element in IteratorFilter.ReadValues(input, false, context.Budget))
             foreach (JsonNode? value in Body.Evaluate(element, context, environment))
             {
                 context.Budget.ReserveArrayItem(value);
@@ -25,11 +25,7 @@ internal sealed class MapFilter(JqFilter Body) : JqFilter
         yield return result;
     }
 
-    internal static IEnumerable<JsonNode?> Iterate(JsonNode? input, JqContext context, JqEnvironment environment)
-    {
-        foreach (JsonNode? value in new IteratorFilter(new IdentityFilter(), false).Evaluate(input, context, environment))
-            yield return value;
-    }
+
 }
 
 // `map_values(f)`: first f-output per element, dropping empties. Objects
@@ -438,7 +434,7 @@ internal static class CollectionKeys
     {
         JsonArray array = RequireArray(input, keys, context, environment, true);
         context.Budget.ReserveBytes(80L * array.Count);
-        foreach (JsonNode? element in MapFilter.Iterate(input, context, environment))
+        foreach (JsonNode? element in IteratorFilter.ReadValues(input, false, context.Budget))
         {
             var collected = new List<JsonNode?>();
             foreach (JsonNode? key in keys.Evaluate(element, context, environment))
@@ -776,7 +772,7 @@ internal sealed class SqlIndexFilter(JqFilter? Stream, JqFilter IndexExpr) : JqF
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        IEnumerable<JsonNode?> rows = Stream is null ? MapFilter.Iterate(input, context, environment) : Stream.Evaluate(input, context, environment);
+        IEnumerable<JsonNode?> rows = Stream is null ? IteratorFilter.ReadValues(input, false, context.Budget) : Stream.Evaluate(input, context, environment);
         var result = new JsonObject();
         context.Budget.CheckCancellation();
         foreach (JsonNode? row in rows)
@@ -857,7 +853,7 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
         {
             if (path is null)
             {
-                foreach (JsonNode? row in Stream is null ? MapFilter.Iterate(input, context, environment) : Stream.Evaluate(input, context, environment))
+                foreach (JsonNode? row in Stream is null ? IteratorFilter.ReadValues(input, false, context.Budget) : Stream.Evaluate(input, context, environment))
                     yield return (row, null);
             }
             else

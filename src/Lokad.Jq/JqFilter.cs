@@ -1124,24 +1124,31 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         foreach (var value in source.Evaluate(input, context, environment))
+            foreach (JsonNode? child in ReadValues(value, optional, context.Budget))
+                yield return child;
+    }
+
+    internal static IEnumerable<JsonNode?> ReadValues(JsonNode? value, bool optional, JqBudget budget)
+    {
+        budget.CheckCancellation();
+        if (value is JsonArray arr)
         {
-            if (value is JsonArray arr)
+            foreach (JsonNode? child in arr)
             {
-                foreach (var child in arr)
-                {
-                    yield return child;
-                }
+                budget.CheckCancellation();
+                yield return child;
             }
-            else if (value is JsonObject obj)
-            {
-                foreach (var child in obj)
-                {
-                    yield return child.Value;
-                }
-            }
-            else if (!optional)
-                throw new JqRuntimeException($"cannot iterate over {TypeName(value)}");
         }
+        else if (value is JsonObject obj)
+        {
+            foreach (var child in obj)
+            {
+                budget.CheckCancellation();
+                yield return child.Value;
+            }
+        }
+        else if (!optional)
+            throw new JqRuntimeException($"cannot iterate over {TypeName(value)}");
     }
 
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
@@ -1767,9 +1774,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
         static bool UsesSubstringSearch(JsonNode? input, JsonNode? needle) =>
             input is JsonArray || (TryGetString(input, out _) && TryGetString(needle, out _));
 
-        static JqFilter FallthroughGet(JsonNode? needle) =>
-            new IndexFilter(new IdentityFilter(), new LiteralFilter(needle), false);
-
         IEnumerable<JsonNode?> EvaluateWith(JsonNode?[] combo)
         {
             JsonNode? Arg(int i) => combo[i];
@@ -1844,8 +1848,10 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     if (UsesSubstringSearch(input, Arg(0)))
                         yield return context.Runtime.Indices(input, Arg(0));
                     else
-                        foreach (JsonNode? got in FallthroughGet(Arg(0)).Evaluate(input, context, environment))
-                            yield return got;
+                    {
+                        _ = JqPathReads.TryIndex(input, Arg(0), false, context, out JsonNode? got);
+                        yield return got;
+                    }
                     break;
                 case "index":
                 case "rindex":
