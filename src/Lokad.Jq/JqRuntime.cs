@@ -175,7 +175,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 budget.CheckCancellation();
                 return JsonValue.Create(topValue);
             }
-            if (TryInvalidNonFiniteLiteral(text, firstContent, out string invalidMessage))
+            if (TryInvalidNonFiniteLiteral(text, firstContent, default, out string invalidMessage))
                 throw new JqException(invalidMessage);
             if (!reader.Read())
                 throw new JqException("expected a JSON value");
@@ -219,17 +219,17 @@ internal sealed partial class JqRuntime(JqBudget budget)
     private static bool IsValueBoundary(byte value) =>
         value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n' or (byte)',' or (byte)']' or (byte)'}';
 
-    private static bool IsValuePreceded(ReadOnlySpan<byte> text, int position)
+    private static bool IsValuePreceded(ReadOnlySpan<byte> text, int position, InputPrefix prefix)
     {
         int index = position - 1;
         while (index >= 0 && text[index] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
             index--;
         if (index < 0)
-            return true;
+            return prefix.LastNonWhitespace is 0 or (byte)'[' or (byte)',' or (byte)':';
         return text[index] is (byte)'[' or (byte)',' or (byte)':';
     }
 
-    private static bool TryInvalidNonFiniteLiteral(ReadOnlySpan<byte> text, int position, out string message)
+    private bool TryInvalidNonFiniteLiteral(ReadOnlySpan<byte> text, int position, InputPrefix prefix, out string message)
     {
         message = string.Empty;
         int index = SkipJsonWhitespace(text, position);
@@ -252,8 +252,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
             tail++;
         if (tail != text.Length)
             return false;
-        ComputeEofPosition(text, out int line, out int column);
-        message = "Invalid numeric literal at EOF at line " + line + ", column " + column;
+        prefix.Advance(text, budget);
+        message = "Invalid numeric literal at EOF at line " + (prefix.LineBreaks + 1) + ", column " + prefix.Column;
         return true;
     }
 
@@ -262,20 +262,28 @@ internal sealed partial class JqRuntime(JqBudget budget)
         value != (byte)'[' && value != (byte)',' && value != (byte)']' && value != (byte)'{' &&
         value != (byte)':' && value != (byte)'}' && value != (byte)'"';
 
-    private static void ComputeEofPosition(ReadOnlySpan<byte> text, out int line, out int column)
+    // The incremental reader only retains incomplete token bytes. This small
+    // prefix summary preserves extended-literal validation and EOF positions.
+    private struct InputPrefix
     {
-        line = 1;
-        column = 0;
-        for (int i = 0; i < text.Length; i++)
+        internal byte LastNonWhitespace;
+        internal int LineBreaks;
+        internal int Column;
+
+        internal void Advance(ReadOnlySpan<byte> text, JqBudget budget)
         {
-            if (text[i] == (byte)'\n')
+            for (int i = 0; i < text.Length; i++)
             {
-                line++;
-                column = 0;
-            }
-            else
-            {
-                column++;
+                if ((i & 4095) == 0) budget.CheckCancellation();
+                byte current = text[i];
+                if (current == (byte)'\n')
+                {
+                    LineBreaks++;
+                    Column = 0;
+                }
+                else Column++;
+                if (current is not ((byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n'))
+                    LastNonWhitespace = current;
             }
         }
     }
@@ -311,7 +319,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // A restored state expecting a value needs the following comma consumed
     // here. A post-value state consumes it itself. Resumed values preserve
     // that state kind, including across incremental host reads.
-    private void ReadToken(ref Utf8JsonReader reader, ReadOnlySpan<byte> source, ref int consumedBase, JsonReaderState restoreState, bool consumeComma, out bool hasToken, out JsonNode? nonFinite)
+    private void ReadToken(ref Utf8JsonReader reader, ReadOnlySpan<byte> source, ref int consumedBase, InputPrefix prefix, JsonReaderState restoreState, bool consumeComma, out bool hasToken, out JsonNode? nonFinite)
         {
             nonFinite = null;
             int checkpoint = consumedBase + (int)reader.BytesConsumed;
@@ -323,7 +331,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             catch (JsonException)
             {
                 int failure = consumedBase + (int)reader.BytesConsumed;
-                if (!reader.IsFinalBlock && IsValuePreceded(source, failure)
+                if (!reader.IsFinalBlock && IsValuePreceded(source, failure, prefix)
                     && IsIncompleteNonFinite(source, failure))
                 {
                     reader = new Utf8JsonReader(source[checkpoint..], false, checkpointState);
@@ -331,10 +339,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     hasToken = false;
                     return;
                 }
-                if (IsValuePreceded(source, failure)
-                    && TryInvalidNonFiniteLiteral(source, failure, out string nestedInvalid))
+                if (IsValuePreceded(source, failure, prefix)
+                    && TryInvalidNonFiniteLiteral(source, failure, prefix, out string nestedInvalid))
                     throw new JqException(nestedInvalid);
-                if (IsValuePreceded(source, failure)
+                if (IsValuePreceded(source, failure, prefix)
                     && TryMatchNonFinite(source, failure, out double number, out int end))
                 {
                     int resume = SkipJsonWhitespace(source, end);
@@ -399,7 +407,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                             throw new JqException("expected object key");
                         string name = ReadAdmittedString(ref reader);
                         budget.ReserveBytes(96);
-                        ReadToken(ref reader, source, ref consumedBase, headState, expectsObjectValue, out bool hasValue, out JsonNode? valueFallback);
+                        ReadToken(ref reader, source, ref consumedBase, default, headState, expectsObjectValue, out bool hasValue, out JsonNode? valueFallback);
                         if (!hasValue)
                             throw new JqException("truncated JSON value");
                         if (valueFallback is not null)
@@ -422,7 +430,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     while (true)
                     {
                         JsonReaderState headState = reader.CurrentState;
-                        ReadToken(ref reader, source, ref consumedBase, headState, expectsValue, out bool hasToken, out JsonNode? nonFinite);
+                        ReadToken(ref reader, source, ref consumedBase, default, headState, expectsValue, out bool hasToken, out JsonNode? nonFinite);
                         if (!hasToken)
                             throw new JqException("truncated JSON value");
                         if (nonFinite is not null)

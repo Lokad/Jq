@@ -50,14 +50,16 @@ public sealed partial class JqTests
         foreach (int chunk in new[] { 1, 2, 3, 7, bytes.Length })
         {
             var reader = new JqRuntime.InputReader(runtime, budget);
+            int start = 0;
             for (int end = Math.Min(chunk, bytes.Length); ; end = Math.Min(end + chunk, bytes.Length))
             {
-                if (reader.TryRead(bytes.AsSpan(0, end), end == bytes.Length, out JsonNode? actual, out int consumed))
+                if (reader.TryRead(bytes.AsSpan(start, end - start), end == bytes.Length, out JsonNode? actual, out int consumed))
                 {
-                    Assert.Equal(expectedConsumed, consumed);
+                    Assert.Equal(expectedConsumed, start + consumed);
                     Assert.Equal(0, runtime.Compare(expected, actual));
                     break;
                 }
+                start += consumed;
                 Assert.True(end < bytes.Length, "Final input must complete.");
             }
         }

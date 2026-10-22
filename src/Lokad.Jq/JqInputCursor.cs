@@ -159,21 +159,27 @@ internal sealed class JqInputCursor : IAsyncDisposable
             }
             JsonNode? value;
             int consumed;
+            int valueStartLine = _newlines;
+            bool valueHasLineFeed = false;
             try
             {
                 if (_jsonReader is not { } reader)
                     throw new InvalidOperationException("JSON input reader is unavailable.");
-                if (!reader.TryRead(_buffer.AsSpan(_start, _count), _eof, out value, out consumed))
+                while (!reader.TryRead(_buffer.AsSpan(_start, _count), _eof, out value, out consumed))
                 {
+                    int newlines = CountLf(_start, consumed);
+                    valueHasLineFeed |= newlines != 0;
+                    _newlines += newlines;
+                    _start += consumed;
+                    _count -= consumed;
                     await FillAsync().ConfigureAwait(false);
-                    continue;
                 }
             }
             catch (JqException exception) when (exception is not JqQuotaException)
             {
                 // Explicit reads report the failing line already present in
                 // the buffer; known-invalid input never needs another host read.
-                int line = _newlines + (IndexOfLf() >= 0 ? 1 : 0);
+                int line = valueStartLine + (valueHasLineFeed || IndexOfLf() >= 0 ? 1 : 0);
                 SetPosition(line);
                 throw;
             }

@@ -7,7 +7,7 @@ namespace Lokad.Jq;
 internal sealed partial class JqRuntime
 {
     // Keeps the standard JSON reader and DOM stack across host reads. The cursor
-    // retains the original bytes until a value completes. Extended literals share
+    // retires committed bytes before further reads. Extended literals share
     // the whole-value token reader; invalid input fails without another host read.
     internal sealed class InputReader(JqRuntime runtime, JqBudget budget)
     {
@@ -20,7 +20,7 @@ internal sealed partial class JqRuntime
 
         private readonly List<Frame> _frames = new();
         private JsonReaderState _state = new(Options);
-        private int _offset;
+        private InputPrefix _prefix;
         private JsonNode? _root;
         private JsonReaderState _propertyState;
         private bool _propertyConsumesComma;
@@ -30,7 +30,7 @@ internal sealed partial class JqRuntime
         internal void Reset()
         {
             _state = new JsonReaderState(Options);
-            _offset = 0;
+            _prefix = default;
             _root = null;
             _frames.Clear();
         }
@@ -52,14 +52,14 @@ internal sealed partial class JqRuntime
             }
             try
             {
-                int consumedBase = _offset;
-                var reader = new Utf8JsonReader(source[_offset..], isFinal, _state);
+                int consumedBase = 0;
+                var reader = new Utf8JsonReader(source, isFinal, _state);
                 while (true)
                 {
                     JsonReaderState checkpointState = reader.CurrentState;
                     JsonTokenType previous = reader.TokenType;
                     bool propertyValue = _frames.Count != 0 && _frames[^1].Key is not null;
-                    runtime.ReadToken(ref reader, source, ref consumedBase,
+                    runtime.ReadToken(ref reader, source, ref consumedBase, _prefix,
                         propertyValue ? _propertyState : checkpointState,
                         propertyValue ? _propertyConsumesComma : previous == JsonTokenType.StartArray,
                         out bool hasToken, out JsonNode? nonFinite);
@@ -111,8 +111,9 @@ internal sealed partial class JqRuntime
                         return true;
                     }
                 }
-                _offset = consumedBase + (int)reader.BytesConsumed;
+                consumed = consumedBase + (int)reader.BytesConsumed;
                 _state = reader.CurrentState;
+                _prefix.Advance(source[..consumed], budget);
                 if (!isFinal) return false;
             }
             catch (JsonException exception)
