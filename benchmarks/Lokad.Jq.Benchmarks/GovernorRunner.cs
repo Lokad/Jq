@@ -510,6 +510,22 @@ internal static class GovernorRunner
             string.Concat(Enumerable.Repeat("{\"x\":[0]}\n", records)), string.Concat(Enumerable.Repeat("[0]\n", records)));
         AddDiagnostic("selector-path-effects", 1, ["-nc", "{a:1} | path(first((.a|debug),error(\"late\")))"],
             "", "[\"a\"]\n", "[\"DEBUG:\",1]\n");
+        Add("add-object-fragments", 1024, ["-nc", "add(range(1024) | {(\"k\" + tostring): .}) | length"],
+            "", "1024\n");
+        Add("add-string-inputs", elements, ["-nc", "add(inputs) | length"],
+            string.Concat(Enumerable.Repeat("\"x\"\n", elements)), "10000\n");
+        Add("operand-preview-string", 100000, ["-nc", "try ((\"x\" * 100000) + 1) catch \"caught\""],
+            "", "\"caught\"\n");
+        Add("operand-preview-suffix", 100000,
+            ["-nc", "try ({a:(\"p\" * 32),z:(\"x\" * 100000)} + 1) catch \"caught\""], "", "\"caught\"\n");
+        Add("from-entries-object", 2, ["-c", "from_entries"],
+            "{\"a\":{\"key\":\"x\",\"value\":null,\"Value\":2},\"b\":{\"Name\":\"y\",\"Value\":3}}", "{\"x\":null,\"y\":3}\n");
+        Add("join-object-values", 3, ["-c", "join(\",\")"],
+            "{\"a\":\"x\",\"b\":null,\"c\":3}", "\"x,,3\"\n");
+        Add("builtin-inventory", 223, ["-nc", "builtins | length"], "", "223\n");
+        AddDiagnostic("with-entries-error-order", 2,
+            ["-nc", "try ({a:1,b:2} | with_entries(if .key == \"a\" then null else stderr end)) catch ."],
+            "", "\"Cannot use null (null) as object key\"\n", "{\"key\":\"b\",\"value\":2}");
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>

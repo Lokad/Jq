@@ -109,4 +109,22 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
     }
+
+    [Fact]
+    public void Jq_AddPrivateObjectChecksCopiedValueDepth()
+    {
+        JsonNode deep = JsonValue.Create(0);
+        for (int depth = 0; depth < 64; depth++) deep = new JsonArray(deep);
+        var source = new JsonObject { ["a"] = deep };
+        var root = new BenchmarkMemoryBudget(64 * 1024);
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        {
+            var error = Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).AddValues(
+                new JsonNode?[] { new JsonObject(), new JsonObject(), source }));
+            Assert.False(error.IsMemoryAdmission);
+            Assert.Equal("value nesting limit exceeded", error.Message);
+            Assert.Same(deep, source["a"]);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
 }

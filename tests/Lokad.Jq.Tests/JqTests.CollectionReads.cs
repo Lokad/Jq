@@ -32,14 +32,15 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("if .key == \"a\" then null else stderr end", "\"Cannot use null (null) as object key\"\n", "{\"key\":\"b\",\"value\":2}")]
-    [InlineData("if .key == \"a\" then null else error(\"body\") end", "\"body\"\n", "")]
-    public async Task Jq_WithEntriesFinishesBodyEffectsBeforeEntryValidation(string body, string expected, string stderr)
+    [InlineData("if .key == \"a\" then null else stderr end", 0, "\"Cannot use null (null) as object key\"\n", "{\"key\":\"b\",\"value\":2}")]
+    [InlineData("if .key == \"a\" then null else error(\"body\") end", 0, "\"body\"\n", "")]
+    [InlineData("if .key == \"a\" then null else halt_error(7) end", 7, "", "{\"key\":\"b\",\"value\":2}\n")]
+    public async Task Jq_WithEntriesFinishesBodyEffectsBeforeEntryValidation(string body, int status, string expected, string stderr)
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "try ({a:1,b:2} | with_entries(" + body + ")) catch .")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
     }
