@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep fresh path/INDEX/JOIN results untracked; preserve saved-binding recovery
+  and JOIN path checks before later key or join effects.
 - Check cancellation throughout containment searches and avoid per-comparison
   closures and boxed enumerators.
 - Use ordinary indexing in `JOIN`, including array searches, slice keys and

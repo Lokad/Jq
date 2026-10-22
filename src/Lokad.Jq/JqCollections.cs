@@ -770,6 +770,8 @@ internal sealed class FlattenImplFilter(JqFilter Depth) : JqFilter
 // INDEX(stream; idx_expr) and INDEX(idx_expr): build an object keyed by tostring per stream row.
 internal sealed class SqlIndexFilter(JqFilter? Stream, JqFilter IndexExpr) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -795,7 +797,21 @@ internal sealed class SqlIndexFilter(JqFilter? Stream, JqFilter IndexExpr) : JqF
 // JOIN(idx; stream; idx_expr; join_expr) family: pair stream rows with index lookups.
 internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter IndexExpr, JqFilter? JoinExpr) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        foreach (var result in Run(input, context, environment, null))
+            yield return result.Value;
+    }
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
+    {
+        foreach (var result in Run(outer.Value, context, environment, outer))
+            yield return result.Path ?? throw new InvalidOperationException("JOIN path evaluation must retain its tracking result.");
+    }
+
+    private IEnumerable<(JsonNode? Value, JqValuePath? Path)> Run(JsonNode? input, JqContext context, JqEnvironment environment, JqValuePath? path)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -806,32 +822,52 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
                 context.Budget.ReserveBytes(64);
                 var collected = new JsonArray();
                 context.Budget.CheckCancellation();
-                foreach (JsonNode? row in MapFilter.Iterate(input, context, environment))
+                foreach (var (row, rowPath) in Rows())
                 {
                     context.Budget.ReserveBytes(24);
-                    collected.Add(CreatePair(idx, row, 1));
+                    collected.Add(CreatePair(idx, row, rowPath, 1));
                 }
-                yield return collected;
+                yield return (collected, path?.WithValue(collected, false));
             }
             else
             {
-                foreach (JsonNode? row in Stream.Evaluate(input, context, environment))
+                foreach (var (row, rowPath) in Rows())
                 {
-                    JsonArray pair = CreatePair(idx, row, 0);
+                    JsonArray pair = CreatePair(idx, row, rowPath, 0);
                     if (JoinExpr is null)
                     {
-                        yield return pair;
+                        yield return (pair, rowPath?.WithValue(pair, false));
+                    }
+                    else if (rowPath is null)
+                    {
+                        foreach (JsonNode? joined in JoinExpr.Evaluate(pair, context, environment))
+                            yield return (joined, null);
                     }
                     else
                     {
-                        foreach (JsonNode? joined in JoinExpr.Evaluate(pair, context, environment))
-                            yield return joined;
+                        JqValuePath untracked = rowPath.WithValue(pair, false);
+                        foreach (JqValuePath joined in JoinExpr.EvaluatePaths(untracked, context, environment))
+                            yield return (joined.Value, joined);
                     }
                 }
             }
         }
 
-        JsonArray CreatePair(JsonNode? idx, JsonNode? row, int depth)
+        IEnumerable<(JsonNode? Value, JqValuePath? Path)> Rows()
+        {
+            if (path is null)
+            {
+                foreach (JsonNode? row in Stream is null ? MapFilter.Iterate(input, context, environment) : Stream.Evaluate(input, context, environment))
+                    yield return (row, null);
+            }
+            else
+            {
+                foreach (JqValuePath row in Stream is null ? IteratorFilter.ReadPaths(path, context) : Stream.EvaluatePaths(path, context, environment))
+                    yield return (row.Value, row);
+            }
+        }
+
+        JsonArray CreatePair(JsonNode? idx, JsonNode? row, JqValuePath? rowPath, int depth)
         {
             context.Budget.ReserveBytes(88 + (row is JsonValue ? 64 : 0));
             var pair = new JsonArray
@@ -840,6 +876,8 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
             };
             foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
             {
+                if (rowPath is not null && !BoundValuePath(rowPath, idx, context.Runtime).Tracked)
+                    throw new JqException(JqPaths.InvalidAccess(key, idx, context));
                 _ = JqPathReads.TryIndex(idx, key, false, context, out JsonNode? lookup);
                 context.Budget.ReserveArrayItem(lookup);
                 pair.Add(context.Budget.CopyValue(lookup, depth + 1));

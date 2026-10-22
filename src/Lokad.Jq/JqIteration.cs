@@ -535,6 +535,8 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
 // only nodes for each truthy filter output, mirroring select.
 internal sealed class PathsFilter(JqFilter? Condition) : JqFilter
 {
+    internal override bool PreservesPathIdentity => false;
+
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);

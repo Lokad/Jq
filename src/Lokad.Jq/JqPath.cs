@@ -64,7 +64,15 @@ internal sealed record InvalidSegment(JsonNode? Raw) : JqValueSegment
 // One enumerated path: accumulated segments, the value found there, and
 // whether the value survived intact (fresh values travel untracked and fail
 // at the next path boundary).
-internal sealed record JqValuePath(IReadOnlyList<JqValueSegment> Segments, JsonNode? Value, bool Tracked);
+internal sealed record JqValuePath(IReadOnlyList<JqValueSegment> Segments, JsonNode? Value, bool Tracked)
+{
+    // Borrow the last tracked value so loading that same binding can restore
+    // the path after an intervening expression constructs a fresh value.
+    internal JqValuePath? Origin { get; init; }
+
+    internal JqValuePath WithValue(JsonNode? value, bool tracked) =>
+        new(Segments, value, tracked) { Origin = tracked ? null : Tracked ? this : Origin };
+}
 
 internal static class JqPaths
 {
@@ -1156,7 +1164,7 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
             JsonNode? value = JqPathReads.GetPath(pair.Value, segments, context);
             if (!pair.Tracked)
             {
-                yield return new JqValuePath(pair.Segments, value, false);
+                yield return pair.WithValue(value, false);
                 continue;
             }
             context.Budget.ReserveBytes(24L * (pair.Segments.Count + segments.Count));

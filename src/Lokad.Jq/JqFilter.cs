@@ -50,10 +50,19 @@ internal abstract class JqFilter
     // without probing ahead into deferred errors or side effects.
     internal virtual bool IsSingleValued(JqEnvironment environment, int depth) => false;
 
+    internal static JqValuePath BoundValuePath(JqValuePath pair, JsonNode? value, JqRuntime runtime)
+    {
+        JqValuePath? origin = pair.Tracked ? pair : pair.Origin;
+        bool intact = origin is not null && (ReferenceEquals(value, origin.Value)
+            || (value is null || value is JsonValue scalar && !TryGetString(scalar, out _))
+                && PathIntact(runtime, origin.Value, value));
+        return intact && origin is not null ? origin.WithValue(value, true) : pair.WithValue(value, false);
+    }
+
     protected virtual IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
         foreach (JsonNode? value in Evaluate(pair.Value, context, environment))
-            yield return new JqValuePath(pair.Segments, value, pair.Tracked && PreservesPathIdentity && PathIntact(context.Runtime, pair.Value, value));
+            yield return pair.WithValue(value, pair.Tracked && PreservesPathIdentity && PathIntact(context.Runtime, pair.Value, value));
     }
 
     // Path intactness mirrors upstream identity: bitwise for doubles (so
@@ -152,19 +161,7 @@ internal sealed class VariableFilter(string name) : SingleValueFilter
     {
         if (!environment.TryGetValue(name, out JsonNode? value))
             throw new JqException($"undefined variable ${name}");
-        if (ReferenceEquals(value, pair.Value))
-        {
-            yield return new JqValuePath(pair.Segments, value, pair.Tracked);
-            yield break;
-        }
-
-        if (value is null || (value is JsonValue scalar && !TryGetString(scalar, out _)))
-        {
-            yield return new JqValuePath(pair.Segments, value, pair.Tracked && PathIntact(context.Runtime, pair.Value, value));
-            yield break;
-        }
-
-        yield return new JqValuePath(pair.Segments, value, false);
+        yield return BoundValuePath(pair, value, context.Runtime);
     }
 }
 
@@ -444,7 +441,7 @@ internal sealed class AsFilter(
     private IEnumerable<JqValuePath> RunPathAlternative(BindingPattern alternative, JsonNode? bound, JqEnvironment prebound, JqValuePath pair, JqContext context, JqScopeStorage storage)
     {
         foreach (JqEnvironment scope in Match(alternative, bound, prebound, context, storage, 1))
-            foreach (JqValuePath next in body.EvaluatePaths(new JqValuePath(pair.Segments, pair.Value, pair.Tracked), context, scope))
+            foreach (JqValuePath next in body.EvaluatePaths(pair, context, scope))
                 yield return next;
     }
 }
@@ -1153,25 +1150,29 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
     protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
     {
         foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment))
+            foreach (JqValuePath child in ReadPaths(pair, context))
+                yield return child;
+    }
+
+    internal static IEnumerable<JqValuePath> ReadPaths(JqValuePath pair, JqContext context)
+    {
+        if ((pair.Value is JsonArray || pair.Value is JsonObject) && !pair.Tracked)
+            throw new JqException(InvalidIterate(pair.Value, context));
+        if (pair.Value is JsonArray arr)
         {
-            if ((pair.Value is JsonArray || pair.Value is JsonObject) && !pair.Tracked)
+            for (int index = 0; index < arr.Count; index++)
+                yield return new JqValuePath(Extend(pair.Segments, new IndexSegment(index, false), context.Budget), arr[index], true);
+        }
+        else if (pair.Value is JsonObject obj)
+        {
+            foreach (var property in obj)
+                yield return new JqValuePath(Extend(pair.Segments, new KeySegment(property.Key), context.Budget), property.Value, true);
+        }
+        else
+        {
+            if (!pair.Tracked)
                 throw new JqException(InvalidIterate(pair.Value, context));
-            if (pair.Value is JsonArray arr)
-            {
-                for (int index = 0; index < arr.Count; index++)
-                    yield return new JqValuePath(Extend(pair.Segments, new IndexSegment(index, false), context.Budget), arr[index], true);
-            }
-            else if (pair.Value is JsonObject obj)
-            {
-                foreach (var property in obj)
-                    yield return new JqValuePath(Extend(pair.Segments, new KeySegment(property.Key), context.Budget), property.Value, true);
-            }
-            else
-            {
-                if (!pair.Tracked)
-                    throw new JqException(InvalidIterate(pair.Value, context));
-                throw new JqRuntimeException($"cannot iterate over {TypeName(pair.Value)}");
-            }
+            throw new JqRuntimeException($"cannot iterate over {TypeName(pair.Value)}");
         }
     }
 }

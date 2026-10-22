@@ -101,7 +101,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
                     bool identical = ReferenceEquals(payload, pair.Value)
                         || ((payload is null || (payload is JsonValue scalar && !JqRuntime.TryGetString(scalar, out _)))
                             && PathIntact(context.Runtime, pair.Value, payload));
-                    failure = new JqValuePath(pair.Segments, payload, pair.Tracked && identical);
+                    failure = pair.WithValue(payload, pair.Tracked && identical);
                 }
             }
             if (faulted && failure is not null && Handler is JqFilter handler)
