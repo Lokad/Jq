@@ -876,7 +876,7 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
             };
             foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
             {
-                if (rowPath is not null && !BoundValuePath(rowPath, idx, context.Runtime).Tracked)
+                if (rowPath is not null && !BoundValuePath(rowPath, idx).Tracked)
                     throw new JqException(JqPaths.InvalidAccess(key, idx, context));
                 _ = JqPathReads.TryIndex(idx, key, false, context, out JsonNode? lookup);
                 context.Budget.ReserveArrayItem(lookup);

@@ -55,7 +55,7 @@ public sealed partial class JqTests
                 if (reader.TryRead(bytes.AsSpan(0, end), end == bytes.Length, out JsonNode? actual, out int consumed))
                 {
                     Assert.Equal(expectedConsumed, consumed);
-                    Assert.True(runtime.IntactEquals(expected, actual));
+                    Assert.Equal(0, runtime.Compare(expected, actual));
                     break;
                 }
                 Assert.True(end < bytes.Length, "Final input must complete.");

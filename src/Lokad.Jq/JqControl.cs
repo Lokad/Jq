@@ -100,7 +100,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
                     JsonNode? payload = JqErrors.Payload(exception, context.Budget);
                     bool identical = ReferenceEquals(payload, pair.Value)
                         || ((payload is null || (payload is JsonValue scalar && !JqRuntime.TryGetString(scalar, out _)))
-                            && PathIntact(context.Runtime, pair.Value, payload));
+                            && PathIntact(pair.Value, payload));
                     failure = pair.WithValue(payload, pair.Tracked && identical);
                 }
             }

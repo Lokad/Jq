@@ -23,8 +23,9 @@ updates preserve the enclosing input and key-major effects/results; `?` leaves
 key-expression errors visible. `join` requires array input; null
 elements and empty arrays remain valid.
 `JOIN` lookups follow ordinary indexing, including array searches and slice keys.
-Fresh path arrays and SQL collection results cannot become writable paths through
-equal contents; loading a saved original binding can restore its path.
+Writable paths retain heap identity and immediate-value representation. Fresh
+containers cannot become targets through equal contents; a saved original binding
+can restore its path.
 
 ## Known differences and limits
 

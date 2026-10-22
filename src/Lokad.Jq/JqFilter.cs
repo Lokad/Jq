@@ -50,31 +50,28 @@ internal abstract class JqFilter
     // without probing ahead into deferred errors or side effects.
     internal virtual bool IsSingleValued(JqEnvironment environment, int depth) => false;
 
-    internal static JqValuePath BoundValuePath(JqValuePath pair, JsonNode? value, JqRuntime runtime)
+    internal static JqValuePath BoundValuePath(JqValuePath pair, JsonNode? value)
     {
         JqValuePath? origin = pair.Tracked ? pair : pair.Origin;
-        bool intact = origin is not null && (ReferenceEquals(value, origin.Value)
-            || (value is null || value is JsonValue scalar && !TryGetString(scalar, out _))
-                && PathIntact(runtime, origin.Value, value));
+        bool intact = origin is not null && PathIntact(origin.Value, value);
         return intact && origin is not null ? origin.WithValue(value, true) : pair.WithValue(value, false);
     }
 
     protected virtual IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
         foreach (JsonNode? value in Evaluate(pair.Value, context, environment))
-            yield return pair.WithValue(value, pair.Tracked && PreservesPathIdentity && PathIntact(context.Runtime, pair.Value, value));
+            yield return pair.WithValue(value, pair.Tracked && PreservesPathIdentity && PathIntact(pair.Value, value));
     }
 
-    // Path intactness mirrors upstream identity: bitwise for doubles (so
-    // signed zeros stay distinct) with NaN-tolerant structural equality
-    // for containers (a surviving NaN is still the same value).
-    internal static bool PathIntact(JqRuntime runtime, JsonNode? expected, JsonNode? actual)
+    // Heap values retain their identity by reference. Immediate numbers keep
+    // their representation, including signed zero and NaN bits.
+    internal static bool PathIntact(JsonNode? expected, JsonNode? actual)
     {
-        ArgumentNullException.ThrowIfNull(runtime);
+        if (ReferenceEquals(expected, actual)) return true;
         if (expected is JsonValue a && actual is JsonValue b
-            && a.TryGetValue<double>(out double x) && b.TryGetValue<double>(out double y))
-            return BitConverter.DoubleToInt64Bits(x) == BitConverter.DoubleToInt64Bits(y);
-        return runtime.IntactEquals(actual, expected);
+            && a.TryGetValue<bool>(out bool x) && b.TryGetValue<bool>(out bool y)) return x == y;
+        return TypeName(expected) == "number" && TypeName(actual) == "number"
+            && BitConverter.DoubleToInt64Bits(Number(expected)) == BitConverter.DoubleToInt64Bits(Number(actual));
     }
 }
 
@@ -161,7 +158,7 @@ internal sealed class VariableFilter(string name) : SingleValueFilter
     {
         if (!environment.TryGetValue(name, out JsonNode? value))
             throw new JqException($"undefined variable ${name}");
-        yield return BoundValuePath(pair, value, context.Runtime);
+        yield return BoundValuePath(pair, value);
     }
 }
 
