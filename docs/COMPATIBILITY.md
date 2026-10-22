@@ -47,6 +47,8 @@ can restore its path.
   as a file, including in groups; use separate values for long options
   (`--indent 4`, `--from-file program.jq`, `--library-path modules`).
 - **Modules:** hosted `import`, `include`, `-L` and `modulemeta` are supported.
+  Explicit search metadata replaces default paths; unreadable selected files
+  fail loading without falling back to another candidate.
   Automatic `~/.jq`, home expansion and `$ORIGIN` lookup are excluded. Main-file
   `$__loc__` reports the file path; qualified calls use hierarchical scopes.
 - **Recursion:** direct tails and proven single-valued control paths flatten.

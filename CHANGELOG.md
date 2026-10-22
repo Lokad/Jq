@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Stop outer input after an error diagnostic's stderr closes or fails, preserving
+  the command's earlier failure status.
+- Stop module search once a file opens, including when reading it fails. Explicit
+  search metadata replaces default paths and skips non-string entries.
+- Retire parsed JSON byte prefixes before further reads, retaining incomplete
+  tokens and owned values with their existing admission and cancellation rules.
+
 - Breaking host API: make `JqOpenedFile` a value type and remove its unused `Error`
   and `Failure(string)` payload. Return `OpenFailure` (or default) on failure and
   `Success(descriptor)` to transfer an owned descriptor.

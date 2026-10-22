@@ -13,7 +13,9 @@ The embedding application supplies byte I/O, files and modules through `IJqHost`
 Paths use Unix-style separators and resolve against the invocation's current
 directory. Its environment snapshot supplies `$ENV` and `env`; `PWD` selects the
 default current directory. `JqClock` supplies time and timezone inputs. Hosted
-module search uses `-L` and import metadata.
+module search uses the importer directory followed by `-L` directories. Explicit
+`search` metadata replaces those defaults and skips non-string entries. Search
+stops when a file opens; a read failure does not select a later candidate.
 
 Standard descriptors are borrowed. Successful `OpenReadAsync` calls transfer an
 owned descriptor to execution; `JqOpenedFile.OpenFailure` transfers none. Execution calls `CloseDescriptorAsync` when exhausted
@@ -34,7 +36,8 @@ without blocking the caller. Pure evaluation completes synchronously.
 Outer iteration and `input`/`inputs` share one pull cursor. File operands open
 lazily; `-` uses borrowed stdin at its current position. UTF-8 JSON values and raw
 lines may span reads. JSON decoding retains completed nodes across reads,
-including non-finite literals. Definitive JSON errors stop further reads; incomplete
+including non-finite literals, and discards parsed byte prefixes before further
+reads. Definitive JSON errors stop further reads; incomplete
 tokens wait for more bytes. LF splits raw input; CR is data. Slurp aggregates the cursor;
 `--stream` emits path/leaf events, and `--seq` separates records at RS and recovers
 after malformed records.
