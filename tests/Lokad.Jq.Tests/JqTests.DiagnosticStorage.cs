@@ -41,6 +41,28 @@ public sealed partial class JqTests
     }
 
     [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(false, 7)]
+    [InlineData(true, 7)]
+    public async Task Jq_ErrorDiagnosticClosurePreservesEarlierFailureDuringCleanup(bool overflow, int appendStatus)
+    {
+        var inner = new MockFileSystem();
+        inner.AddFile("/input", "0\n");
+        var host = new DiagnosticHost(inner)
+        {
+            StderrResult = appendStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(appendStatus),
+            CloseFailure = overflow ? new OverflowException("close sentinel") : new ArgumentException("close sentinel"),
+        };
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "error(\"bad\")", "/input")));
+        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("jq: error (at /input:1): bad\n", inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(1, host.CloseCalls);
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(7)]
     public async Task Jq_TerminalDiagnosticClosurePreservesCommandStatus(int appendStatus)

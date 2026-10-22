@@ -74,11 +74,36 @@ public sealed partial class JqTests
         Assert.Equal(0, host.OpenFileCount);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jq_SelectedModuleReadFailureSurvivesCleanupFault(bool optional)
+    {
+        var inner = new MockFileSystem();
+        inner.AddFile("/first/m.jq", "def f:1;");
+        inner.AddFile("/second/m.jq", "def f:2;");
+        var host = new ModuleReadFailureHost(inner, "/first/m.jq", false)
+        {
+            CloseFailure = new ArgumentException("close sentinel"),
+        };
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-n", "-L", "/first", "-L", "/second",
+            "import \"m\" as m {optional:" + (optional ? "true" : "false") + "}; 1")));
+        Assert.Equal(optional ? 0 : 3, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(optional ? "1\n" : "", inner.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(optional ? "" : "jq: error loading module /first/m.jq: input read failed\n", inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.DoesNotContain(host.Paths, path => path.StartsWith("/second/", StringComparison.Ordinal));
+        Assert.Single(inner.ClosedDescriptors);
+        Assert.Equal(0, inner.OpenFileCount);
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
     private sealed class ModuleReadFailureHost(MockFileSystem inner, string selected, bool partial) : IJqHost
     {
         private JqFileDescriptor? _selected;
         internal List<string> Paths { get; } = [];
         internal int Reads { get; private set; }
+        internal Exception? CloseFailure { get; init; }
 
         public async Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken)
         {
@@ -99,7 +124,11 @@ public sealed partial class JqTests
 
         public Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken) =>
             inner.AppendWhileOpenAsync(descriptor, content, cancellationToken);
-        public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>
-            inner.CloseDescriptorAsync(descriptor, cancellationToken);
+        public async Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+        {
+            int status = await inner.CloseDescriptorAsync(descriptor, cancellationToken).ConfigureAwait(false);
+            if (CloseFailure is { } failure) throw failure;
+            return status;
+        }
     }
 }

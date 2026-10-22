@@ -364,6 +364,8 @@ internal sealed class JqModuleLoader(
         try
         {
             content = await host.TryReadAllBytesAsync(descriptor, budget, cancellationToken).ConfigureAwait(false);
+            if (content is JqReadResult.Failed)
+                failure = new JqException("input read failed");
         }
         catch (Exception exception)
         {

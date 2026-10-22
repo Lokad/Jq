@@ -166,7 +166,10 @@ internal static class JqExecutor
                     {
                         if (await WriteErrorAsync(host, invocation, RenderUncaughtError(context, exception),
                             memoryScope, cancellationToken).ConfigureAwait(false) is not { CanAcceptMore: true })
+                        {
+                            unwindError = exception;
                             return 5;
+                        }
                         stickyError = 5;
                     }
                 }
