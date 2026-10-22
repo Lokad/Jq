@@ -25,7 +25,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs) =>
         SerializeUtf8(node, ascii, indent, tabs, sorted: false);
 
-    internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted)
+    internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted) =>
+        SerializeUtf8(node, ascii, indent, tabs, sorted, false);
+
+    private JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted, bool preview)
     {
         using var keyOrder = sorted ? new JqComparer(budget) : null;
         JqJsonBuffer buffer = budget.RentSerializationBuffer();
@@ -33,7 +36,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         {
             using (var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs)))
             {
-                try { WriteJson(node, ascii, writer, keyOrder); }
+                try { WriteJson(node, ascii, writer, keyOrder, preview); }
                 finally { writer.Reset(); }
             }
             buffer.LowercaseUnicodeEscapes();
@@ -56,33 +59,38 @@ internal sealed partial class JqRuntime(JqBudget budget)
             NewLine = "\n"
         };
 
-    private void WriteJson(JsonNode? node, bool ascii, Utf8JsonWriter writer, JqComparer? keyOrder)
+    private void WriteJson(JsonNode? node, bool ascii, Utf8JsonWriter writer, JqComparer? keyOrder, bool preview)
     {
-        WriteValue(node, 0, budget, ascii, writer, keyOrder);
+        WriteValue(node, 0, budget, ascii, writer, keyOrder, preview);
         writer.Flush();
         budget.CheckCancellation();
 
-        static void WriteValue(JsonNode? value, int depth, JqBudget budget, bool ascii,
-            Utf8JsonWriter writer, JqComparer? keyOrder)
+        static bool WriteValue(JsonNode? value, int depth, JqBudget budget, bool ascii,
+            Utf8JsonWriter writer, JqComparer? keyOrder, bool preview)
         {
             budget.CheckCancellation();
             JqRecursion.CheckValueDepth(value, depth);
             if (value is JsonArray array)
             {
                 writer.WriteStartArray();
-                foreach (JsonNode? child in array) WriteValue(child, depth + 1, budget, ascii, writer, keyOrder);
+                if (Full()) return false;
+                foreach (JsonNode? child in array)
+                    if (!WriteValue(child, depth + 1, budget, ascii, writer, keyOrder, preview)) return false;
                 writer.WriteEndArray();
             }
             else if (value is JsonObject obj)
             {
                 writer.WriteStartObject();
+                if (Full()) return false;
                 IEnumerable<KeyValuePair<string, JsonNode?>> properties = keyOrder is not null && obj.Count > 1
                     ? keyOrder.OrderProperties(obj, depth) : obj;
                 foreach (var property in properties)
                 {
                     budget.CheckCancellation();
-                    writer.WritePropertyName(property.Key);
-                    WriteValue(property.Value, depth + 1, budget, ascii, writer, keyOrder);
+                    ReadOnlySpan<char> key = Prefix(property.Key);
+                    writer.WritePropertyName(key);
+                    if (key.Length != property.Key.Length || Full()) return false;
+                    if (!WriteValue(property.Value, depth + 1, budget, ascii, writer, keyOrder, preview)) return false;
                 }
                 writer.WriteEndObject();
             }
@@ -95,7 +103,19 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 if (double.IsNaN(number)) writer.WriteNullValue();
                 else writer.WriteNumberValue(number > 0 ? double.MaxValue : double.MinValue);
             }
+            else if (preview && TryGetString(value, out string? text) && text is not null)
+                writer.WriteStringValue(Prefix(text));
             else value.WriteTo(writer, ascii ? AsciiJson : CompactJson);
+            return !Full();
+
+            bool Full() => preview && writer.BytesCommitted + writer.BytesPending >= 30;
+
+            ReadOnlySpan<char> Prefix(string text)
+            {
+                int length = preview ? Math.Min(30, text.Length) : text.Length;
+                if (length < text.Length && char.IsHighSurrogate(text[length - 1])) length--;
+                return text.AsSpan(0, length);
+            }
         }
     }
 
@@ -485,11 +505,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // Mirrors jv_dump_string_trunc with a 30-byte buffer: dumps longer than
     // 29 bytes keep 25 bytes (26 without a closing delimiter for scalars
     // other than strings) backed over the UTF-8 boundary, then take "..."
-    // with the closing delimiter. The string pre-slice is skipped: the
-    // truncation window dominates it in every case.
+    // with the closing delimiter. The shared writer stops after obtaining
+    // that prefix, including when a string or property name is much longer.
     internal string TruncatedDump(JsonNode? node)
     {
-        using var rendered = SerializeUtf8(node, false, null, false);
+        using var rendered = SerializeUtf8(node, false, null, false, false, true);
         ReadOnlySpan<byte> dumped = rendered.Value.Span;
         if (dumped.Length <= 29)
         {

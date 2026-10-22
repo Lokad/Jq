@@ -27,7 +27,7 @@ internal sealed partial class JqRuntime
                 CreateWriterOptions(invocation.AsciiOutput, invocation.Indent, invocation.UseTabs));
             buffer.Reset();
             writer.Reset(buffer);
-            try { runtime.WriteJson(node, invocation.AsciiOutput, writer, _keyOrder); }
+            try { runtime.WriteJson(node, invocation.AsciiOutput, writer, _keyOrder, false); }
             finally { writer.Reset(); }
             buffer.LowercaseUnicodeEscapes();
             ReadOnlyMemory<byte> body = buffer.WrittenMemory;
