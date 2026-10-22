@@ -20,8 +20,8 @@ intervening catch/optional scopes can intercept breaks. Keyed collections requir
 keeps the first minimum and `max_by` the last maximum. Slice deletion preserves
 slice-relative indices and mixed path forms. Computed index/slice paths and
 updates preserve the enclosing input and key-major effects/results; `?` leaves
-key-expression errors visible. `join` requires array input; null
-elements and empty arrays remain valid.
+key-expression errors visible. `join` and `from_entries` iterate array elements
+or object values in insertion order; null join elements remain valid.
 `JOIN` lookups follow ordinary indexing, including array searches and slice keys.
 Writable paths retain heap identity and immediate-value representation. Fresh
 containers cannot become targets through equal contents; a saved original binding

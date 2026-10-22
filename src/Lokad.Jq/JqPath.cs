@@ -649,6 +649,14 @@ internal static class JqPathReads
                 upper.HasValue ? CreateNumber(upper.Value) : null, context), false, null, false) + ")");
     }
 
+    internal static JsonNode? ReadField(JsonNode? value, string key, JqRuntime runtime) => value switch
+    {
+        JsonObject obj => obj.TryGetPropertyValue(key, out JsonNode? child) ? child : null,
+        null => null,
+        _ => throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(value) + " with string ("
+            + runtime.Serialize(JsonValue.Create(key), false, null, false) + ")")
+    };
+
     // Read traversal mirroring value semantics: missing reads null,
     // mistyped containers raise the same errors as ordinary reads.
     internal static JsonNode? GetPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JqContext context)
@@ -664,12 +672,7 @@ internal static class JqPathReads
             switch (segment)
             {
                 case KeySegment key:
-                    if (current is JsonObject obj)
-                        current = obj.TryGetPropertyValue(key.Key, out JsonNode? child) ? child : null;
-                    else if (current is null)
-                        current = null;
-                    else
-                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with string (" + context.Runtime.Serialize(JsonValue.Create(key.Key), false, null, false) + ")");
+                    current = ReadField(current, key.Key, context.Runtime);
                     break;
                 case IndexSegment index:
                     if (current is JsonArray arr)

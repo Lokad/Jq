@@ -1088,34 +1088,24 @@ internal sealed partial class JqRuntime(JqBudget budget)
         throw new JqException($"{TypeName(input)} ({Serialize(input, false, null, false)}) has no keys");
     }
 
-    internal JsonNode FromEntries(JsonNode? input)
-    {
-        if (input is not JsonArray arr)
-            throw new JqRuntimeException($"cannot iterate over {TypeName(input)}");
-        return FromEntryValues(arr);
-    }
+    internal JsonNode FromEntries(JsonNode? input) =>
+        FromEntryValues(IteratorFilter.ReadValues(input, false, budget));
 
     internal JsonObject FromEntryValues(IEnumerable<JsonNode?> entries)
     {
         var result = new JsonObject();
         foreach (JsonNode? element in entries)
         {
-            if (element is not JsonObject entry)
-                throw new JqRuntimeException($"cannot index {TypeName(element)} with string \"key\"");
-            JsonNode? key = null;
-            foreach (string name in new[] { "key", "Key", "name", "Name" })
-            {
-                if (entry.TryGetPropertyValue(name, out JsonNode? candidate) && Truthy(candidate))
-                {
-                    key = candidate;
-                    break;
-                }
-            }
+            budget.CheckCancellation();
+            JsonNode? key = JqPathReads.ReadField(element, "key", this);
+            if (!Truthy(key)) key = JqPathReads.ReadField(element, "Key", this);
+            if (!Truthy(key)) key = JqPathReads.ReadField(element, "name", this);
+            if (!Truthy(key)) key = JqPathReads.ReadField(element, "Name", this);
             if (key is null || !TryGetString(key, out string? keyName) || keyName is null)
                 throw new JqException($"Cannot use {TypeName(key)} ({ToJqString(key)}) as object key");
             budget.CheckCancellation();
-            JsonNode? value = entry.TryGetPropertyValue("value", out JsonNode? direct) ? direct
-                : entry.TryGetPropertyValue("Value", out JsonNode? capitalized) ? capitalized : null;
+            JsonNode? value = element is JsonObject entry && entry.TryGetPropertyValue("value", out JsonNode? direct)
+                ? direct : JqPathReads.ReadField(element, "Value", this);
             budget.ReserveObjectItem(value);
             result[keyName] = budget.CopyValue(value, 1);
         }
@@ -1599,7 +1589,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode Join(JsonNode? input, JsonNode? separator)
     {
-        if (input is not JsonArray arr)
+        if (input is not (JsonArray or JsonObject))
             throw new JqRuntimeException("Cannot iterate over " + TypeName(input) + " (" + TruncatedDump(input) + ")");
         bool hasSepText = separator is null;
         string sepText = string.Empty;
@@ -1610,7 +1600,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
         var builder = new StringBuilder();
         bool first = true;
-        foreach (JsonNode? item in arr)
+        foreach (JsonNode? item in IteratorFilter.ReadValues(input, false, budget))
         {
             if (!first)
             {

@@ -248,7 +248,6 @@ public sealed partial class JqTests
     [InlineData("[\"a\",\"b\"]", "join(1)", "string (\"a\") and number (1) cannot be added")]
     [InlineData("5", "join(\",\")", "Cannot iterate over number (5)")]
     [InlineData("\"a\"", "join(\",\")", "Cannot iterate over string (\"a\")")]
-    [InlineData("{\"a\":1}", "join(\",\")", "Cannot iterate over object ({\"a\":1})")]
     [InlineData("[\"1\",\"2\",{\"a\":{\"b\":{\"c\":33}}}]", "join(\",\")", "string (\"1,2,\") and object ({\"a\":{\"b\":{\"c\":33}}}) cannot be added")]
     [InlineData("[\"1\",\"2\",[3,4,5]]", "join(\",\")", "string (\"1,2,\") and array ([3,4,5]) cannot be added")]
     [InlineData("5", "explode", "explode input must be a string")]
