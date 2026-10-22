@@ -52,7 +52,7 @@ public sealed partial class JqTests
         Assert.Equal(0, root.ReservedBytes);
     }
     [Fact]
-    public void Jq_CaughtLabelPayloadAdmissionIsTerminal()
+    public async Task Jq_CaughtLabelPayloadAdmissionIsTerminal()
     {
         using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(CancellationToken.None));
         var filter = new JqParser("label $out | try break $out catch 42", JqProgramSource.Inline,
@@ -61,7 +61,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
         {
-            var error = Assert.Throws<JqQuotaException>(() => filter.Evaluate(null, context, context.RootEnvironment).ToArray());
+            var error = await Assert.ThrowsAsync<JqQuotaException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).ToArrayAsync());
             Assert.True(error.IsMemoryAdmission);
         }
         Assert.Equal(0, root.ReservedBytes);

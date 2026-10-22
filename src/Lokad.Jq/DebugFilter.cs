@@ -8,7 +8,7 @@ namespace Lokad.Jq;
 // Bytes queue in the context; the executor drains them to the host.
 internal sealed class DebugFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         if (args.Count == 0)
         {
@@ -16,7 +16,7 @@ internal sealed class DebugFilter(IReadOnlyList<JqFilter> args) : JqFilter
             yield return input;
             yield break;
         }
-        foreach (JsonNode? message in args[0].Evaluate(input, context, environment))
+        await foreach (JsonNode? message in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
             EmitDebug(context, message);
         yield return input;
     }

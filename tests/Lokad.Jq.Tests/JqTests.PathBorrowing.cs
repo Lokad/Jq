@@ -8,7 +8,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Jq_PathVariableReadsBorrowWithoutAdmissionAndStillCancel(bool currentValue)
+    public async Task Jq_PathVariableReadsBorrowWithoutAdmissionAndStillCancel(bool currentValue)
     {
         var memory = new BenchmarkMemoryBudget(0);
         var value = new JsonArray();
@@ -17,15 +17,15 @@ public sealed partial class JqTests
         using var context = new JqContext(new Dictionary<string, JsonNode?> { ["value"] = value },
             new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token));
         var filter = new VariableFilter("value");
-        using var paths = filter.EvaluatePaths(new JqValuePath([], currentValue ? value : null, true),
-            context, context.RootEnvironment).GetEnumerator();
+        await using var paths = filter.EvaluatePaths(new JqValuePath([], currentValue ? value : null, true),
+            context, context.RootEnvironment).GetAsyncEnumerator();
 
-        Assert.True(paths.MoveNext());
+        Assert.True(await paths.MoveNextAsync());
         Assert.Same(value, paths.Current.Value);
         Assert.Equal(currentValue, paths.Current.Tracked);
         Assert.Equal(0, memory.ReservedBytes);
         cancellation.Cancel();
-        Assert.ThrowsAny<OperationCanceledException>(() => paths.MoveNext());
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await paths.MoveNextAsync());
         Assert.Equal(0, memory.ReservedBytes);
     }
 

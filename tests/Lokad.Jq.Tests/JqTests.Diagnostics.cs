@@ -458,14 +458,14 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_RuntimeTypeErrorHasDiagnostic()
+    public async Task Jq_RuntimeTypeErrorHasDiagnostic()
     {
         var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
         var budget = new JqBudget(CancellationToken.None);
         using var context = new JqContext(variables, budget);
         JqFilter filter = new JqParser("1 | .foo", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
 
-        JqRuntimeException error = Assert.Throws<JqRuntimeException>(() => { filter.Evaluate(null, context, context.RootEnvironment).ToList(); });
+        JqRuntimeException error = await Assert.ThrowsAsync<JqRuntimeException>(async () => { await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync(); });
         Assert.Contains("cannot index number", error.Message);
     }
 

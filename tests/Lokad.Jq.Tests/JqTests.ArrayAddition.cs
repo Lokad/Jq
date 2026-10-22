@@ -6,7 +6,7 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Fact]
-    public void Jq_AddAppendsIntoItsOwnedArrayWithoutCopyingHistory()
+    public async Task Jq_AddAppendsIntoItsOwnedArrayWithoutCopyingHistory()
     {
         var fragments = new JsonArray();
         for (int index = 0; index < 1024; index++) fragments.Add(new JsonArray(index));
@@ -14,7 +14,7 @@ public sealed partial class JqTests
         var counted = new CountingMemoryBudget(root);
         using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
         {
-            var result = Assert.IsType<JsonArray>(new JqRuntime(budget).AddValues(fragments));
+            var result = Assert.IsType<JsonArray>(await new JqRuntime(budget).AddValues(fragments.ToAsyncEnumerable()));
             Assert.Equal(1024, result.Count);
             for (int index = 0; index < result.Count; index++)
             {
@@ -51,7 +51,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Jq_ArrayAddPreflightsGrowthAndCancelsBeforeMutation(bool cancel)
+    public async Task Jq_ArrayAddPreflightsGrowthAndCancelsBeforeMutation(bool cancel)
     {
         var fragment = new JsonArray(1);
         var root = new BenchmarkMemoryBudget(1024);
@@ -59,8 +59,8 @@ public sealed partial class JqTests
         using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
-            if (cancel) Assert.Throws<OperationCanceledException>(() => runtime.AddValues(Generate()));
-            else Assert.True(Assert.Throws<JqQuotaException>(() => runtime.AddValues(Generate())).IsMemoryAdmission);
+            if (cancel) await Assert.ThrowsAsync<OperationCanceledException>(async () => await runtime.AddValues(Generate().ToAsyncEnumerable()));
+            else Assert.True((await Assert.ThrowsAsync<JqQuotaException>(async () => await runtime.AddValues(Generate().ToAsyncEnumerable()))).IsMemoryAdmission);
             Assert.Single(fragment);
             Assert.Equal(1, fragment[0]?.GetValue<int>());
         }

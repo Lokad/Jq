@@ -43,11 +43,12 @@ internal sealed class JqBreakException(JqEnvironment target) : JqException("brea
 // host, halt, and tail-call signals always propagate.
 internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        using IEnumerator<JsonNode?> results = Body.Evaluate(input, context, environment).GetEnumerator();
+        var results = Body.Evaluate(input, context, environment).GetAsyncEnumerator();
+        await using var resultsLifetime = results.ConfigureAwait(false);
         while (true)
         {
             bool moved;
@@ -55,7 +56,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
             bool faulted = false;
             try
             {
-                moved = results.MoveNext();
+                moved = await results.MoveNextAsync().ConfigureAwait(false);
             }
             catch (Exception exception) when (JqErrors.IsCatchable(exception))
             {
@@ -69,7 +70,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
             if (faulted)
             {
                 if (Handler is JqFilter handler)
-                    foreach (JsonNode? value in handler.Evaluate(failure, context, environment))
+                    await foreach (JsonNode? value in handler.Evaluate(failure, context, environment).ConfigureAwait(false))
                         yield return value;
                 yield break;
             }
@@ -79,9 +80,10 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
         }
     }
 
-    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        using IEnumerator<JqValuePath> results = Body.EvaluatePaths(pair, context, environment).GetEnumerator();
+        var results = Body.EvaluatePaths(pair, context, environment).GetAsyncEnumerator();
+        await using var resultsLifetime = results.ConfigureAwait(false);
         while (true)
         {
             bool moved;
@@ -89,7 +91,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
             bool faulted = false;
             try
             {
-                moved = results.MoveNext();
+                moved = await results.MoveNextAsync().ConfigureAwait(false);
             }
             catch (Exception exception) when (JqErrors.IsCatchable(exception))
             {
@@ -106,7 +108,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
             }
             if (faulted && failure is not null && Handler is JqFilter handler)
             {
-                foreach (JqValuePath next in handler.EvaluatePaths(failure, context, environment))
+                await foreach (JqValuePath next in handler.EvaluatePaths(failure, context, environment).ConfigureAwait(false))
                     yield return next;
                 yield break;
             }
@@ -124,14 +126,14 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
 // nothing. Non-matching breaks propagate to outer labels.
 internal sealed class LabelFilter(object Label, JqFilter Body) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+    protected override IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
         Run(context, environment, scope => Body.Evaluate(input, context, scope));
 
-    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+    protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
         Run(context, environment, scope => Body.EvaluatePaths(pair, context, scope));
 
-    private IEnumerable<T> Run<T>(JqContext context, JqEnvironment environment,
-        Func<JqEnvironment, IEnumerable<T>> evaluate)
+    private async IAsyncEnumerable<T> Run<T>(JqContext context, JqEnvironment environment,
+        Func<JqEnvironment, IAsyncEnumerable<T>> evaluate)
     {
         using var ownedStorage = context.Budget.TemporaryStorage is null ? new JqStorage(context.Budget.MemoryBudget) : null;
         JqStorage storage = context.Budget.TemporaryStorage ?? ownedStorage
@@ -141,11 +143,12 @@ internal sealed class LabelFilter(object Label, JqFilter Body) : JqFilter
         try
         {
             JqEnvironment scope = environment.ExtendLabel(Label, context.NextLabel());
-            using IEnumerator<T> results = evaluate(scope).GetEnumerator();
+            var results = evaluate(scope).GetAsyncEnumerator();
+            await using var resultsLifetime = results.ConfigureAwait(false);
             while (true)
             {
                 bool moved;
-                try { moved = results.MoveNext(); }
+                try { moved = await results.MoveNextAsync().ConfigureAwait(false); }
                 catch (JqBreakException broken) when (ReferenceEquals(broken.Target, scope)) { yield break; }
                 catch (JqErrorException error) when (error.Payload is JsonObject { Count: 1 } payload
                     && payload.TryGetPropertyValue("__jq", out JsonNode? id)
@@ -165,7 +168,7 @@ internal sealed class LabelFilter(object Label, JqFilter Body) : JqFilter
 // itself; unknown labels are rejected at parse time.
 internal sealed class BreakFilter(object Label) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);

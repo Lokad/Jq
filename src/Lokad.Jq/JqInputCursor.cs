@@ -131,16 +131,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
         }
     }
 
-    // Synchronous pull for `input`/`inputs` filters, which evaluate without
-    // an async boundary. Blocks on the same host reads the async path uses;
-    // cancellation, quotas, and language errors propagate unchanged.
-    internal bool TryPullSync(out JsonNode? value)
-    {
-        (bool hasValue, JsonNode? pulled) = PullAsync().GetAwaiter().GetResult();
-        value = pulled;
-        return hasValue;
-    }
-
     private static bool ShouldAbandonSource(Exception exception) =>
         exception is not OperationCanceledException
         && exception is not JqQuotaException

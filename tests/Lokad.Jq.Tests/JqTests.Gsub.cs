@@ -135,13 +135,13 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GsubRejectsInvalidUtf16BeforeMatching()
+    public async Task Jq_GsubRejectsInvalidUtf16BeforeMatching()
     {
         using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), new JqBudget(CancellationToken.None));
         var filter = new JqParser("gsub(\"a\";\"x\")", JqProgramSource.Inline, context.RootEnvironment, context.Budget).Parse();
         var input = System.Text.Json.Nodes.JsonValue.Create("a\ud800");
 
-        var error = Assert.Throws<JqException>(() => filter.Evaluate(input, context, context.RootEnvironment).ToList());
+        var error = await Assert.ThrowsAsync<JqException>(async () => await filter.Evaluate(input, context, context.RootEnvironment).ToListAsync());
         Assert.Contains("invalid regex input", error.Message);
     }
 }

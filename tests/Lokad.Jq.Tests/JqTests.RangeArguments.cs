@@ -37,15 +37,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_RangeCancellationStopsAnActiveSequence()
+    public async Task Jq_RangeCancellationStopsAnActiveSequence()
     {
         using var cancellation = new CancellationTokenSource();
         using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(cancellation.Token));
         var filter = new RangeFilter(new JqFilter[] { new LiteralFilter(JsonValue.Create(1000000)) });
-        using IEnumerator<JsonNode?> values = filter.Evaluate(null, context, context.RootEnvironment).GetEnumerator();
-        Assert.True(values.MoveNext());
+        await using IAsyncEnumerator<JsonNode?> values = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
+        Assert.True(await values.MoveNextAsync());
         Assert.Equal(0, values.Current?.GetValue<long>());
         cancellation.Cancel();
-        Assert.Throws<OperationCanceledException>(() => values.MoveNext());
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await values.MoveNextAsync());
     }
 }

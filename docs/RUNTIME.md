@@ -27,6 +27,8 @@ the last bytes. `AppendWhileOpenAsync` may stay pending to apply backpressure an
 must copy bytes retained beyond completion.
 Execution awaits writes before reusing buffers and stops production on downstream
 closure or failure. Cancellation alone does not end a pending buffer borrow.
+Pending reads, including `input`, `inputs` and `modulemeta`, suspend evaluation
+without blocking the caller. Pure evaluation completes synchronously.
 
 Outer iteration and `input`/`inputs` share one pull cursor. File operands open
 lazily; `-` uses borrowed stdin at its current position. UTF-8 JSON values and raw

@@ -116,34 +116,34 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(64)]
     [InlineData(65)]
-    public void Jq_RecursiveEnumerationRestoresDepthAfterCompletionOrFailure(int depth)
+    public async Task Jq_RecursiveEnumerationRestoresDepthAfterCompletionOrFailure(int depth)
     {
         using var budget = new JqBudget(CancellationToken.None);
-        using (IEnumerator<int> values = Enumerate(depth).GetEnumerator())
+        await using (IAsyncEnumerator<int> values = Enumerate(depth).GetAsyncEnumerator())
         {
             if (depth == 64)
             {
-                Assert.True(budget.MoveNext(values));
+                Assert.True(await budget.MoveNextAsync(values));
                 Assert.Equal(1, values.Current);
-                Assert.False(budget.MoveNext(values));
+                Assert.False(await budget.MoveNextAsync(values));
             }
             else
-                Assert.Equal("filter nesting limit exceeded", Assert.Throws<JqQuotaException>(() => budget.MoveNext(values)).Message);
+                Assert.Equal("filter nesting limit exceeded", (await Assert.ThrowsAsync<JqQuotaException>(async () => await budget.MoveNextAsync(values))).Message);
         }
-        using IEnumerator<int> next = Enumerate(1).GetEnumerator();
-        Assert.True(budget.MoveNext(next));
+        await using IAsyncEnumerator<int> next = Enumerate(1).GetAsyncEnumerator();
+        Assert.True(await budget.MoveNextAsync(next));
         Assert.Equal(1, next.Current);
-        Assert.False(budget.MoveNext(next));
+        Assert.False(await budget.MoveNextAsync(next));
 
-        IEnumerable<int> Enumerate(int remaining)
+        async IAsyncEnumerable<int> Enumerate(int remaining)
         {
             if (remaining == 1)
             {
                 yield return 1;
                 yield break;
             }
-            using IEnumerator<int> nested = Enumerate(remaining - 1).GetEnumerator();
-            while (budget.MoveNext(nested)) yield return nested.Current;
+            await using IAsyncEnumerator<int> nested = Enumerate(remaining - 1).GetAsyncEnumerator();
+            while (await budget.MoveNextAsync(nested)) yield return nested.Current;
         }
     }
 

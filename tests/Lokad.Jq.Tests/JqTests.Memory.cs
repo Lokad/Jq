@@ -179,11 +179,11 @@ public sealed partial class JqTests
     {
         using var cancellation = new CancellationTokenSource();
         using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), new JqBudget(cancellation.Token));
-        using var values = new JqParser(filter, JqProgramSource.Inline, context.RootEnvironment, context.Budget).Parse().Evaluate(null, context, context.RootEnvironment).GetEnumerator();
-        Assert.True(values.MoveNext());
+        await using var values = new JqParser(filter, JqProgramSource.Inline, context.RootEnvironment, context.Budget).Parse().Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
+        Assert.True(await values.MoveNextAsync());
         cancellation.Cancel();
 
-        Assert.ThrowsAny<OperationCanceledException>(() => values.MoveNext());
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await values.MoveNextAsync());
     }
 
     [Theory]

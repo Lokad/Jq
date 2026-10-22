@@ -66,15 +66,19 @@ public sealed partial class JqTests
         Assert.InRange(memory.PeakBytes, 16386, 20 * 1024);
     }
 
-    [Fact]
-    public async Task Jq_GovernedInputKeepsPendingReadAndCleanupChargedAfterCancellation()
+    [Theory]
+    [InlineData(".")]
+    [InlineData("input")]
+    [InlineData("first(inputs)")]
+    public async Task Jq_GovernedInputKeepsPendingReadAndCleanupChargedAfterCancellation(string filter)
     {
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var inner = new MockFileSystem();
         inner.AddFile("/input", "1\n");
         var host = new MemoryReadBorrowHost(inner);
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "/input")));
+        string[] arguments = filter == "." ? [filter, "/input"] : ["-n", filter, "/input"];
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
         Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
         Memory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(8192, pending.Length);

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -100,13 +101,14 @@ internal static class JqPaths
     }
 
     // Collects tracked segments; fresh values fail exactly like upstream.
-    internal static List<IReadOnlyList<JqValueSegment>> CollectPaths(JqFilter paths, JsonNode? input, JqContext context, JqEnvironment environment)
+    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+    internal static async ValueTask<List<IReadOnlyList<JqValueSegment>>> CollectPaths(JqFilter paths, JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         var collected = new List<IReadOnlyList<JqValueSegment>>();
-        foreach (JqValuePath pair in paths.EvaluatePaths(new JqValuePath(new List<JqValueSegment>(), input, true), context, environment))
+        await foreach (JqValuePath pair in paths.EvaluatePaths(new JqValuePath(new List<JqValueSegment>(), input, true), context, environment).ConfigureAwait(false))
         {
             if (!pair.Tracked)
                 throw new JqException(InvalidResult(pair.Value, context));
@@ -1110,12 +1112,12 @@ internal static class JqPathDeletes
 // `path(EXPR)`: enumerates tracked segments as JSON arrays.
 internal sealed class PathBuiltinFilter(JqFilter Paths) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         var root = new JqValuePath(new List<JqValueSegment>(), input, true);
-        foreach (JqValuePath pair in Paths.EvaluatePaths(root, context, environment))
+        await foreach (JqValuePath pair in Paths.EvaluatePaths(root, context, environment).ConfigureAwait(false))
         {
             if (!pair.Tracked)
                 throw new JqException(JqPaths.InvalidResult(pair.Value, context));
@@ -1130,13 +1132,13 @@ internal sealed class DelBuiltinFilter(IReadOnlyList<JqFilter> Args) : JqFilter
     // Deletion rebuilds the root, so results travel untracked.
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         var collected = new List<IReadOnlyList<JqValueSegment>>();
         foreach (JqFilter paths in Args)
-            collected.AddRange(JqPaths.CollectPaths(paths, input, context, environment));
+            collected.AddRange(await JqPaths.CollectPaths(paths, input, context, environment).ConfigureAwait(false));
         yield return JqPathDeletes.DeletePaths(input, collected, context);
     }
 }
@@ -1144,15 +1146,15 @@ internal sealed class DelBuiltinFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 // `getpath(PATHS)`: reads through a path value.
 internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? paths in Paths.Evaluate(input, context, environment))
+        await foreach (JsonNode? paths in Paths.Evaluate(input, context, environment).ConfigureAwait(false))
             yield return JqPathReads.GetPath(input, JqPaths.ParsePathValue(paths, context), context);
     }
 
-    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(pair);
         ArgumentNullException.ThrowIfNull(context);
@@ -1161,7 +1163,7 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
         // keeps tracking with the path argument appended, so path(getpath($p)),
         // getpath($p) = value, and getpath($p) |= update all resolve through $p.
         // Fresh inputs travel untracked and fail at the next path boundary.
-        foreach (JsonNode? paths in Paths.Evaluate(pair.Value, context, environment))
+        await foreach (JsonNode? paths in Paths.Evaluate(pair.Value, context, environment).ConfigureAwait(false))
         {
             List<JqValueSegment> segments = JqPaths.ParsePathValue(paths, context);
             JsonNode? value = JqPathReads.GetPath(pair.Value, segments, context);
@@ -1184,12 +1186,12 @@ internal sealed class SetpathBuiltinFilter(JqFilter Paths, JqFilter Values) : Jq
     // Updates rebuild the root, so results travel untracked.
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? value in Values.Evaluate(input, context, environment))
-            foreach (JsonNode? paths in Paths.Evaluate(input, context, environment))
+        await foreach (JsonNode? value in Values.Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JsonNode? paths in Paths.Evaluate(input, context, environment).ConfigureAwait(false))
                 yield return JqPathUpdates.SetPath(input, JqPaths.ParsePathValue(paths, context), value, context);
     }
 }
@@ -1200,11 +1202,11 @@ internal sealed class DelpathsBuiltinFilter(JqFilter Paths) : JqFilter
     // Deletion rebuilds the root, so results travel untracked.
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? paths in Paths.Evaluate(input, context, environment))
+        await foreach (JsonNode? paths in Paths.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             if (paths is not JsonArray array)
                 throw new JqException("Paths must be specified as an array");
@@ -1228,13 +1230,13 @@ internal sealed class PickFilter(IReadOnlyList<JqFilter> Args) : JqFilter
     // Pick rebuilds from null, so its output is never identical to the input.
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         JsonNode? state = null;
         foreach (JqFilter paths in Args)
-            foreach (IReadOnlyList<JqValueSegment> segments in JqPaths.CollectPaths(paths, input, context, environment))
+            foreach (IReadOnlyList<JqValueSegment> segments in await JqPaths.CollectPaths(paths, input, context, environment).ConfigureAwait(false))
                 state = JqPathUpdates.SetPath(state, segments, JqPathReads.GetPath(input, segments, context), context);
         yield return state;
     }
@@ -1251,17 +1253,17 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
     // _modify, whose opaque results fail path tracking the same way.
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        List<IReadOnlyList<JqValueSegment>> paths = JqPaths.CollectPaths(Paths, input, context, environment);
+        List<IReadOnlyList<JqValueSegment>> paths = await JqPaths.CollectPaths(Paths, input, context, environment).ConfigureAwait(false);
         if (Op == "|=")
         {
-            yield return ModifyLoop(paths, Values, input, context, environment);
+            yield return await ModifyLoop(paths, Values, input, context, environment).ConfigureAwait(false);
             yield break;
         }
-        foreach (JsonNode? value in Values.Evaluate(input, context, environment))
+        await foreach (JsonNode? value in Values.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             JsonNode? state = input;
             foreach (IReadOnlyList<JqValueSegment> segments in paths)
@@ -1284,15 +1286,17 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
         }
     }
 
-    internal static JsonNode? ModifyLoop(IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqFilter update, JsonNode? input, JqContext context, JqEnvironment environment)
+    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+    internal static async ValueTask<JsonNode?> ModifyLoop(IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqFilter update, JsonNode? input, JqContext context, JqEnvironment environment)
     {
         JsonNode? state = input;
         var deleted = new List<IReadOnlyList<JqValueSegment>>();
         foreach (IReadOnlyList<JqValueSegment> segments in paths)
         {
             bool ran = false;
-            using IEnumerator<JsonNode?> results = update.Evaluate(JqPathReads.GetPath(state, segments, context), context, environment).GetEnumerator();
-            while (results.MoveNext())
+            var results = update.Evaluate(JqPathReads.GetPath(state, segments, context), context, environment).GetAsyncEnumerator();
+            await using var resultsLifetime = results.ConfigureAwait(false);
+            while (await results.MoveNextAsync().ConfigureAwait(false))
             {
                 state = JqPathUpdates.SetPath(state, segments, results.Current, context);
                 ran = true;
@@ -1313,11 +1317,11 @@ internal sealed class ModifyBuiltinFilter(JqFilter Paths, JqFilter Update) : JqF
     // Updates rebuild the root, so results travel untracked.
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        List<IReadOnlyList<JqValueSegment>> paths = JqPaths.CollectPaths(Paths, input, context, environment);
-        yield return AssignFilter.ModifyLoop(paths, Update, input, context, environment);
+        List<IReadOnlyList<JqValueSegment>> paths = await JqPaths.CollectPaths(Paths, input, context, environment).ConfigureAwait(false);
+        yield return await AssignFilter.ModifyLoop(paths, Update, input, context, environment).ConfigureAwait(false);
     }
 }

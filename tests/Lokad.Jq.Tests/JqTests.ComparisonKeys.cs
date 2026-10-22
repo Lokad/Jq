@@ -94,16 +94,16 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_ComparisonKeysKeepBorrowedValuesAndConstructIndependentOutputs()
+    public async Task Jq_ComparisonKeysKeepBorrowedValuesAndConstructIndependentOutputs()
     {
         var source = new JsonArray(new JsonArray(2), new JsonArray(1));
         using var budget = new JqBudget(CancellationToken.None);
         using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
-        var keys = CollectionKeys.Keyed(source, new IdentityFilter(), context, context.RootEnvironment).ToList();
+        var keys = await CollectionKeys.Keyed(source, new IdentityFilter(), context, context.RootEnvironment).ToListAsync();
         Assert.Same(source[0], keys[0].Keys[0]);
         Assert.Same(source[1], keys[1].Keys[0]);
         var filter = new SortByFilter(new IdentityFilter());
-        var output = Assert.IsType<JsonArray>(filter.Evaluate(source, context, context.RootEnvironment).Single());
+        var output = Assert.IsType<JsonArray>(await filter.Evaluate(source, context, context.RootEnvironment).SingleAsync());
         Assert.NotSame(source[1], output[0]);
         Assert.NotSame(source[0], output[1]);
         Assert.Same(source, source[0]?.Parent);

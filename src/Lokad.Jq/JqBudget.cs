@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
@@ -224,11 +225,13 @@ internal sealed class JqBudget : IDisposable
         return builder.ToString();
     }
 
-    // Count synchronous advancement; suspended results keep their storage owners.
-    internal bool MoveNext<T>(IEnumerator<T> iterator)
+    // Count nested advancement, including a suspended host operation. Yielded
+    // results keep their storage owners without keeping an active stack frame.
+    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+    internal async ValueTask<bool> MoveNextAsync<T>(IAsyncEnumerator<T> iterator)
     {
         EnterRecursion();
-        try { return iterator.MoveNext(); }
+        try { return await iterator.MoveNextAsync().ConfigureAwait(false); }
         finally { LeaveRecursion(); }
     }
 

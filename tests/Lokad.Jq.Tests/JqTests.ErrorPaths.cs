@@ -45,7 +45,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_CaughtErrorBorrowsDeepPayloadWithoutAdmissionAndStillCancels()
+    public async Task Jq_CaughtErrorBorrowsDeepPayloadWithoutAdmissionAndStillCancels()
     {
         JsonNode? payload = new JsonArray();
         for (int index = 0; index < 100; index++) payload = new JsonArray(payload);
@@ -55,10 +55,10 @@ public sealed partial class JqTests
             new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
         {
             var filter = new TryFilter(new FunctionFilter("error", []), new IdentityFilter());
-            Assert.Same(payload, filter.Evaluate(payload, context, context.RootEnvironment).Single());
+            Assert.Same(payload, await filter.Evaluate(payload, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(0, root.ReservedBytes);
             cancellation.Cancel();
-            Assert.ThrowsAny<OperationCanceledException>(() => filter.Evaluate(payload, context, context.RootEnvironment).ToArray());
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await filter.Evaluate(payload, context, context.RootEnvironment).ToArrayAsync());
         }
         Assert.Equal(0, root.ReservedBytes);
     }

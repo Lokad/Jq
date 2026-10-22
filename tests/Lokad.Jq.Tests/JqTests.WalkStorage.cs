@@ -6,7 +6,7 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Fact]
-    public void Jq_WalkAdmitsWideOutputWithoutCopiedChildInventories()
+    public async Task Jq_WalkAdmitsWideOutputWithoutCopiedChildInventories()
     {
         var input = new JsonArray();
         for (int index = 0; index < 10000; index++) input.Add((JsonNode?)null);
@@ -14,7 +14,7 @@ public sealed partial class JqTests
         var counted = new CountingMemoryBudget(root);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None)))
         {
-            var output = Assert.IsType<JsonArray>(new WalkFilter(new IdentityFilter()).Evaluate(input, context, context.RootEnvironment).Single());
+            var output = Assert.IsType<JsonArray>(await new WalkFilter(new IdentityFilter()).Evaluate(input, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(10000, output.Count);
             Assert.All(output, Assert.Null);
             output[0] = 1;
@@ -25,14 +25,14 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_WalkBorrowsObjectChildCursorsAndPreservesKeyOrder()
+    public async Task Jq_WalkBorrowsObjectChildCursorsAndPreservesKeyOrder()
     {
         var input = new JsonObject();
         for (int index = 0; index < 1000; index++) input.Add(index.ToString(System.Globalization.CultureInfo.InvariantCulture), null);
         var root = new BenchmarkMemoryBudget(128 * 1024);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
         {
-            var output = Assert.IsType<JsonObject>(new WalkFilter(new IdentityFilter()).Evaluate(input, context, context.RootEnvironment).Single());
+            var output = Assert.IsType<JsonObject>(await new WalkFilter(new IdentityFilter()).Evaluate(input, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(input.Select(property => property.Key), output.Select(property => property.Key));
             output["0"] = 1;
             Assert.Null(input["0"]);
@@ -57,7 +57,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_WalkCancelsBetweenChildrenAndRefundsItsOpenFrames()
+    public async Task Jq_WalkCancelsBetweenChildrenAndRefundsItsOpenFrames()
     {
         var input = new JsonObject { ["a"] = new JsonArray(1, 2, 3), ["b"] = new JsonArray(4, 5, 6) };
         using var cancellation = new CancellationTokenSource();
@@ -65,7 +65,7 @@ public sealed partial class JqTests
         var body = new WalkVisitFilter(() => { if (++visits == 2) cancellation.Cancel(); });
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
-            Assert.Throws<OperationCanceledException>(() => new WalkFilter(body).Evaluate(input, context, context.RootEnvironment).Single());
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await new WalkFilter(body).Evaluate(input, context, context.RootEnvironment).SingleAsync());
         Assert.Equal(2, visits);
         Assert.Equal("{\"a\":[1,2,3],\"b\":[4,5,6]}", input.ToJsonString());
         Assert.Equal(0, root.ReservedBytes);
@@ -73,7 +73,7 @@ public sealed partial class JqTests
 
     private sealed class WalkVisitFilter(Action visit) : JqFilter
     {
-        protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+        protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
         {
             visit();
             yield return input;

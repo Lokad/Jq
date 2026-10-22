@@ -43,7 +43,7 @@ public sealed partial class JqTests
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
             var env = await loader.LoadMainImportsAsync(Enumerable.Repeat(new JqModuleImport("m", null, false, null), 5).ToArray(),
                 "/", CancellationToken.None);
-            var result = new UserCallFilter("f999", 0, []).Evaluate(null, context, env).Single();
+            var result = await new UserCallFilter("f999", 0, []).Evaluate(null, context, env).SingleAsync();
             Assert.Equal(999, JqRuntime.Number(result));
             Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 1000);
         }
@@ -78,7 +78,7 @@ public sealed partial class JqTests
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], "/");
             var env = await loader.LoadMainImportsAsync([new JqModuleImport("m", null, false, metadata)], "/", CancellationToken.None);
-            Assert.Equal(42, JqRuntime.Number(new UserCallFilter("f", 0, []).Evaluate(null, context, env).Single()));
+            Assert.Equal(42, JqRuntime.Number(await new UserCallFilter("f", 0, []).Evaluate(null, context, env).SingleAsync()));
             Assert.Single(host.ClosedDescriptors);
         }
         Assert.Equal(0, host.OpenFileCount);
@@ -183,7 +183,7 @@ public sealed partial class JqTests
                 for (int i = 0; i < 10; i++)
                 {
                     var env = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
-                    Assert.Equal(42, JqRuntime.Number(new UserCallFilter("f", 0, []).Evaluate(null, context, env).Single()));
+                    Assert.Equal(42, JqRuntime.Number(await new UserCallFilter("f", 0, []).Evaluate(null, context, env).SingleAsync()));
                 }
                 var metadata = await loader.GetModuleMetadataAsync("m", CancellationToken.None);
                 Assert.Equal("f/0", metadata["defs"]?[0]?.GetValue<string>());
@@ -210,7 +210,7 @@ public sealed partial class JqTests
             host.AddFile("/first/m.jq", "def f:1;");
             var second = new JqModuleImport("m", null, false, new JsonObject { ["search"] = new JsonArray("/first", "/second") });
             var env = await loader.LoadMainImportsAsync([second], "/", CancellationToken.None);
-            Assert.Equal(1, JqRuntime.Number(new UserCallFilter("f", 0, []).Evaluate(null, context, env).Single()));
+            Assert.Equal(1, JqRuntime.Number(await new UserCallFilter("f", 0, []).Evaluate(null, context, env).SingleAsync()));
             Assert.Equal(2, host.ReadBytesCallCount);
         }
         Assert.Equal(0, host.OpenFileCount);

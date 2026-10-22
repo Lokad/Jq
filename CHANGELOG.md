@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Suspend evaluation for pending host reads in `input`, `inputs` and `modulemeta`.
+  Preserve lazy output, cancellation, scoped bindings and cleanup through suspension.
+- Keep host contract faults terminal during descriptor close, preserving earlier
+  failures and uncancelled cleanup.
 - Breaking host API: remove unused read failure payloads/status, append error
   diagnostics and `JqOperationError`. Use `ReadFailure` and `Failure(exitCode)`;
   successful reads still carry bytes and EOF, and append failures retain status.

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -1112,12 +1113,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return result;
     }
 
-    internal JsonNode? AddValues(IEnumerable<JsonNode?> values)
+    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+    internal async ValueTask<JsonNode?> AddValues(IAsyncEnumerable<JsonNode?> values)
     {
         JsonNode? result = null;
         bool ownsContainer = false;
         StringBuilder? text = null;
-        foreach (JsonNode? value in values)
+        await foreach (JsonNode? value in values.ConfigureAwait(false))
         {
             budget.CheckCancellation();
             if (text is not null)

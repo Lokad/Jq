@@ -89,7 +89,7 @@ public sealed partial class JqTests
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
-    public void Jq_TraversalPullsOneInfiniteSiblingAndDisposesItsEnumerator(int kind)
+    public async Task Jq_TraversalPullsOneInfiniteSiblingAndDisposesItsEnumerator(int kind)
     {
         var source = new TraversalSourceFilter(static () => { });
         JqFilter filter = kind == 0 ? new RecurseFilter(source, null)
@@ -98,8 +98,8 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(16 * 1024);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
         {
-            Assert.Equal(kind == 2 ? 1 : 2, filter.Evaluate(kind == 2 ? JsonValue.Create(0) : null, context, context.RootEnvironment)
-                .Take(kind == 2 ? 1 : 2).Count());
+            Assert.Equal(kind == 2 ? 1 : 2, await filter.Evaluate(kind == 2 ? JsonValue.Create(0) : null, context, context.RootEnvironment)
+                .Take(kind == 2 ? 1 : 2).CountAsync());
             Assert.Equal(1, source.Pulls);
             Assert.Equal(1, source.Disposals);
         }
@@ -107,7 +107,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_TraversalCancelsWhileRejectingInfiniteChildrenAndDisposesThem()
+    public async Task Jq_TraversalCancelsWhileRejectingInfiniteChildrenAndDisposesThem()
     {
         using var cancellation = new CancellationTokenSource();
         int calls = 0;
@@ -116,9 +116,9 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
         {
             var filter = new RecurseFilter(source, new LiteralFilter(JsonValue.Create(false)));
-            using var outputs = filter.Evaluate(null, context, context.RootEnvironment).GetEnumerator();
-            Assert.True(outputs.MoveNext());
-            Assert.Throws<OperationCanceledException>(() => outputs.MoveNext());
+            await using var outputs = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
+            Assert.True(await outputs.MoveNextAsync());
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await outputs.MoveNextAsync());
             Assert.Equal(10, calls);
             Assert.Equal(1, source.Disposals);
         }
@@ -219,7 +219,7 @@ public sealed partial class JqTests
 
     private sealed class TraversalNullFilter : JqFilter
     {
-        protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+        protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
         {
             yield return JsonValue.Create(input is null);
         }
@@ -230,7 +230,7 @@ public sealed partial class JqTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void Jq_TraversalCleanupPreservesTerminalFailures(bool primaryTerminal, bool cancellation)
+    public async Task Jq_TraversalCleanupPreservesTerminalFailures(bool primaryTerminal, bool cancellation)
     {
         Exception terminal = cancellation ? new OperationCanceledException()
             : new JqQuotaException("memory budget exceeded") { IsMemoryAdmission = true };
@@ -240,7 +240,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
         {
             var filter = new RecurseFilter(body, null);
-            Exception? thrown = Record.Exception(() => filter.Evaluate(JsonValue.Create(0), context, context.RootEnvironment).ToList());
+            Exception? thrown = await Record.ExceptionAsync(async () => await filter.Evaluate(JsonValue.Create(0), context, context.RootEnvironment).ToListAsync());
             Assert.Same(terminal, thrown);
             Assert.Equal(1, body.Disposals);
         }
@@ -250,7 +250,7 @@ public sealed partial class JqTests
     private sealed class TraversalFailureFilter(Exception primary, Exception cleanup) : JqFilter
     {
         public int Disposals { get; private set; }
-        protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+        protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
         {
             if (input is null) throw primary;
             try { yield return null; }
@@ -266,7 +266,7 @@ public sealed partial class JqTests
     {
         public int Pulls { get; private set; }
         public int Disposals { get; private set; }
-        protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+        protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
         {
             try
             {

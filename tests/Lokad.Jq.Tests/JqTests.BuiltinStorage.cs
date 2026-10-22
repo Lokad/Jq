@@ -17,7 +17,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_BuiltinResultsRemainIndependentWithOneAdmissionPerResult()
+    public async Task Jq_BuiltinResultsRemainIndependentWithOneAdmissionPerResult()
     {
         using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(CancellationToken.None));
         JqFilter filter = new JqParser("builtins", JqProgramSource.Inline, compiler.RootEnvironment, compiler.Budget).Parse();
@@ -25,10 +25,10 @@ public sealed partial class JqTests
         var counted = new CountingMemoryBudget(root);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None)))
         {
-            var first = Assert.IsType<JsonArray>(filter.Evaluate(null, context, context.RootEnvironment).Single());
+            var first = Assert.IsType<JsonArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
             string original = first[0]?.GetValue<string>() ?? throw new InvalidOperationException();
             first[0] = "changed";
-            var second = Assert.IsType<JsonArray>(filter.Evaluate(null, context, context.RootEnvironment).Single());
+            var second = Assert.IsType<JsonArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(original, second[0]?.GetValue<string>());
             Assert.Equal(original, JqBuiltinRegistry.ListAll()[0]);
             Assert.NotSame(first, second);
@@ -52,7 +52,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Jq_BuiltinResultsObserveCancellationBeforeAndAfterAdmission(bool duringAdmission)
+    public async Task Jq_BuiltinResultsObserveCancellationBeforeAndAfterAdmission(bool duringAdmission)
     {
         using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(CancellationToken.None));
         JqFilter filter = new JqParser("builtins", JqProgramSource.Inline, compiler.RootEnvironment, compiler.Budget).Parse();
@@ -61,7 +61,7 @@ public sealed partial class JqTests
         if (!duringAdmission) cancellation.Cancel();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token)))
-            Assert.Throws<OperationCanceledException>(() => filter.Evaluate(null, context, context.RootEnvironment).Single());
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
         Assert.Equal(0, root.ReservedBytes);
     }
 }

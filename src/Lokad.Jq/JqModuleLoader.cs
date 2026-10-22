@@ -399,15 +399,6 @@ internal sealed class JqModuleLoader(
         return BuildMetadataObject(loaded);
     }
 
-    internal JsonObject GetModuleMetadataSync(string relPath)
-    {
-        ArgumentNullException.ThrowIfNull(relPath);
-        // Filters evaluate synchronously while module reads are host-async.
-        // In-memory hosts complete synchronously; blocking here keeps the
-        // evaluator shape while still mediating all bytes via IJqHost.
-        return GetModuleMetadataAsync(relPath, budget.CancellationToken).GetAwaiter().GetResult();
-    }
-
     private JsonObject BuildMetadataObject(JqLoadedModule loaded)
     {
         ArgumentNullException.ThrowIfNull(loaded);

@@ -52,7 +52,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(0, true)]
     [InlineData(65536, false)]
-    public void Jq_UserTailFirstResultDoesNotInventoryBorrowedArguments(long allowance, bool refused)
+    public async Task Jq_UserTailFirstResultDoesNotInventoryBorrowedArguments(long allowance, bool refused)
     {
         var values = new JsonArray();
         for (int i = 0; i < 100000; i++) values.Add((JsonNode?)null);
@@ -64,9 +64,9 @@ public sealed partial class JqTests
         using (var context = new JqContext(variables, new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
         {
             if (refused)
-                Assert.True(Assert.Throws<JqQuotaException>(() => filter.Evaluate(null, context, context.RootEnvironment).Single()).IsMemoryAdmission);
+                Assert.True((await Assert.ThrowsAsync<JqQuotaException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync())).IsMemoryAdmission);
             else
-                Assert.Null(filter.Evaluate(null, context, context.RootEnvironment).Single());
+                Assert.Null(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
         }
         Assert.Equal(0, memory.ReservedBytes);
     }

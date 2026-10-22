@@ -27,7 +27,7 @@ public sealed partial class JqTests
     [InlineData("_sort_by_impl", 100000)]
     [InlineData("_group_by_impl", 1)]
     [InlineData("_unique_by_impl", 1)]
-    public void Jq_PrecomputedKeysDoNotCopyPairInventories(string operation, int count)
+    public async Task Jq_PrecomputedKeysDoNotCopyPairInventories(string operation, int count)
     {
         var source = new JsonArray();
         for (int index = 0; index < 100000; index++) source.Add((JsonNode?)null);
@@ -40,7 +40,7 @@ public sealed partial class JqTests
                 "_group_by_impl" => new GroupByImplFilter(new IdentityFilter()),
                 _ => new UniqueByImplFilter(new IdentityFilter())
             };
-            var output = Assert.IsType<JsonArray>(filter.Evaluate(source, context, context.RootEnvironment).Single());
+            var output = Assert.IsType<JsonArray>(await filter.Evaluate(source, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(count, output.Count);
             if (operation == "_group_by_impl") Assert.Equal(100000, Assert.IsType<JsonArray>(output[0]).Count);
             Assert.Equal(100000, source.Count);
@@ -52,7 +52,7 @@ public sealed partial class JqTests
     [InlineData("_sort_by_impl")]
     [InlineData("_group_by_impl")]
     [InlineData("_unique_by_impl")]
-    public void Jq_PrecomputedKeysConstructIndependentOutputs(string operation)
+    public async Task Jq_PrecomputedKeysConstructIndependentOutputs(string operation)
     {
         var source = new JsonArray(new JsonArray(2), new JsonArray(1));
         using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(CancellationToken.None));
@@ -62,7 +62,7 @@ public sealed partial class JqTests
             "_group_by_impl" => new GroupByImplFilter(new IdentityFilter()),
             _ => new UniqueByImplFilter(new IdentityFilter())
         };
-        var output = Assert.IsType<JsonArray>(filter.Evaluate(source, context, context.RootEnvironment).Single());
+        var output = Assert.IsType<JsonArray>(await filter.Evaluate(source, context, context.RootEnvironment).SingleAsync());
         var first = Assert.IsType<JsonArray>(operation == "_group_by_impl" ? output[0]?[0] : output[0]);
         Assert.NotSame(source[1], first);
         first[0] = 9;
@@ -74,7 +74,7 @@ public sealed partial class JqTests
     [InlineData("_sort_by_impl")]
     [InlineData("_group_by_impl")]
     [InlineData("_unique_by_impl")]
-    public void Jq_PrecomputedKeysPropagateCancellationFromSortComparison(string operation)
+    public async Task Jq_PrecomputedKeysPropagateCancellationFromSortComparison(string operation)
     {
         var source = new JsonArray(new JsonObject { ["a"] = 2 }, new JsonObject { ["a"] = 1 });
         var root = new BenchmarkMemoryBudget(64 * 1024);
@@ -89,7 +89,7 @@ public sealed partial class JqTests
                 "_group_by_impl" => new GroupByImplFilter(new IdentityFilter()),
                 _ => new UniqueByImplFilter(new IdentityFilter())
             };
-            Assert.ThrowsAny<OperationCanceledException>(() => filter.Evaluate(source, context, context.RootEnvironment).ToArray());
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await filter.Evaluate(source, context, context.RootEnvironment).ToArrayAsync());
             Assert.Equal(2, admissions);
         }
         Assert.Equal(0, root.ReservedBytes);

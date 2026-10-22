@@ -252,15 +252,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_RepeatedEvaluationYieldsIndependentValues()
+    public async Task Jq_RepeatedEvaluationYieldsIndependentValues()
     {
         var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
         var budget = new JqBudget(CancellationToken.None);
         using var context = new JqContext(variables, budget);
         JqFilter filter = new JqParser("{\"a\":[1]}", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
 
-        List<System.Text.Json.Nodes.JsonNode?> first = filter.Evaluate(null, context, context.RootEnvironment).ToList();
-        List<System.Text.Json.Nodes.JsonNode?> second = filter.Evaluate(null, context, context.RootEnvironment).ToList();
+        List<System.Text.Json.Nodes.JsonNode?> first = await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync();
+        List<System.Text.Json.Nodes.JsonNode?> second = await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync();
 
         Assert.Single(first);
         Assert.Single(second);
@@ -273,7 +273,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_NumericSyntaxIgnoresAmbientCulture()
+    public async Task Jq_NumericSyntaxIgnoresAmbientCulture()
     {
         System.Globalization.CultureInfo previous = System.Globalization.CultureInfo.CurrentCulture;
         try
@@ -283,7 +283,7 @@ public sealed partial class JqTests
             var budget = new JqBudget(CancellationToken.None);
             using var context = new JqContext(variables, budget);
             JqFilter filter = new JqParser("1.5 + 2.5", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
-            List<System.Text.Json.Nodes.JsonNode?> results = filter.Evaluate(null, context, context.RootEnvironment).ToList();
+            List<System.Text.Json.Nodes.JsonNode?> results = await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync();
 
             Assert.Single(results);
             Assert.Equal(4.0, JqRuntime.Number(results[0]));

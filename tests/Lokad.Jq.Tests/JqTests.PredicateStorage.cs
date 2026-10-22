@@ -89,7 +89,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("all")]
     [InlineData("any")]
-    public void Jq_EscapingPredicateErrorKeepsItsPayloadAdmission(string operation)
+    public async Task Jq_EscapingPredicateErrorKeepsItsPayloadAdmission(string operation)
     {
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
@@ -97,7 +97,7 @@ public sealed partial class JqTests
         var parser = new JqParser(operation + "(1; error(\"x\" * 8192))", JqProgramSource.Inline, context.RootEnvironment, budget);
         var filter = parser.Parse();
         long compilation = memory.ReservedBytes;
-        var error = Assert.Throws<JqErrorException>(() => filter.Evaluate(null, context, context.RootEnvironment).ToArray());
+        var error = await Assert.ThrowsAsync<JqErrorException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).ToArrayAsync());
         Assert.True(memory.ReservedBytes >= compilation + 2 * 8192);
         Assert.Equal(new string('x', 8192), error.Payload?.GetValue<string>());
         budget.Dispose();

@@ -6,11 +6,11 @@ namespace Lokad.Jq;
 
 internal sealed class TestFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         if (args.Count == 1)
         {
-            foreach (var value in args[0].Evaluate(input, context, environment))
+            await foreach (var value in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
             {
                 JqMatch.SplitArgument(context, value, out JsonNode? pattern, out JsonNode? flags);
                 yield return Match(pattern, flags);
@@ -19,8 +19,8 @@ internal sealed class TestFilter(IReadOnlyList<JqFilter> args) : JqFilter
         else
         {
             // jq evaluates the flags stream before the pattern stream.
-            foreach (var flags in args[1].Evaluate(input, context, environment))
-            foreach (var pattern in args[0].Evaluate(input, context, environment))
+            await foreach (var flags in args[1].Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (var pattern in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
                 yield return Match(pattern, flags);
         }
 

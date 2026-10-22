@@ -79,14 +79,14 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_CanceledReadsOfBorrowedStringsStillPropagate()
+    public async Task Jq_CanceledReadsOfBorrowedStringsStillPropagate()
     {
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(cancellation.Token);
         using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
         var node = JsonValue.Create("borrowed");
         cancellation.Cancel();
-        Assert.Throws<OperationCanceledException>(() => new IdentityFilter().Evaluate(node, context, context.RootEnvironment).ToArray());
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await new IdentityFilter().Evaluate(node, context, context.RootEnvironment).ToArrayAsync());
     }
 
     [Fact]

@@ -151,7 +151,7 @@ internal static class JqExecutor
                     stage = 5;
                     try
                     {
-                        foreach (var output in filter.Evaluate(inputs.Current, context, moduleEnv))
+                        await foreach (var output in filter.Evaluate(inputs.Current, context, moduleEnv).ConfigureAwait(false))
                         {
                             sawOutput = true;
                             lastFalseNull = output is null

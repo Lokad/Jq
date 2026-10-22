@@ -8,7 +8,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Jq_ExtremaKeyScratchDoesNotGrowWithInputLength(bool maximum)
+    public async Task Jq_ExtremaKeyScratchDoesNotGrowWithInputLength(bool maximum)
     {
         var source = new JsonArray();
         for (int index = 0; index < 100000; index++) source.Add((JsonNode?)null);
@@ -18,7 +18,7 @@ public sealed partial class JqTests
             new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None)))
         {
             var filter = new MinMaxByFilter(new IdentityFilter(), maximum);
-            Assert.Null(filter.Evaluate(source, context, context.RootEnvironment).Single());
+            Assert.Null(await filter.Evaluate(source, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(0, root.ReservedBytes);
             Assert.InRange(root.PeakBytes, 128, 256);
             Assert.InRange(counted.Counts.Reservations + counted.Counts.Resizes, 1, 3);
@@ -31,7 +31,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false, 0)]
     [InlineData(true, 2)]
-    public void Jq_ExtremaKeepBorrowedTieIdentityAndAllKeyOutputs(bool maximum, int selected)
+    public async Task Jq_ExtremaKeepBorrowedTieIdentityAndAllKeyOutputs(bool maximum, int selected)
     {
         var source = new JsonArray(new JsonArray(1), new JsonArray(1), new JsonArray(1));
         var root = new BenchmarkMemoryBudget(4096);
@@ -40,7 +40,7 @@ public sealed partial class JqTests
         {
             var parser = new JqParser(maximum ? "max_by((.,.))" : "min_by((.,.))", JqProgramSource.Inline,
                 context.RootEnvironment, context.Budget);
-            Assert.Same(source[selected], parser.Parse().Evaluate(source, context, context.RootEnvironment).Single());
+            Assert.Same(source[selected], await parser.Parse().Evaluate(source, context, context.RootEnvironment).SingleAsync());
         }
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -48,7 +48,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Jq_ExtremaCancelDuringKeyCollectionAndRefundScratch(bool maximum)
+    public async Task Jq_ExtremaCancelDuringKeyCollectionAndRefundScratch(bool maximum)
     {
         var root = new BenchmarkMemoryBudget(4096);
         using var cancellation = new CancellationTokenSource();
@@ -56,7 +56,7 @@ public sealed partial class JqTests
             new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
         {
             var filter = new MinMaxByFilter(new CancellingKeys(cancellation), maximum);
-            Assert.ThrowsAny<OperationCanceledException>(() => filter.Evaluate(new JsonArray(1, 2), context, context.RootEnvironment).ToArray());
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await filter.Evaluate(new JsonArray(1, 2), context, context.RootEnvironment).ToArrayAsync());
             Assert.Equal(0, root.ReservedBytes);
         }
     }
@@ -81,7 +81,7 @@ public sealed partial class JqTests
 
     private sealed class CancellingKeys(CancellationTokenSource cancellation) : JqFilter
     {
-        protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+        protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
         {
             yield return input;
             cancellation.Cancel();

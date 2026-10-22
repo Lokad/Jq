@@ -6,7 +6,7 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Fact]
-    public void Jq_WithEntriesBorrowsMappedValuesAndCopiesTheFinalPayloadOnce()
+    public async Task Jq_WithEntriesBorrowsMappedValuesAndCopiesTheFinalPayloadOnce()
     {
         var payload = new JsonArray();
         for (int index = 0; index < 1000; index++) payload.Add(index);
@@ -14,7 +14,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(200000);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
         {
-            var result = Assert.IsType<JsonObject>(new WithEntriesFilter(new IdentityFilter()).Evaluate(input, context, context.RootEnvironment).Single());
+            var result = Assert.IsType<JsonObject>(await new WithEntriesFilter(new IdentityFilter()).Evaluate(input, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(1000, Assert.IsType<JsonArray>(result["payload"]).Count);
             result["payload"]?[0] = -1;
             Assert.Equal(0, payload[0]?.GetValue<int>());
@@ -43,7 +43,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_WithEntriesCancelsBeforeRetainingAnotherMappedValue()
+    public async Task Jq_WithEntriesCancelsBeforeRetainingAnotherMappedValue()
     {
         var input = new JsonObject { ["a"] = 1, ["b"] = 2 };
         using var cancellation = new CancellationTokenSource();
@@ -51,7 +51,7 @@ public sealed partial class JqTests
         var body = new WalkVisitFilter(() => { if (++visits == 2) cancellation.Cancel(); });
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
-            Assert.Throws<OperationCanceledException>(() => new WithEntriesFilter(body).Evaluate(input, context, context.RootEnvironment).Single());
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await new WithEntriesFilter(body).Evaluate(input, context, context.RootEnvironment).SingleAsync());
         Assert.Equal(2, visits);
         Assert.Equal("{\"a\":1,\"b\":2}", input.ToJsonString());
         Assert.Equal(0, root.ReservedBytes);

@@ -52,14 +52,18 @@ public sealed partial class JqTests
         Assert.Equal(0, root.ReservedBytes);
     }
 
-    [Fact]
-    public async Task Jq_PendingCloseRetainsAdmissionUntilContractFailureCompletes()
+    [Theory]
+    [InlineData(".")]
+    [InlineData("inputs")]
+    [InlineData("first(inputs)")]
+    public async Task Jq_PendingCloseRetainsAdmissionUntilContractFailureCompletes(string filter)
     {
         var source = new MockFileSystem();
         source.AddFile("/input", "42\n");
         var host = new CloseFaultHost(source, false) { HoldClose = true };
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "/input")));
+        string[] arguments = filter == "." ? [filter, "/input"] : ["-n", filter, "/input"];
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
         Task<int> pending = command.ExecuteAsync(host, root, CancellationToken.None);
         await host.CloseEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False(pending.IsCompleted);

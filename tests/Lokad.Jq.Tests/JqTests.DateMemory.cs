@@ -8,7 +8,7 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void Jq_DateCopiesAndCaughtFailuresAdmitBeforeConstruction(bool suffix)
+    public async Task Jq_DateCopiesAndCaughtFailuresAdmitBeforeConstruction(bool suffix)
     {
         var variables = new Dictionary<string, JsonNode?>();
         using var compiler = new JqContext(variables, new JqBudget(CancellationToken.None));
@@ -18,7 +18,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(0);
         using (var context = new JqContext(variables, new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
         {
-            var failure = Assert.Throws<JqQuotaException>(() => filter.Evaluate(input, context, context.RootEnvironment).Single());
+            var failure = await Assert.ThrowsAsync<JqQuotaException>(async () => await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync());
             Assert.True(failure.IsMemoryAdmission);
         }
         Assert.Equal(0, memory.ReservedBytes);

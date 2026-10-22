@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
@@ -10,14 +11,14 @@ internal sealed class MapFilter(JqFilter Body) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         var result = new JsonArray();
         context.Budget.CheckCancellation();
         foreach (JsonNode? element in IteratorFilter.ReadValues(input, false, context.Budget))
-            foreach (JsonNode? value in Body.Evaluate(element, context, environment))
+            await foreach (JsonNode? value in Body.Evaluate(element, context, environment).ConfigureAwait(false))
             {
                 context.Budget.ReserveArrayItem(value);
                 result.Add(context.Budget.CopyValue(value, 1));
@@ -34,7 +35,7 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -44,8 +45,9 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
             context.Budget.CheckCancellation();
             foreach (JsonNode? element in array)
             {
-                using IEnumerator<JsonNode?> outputs = Body.Evaluate(element, context, environment).GetEnumerator();
-                if (outputs.MoveNext())
+                var outputs = Body.Evaluate(element, context, environment).GetAsyncEnumerator();
+                await using var outputsLifetime = outputs.ConfigureAwait(false);
+                if (await outputs.MoveNextAsync().ConfigureAwait(false))
                 {
                     context.Budget.ReserveArrayItem(outputs.Current);
                     result.Add(context.Budget.CopyValue(outputs.Current, 1));
@@ -60,8 +62,9 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
             context.Budget.CheckCancellation();
             foreach (var property in obj)
             {
-                using IEnumerator<JsonNode?> outputs = Body.Evaluate(property.Value, context, environment).GetEnumerator();
-                if (outputs.MoveNext())
+                var outputs = Body.Evaluate(property.Value, context, environment).GetAsyncEnumerator();
+                await using var outputsLifetime = outputs.ConfigureAwait(false);
+                if (await outputs.MoveNextAsync().ConfigureAwait(false))
                 {
                     context.Budget.ReserveObjectItem(outputs.Current);
                     result.Add(property.Key, context.Budget.CopyValue(outputs.Current, 1));
@@ -79,14 +82,14 @@ internal sealed class WithEntriesFilter(JqFilter Body) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         context.Budget.ReserveBytes(64);
         var mapped = new List<JsonNode?>();
         foreach (JsonNode? entry in context.Runtime.ToEntries(input))
-            foreach (JsonNode? value in Body.Evaluate(entry, context, environment))
+            await foreach (JsonNode? value in Body.Evaluate(entry, context, environment).ConfigureAwait(false))
             {
                 context.Budget.ReserveBytes(32);
                 mapped.Add(value);
@@ -98,11 +101,11 @@ internal sealed class WithEntriesFilter(JqFilter Body) : JqFilter
 // `in(xs)`: one membership boolean per collection value.
 internal sealed class InFilter(JqFilter Containers) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? container in Containers.Evaluate(input, context, environment))
+        await foreach (JsonNode? container in Containers.Evaluate(input, context, environment).ConfigureAwait(false))
             yield return JsonValue.Create(context.Runtime.Has(container, input));
     }
 }
@@ -112,11 +115,11 @@ internal sealed class AddValuesFilter(JqFilter Values) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        yield return context.Runtime.AddValues(Values.Evaluate(input, context, environment));
+        yield return await context.Runtime.AddValues(Values.Evaluate(input, context, environment)).ConfigureAwait(false);
     }
 }
 
@@ -159,7 +162,7 @@ internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
 
 
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -168,7 +171,7 @@ internal sealed class FlattenFilter(JqFilter? Depth) : JqFilter
             yield return context.Runtime.Flatten(input, JsonValue.Create(-1));
             yield break;
         }
-        foreach (JsonNode? depth in Depth.Evaluate(input, context, environment))
+        await foreach (JsonNode? depth in Depth.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             if (TryDepthLevel(depth, out double level))
             {
@@ -189,7 +192,7 @@ internal sealed class TransposeFilter : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -241,14 +244,14 @@ internal sealed class RangeFilter(IReadOnlyList<JqFilter> args) : JqFilter
     // Generated scalars are always fresh, so results travel untracked.
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         var current = new JsonNode?[args.Count];
-        foreach (JsonNode? value in Generate(0)) yield return value;
+        await foreach (JsonNode? value in Generate(0).ConfigureAwait(false)) yield return value;
 
-        IEnumerable<JsonNode?> Generate(int index)
+        async IAsyncEnumerable<JsonNode?> Generate(int index)
         {
             if (index >= args.Count)
             {
@@ -263,10 +266,10 @@ internal sealed class RangeFilter(IReadOnlyList<JqFilter> args) : JqFilter
                 }
                 yield break;
             }
-            foreach (JsonNode? value in args[index].Evaluate(input, context, environment))
+            await foreach (JsonNode? value in args[index].Evaluate(input, context, environment).ConfigureAwait(false))
             {
                 current[index] = value;
-                foreach (JsonNode? result in Generate(index + 1)) yield return result;
+                await foreach (JsonNode? result in Generate(index + 1).ConfigureAwait(false)) yield return result;
             }
         }
 
@@ -283,7 +286,7 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -303,7 +306,7 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
                 yield return combo;
             yield break;
         }
-        foreach (JsonNode? count in Count.Evaluate(input, context, environment))
+        await foreach (JsonNode? count in Count.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             // Like range bounds upstream, non-numbers fail with the range
             // diagnostic while numeric strings still coerce.
@@ -384,13 +387,13 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
 // `bsearch(target)`: binary search with total ordering; misses yield -1-ix.
 internal sealed class BsearchFilter(JqFilter Target) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         if (input is not JsonArray sorted)
             throw new JqException($"{JqRuntime.TypeName(input)} ({context.Runtime.Serialize(input, false, null, false)}) cannot be searched from");
-        foreach (JsonNode? target in Target.Evaluate(input, context, environment))
+        await foreach (JsonNode? target in Target.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             using var comparer = new JqComparer(context.Budget);
             int low = 0;
@@ -419,25 +422,26 @@ internal sealed class BsearchFilter(JqFilter Target) : JqFilter
 // collected sequence mirrors map([f]) without adding a JSON nesting level.
 internal static class CollectionKeys
 {
-    internal static JsonArray RequireArray(JsonNode? input, JqFilter keys, JqContext context, JqEnvironment environment, bool sorting)
+    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+    internal static async ValueTask<JsonArray> RequireArray(JsonNode? input, JqFilter keys, JqContext context, JqEnvironment environment, bool sorting)
     {
         if (input is JsonArray array) return array;
         // jq evaluates map([f]) before its internal array check. Retain those
         // effects and failures; only this invalid-input path needs JSON keys.
-        JsonNode? mapped = new MapFilter(new ArrayFilter(keys)).Evaluate(input, context, environment).Single();
+        JsonNode? mapped = await new MapFilter(new ArrayFilter(keys)).Evaluate(input, context, environment).SingleAsync().ConfigureAwait(false);
         string operation = sorting ? "cannot be sorted, as they are not both arrays" : "cannot be iterated over";
         throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false)
             + ") and array (" + context.Runtime.Serialize(mapped, false, null, false) + ") " + operation);
     }
 
-    internal static IEnumerable<(JsonNode? Element, IReadOnlyList<JsonNode?> Keys)> Keyed(JsonNode? input, JqFilter keys, JqContext context, JqEnvironment environment)
+    internal static async IAsyncEnumerable<(JsonNode? Element, IReadOnlyList<JsonNode?> Keys)> Keyed(JsonNode? input, JqFilter keys, JqContext context, JqEnvironment environment)
     {
-        JsonArray array = RequireArray(input, keys, context, environment, true);
+        JsonArray array = await RequireArray(input, keys, context, environment, true).ConfigureAwait(false);
         context.Budget.ReserveBytes(80L * array.Count);
         foreach (JsonNode? element in IteratorFilter.ReadValues(input, false, context.Budget))
         {
             var collected = new List<JsonNode?>();
-            foreach (JsonNode? key in keys.Evaluate(element, context, environment))
+            await foreach (JsonNode? key in keys.Evaluate(element, context, environment).ConfigureAwait(false))
             {
                 // Reference slots and geometric backing replacement peaks.
                 context.Budget.ReserveBytes(32);
@@ -481,15 +485,15 @@ internal sealed class SortByFilter(JqFilter Keys) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         var result = new JsonArray();
         context.Budget.CheckCancellation();
         using var comparer = new JqComparer(context.Budget);
-        foreach (var (element, _) in JqComparer.OrderBy(CollectionKeys.Keyed(input, Keys, context, environment),
-            static pair => pair.Keys, (IComparer<IReadOnlyList<JsonNode?>>)comparer))
+        await foreach (var (element, _) in JqComparer.OrderBy(CollectionKeys.Keyed(input, Keys, context, environment),
+            static pair => pair.Keys, (IComparer<IReadOnlyList<JsonNode?>>)comparer).ConfigureAwait(false))
         {
             context.Budget.CheckCancellation();
             context.Budget.ReserveArrayItem(element);
@@ -504,7 +508,7 @@ internal sealed class GroupByFilter(JqFilter Keys) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -515,7 +519,7 @@ internal sealed class GroupByFilter(JqFilter Keys) : JqFilter
         context.Budget.CheckCancellation();
         JsonArray? group = null;
         IReadOnlyList<JsonNode?> current = Array.Empty<JsonNode?>();
-        foreach (var (element, keys) in ordered)
+        await foreach (var (element, keys) in ordered.ConfigureAwait(false))
         {
             if (group is null || !CollectionKeys.Equal(current, keys, context.Runtime))
             {
@@ -537,7 +541,7 @@ internal sealed class UniqueByFilter(JqFilter Keys) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -548,7 +552,7 @@ internal sealed class UniqueByFilter(JqFilter Keys) : JqFilter
         context.Budget.CheckCancellation();
         IReadOnlyList<JsonNode?> current = Array.Empty<JsonNode?>();
         bool first = true;
-        foreach (var (element, keys) in ordered)
+        await foreach (var (element, keys) in ordered.ConfigureAwait(false))
         {
             if (first || !CollectionKeys.Equal(current, keys, context.Runtime))
             {
@@ -566,11 +570,11 @@ internal sealed class UniqueByFilter(JqFilter Keys) : JqFilter
 // `min_by(f)` keeps the first minimum; `max_by(f)` keeps the last maximum.
 internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        JsonArray array = CollectionKeys.RequireArray(input, Keys, context, environment, false);
+        JsonArray array = await CollectionKeys.RequireArray(input, Keys, context, environment, false).ConfigureAwait(false);
         if (array.Count == 0)
         {
             yield return null;
@@ -586,7 +590,7 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
         foreach (JsonNode? element in array)
         {
             current.Clear();
-            foreach (JsonNode? key in Keys.Evaluate(element, context, environment))
+            await foreach (JsonNode? key in Keys.Evaluate(element, context, environment).ConfigureAwait(false))
             {
                 context.Budget.CheckCancellation();
                 if (current.Count == current.Capacity)
@@ -618,11 +622,11 @@ internal sealed class SortByImplFilter(JqFilter Keys) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
+        await foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             var ordered = CollectionKeys.OrderPrecomputed(input, keysValue, context);
             context.Budget.ReserveBytes(64);
@@ -644,11 +648,11 @@ internal sealed class GroupByImplFilter(JqFilter Keys) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
+        await foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             var ordered = CollectionKeys.OrderPrecomputed(input, keysValue, context);
             context.Budget.ReserveBytes(64);
@@ -680,11 +684,11 @@ internal sealed class UniqueByImplFilter(JqFilter Keys) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
+        await foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             var ordered = CollectionKeys.OrderPrecomputed(input, keysValue, context);
             context.Budget.ReserveBytes(64);
@@ -711,11 +715,11 @@ internal sealed class UniqueByImplFilter(JqFilter Keys) : JqFilter
 // _min_by_impl and _max_by_impl with precomputed keys: first extreme wins for min, last wins for max; empty yields null.
 internal sealed class MinMaxByImplFilter(JqFilter Keys, bool TakeMax) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment))
+        await foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             if (input is not JsonArray elements || keysValue is not JsonArray keys)
                 throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be iterated over");
@@ -749,11 +753,11 @@ internal sealed class FlattenImplFilter(JqFilter Depth) : JqFilter
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? depth in Depth.Evaluate(input, context, environment))
+        await foreach (JsonNode? depth in Depth.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             // _flatten carries no negative guard upstream; numeric depths
             // recurse by decrementing while non-numeric depths recurse
@@ -768,16 +772,16 @@ internal sealed class SqlIndexFilter(JqFilter? Stream, JqFilter IndexExpr) : JqF
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        IEnumerable<JsonNode?> rows = Stream is null ? IteratorFilter.ReadValues(input, false, context.Budget) : Stream.Evaluate(input, context, environment);
+        IAsyncEnumerable<JsonNode?> rows = Stream is null ? IteratorFilter.ReadValues(input, false, context.Budget).ToAsyncEnumerable() : Stream.Evaluate(input, context, environment);
         var result = new JsonObject();
         context.Budget.CheckCancellation();
-        foreach (JsonNode? row in rows)
+        await foreach (JsonNode? row in (rows).ConfigureAwait(false))
         {
-            foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
+            await foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment).ConfigureAwait(false))
             {
                 string name = context.Runtime.ToJqString(key);
                 context.Budget.CheckCancellation();
@@ -795,82 +799,83 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
 {
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        foreach (var result in Run(input, context, environment, null))
+        await foreach (var result in Run(input, context, environment, null).ConfigureAwait(false))
             yield return result.Value;
     }
 
-    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
     {
-        foreach (var result in Run(outer.Value, context, environment, outer))
+        await foreach (var result in Run(outer.Value, context, environment, outer).ConfigureAwait(false))
             yield return result.Path ?? throw new InvalidOperationException("JOIN path evaluation must retain its tracking result.");
     }
 
-    private IEnumerable<(JsonNode? Value, JqValuePath? Path)> Run(JsonNode? input, JqContext context, JqEnvironment environment, JqValuePath? path)
+    private async IAsyncEnumerable<(JsonNode? Value, JqValuePath? Path)> Run(JsonNode? input, JqContext context, JqEnvironment environment, JqValuePath? path)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? idx in Index.Evaluate(input, context, environment))
+        await foreach (JsonNode? idx in Index.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             if (Stream is null)
             {
                 context.Budget.ReserveBytes(64);
                 var collected = new JsonArray();
                 context.Budget.CheckCancellation();
-                foreach (var (row, rowPath) in Rows())
+                await foreach (var (row, rowPath) in Rows().ConfigureAwait(false))
                 {
                     context.Budget.ReserveBytes(24);
-                    collected.Add(CreatePair(idx, row, rowPath, 1));
+                    collected.Add(await CreatePair(idx, row, rowPath, 1).ConfigureAwait(false));
                 }
                 yield return (collected, path?.WithValue(collected, false));
             }
             else
             {
-                foreach (var (row, rowPath) in Rows())
+                await foreach (var (row, rowPath) in Rows().ConfigureAwait(false))
                 {
-                    JsonArray pair = CreatePair(idx, row, rowPath, 0);
+                    JsonArray pair = await CreatePair(idx, row, rowPath, 0).ConfigureAwait(false);
                     if (JoinExpr is null)
                     {
                         yield return (pair, rowPath?.WithValue(pair, false));
                     }
                     else if (rowPath is null)
                     {
-                        foreach (JsonNode? joined in JoinExpr.Evaluate(pair, context, environment))
+                        await foreach (JsonNode? joined in JoinExpr.Evaluate(pair, context, environment).ConfigureAwait(false))
                             yield return (joined, null);
                     }
                     else
                     {
                         JqValuePath untracked = rowPath.WithValue(pair, false);
-                        foreach (JqValuePath joined in JoinExpr.EvaluatePaths(untracked, context, environment))
+                        await foreach (JqValuePath joined in JoinExpr.EvaluatePaths(untracked, context, environment).ConfigureAwait(false))
                             yield return (joined.Value, joined);
                     }
                 }
             }
         }
 
-        IEnumerable<(JsonNode? Value, JqValuePath? Path)> Rows()
+        async IAsyncEnumerable<(JsonNode? Value, JqValuePath? Path)> Rows()
         {
             if (path is null)
             {
-                foreach (JsonNode? row in Stream is null ? IteratorFilter.ReadValues(input, false, context.Budget) : Stream.Evaluate(input, context, environment))
+                await foreach (JsonNode? row in (Stream is null ? IteratorFilter.ReadValues(input, false, context.Budget).ToAsyncEnumerable() : Stream.Evaluate(input, context, environment)).ConfigureAwait(false))
                     yield return (row, null);
             }
             else
             {
-                foreach (JqValuePath row in Stream is null ? IteratorFilter.ReadPaths(path, context) : Stream.EvaluatePaths(path, context, environment))
+                await foreach (JqValuePath row in (Stream is null ? IteratorFilter.ReadPaths(path, context).ToAsyncEnumerable() : Stream.EvaluatePaths(path, context, environment)).ConfigureAwait(false))
                     yield return (row.Value, row);
             }
         }
 
-        JsonArray CreatePair(JsonNode? idx, JsonNode? row, JqValuePath? rowPath, int depth)
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+        async ValueTask<JsonArray> CreatePair(JsonNode? idx, JsonNode? row, JqValuePath? rowPath, int depth)
         {
             context.Budget.ReserveBytes(88 + (row is JsonValue ? 64 : 0));
             var pair = new JsonArray
             {
                 context.Budget.CopyValue(row, depth + 1)
             };
-            foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment))
+            await foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment).ConfigureAwait(false))
             {
                 if (rowPath is not null && !BoundValuePath(rowPath, idx).Tracked)
                     throw new JqException(JqPaths.InvalidAccess(key, idx, context));
@@ -888,11 +893,11 @@ internal sealed class SqlJoinFilter(JqFilter Index, JqFilter? Stream, JqFilter I
 // short-circuiting the rest. Exhaustion yields false; errors propagate.
 internal sealed class AnyFilter(JqFilter Generator, JqFilter Condition) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        yield return JsonValue.Create(JqPredicateFold.Evaluate(Generator, Condition, input, context, environment, false));
+        yield return JsonValue.Create(await JqPredicateFold.Evaluate(Generator, Condition, input, context, environment, false).ConfigureAwait(false));
     }
 }
 
@@ -900,11 +905,11 @@ internal sealed class AnyFilter(JqFilter Generator, JqFilter Condition) : JqFilt
 // short-circuiting the rest. Exhaustion yields true; errors propagate.
 internal sealed class AllFilter(JqFilter Generator, JqFilter Condition) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        yield return JsonValue.Create(JqPredicateFold.Evaluate(Generator, Condition, input, context, environment, true));
+        yield return JsonValue.Create(await JqPredicateFold.Evaluate(Generator, Condition, input, context, environment, true).ConfigureAwait(false));
     }
 }
 
@@ -912,17 +917,18 @@ internal sealed class AllFilter(JqFilter Generator, JqFilter Condition) : JqFilt
 // checkpoint; its temporary demand ends after the enumerator is disposed.
 internal static class JqPredicateFold
 {
-    internal static bool Evaluate(JqFilter generator, JqFilter condition, JsonNode? input,
+    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+    internal static async ValueTask<bool> Evaluate(JqFilter generator, JqFilter condition, JsonNode? input,
         JqContext context, JqEnvironment environment, bool all)
     {
-        foreach (JsonNode? generated in generator.Evaluate(input, context, environment))
+        await foreach (JsonNode? generated in generator.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             JqStorage? storage = context.Budget.TemporaryStorage;
             long before = storage?.UsedBytes ?? 0;
             bool decided = false;
-            using (var probes = condition.Evaluate(generated, context, environment).GetEnumerator())
+            await using (var probes = condition.Evaluate(generated, context, environment).ConfigureAwait(false).GetAsyncEnumerator())
             {
-                while (probes.MoveNext())
+                while (await probes.MoveNextAsync())
                 {
                     if (Truthy(probes.Current) == all) continue;
                     decided = true;

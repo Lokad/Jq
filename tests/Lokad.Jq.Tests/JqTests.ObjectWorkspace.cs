@@ -24,7 +24,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_ObjectWorkspaceEndsWithoutRefundingRetainedOutput()
+    public async Task Jq_ObjectWorkspaceEndsWithoutRefundingRetainedOutput()
     {
         ObjectProperty[] properties = Enumerable.Range(0, 1000)
             .Select(i => new ObjectProperty("k" + i, null, new LiteralFilter(null))).ToArray();
@@ -34,11 +34,11 @@ public sealed partial class JqTests
             new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
         {
             context.Budget.BeginRecord();
-            var results = filter.Evaluate(null, context, context.RootEnvironment).GetEnumerator();
-            Assert.True(results.MoveNext());
+            var results = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
+            Assert.True(await results.MoveNextAsync());
             var output = Assert.IsType<JsonObject>(results.Current);
             long pending = root.ReservedBytes;
-            results.Dispose();
+            await results.DisposeAsync();
             Assert.InRange(root.ReservedBytes, 96000, pending - 64000);
             Assert.Equal(1000, output.Count);
             Assert.True(output.ContainsKey("k999"));

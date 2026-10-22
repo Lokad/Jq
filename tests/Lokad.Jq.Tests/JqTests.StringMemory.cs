@@ -119,16 +119,16 @@ public sealed partial class JqTests
     [InlineData(-3.0, -1.0, "🚀b")]
     [InlineData(-100.0, 100.0, "a🚀bc")]
     [InlineData(double.NaN, double.NaN, "a🚀bc")]
-    public void Jq_ScalarSlicesAgreeAcrossReadAndTrackedPaths(double? start, double? end, string expected)
+    public async Task Jq_ScalarSlicesAgreeAcrossReadAndTrackedPaths(double? start, double? end, string expected)
     {
         JsonNode input = JsonValue.Create("a🚀bc");
         using var budget = new JqBudget(CancellationToken.None);
         using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
         var filter = new SliceFilter(new IdentityFilter(), new LiteralFilter(start.HasValue ? JsonValue.Create(start.Value) : null),
             new LiteralFilter(end.HasValue ? JsonValue.Create(end.Value) : null), false);
-        Assert.Equal(expected, filter.Evaluate(input, context, context.RootEnvironment).Single()?.GetValue<string>());
-        Assert.Equal(expected, filter.EvaluatePaths(new JqValuePath([], input, true), context, context.RootEnvironment)
-            .Single().Value?.GetValue<string>());
+        Assert.Equal(expected, (await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync())?.GetValue<string>());
+        Assert.Equal(expected, (await filter.EvaluatePaths(new JqValuePath([], input, true), context, context.RootEnvironment)
+            .SingleAsync()).Value?.GetValue<string>());
         Assert.Equal(expected, JqPathReads.GetPath(input, new[] { new SliceSegment(start, end) }, context)?.GetValue<string>());
         var raw = new JsonObject
         {
@@ -139,7 +139,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_PathSliceAdmitsSelectedSubstringAndBorrowsFullSlice()
+    public async Task Jq_PathSliceAdmitsSelectedSubstringAndBorrowsFullSlice()
     {
         string text = new('x', 100000);
         JsonNode input = JsonValue.Create(text);
@@ -153,7 +153,7 @@ public sealed partial class JqTests
             Assert.Equal("x", JqPathReads.GetPath(input, new[] { new SliceSegment(1, 2) }, context)?.GetValue<string>());
             Assert.Equal(2, root.ReservedBytes);
             var filter = new SliceFilter(new IdentityFilter(), new LiteralFilter(JsonValue.Create(1)), new LiteralFilter(JsonValue.Create(2)), false);
-            var path = filter.EvaluatePaths(new JqValuePath([], input, true), context, context.RootEnvironment).Single();
+            var path = await filter.EvaluatePaths(new JqValuePath([], input, true), context, context.RootEnvironment).SingleAsync();
             Assert.True(path.Tracked);
             Assert.Equal("x", path.Value?.GetValue<string>());
             Assert.Single(path.Segments);

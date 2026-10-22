@@ -11,11 +11,11 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
     // Substitutions build fresh strings, so results travel untracked.
     internal override bool PreservesPathIdentity => false;
 
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         string text = JqMatch.RequireText(context, input);
-        foreach (var flags in args.Count == 3 ? args[2].Evaluate(input, context, environment) : [(JsonNode?)null])
-        foreach (var pattern in args[0].Evaluate(input, context, environment))
+        await foreach (var flags in (args.Count == 3 ? args[2].Evaluate(input, context, environment) : Enumerable.Repeat<JsonNode?>(null, 1).ToAsyncEnumerable()).ConfigureAwait(false))
+        await foreach (var pattern in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
         {
             string flagText = JqMatch.RequireModifiers(context, flags);
             JqRegexOptions options = JqRegexOptions.ParseOrThrow(flagText);
@@ -32,28 +32,33 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
             var start = 0;
             while (start <= subject.Length)
             {
-                using var match = context.Regexes.Match(regex, subject, start, matchOptions);
-                if (!match.Success) break;
-                context.Budget.CheckCancellation();
-                var end = match.Value.EndOffsetInUtf16;
-                var endByte = match.Value.EndOffsetInBytes;
-                var isEmpty = endByte == match.Value.StartOffsetInBytes;
-                if (match.Value.StartOffsetInUtf16 < previous || end < match.Value.StartOffsetInUtf16)
-                    throw new JqException("gsub requires non-overlapping forward matches");
+                int end, endByte, gapLength;
+                bool isEmpty;
                 var gapStart = previous;
-                var gapLength = match.Value.StartOffsetInUtf16 - previous;
                 JqStorage? storage = context.Budget.TemporaryStorage;
-                long captureBefore = storage?.UsedBytes ?? 0;
-                JsonObject captures = JqMatch.FoldNamedCaptures(context, text, match, regex.GroupNames, match.CaptureSlotCount - 1);
-                long captureDemand = storage is null ? 0 : storage.UsedBytes - captureBefore;
+                JsonObject captures;
+                long captureDemand;
+                using (var match = context.Regexes.Match(regex, subject, start, matchOptions))
+                {
+                    if (!match.Success) break;
+                    context.Budget.CheckCancellation();
+                    end = match.Value.EndOffsetInUtf16;
+                    endByte = match.Value.EndOffsetInBytes;
+                    isEmpty = endByte == match.Value.StartOffsetInBytes;
+                    if (match.Value.StartOffsetInUtf16 < previous || end < match.Value.StartOffsetInUtf16)
+                        throw new JqException("gsub requires non-overlapping forward matches");
+                    gapLength = match.Value.StartOffsetInUtf16 - previous;
+                    long captureBefore = storage?.UsedBytes ?? 0;
+                    captures = JqMatch.FoldNamedCaptures(context, text, match, regex.GroupNames, match.CaptureSlotCount - 1);
+                    captureDemand = storage is null ? 0 : storage.UsedBytes - captureBefore;
+                }
 
                 // Positions and capture strings have been copied. Release the
                 // provider result before evaluating nested replacements.
-                match.Dispose();
                 var index = 0;
                 long bodyBefore = storage?.UsedBytes ?? 0;
                 long retainedBuilderDemand = 0;
-                foreach (var replacement in args[1].Evaluate(captures, context, environment))
+                await foreach (var replacement in args[1].Evaluate(captures, context, environment).ConfigureAwait(false))
                 {
                     long builderBefore = storage?.UsedBytes ?? 0;
                     if (index == results.Count)

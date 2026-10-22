@@ -177,6 +177,20 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
         }
     }
 
+    internal static async IAsyncEnumerable<T> OrderBy<T, TKey>(IAsyncEnumerable<T> source, Func<T, TKey> key, IComparer<TKey> comparer)
+    {
+        await using var iterator = source.OrderBy(key, comparer).ConfigureAwait(false).GetAsyncEnumerator();
+        while (true)
+        {
+            bool moved;
+            try { moved = await iterator.MoveNextAsync(); }
+            catch (InvalidOperationException exception) when (TerminalCause(exception) is { } cause)
+            { ExceptionDispatchInfo.Capture(cause).Throw(); throw; }
+            if (!moved) yield break;
+            yield return iterator.Current;
+        }
+    }
+
     private static void Sort<T>(T[] values, int count, IComparer<T> comparer)
     {
         try { Array.Sort(values, 0, count, comparer); }

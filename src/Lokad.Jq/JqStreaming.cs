@@ -10,7 +10,7 @@ namespace Lokad.Jq;
 // the last child segment, so even the root container closes when non-empty.
 internal sealed class TostreamFilter : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         using var cursor = new JqTreeCursor(context.Budget);
         JsonNode? current = input;
@@ -44,13 +44,13 @@ internal sealed class TostreamFilter : JqFilter
 // accumulated value when its path holds exactly one element.
 internal sealed class FromstreamFilter(JqFilter Stream) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         JsonNode? state = null;
         bool emit = false;
-        foreach (JsonNode? item in Stream.Evaluate(input, context, environment))
+        await foreach (JsonNode? item in Stream.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             if (emit)
             {
@@ -90,13 +90,13 @@ internal sealed class FromstreamFilter(JqFilter Stream) : JqFilter
 // against null; events left with no deeper path are omitted.
 internal sealed class TruncateStreamFilter(JqFilter Stream) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         IReadOnlyList<JqValueSegment> first = [new IndexSegment(0, false)];
         IReadOnlyList<JqValueSegment>? slice = null;
-        foreach (JsonNode? item in Stream.Evaluate(null, context, environment))
+        await foreach (JsonNode? item in Stream.Evaluate(null, context, environment).ConfigureAwait(false))
         {
             JsonNode? path = JqPathReads.GetPath(item, first, context);
             if (context.Runtime.Compare(context.Runtime.Length(path), input) <= 0)

@@ -74,7 +74,7 @@ public sealed partial class JqTests
     [InlineData("debug(empty)")]
     [InlineData(". + null")]
     [InlineData("null + .")]
-    public void Jq_PassThroughBuiltinsBorrowLargeValuesWithoutAdmission(string source)
+    public async Task Jq_PassThroughBuiltinsBorrowLargeValuesWithoutAdmission(string source)
     {
         var input = new JsonArray();
         for (int index = 0; index < 10000; index++) input.Add(index);
@@ -83,7 +83,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
         {
             JqFilter filter = new JqParser(source, JqProgramSource.Inline, context.RootEnvironment, lexical).Parse();
-            Assert.Same(input, filter.Evaluate(input, context, context.RootEnvironment).Single());
+            Assert.Same(input, await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(0, memory.PeakBytes);
         }
         Assert.Equal(0, memory.ReservedBytes);

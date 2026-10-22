@@ -6,7 +6,7 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Fact]
-    public void Jq_FromstreamBuildsPrivateArrayWithoutCopyingEarlierElements()
+    public async Task Jq_FromstreamBuildsPrivateArrayWithoutCopyingEarlierElements()
     {
         var events = new JsonArray();
         for (int i = 0; i < 2000; i++) events.Add(new JsonArray(new JsonArray(JsonValue.Create(i)), null));
@@ -17,7 +17,7 @@ public sealed partial class JqTests
             new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
         {
             var filter = new FromstreamFilter(new IteratorFilter(new IdentityFilter(), false));
-            var result = Assert.IsType<JsonArray>(filter.Evaluate(events, context, context.RootEnvironment).Single());
+            var result = Assert.IsType<JsonArray>(await filter.Evaluate(events, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(2000, result.Count);
             Assert.All(result, Assert.Null);
             Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 200);

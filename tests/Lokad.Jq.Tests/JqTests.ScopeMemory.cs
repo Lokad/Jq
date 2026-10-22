@@ -18,7 +18,7 @@ public sealed partial class JqTests
     [InlineData("definitions", false, true)]
     [InlineData("definitions", true, false)]
     [InlineData("definitions", true, true)]
-    public void Jq_RuntimeScopesRequireAdmissionBeforeConstruction(string shape, bool paths, bool cancel)
+    public async Task Jq_RuntimeScopesRequireAdmissionBeforeConstruction(string shape, bool paths, bool cancel)
     {
         IReadOnlyList<BindingPattern> variables = Enumerable.Range(0, 10000)
             .Select(i => (BindingPattern)new VariablePattern("v" + i)).ToArray();
@@ -35,11 +35,11 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token)))
         {
-            Action evaluate = paths
-                ? () => filter.EvaluatePaths(new JqValuePath([], null, true), context, context.RootEnvironment).Single()
-                : () => filter.Evaluate(null, context, context.RootEnvironment).Single();
-            if (cancel) Assert.ThrowsAny<OperationCanceledException>(evaluate);
-            else Assert.True(Assert.Throws<JqQuotaException>(evaluate).IsMemoryAdmission);
+            Func<Task> evaluate = paths
+                ? async () => await filter.EvaluatePaths(new JqValuePath([], null, true), context, context.RootEnvironment).SingleAsync()
+                : async () => await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync();
+            if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(evaluate);
+            else Assert.True((await Assert.ThrowsAsync<JqQuotaException>(evaluate)).IsMemoryAdmission);
             Assert.Equal(cancel ? 0 : 1, memory.Counts.Refusals);
         }
         Assert.Equal(0, root.ReservedBytes);

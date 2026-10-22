@@ -10,7 +10,7 @@ public sealed partial class JqTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void Jq_DescentBorrowsWideChildrenWithinSmallAdmission(bool objects, bool paths)
+    public async Task Jq_DescentBorrowsWideChildrenWithinSmallAdmission(bool objects, bool paths)
     {
         JsonNode input = WideNullContainer(objects);
         var root = new BenchmarkMemoryBudget(4096);
@@ -20,7 +20,7 @@ public sealed partial class JqTests
             var filter = new RecursiveDescentFilter();
             if (paths)
             {
-                JqValuePath[] values = filter.EvaluatePaths(new JqValuePath([], input, true), context, context.RootEnvironment).Take(2).ToArray();
+                JqValuePath[] values = await filter.EvaluatePaths(new JqValuePath([], input, true), context, context.RootEnvironment).Take(2).ToArrayAsync();
                 Assert.Equal(2, values.Length);
                 Assert.Same(input, values[0].Value);
                 Assert.Null(values[1].Value);
@@ -28,7 +28,7 @@ public sealed partial class JqTests
             }
             else
             {
-                JsonNode?[] values = filter.Evaluate(input, context, context.RootEnvironment).Take(2).ToArray();
+                JsonNode?[] values = await filter.Evaluate(input, context, context.RootEnvironment).Take(2).ToArrayAsync();
                 Assert.Equal(2, values.Length);
                 Assert.Same(input, values[0]);
                 Assert.Null(values[1]);
@@ -44,7 +44,7 @@ public sealed partial class JqTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void Jq_DescentRefusesBeforeBufferingSiblings(bool objects, bool paths)
+    public async Task Jq_DescentRefusesBeforeBufferingSiblings(bool objects, bool paths)
     {
         JsonNode input = WideNullContainer(objects);
         var root = new BenchmarkMemoryBudget(0);
@@ -52,12 +52,12 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None)))
         {
             var filter = new RecursiveDescentFilter();
-            using IEnumerator<object?> values = paths
-                ? filter.EvaluatePaths(new JqValuePath([], input, true), context, context.RootEnvironment).Cast<object?>().GetEnumerator()
-                : filter.Evaluate(input, context, context.RootEnvironment).Cast<object?>().GetEnumerator();
-            Assert.True(values.MoveNext());
+            await using IAsyncEnumerator<object?> values = paths
+                ? filter.EvaluatePaths(new JqValuePath([], input, true), context, context.RootEnvironment).Cast<object?>().GetAsyncEnumerator()
+                : filter.Evaluate(input, context, context.RootEnvironment).Cast<object?>().GetAsyncEnumerator();
+            Assert.True(await values.MoveNextAsync());
             long before = GC.GetAllocatedBytesForCurrentThread();
-            var failure = Assert.Throws<JqQuotaException>(() => values.MoveNext());
+            var failure = await Assert.ThrowsAsync<JqQuotaException>(async () => await values.MoveNextAsync());
             Assert.True(failure.IsMemoryAdmission);
             Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 32 * 1024);
             Assert.Equal(1, counted.Counts.Refusals);
@@ -66,7 +66,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_DescentTraversesDeepValuesAndCancelsWithOpenCursors()
+    public async Task Jq_DescentTraversesDeepValuesAndCancelsWithOpenCursors()
     {
         JsonNode? input = null;
         for (int depth = 0; depth < 5000; depth++) input = new JsonArray(input);
@@ -75,14 +75,14 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
         {
             var filter = new RecursiveDescentFilter();
-            Assert.Equal(5001, filter.Evaluate(input, context, context.RootEnvironment).Count());
+            Assert.Equal(5001, await filter.Evaluate(input, context, context.RootEnvironment).CountAsync());
             Assert.Equal(0, root.ReservedBytes);
-            using IEnumerator<JsonNode?> values = filter.Evaluate(input, context, context.RootEnvironment).GetEnumerator();
-            Assert.True(values.MoveNext());
-            Assert.True(values.MoveNext());
+            await using IAsyncEnumerator<JsonNode?> values = filter.Evaluate(input, context, context.RootEnvironment).GetAsyncEnumerator();
+            Assert.True(await values.MoveNextAsync());
+            Assert.True(await values.MoveNextAsync());
             Assert.True(root.ReservedBytes > 0);
             cancellation.Cancel();
-            Assert.Throws<OperationCanceledException>(() => values.MoveNext());
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await values.MoveNextAsync());
             Assert.Equal(0, root.ReservedBytes);
         }
         Assert.Equal(0, root.ReservedBytes);

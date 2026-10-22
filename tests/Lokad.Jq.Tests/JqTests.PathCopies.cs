@@ -12,7 +12,7 @@ public sealed partial class JqTests
     [InlineData(". += $value")]
     [InlineData(". //= $value")]
     [InlineData("fromstream($events[])")]
-    public void Jq_PathWritesCopyBorrowedReplacementsAtOneBoundary(string source)
+    public async Task Jq_PathWritesCopyBorrowedReplacementsAtOneBoundary(string source)
     {
         var value = new JsonArray();
         for (int index = 0; index < 1000; index++) value.Add(index);
@@ -26,7 +26,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(variables, new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
         {
             JqFilter filter = new JqParser(source, JqProgramSource.Inline, context.RootEnvironment, lexical).Parse();
-            var result = Assert.IsType<JsonArray>(filter.Evaluate(null, context, context.RootEnvironment).Single());
+            var result = Assert.IsType<JsonArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(1000, result.Count);
             Assert.NotSame(value, result);
             Assert.Equal(999, result[999]?.GetValue<int>());
@@ -88,7 +88,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GetpathBorrowsLargeValuesAndAdmitsOnlyPathConstruction()
+    public async Task Jq_GetpathBorrowsLargeValuesAndAdmitsOnlyPathConstruction()
     {
         var value = new JsonArray();
         for (int index = 0; index < 10000; index++) value.Add(index);
@@ -99,18 +99,18 @@ public sealed partial class JqTests
         using (var context = new JqContext(variables, new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
         {
             var filter = new GetpathBuiltinFilter(new VariableFilter("path"));
-            Assert.Same(value, filter.Evaluate(input, context, context.RootEnvironment).Single());
+            Assert.Same(value, await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(64, root.ReservedBytes);
             Assert.Same(input, JqPathReads.GetPath(input, Array.Empty<JqValueSegment>(), context));
             cancellation.Cancel();
             Assert.Throws<OperationCanceledException>(() => JqPathReads.GetPath(input, Array.Empty<JqValueSegment>(), context));
-            Assert.Throws<OperationCanceledException>(() => filter.Evaluate(input, context, context.RootEnvironment).Single());
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync());
         }
         Assert.Equal(0, root.ReservedBytes);
     }
 
     [Fact]
-    public void Jq_GetpathCopiesArraySliceOnceAndKeepsSourceIndependent()
+    public async Task Jq_GetpathCopiesArraySliceOnceAndKeepsSourceIndependent()
     {
         JsonNode input = new JsonArray(new JsonObject { ["x"] = 1 }, new JsonObject { ["x"] = 2 });
         var variables = new Dictionary<string, JsonNode?>
@@ -118,8 +118,8 @@ public sealed partial class JqTests
             ["path"] = new JsonArray(new JsonObject { ["start"] = 0, ["end"] = 1 })
         };
         using var context = new JqContext(variables, new JqBudget(CancellationToken.None));
-        var result = Assert.IsType<JsonArray>(new GetpathBuiltinFilter(new VariableFilter("path"))
-            .Evaluate(input, context, context.RootEnvironment).Single());
+        var result = Assert.IsType<JsonArray>(await new GetpathBuiltinFilter(new VariableFilter("path"))
+            .Evaluate(input, context, context.RootEnvironment).SingleAsync());
         Assert.Single(result);
         result[0]?["x"] = 9;
         Assert.Equal(1, input[0]?["x"]?.GetValue<int>());

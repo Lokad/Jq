@@ -108,7 +108,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_CompilerSeedsNearestFunctionsWithAmortizedAdmission()
+    public async Task Jq_CompilerSeedsNearestFunctionsWithAmortizedAdmission()
     {
         var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
         for (int i = 0; i < 1000; i++)
@@ -121,14 +121,14 @@ public sealed partial class JqTests
             new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
         {
             var filter = new JqParser("f0 + f0(1)", JqProgramSource.Inline, env, context.Budget).Parse();
-            Assert.Equal(43, JqRuntime.Number(filter.Evaluate(null, context, env).Single()));
+            Assert.Equal(43, JqRuntime.Number(await filter.Evaluate(null, context, env).SingleAsync()));
             Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 100);
         }
         Assert.Equal(0, root.ReservedBytes);
     }
 
     [Fact]
-    public void Jq_InterpolationBorrowsWideVisibleScopes()
+    public async Task Jq_InterpolationBorrowsWideVisibleScopes()
     {
         var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
         for (int i = 0; i < 10000; i++)
@@ -140,7 +140,7 @@ public sealed partial class JqTests
         {
             string source = "\"" + string.Concat(Enumerable.Repeat("\\(f0)", 20)) + "\"";
             var filter = new JqParser(source, JqProgramSource.Inline, env, context.Budget).Parse();
-            Assert.Equal(new string('1', 20), context.Runtime.ToJqString(filter.Evaluate(JsonValue.Create(1), context, env).Single()));
+            Assert.Equal(new string('1', 20), context.Runtime.ToJqString(await filter.Evaluate(JsonValue.Create(1), context, env).SingleAsync()));
             Assert.True(root.PeakBytes < 2 * 1024 * 1024);
         }
         Assert.Equal(0, root.ReservedBytes);
