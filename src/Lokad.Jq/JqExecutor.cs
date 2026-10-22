@@ -358,7 +358,7 @@ internal static class JqExecutor
                 }
                 else
                 {
-                    value = ReadSlurpfileValue(bytes, context);
+                    value = context.Runtime.ReadJsonArray(bytes.Span, 0);
                 }
                 variables[name] = value;
                 if (variables.TryGetValue("ARGS", out JsonNode? args)
@@ -378,21 +378,6 @@ internal static class JqExecutor
                 throw new JqException($"Bad JSON in --{which} {name} {path}: {exception.Message}");
             }
         }
-    }
-
-    private static JsonArray ReadSlurpfileValue(ReadOnlyMemory<byte> bytes, JqContext context)
-    {
-        var values = new JsonArray();
-        int offset = JqRuntime.HasBomPrefix(bytes.Span) ? 3 : 0;
-        while (offset < bytes.Length)
-        {
-            if (bytes.Span[offset..].TrimStart(" \t\r\n"u8).IsEmpty)
-                break;
-            context.Budget.ReserveBytes(24);
-            values.Add(context.Runtime.ReadJsonValue(bytes.Span[offset..], out int consumed));
-            offset += consumed;
-        }
-        return values;
     }
 
     private static string ParentDir(string canonicalPath)

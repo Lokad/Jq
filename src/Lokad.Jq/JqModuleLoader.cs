@@ -198,19 +198,7 @@ internal sealed class JqModuleLoader(
         }
         try
         {
-            budget.ReserveBytes(64);
-            var array = new JsonArray();
-            int offset = 0;
-            while (offset < content.Length)
-            {
-                if (IsWhitespaceOnly(content.Span[offset..]))
-                    break;
-                JsonNode? node = runtime.ReadJsonValue(content.Span[offset..], 1, out int consumed);
-                offset += consumed;
-                budget.ReserveArrayItem(node);
-                array.Add(node);
-            }
-            return array;
+            return runtime.ReadJsonArray(content.Span, 1);
         }
         catch (JqException ex) when (ex is not JqQuotaException)
         {
@@ -387,16 +375,6 @@ internal sealed class JqModuleLoader(
         if (slash <= 0)
             return "/";
         return canonicalPath[..slash];
-    }
-
-    private static bool IsWhitespaceOnly(ReadOnlySpan<byte> span)
-    {
-        foreach (byte b in span)
-        {
-            if (b != (byte)32 && b != (byte)9 && b != (byte)10 && b != (byte)13)
-                return false;
-        }
-        return true;
     }
 
     internal async Task<JsonObject> GetModuleMetadataAsync(string relPath, CancellationToken cancellationToken)

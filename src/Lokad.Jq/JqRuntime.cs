@@ -155,6 +155,24 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JsonNode? ReadJsonValue(ReadOnlySpan<byte> text, out int consumed) =>
         ReadJsonValue(text, 0, out consumed);
 
+    internal JsonArray ReadJsonArray(ReadOnlySpan<byte> bytes, int childDepth)
+    {
+        budget.ReserveBytes(64);
+        var values = new JsonArray();
+        int offset = HasBomPrefix(bytes) ? 3 : 0;
+        while (offset < bytes.Length)
+        {
+            budget.CheckCancellation();
+            if (bytes[offset..].TrimStart(" \t\r\n"u8).IsEmpty) break;
+            JsonNode? value = ReadJsonValue(bytes[offset..], childDepth, out int consumed);
+            offset += consumed;
+            // Parsing already owns the node; only the containing slot is new.
+            budget.ReserveBytes(24);
+            values.Add(value);
+        }
+        return values;
+    }
+
     internal JsonNode? ReadJsonValue(ReadOnlySpan<byte> text, int depth, out int consumed)
     {
         try
