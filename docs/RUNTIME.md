@@ -16,7 +16,7 @@ default current directory. `JqClock` supplies time and timezone inputs. Hosted
 module search uses `-L` and import metadata.
 
 Standard descriptors are borrowed. Successful `OpenReadAsync` calls transfer an
-owned descriptor to execution, which calls `CloseDescriptorAsync` when exhausted
+owned descriptor to execution; `JqOpenedFile.OpenFailure` transfers none. Execution calls `CloseDescriptorAsync` when exhausted
 or abandoned, including on cancellation or failure. Cleanup uses
 `CancellationToken.None`, retries a reported unsuccessful close once and preserves
 an earlier failure.

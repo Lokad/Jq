@@ -125,7 +125,7 @@ public sealed partial class JqTests
     public async Task Jq_SeqStreamAbandonedWarns()
     {
         // The streaming sequence path reports unframed tails the same way:
-        // warnings in auto-drain with no records.
+        // warnings during outer input iteration with no records.
         var host = new MockFileSystem();
         host.SetStandardInput("1\n");
         var (exit, stdout, stderr) = await RunSeqAsync(host, "--stream", "--seq", ".");
@@ -176,7 +176,7 @@ public sealed partial class JqTests
     {
         // Like the reference waiting state, content that never sees a
         // record separator is abandoned text even when it parses as
-        // complete values: warnings in auto-drain, errors via inputs.
+        // complete values: warnings during outer input iteration, errors via inputs.
         var bare = new MockFileSystem();
         bare.SetStandardInput("1\n");
         var (bareExit, bareOut, bareErr) = await RunSeqAsync(bare, "-c", "--seq", ".");

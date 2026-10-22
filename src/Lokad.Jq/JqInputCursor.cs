@@ -285,9 +285,9 @@ internal sealed class JqInputCursor : IAsyncDisposable
         JqResolvedPath source = _sources[_index];
         JqOpenedFile opened = await JqHostExtensions.GuardedOpenAsync(
             _host, source.Absolute, _cancellationToken).ConfigureAwait(false);
-        if (opened.Error != null || opened.FileDescriptor == null)
+        if (opened.FileDescriptor is not { } descriptor)
             throw new JqInputException($"cannot open {source.Display}", 2);
-        _owned = opened.FileDescriptor.Value;
+        _owned = descriptor;
         return true;
     }
 

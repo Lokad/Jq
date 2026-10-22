@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Breaking host API: make `JqOpenedFile` a value type and remove its unused `Error`
+  and `Failure(string)` payload. Return `OpenFailure` (or default) on failure and
+  `Success(descriptor)` to transfer an owned descriptor.
+
 - Keep unexpected clock and regex callback CLR faults outside jq error handlers;
   preserve provider-declared syntax, resource and cancellation outcomes.
 

@@ -6,8 +6,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Lokad.Jq;
 
-// Development-only inspection of the packed artifact. This fixture is never
-// part of the runtime, ordinary test suite or automatic CI.
+// Inspects packed symbols and sources in isolated consumers, including CI.
 internal static class PackageSymbols
 {
     internal static async Task VerifyAsync(string symbolPackage, string sourceRoot, string commit, bool verifyHostedSources)

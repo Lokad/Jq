@@ -389,12 +389,12 @@ internal static class JqExecutor
         JqResolvedPath path, IJqHost host, JqBudget budget, CancellationToken cancellationToken)
     {
         var opened = await JqHostExtensions.GuardedOpenAsync(host, path.Absolute, cancellationToken).ConfigureAwait(false);
-        if (opened.Error != null || opened.FileDescriptor == null)
+        if (opened.FileDescriptor is not { } descriptor)
             throw new JqException($"cannot open {path.Display}");
         Exception? failure = null;
         try
         {
-            return await ReadAllAsync(host, opened.FileDescriptor.Value, budget, cancellationToken).ConfigureAwait(false);
+            return await ReadAllAsync(host, descriptor, budget, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -403,7 +403,7 @@ internal static class JqExecutor
         }
         finally
         {
-            await host.CloseOwnedDescriptorAsync(opened.FileDescriptor.Value, failure).ConfigureAwait(false);
+            await host.CloseOwnedDescriptorAsync(descriptor, failure).ConfigureAwait(false);
         }
     }
 

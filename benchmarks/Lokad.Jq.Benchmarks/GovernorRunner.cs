@@ -326,7 +326,7 @@ internal static class GovernorRunner
             string.Concat(Enumerable.Range(0, records).Select(value => "[\"DEBUG:\"," + value.ToString(CultureInfo.InvariantCulture) + "]\n")));
         AddDiagnostic("debug-burst", records, ["-nc", "range(1000) | debug | empty"], "", "",
             string.Concat(Enumerable.Range(0, records).Select(value => "[\"DEBUG:\"," + value.ToString(CultureInfo.InvariantCulture) + "]\n")));
-        AddDiagnostic("stderr-drained-1", records, ["-nr", "range(1000) | \"a\" | stderr"], "",
+        AddDiagnostic("stderr-with-output-1", records, ["-nr", "range(1000) | \"a\" | stderr"], "",
             string.Concat(Enumerable.Repeat("a\n", records)), new string('a', records));
         foreach (int length in new[] { 1, 4096 })
         {

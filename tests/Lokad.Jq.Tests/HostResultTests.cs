@@ -5,8 +5,11 @@ namespace Lokad.Jq.Tests;
 public sealed class HostResultTests
 {
     [Fact]
-    public void ReadAndAppendStatesKeepTheirDistinctMeanings()
+    public void HostResultStatesKeepTheirDistinctMeanings()
     {
+        Assert.Null(default(JqOpenedFile).FileDescriptor);
+        Assert.Null(JqOpenedFile.OpenFailure.FileDescriptor);
+        Assert.Equal(new JqFileDescriptor(3), JqOpenedFile.Success(new JqFileDescriptor(3)).FileDescriptor);
         Assert.True(default(JqByteReadResult).ReachedEoF);
         Assert.False(JqByteReadResult.EndOfFile.IsError);
         Assert.True(JqByteReadResult.ReadFailure.IsError);

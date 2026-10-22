@@ -28,24 +28,20 @@ public interface IJqHost
     Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken);
 }
 
-/// <summary>A successful read-only open, or a host-provided failure description.</summary>
-public sealed record JqOpenedFile
+/// <summary>A successful read-only open, or a failure. The default value is a failure.</summary>
+public readonly record struct JqOpenedFile
 {
-    private JqOpenedFile(JqFileDescriptor? descriptor, string? error)
+    private JqOpenedFile(JqFileDescriptor descriptor)
     {
         FileDescriptor = descriptor;
-        Error = error;
     }
 
     /// <summary>Gets the owned descriptor on success.</summary>
     public JqFileDescriptor? FileDescriptor { get; }
 
-    /// <summary>Gets the failure description, or null on success.</summary>
-    public string? Error { get; }
-
     /// <summary>Creates a successful open result.</summary>
-    public static JqOpenedFile Success(JqFileDescriptor descriptor) => new(descriptor, null);
+    public static JqOpenedFile Success(JqFileDescriptor descriptor) => new(descriptor);
 
-    /// <summary>Creates a failed open result.</summary>
-    public static JqOpenedFile Failure(string error) => new(null, error);
+    /// <summary>A failed read-only open. No descriptor is transferred.</summary>
+    public static JqOpenedFile OpenFailure => default;
 }

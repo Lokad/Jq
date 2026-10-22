@@ -92,6 +92,13 @@ int checks = 0;
 }
 {
     var host = new SmokeHost();
+    Check("open failure", await Command([".", "/missing"], []).ExecuteAsync(host, CancellationToken.None) == 2
+        && host.Output(JqFileDescriptor.StdOut) == ""
+        && host.Output(JqFileDescriptor.StdErr) == "jq: cannot open /missing\n"
+        && host.ClosedDescriptors.Count == 0 && host.OpenFileCount == 0);
+}
+{
+    var host = new SmokeHost();
     host.AddFile("/modules/values.jq", "def twice: . * 2;");
     Check("hosted module", await Command(["-n", "-L", "/modules", "import \"values\" as v; 3 | v::twice"], [])
         .ExecuteAsync(host, CancellationToken.None) == 0
@@ -431,7 +438,7 @@ sealed class SmokeHost : IJqHost
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!_files.TryGetValue(path.Path, out var bytes))
-            return Task.FromResult(JqOpenedFile.Failure("Missing virtual file."));
+            return Task.FromResult(JqOpenedFile.OpenFailure);
         var descriptor = new JqFileDescriptor(_nextDescriptor++);
         _inputs[descriptor.Id] = bytes;
         return Task.FromResult(JqOpenedFile.Success(descriptor));

@@ -347,12 +347,12 @@ internal sealed class JqModuleLoader(
     private async Task<JqReadResult.Complete?> TryReadModuleFileAsync(JqPath path, CancellationToken cancellationToken)
     {
         var opened = await JqHostExtensions.GuardedOpenAsync(host, path, cancellationToken).ConfigureAwait(false);
-        if (opened.Error is not null || opened.FileDescriptor is null) return null;
+        if (opened.FileDescriptor is not { } descriptor) return null;
         Exception? failure = null;
         JqReadResult.Complete? content = null;
         try
         {
-            content = await host.TryReadAllBytesAsync(opened.FileDescriptor.Value, budget, cancellationToken).ConfigureAwait(false)
+            content = await host.TryReadAllBytesAsync(descriptor, budget, cancellationToken).ConfigureAwait(false)
                 as JqReadResult.Complete;
         }
         catch (Exception exception)
@@ -362,7 +362,7 @@ internal sealed class JqModuleLoader(
         }
         finally
         {
-            try { await host.CloseOwnedDescriptorAsync(opened.FileDescriptor.Value, failure).ConfigureAwait(false); }
+            try { await host.CloseOwnedDescriptorAsync(descriptor, failure).ConfigureAwait(false); }
             catch { content?.Dispose(); throw; }
         }
         return content;

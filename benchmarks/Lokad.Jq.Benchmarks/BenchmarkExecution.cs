@@ -87,7 +87,7 @@ internal sealed class BenchmarkHost : IJqHost, IDisposable
     public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(JqOpenedFile.Failure("No files in benchmark host"));
+        return Task.FromResult(JqOpenedFile.OpenFailure);
     }
 
     public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>
