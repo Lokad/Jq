@@ -41,7 +41,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_OptionalUnreadableFunctionIsUndefinedInsteadOfLoadedFromLaterFile()
+    public async Task Jq_OptionalUnreadableModuleDoesNotBindFunctionsFromLaterFile()
     {
         var inner = new MockFileSystem();
         inner.AddFile("/first/m.jq", "def f:1;");
@@ -50,9 +50,9 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-n", "-L", "/first", "-L", "/second",
             "import \"m\" as m {optional:true}; m::f")));
-        Assert.Equal(3, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Contains("m::f/0 is not defined", inner.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
+        Assert.Equal("jq: error (at <unknown>): undefined function m::f/0\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.DoesNotContain(host.Paths, path => path.StartsWith("/second/", StringComparison.Ordinal));
         Assert.Single(inner.ClosedDescriptors);
         Assert.Equal(0, inner.OpenFileCount);
