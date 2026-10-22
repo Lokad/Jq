@@ -139,9 +139,15 @@ internal sealed class JqModuleLoader(
         foreach (JqPath path in ModulePaths(import, importerDir, ".jq", cancellationToken))
         {
             if (_cache.TryGetValue(path.Path, out JqLoadedModule? cached)) return cached;
-            using var content = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
-            if (content is not null)
-                return await LoadFuncModuleAtPathAsync(path.Path, content.Content, depth, cancellationToken).ConfigureAwait(false);
+            var result = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
+            if (result is null) continue;
+            if (result is JqReadResult.Failed)
+            {
+                if (import.IsOptional) return null;
+                throw new JqException("error loading module " + path.Path + ": input read failed");
+            }
+            using var content = (JqReadResult.Complete)result;
+            return await LoadFuncModuleAtPathAsync(path.Path, content.Content, depth, cancellationToken).ConfigureAwait(false);
         }
         if (import.IsOptional) return null;
         throw new JqException("module not found: " + import.RelPath);
@@ -156,8 +162,14 @@ internal sealed class JqModuleLoader(
         string canonical = string.Empty;
         foreach (JqPath path in ModulePaths(import, importerDir, ".json", cancellationToken))
         {
-            loaded = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
-            if (loaded is null) continue;
+            var result = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
+            if (result is null) continue;
+            if (result is JqReadResult.Failed)
+            {
+                if (import.IsOptional) return null;
+                throw new JqException("error loading data file " + path.Path + ": input read failed");
+            }
+            loaded = (JqReadResult.Complete)result;
             canonical = path.Path;
             break;
         }
@@ -344,16 +356,15 @@ internal sealed class JqModuleLoader(
         }
     }
 
-    private async Task<JqReadResult.Complete?> TryReadModuleFileAsync(JqPath path, CancellationToken cancellationToken)
+    private async Task<JqReadResult?> TryReadModuleFileAsync(JqPath path, CancellationToken cancellationToken)
     {
         var opened = await JqHostExtensions.GuardedOpenAsync(host, path, cancellationToken).ConfigureAwait(false);
         if (opened.FileDescriptor is not { } descriptor) return null;
         Exception? failure = null;
-        JqReadResult.Complete? content = null;
+        JqReadResult? content = null;
         try
         {
-            content = await host.TryReadAllBytesAsync(descriptor, budget, cancellationToken).ConfigureAwait(false)
-                as JqReadResult.Complete;
+            content = await host.TryReadAllBytesAsync(descriptor, budget, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -363,7 +374,7 @@ internal sealed class JqModuleLoader(
         finally
         {
             try { await host.CloseOwnedDescriptorAsync(descriptor, failure).ConfigureAwait(false); }
-            catch { content?.Dispose(); throw; }
+            catch { (content as JqReadResult.Complete)?.Dispose(); throw; }
         }
         return content;
     }
