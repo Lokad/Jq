@@ -8,8 +8,6 @@ internal sealed class TestFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        if (args.Count is not (1 or 2))
-            throw new JqException("test expects one or two arguments");
         if (args.Count == 1)
         {
             foreach (var value in args[0].Evaluate(input, context, environment))

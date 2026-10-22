@@ -23,10 +23,7 @@ internal static class JqCommandLineParser
         return name.Length != 0;
     }
 
-    // Range check for strict `--indent` values without integer overflow:
-    // only -1..7 are in range, so any multi-digit significant is out of range
-    // (this also covers values far past int range, which must report the
-    // reference diagnostic instead of tripping binder conversion errors).
+    // Check -1..7 without overflow, including arbitrarily many leading zeros.
     private static bool IsIndentInRange(string text)
     {
         int start = text[0] is '+' or '-' ? 1 : 0;

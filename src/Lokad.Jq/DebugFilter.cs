@@ -10,8 +10,6 @@ internal sealed class DebugFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        if (args.Count > 1)
-            throw new JqException("debug expects zero or one arguments");
         if (args.Count == 0)
         {
             EmitDebug(context, input);

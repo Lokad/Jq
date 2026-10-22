@@ -1668,8 +1668,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
 
         if (name == "select")
         {
-            if (args.Count != 1)
-                throw new JqException("select expects one argument");
             // Predicates can yield multiple results; consume them without buffering.
             foreach (var value in args[0].Evaluate(input, context, environment))
                 if (Truthy(value))
@@ -1684,8 +1682,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
 
         if (name == "error")
         {
-            if (args.Count > 1)
-                throw new JqException("error expects at most one argument");
             // Bare `error` raises the input; otherwise the first argument
             // value wins and the rest never runs. An empty argument stream
             // yields nothing at all.
@@ -1701,8 +1697,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
 
         if (name == "halt_error")
         {
-            if (args.Count > 1)
-                throw new JqException("halt_error expects at most one argument");
             // Bare `halt_error` exits 5 with the input rendered; otherwise
             // the first code value wins and the rest never runs.
             if (args.Count == 0)
@@ -1956,32 +1950,10 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
         ArgumentNullException.ThrowIfNull(environment);
         if (name == "select")
         {
-            if (args.Count != 1)
-                throw new JqException("select expects one argument");
             // Predicates run in value mode; surviving pairs keep paths.
             foreach (JsonNode? probe in args[0].Evaluate(pair.Value, context, environment))
                 if (Truthy(probe))
                     yield return pair;
-            yield break;
-        }
-        if (name == "getpath")
-        {
-            if (args.Count != 1)
-                throw new JqException("getpath expects one argument");
-            if (!pair.Tracked)
-                throw new JqException(InvalidResult(pair.Value, context));
-            // Path synthesis: the argument supplies segments directly.
-            foreach (JsonNode? paths in args[0].Evaluate(pair.Value, context, environment))
-            {
-                List<JqValueSegment> extra = ParsePathValue(paths, context);
-                context.Budget.ReserveBytes(24L * (pair.Segments.Count + extra.Count));
-                var segments = new List<JqValueSegment>(pair.Segments.Count + extra.Count);
-                foreach (JqValueSegment existing in pair.Segments)
-                    segments.Add(existing);
-                foreach (JqValueSegment added in extra)
-                    segments.Add(added);
-                yield return new JqValuePath(segments, JqPathReads.GetPath(pair.Value, extra, context), true);
-            }
             yield break;
         }
         foreach (JqValuePath next in base.EvaluatePathsCore(pair, context, environment))

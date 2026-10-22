@@ -13,9 +13,6 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
 
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        string filterName = firstOnly ? "sub" : "gsub";
-        if (args.Count is not (2 or 3))
-            throw new JqException(filterName + " expects two or three arguments");
         string text = JqMatch.RequireText(context, input);
         foreach (var flags in args.Count == 3 ? args[2].Evaluate(input, context, environment) : [(JsonNode?)null])
         foreach (var pattern in args[0].Evaluate(input, context, environment))

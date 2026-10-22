@@ -23,7 +23,7 @@ namespace Lokad.Jq;
 // Reads are chunked (8 KiB): JSON values and raw lines may span chunk
 // boundaries; shared admission preflights staging and scalar storage. JSON
 // decoding retains reader state and completed DOM nodes across reads. Extended
-// literals and invalid input reuse the whole-buffer reader for compatibility.
+// literals share the token reader; malformed input keeps its diagnostics.
 // Failures at end-of-source surface as input errors. Slurp stays an explicit
 // aggregating loop over this cursor in the executor.
 internal sealed class JqInputCursor : IAsyncDisposable
