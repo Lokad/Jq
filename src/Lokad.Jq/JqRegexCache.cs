@@ -114,12 +114,14 @@ internal sealed class JqRegexCache : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _budget.CheckCancellation();
-        try { return pattern.IsMatch(input.Span, options, _budget.CancellationToken); }
+        bool matched;
+        try { matched = pattern.IsMatch(input.Span, options, _budget.CancellationToken); }
         catch (JqRegexResourceException exception) { throw Terminal(exception); }
         catch (NotSupportedException ex) { throw new JqException($"unsupported regex: {ex.Message}"); }
         catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
         { throw new JqHostFailureException("regex matching violated its contract", exception); }
-        finally { _budget.CheckCancellation(); }
+        _budget.CheckCancellation();
+        return matched;
     }
 
     internal static IReadOnlyDictionary<int, string> GetGroupNames(IJqCompiledRegex pattern)

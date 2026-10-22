@@ -27,8 +27,8 @@ internal static class JqExecutor
         }
         catch (JqQuotaException exception)
         {
-            await JqDiagnosticWriter.TryWriteAsync(host, commandInvocation.StdErr,
-                ["jq: ", exception.Message], true, memoryScope, cancellationToken).ConfigureAwait(false);
+            await JqDiagnosticWriter.WriteQuotaAsync(host, commandInvocation.StdErr,
+                exception.Message, memoryScope, cancellationToken).ConfigureAwait(false);
             return 5;
         }
         if (invocation.Error != null)
@@ -50,7 +50,7 @@ internal static class JqExecutor
             }
             catch (JqQuotaException exception)
             {
-                await WriteErrorAsync(host, invocation, ["jq: ", exception.Message], memoryScope,
+                await JqDiagnosticWriter.WriteQuotaAsync(host, invocation.StdErr, exception.Message, memoryScope,
                     cancellationToken).ConfigureAwait(false);
                 return 5;
             }
@@ -212,7 +212,7 @@ internal static class JqExecutor
             // stage was active when the budget tripped.
             // A stopped diagnostic descriptor prevents further writes, but
             // cannot replace the resource failure with success or another code.
-            await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
+            await JqDiagnosticWriter.WriteQuotaAsync(host, invocation.StdErr, ex.Message, memoryScope,
                 cancellationToken).ConfigureAwait(false);
             return 5;
         }

@@ -92,8 +92,7 @@ public sealed partial class JqTests
         Assert.False(execution.IsCompleted);
         Assert.Equal(charged, memory.ReservedBytes);
         host.Release.SetResult();
-        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
-        else Assert.Equal(5, await execution);
+        Assert.Equal(5, await execution);
         Assert.Equal(0, memory.ReservedBytes);
         Assert.Single(inner.ClosedDescriptors);
         Assert.Equal(0, inner.OpenFileCount);

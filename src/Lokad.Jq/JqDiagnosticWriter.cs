@@ -21,7 +21,7 @@ internal static class JqDiagnosticWriter
             long count = Utf8Text.GetByteCount(part, cancellationToken);
             if (count > Array.MaxLength - length)
             {
-                await host.AppendAsync(descriptor, Refusal, cancellationToken).ConfigureAwait(false);
+                await WriteRefusalAsync(host, descriptor, cancellationToken).ConfigureAwait(false);
                 return null;
             }
             length += count;
@@ -29,7 +29,7 @@ internal static class JqDiagnosticWriter
         using var memory = new JqMemoryReservation(memoryBudget);
         if (length > Array.MaxLength || !memory.TryResize(length))
         {
-            await host.AppendAsync(descriptor, Refusal, cancellationToken).ConfigureAwait(false);
+            await WriteRefusalAsync(host, descriptor, cancellationToken).ConfigureAwait(false);
             return null;
         }
         var bytes = new byte[(int)length];
@@ -39,5 +39,25 @@ internal static class JqDiagnosticWriter
         if (newline) bytes[offset] = (byte)'\n';
         cancellationToken.ThrowIfCancellationRequested();
         return await JqHostExtensions.GuardedAppendAsync(host, descriptor, bytes, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Admission has already failed. Await any pending borrow, but a later
+    // cancellation while reporting cannot replace its terminal status.
+    internal static async Task WriteQuotaAsync(IJqHost host, JqFileDescriptor descriptor,
+        string message, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await TryWriteAsync(host, descriptor, ["jq: ", message], true, memoryBudget,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    private static async Task WriteRefusalAsync(IJqHost host, JqFileDescriptor descriptor,
+        CancellationToken cancellationToken)
+    {
+        try { await host.AppendAsync(descriptor, Refusal, cancellationToken).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
     }
 }
