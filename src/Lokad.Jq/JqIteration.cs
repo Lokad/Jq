@@ -541,22 +541,24 @@ internal sealed class PathsFilter(JqFilter? Condition) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        var root = new JqValuePath(new List<JqValueSegment>(), input, true);
-        foreach (JqValuePath pair in new RecursiveDescentFilter().EvaluatePaths(root, context, environment))
+        using var cursor = new JqTreeCursor(context.Budget);
+        JsonNode? current = input;
+        while (true)
         {
-            if (pair.Segments.Count == 0)
-                continue;
+            if (current is JsonArray { Count: > 0 } or JsonObject { Count: > 0 }) cursor.Push(current);
+            while (cursor.Count != 0 && !cursor.TryNext(out current)) cursor.Pop();
+            if (cursor.Count == 0) yield break;
             if (Condition is null)
             {
-                yield return JqPaths.PathToJson(pair.Segments, context.Budget);
+                yield return cursor.CopyJsonPath();
                 continue;
             }
             // Like select, every condition output counts: each truthy probe keeps
             // the path, matching path(recurse|select(node_filter)) multiplicity.
-            foreach (JsonNode? probe in Condition.Evaluate(pair.Value, context, environment))
+            foreach (JsonNode? probe in Condition.Evaluate(current, context, environment))
             {
                 if (Truthy(probe))
-                    yield return JqPaths.PathToJson(pair.Segments, context.Budget);
+                    yield return cursor.CopyJsonPath();
             }
         }
     }
