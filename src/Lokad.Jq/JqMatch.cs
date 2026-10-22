@@ -12,6 +12,16 @@ namespace Lokad.Jq;
 // like the reference, which builds one array per call.
 internal static class JqMatch
 {
+    internal static bool Test(JqContext context, JsonNode? input, JsonNode? patternNode, JsonNode? flagsNode)
+    {
+        string text = RequireText(context, input);
+        string pattern = RequirePattern(context, patternNode);
+        JqRegexOptions options = JqRegexOptions.ParseOrThrow(RequireModifiers(context, flagsNode));
+        var regex = context.Regexes.Get(pattern, options.Pattern);
+        using var subject = context.Regexes.EncodeSubject(text);
+        return context.Regexes.IsMatch(regex, subject.Value, options.Match);
+    }
+
     internal static List<JsonObject> Search(JqContext context, JsonNode? input, JsonNode? patternNode, JsonNode? modifiersNode)
     {
         ArgumentNullException.ThrowIfNull(context);

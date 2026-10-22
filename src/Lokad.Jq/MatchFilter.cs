@@ -38,13 +38,13 @@ internal sealed class MatchImplFilter(IReadOnlyList<JqFilter> args) : JqFilter
         await foreach (JsonNode? pattern in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
         {
             bool isTest = testmode is JsonValue testValue && testValue.TryGetValue<bool>(out bool flag) && flag;
-            List<JsonObject> matches = JqMatch.Search(context, input, pattern, modifiers);
             if (isTest)
             {
-                yield return JsonValue.Create(matches.Count > 0);
+                yield return JsonValue.Create(JqMatch.Test(context, input, pattern, modifiers));
             }
             else
             {
+                List<JsonObject> matches = JqMatch.Search(context, input, pattern, modifiers);
                 var array = new JsonArray();
                 context.Budget.CheckCancellation();
                 foreach (JsonObject match in matches)
