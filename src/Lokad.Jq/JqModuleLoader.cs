@@ -374,7 +374,7 @@ internal sealed class JqModuleLoader(
         }
         finally
         {
-            try { await host.CloseOwnedDescriptorAsync(descriptor, failure).ConfigureAwait(false); }
+            try { await host.CloseOwnedDescriptorAsync(descriptor, path.Path, failure is not null).ConfigureAwait(false); }
             catch { (content as JqReadResult.Complete)?.Dispose(); throw; }
         }
         return content;

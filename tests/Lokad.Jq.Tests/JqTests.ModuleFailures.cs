@@ -124,9 +124,9 @@ public sealed partial class JqTests
 
         public Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken) =>
             inner.AppendWhileOpenAsync(descriptor, content, cancellationToken);
-        public async Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+        public async Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
         {
-            int status = await inner.CloseDescriptorAsync(descriptor, cancellationToken).ConfigureAwait(false);
+            JqCloseResult status = await inner.CloseDescriptorAsync(descriptor, cancellationToken).ConfigureAwait(false);
             if (CloseFailure is { } failure) throw failure;
             return status;
         }

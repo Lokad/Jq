@@ -74,7 +74,7 @@ public sealed partial class JqTests
 
         public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) => Fail<JqOpenedFile>();
 
-        public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>
+        public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("No descriptor was transferred.");
 
         private Task<T> Fail<T>()

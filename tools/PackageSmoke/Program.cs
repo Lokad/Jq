@@ -336,6 +336,17 @@ foreach (bool refuse in new[] { false, true })
         && host.Output(JqFileDescriptor.StdOut) == "x\n" && host.Output(JqFileDescriptor.StdErr) == ""
         && memory.ReservedBytes == 0);
 }
+{
+    var host = new SmokeHost { CloseFailure = new JqOperationError("storage unavailable") };
+    host.AddFile("/first", "42\n");
+    host.AddFile("/later", "99\n");
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("terminal structured close", await Command(["-c", ".", "/first", "/later"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 5
+        && host.Output(JqFileDescriptor.StdOut) == "42\n"
+        && host.Output(JqFileDescriptor.StdErr) == "jq: error closing /first: storage unavailable\n"
+        && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 
@@ -404,6 +415,7 @@ sealed class SmokeCooperatingRegex(CancellationTokenSource cancellation) : IJqRe
 
 sealed class SmokeHost : IJqHost
 {
+    public JqOperationError? CloseFailure { get; init; }
     private readonly Dictionary<string, byte[]> _files = new(StringComparer.Ordinal);
     private readonly Dictionary<int, byte[]> _inputs = new();
     private readonly Dictionary<int, MemoryStream> _outputs = new();
@@ -449,12 +461,12 @@ sealed class SmokeHost : IJqHost
         return Task.FromResult(JqOpenedFile.Success(descriptor));
     }
 
-    public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+    public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
     {
         if (descriptor.Id < 10) throw new InvalidOperationException("Borrowed descriptor was closed.");
         ClosedDescriptors.Add(descriptor);
         _inputs.Remove(descriptor.Id);
-        return Task.FromResult(0);
+        return Task.FromResult(CloseFailure is { } error ? JqCloseResult.Failure(error) : JqCloseResult.Success);
     }
 }
 
@@ -484,7 +496,7 @@ sealed class SmokeBorrowHost(SmokeHost inner) : IJqHost
     public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) =>
         inner.OpenReadAsync(path, cancellationToken);
 
-    public async Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+    public async Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
     {
         Closing.TrySetResult();
         await CloseRelease.Task.ConfigureAwait(false);

@@ -266,19 +266,19 @@ public sealed partial class JqTests
     public async Task Jq_ModuleReadRefundsUnpublishedContentWhenCloseFails()
     {
         var root = new BenchmarkMemoryBudget(1024 * 1024);
-        var host = new MockFileSystem { CloseFailuresRemaining = 2 };
+        var host = new MockFileSystem { CloseFailure = new JqOperationError("storage unavailable") };
         host.AddFile("/lib/m.jq", "def f:42;");
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
-            var error = await Assert.ThrowsAsync<JqException>(() =>
+            var error = await Assert.ThrowsAsync<JqCloseException>(() =>
                 loader.LoadMainImportsAsync([new JqModuleImport("m", null, false, null)], "/", CancellationToken.None));
-            Assert.Equal("input close failed", error.Message);
-            Assert.Equal(2, host.ClosedDescriptors.Count);
+            Assert.Equal("/lib/m.jq", error.Path);
+            Assert.Equal("storage unavailable", error.Error.Message);
+            Assert.Single(host.ClosedDescriptors);
         }
         Assert.Equal(0, root.ReservedBytes);
-        Assert.Equal(0, await host.CloseDescriptorAsync(host.ClosedDescriptors[0], CancellationToken.None));
         Assert.Equal(0, host.OpenFileCount);
     }
 

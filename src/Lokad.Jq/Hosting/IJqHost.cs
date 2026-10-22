@@ -21,11 +21,11 @@ public interface IJqHost
     Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Closes an owned descriptor. Return zero after successful release, nonzero if cleanup should
-    /// be retried. The runtime retries once and uses an uncancelled token for cleanup.
+    /// Retires an owned descriptor and reports successful release or a terminal cleanup failure.
+    /// Both outcomes end ownership; execution never retries and supplies an uncancelled token.
     /// Standard descriptors supplied by the caller are borrowed and are never closed by the runtime.
     /// </summary>
-    Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken);
+    Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken);
 }
 
 /// <summary>A successful read-only open, or a failure. The default value is a failure.</summary>

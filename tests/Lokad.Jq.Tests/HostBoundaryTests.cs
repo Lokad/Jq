@@ -55,31 +55,17 @@ public sealed class HostBoundaryTests
     }
 
     [Fact]
-    public async Task OwnedDescriptorCloseRetriesReportedFailure()
-    {
-        var host = new MockFileSystem { CloseFailuresRemaining = 1 };
-        host.AddFile("/input", "42");
-        var command = Assert.IsType<Jq>(Jq.TryParse(
-            JqCommandInvocation.CreateWithStandardDescriptors("jq", [".", "/input"], [])));
-
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal(2, host.ClosedDescriptors.Count);
-        Assert.Equal(host.ClosedDescriptors[0], host.ClosedDescriptors[1]);
-        Assert.Equal(0, host.OpenFileCount);
-    }
-
-    [Fact]
     public async Task CleanupFailurePreservesOriginalCancellation()
     {
         using var cancellation = new CancellationTokenSource();
-        var host = new MockFileSystem { CloseFailuresRemaining = 2 };
+        var host = new MockFileSystem { CloseFailure = new JqOperationError("storage unavailable") };
         host.AddFile("/input", "42");
         host.BeforeByteRead = _ => cancellation.Cancel();
         var command = Assert.IsType<Jq>(Jq.TryParse(
             JqCommandInvocation.CreateWithStandardDescriptors("jq", [".", "/input"], [])));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, cancellation.Token));
-        Assert.Equal(2, host.ClosedDescriptors.Count);
+        Assert.Single(host.ClosedDescriptors);
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 }

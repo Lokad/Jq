@@ -27,5 +27,6 @@ internal static class JqErrors
 
     internal static bool IsCatchable(Exception exception) =>
         IsCatchableClr(exception)
-        || (exception is JqException && exception is not JqQuotaException && exception is not JqCompileException);
+        || (exception is JqException && exception is not JqQuotaException
+            && exception is not JqCompileException && exception is not JqCloseException);
 }

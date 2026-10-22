@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Breaking host API: `CloseDescriptorAsync` returns `Task<JqCloseResult>`.
+  Success and failure both retire the descriptor; close is never retried.
+  Return `Success` or `Failure(new JqOperationError(detail))`. Lone failures report
+  the file path and host detail promptly; earlier failures remain primary.
+
 - Stop outer input after an error diagnostic's stderr closes or fails, preserving
   the command's earlier failure status.
 - Stop module search once a file opens, including when reading it fails. Explicit
@@ -24,7 +29,7 @@
 - Keep host contract faults terminal during descriptor close, preserving earlier
   failures and uncancelled cleanup.
 - Breaking host API: remove unused read failure payloads/status, append error
-  diagnostics and `JqOperationError`. Use `ReadFailure` and `Failure(exitCode)`;
+  diagnostics. Use `ReadFailure` and `Failure(exitCode)`;
   successful reads still carry bytes and EOF, and append failures retain status.
 - Accumulate object and string `add` results without repeatedly copying prefixes.
 - Bound operand-error preview work, including large strings and object suffixes.

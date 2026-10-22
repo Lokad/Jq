@@ -28,6 +28,10 @@ public sealed class HostResultTests
         Assert.Equal(-7, JqAppendResult.Failure(-7).ExitCode);
         Assert.Equal(1, JqAppendResult.WriteFailure.ExitCode);
         Assert.Throws<ArgumentOutOfRangeException>(() => JqAppendResult.Failure(0));
+        Assert.Null(default(JqCloseResult).Error);
+        Assert.Null(JqCloseResult.Success.Error);
+        var closeError = new JqOperationError("storage unavailable");
+        Assert.Same(closeError, JqCloseResult.Failure(closeError).Error);
     }
 
     [Theory]
@@ -64,6 +68,6 @@ public sealed class HostResultTests
         }
 
         public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) => inner.OpenReadAsync(path, cancellationToken);
-        public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) => inner.CloseDescriptorAsync(descriptor, cancellationToken);
+        public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) => inner.CloseDescriptorAsync(descriptor, cancellationToken);
     }
 }

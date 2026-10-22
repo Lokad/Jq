@@ -55,6 +55,9 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private int _count;
     private bool _eof;
     private bool _bomPending;
+    private bool _reportedFailure;
+
+    internal void RecordFailure() => _reportedFailure = true;
     private JqFileDescriptor? _owned;
     private int _newlines;
     private bool _disposed;
@@ -337,7 +340,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         if (_owned is { } owned)
         {
             _owned = null;
-            await _host.CloseOwnedDescriptorAsync(owned, earlier).ConfigureAwait(false);
+            await _host.CloseOwnedDescriptorAsync(owned, CurrentName ?? "<unknown>", earlier is not null || _reportedFailure).ConfigureAwait(false);
         }
         _active = false;
         _start = 0;
@@ -630,7 +633,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         if (_owned is { } owned)
         {
             _owned = null;
-            await _host.CloseOwnedDescriptorAsync(owned, null).ConfigureAwait(false);
+            await _host.CloseOwnedDescriptorAsync(owned, CurrentName ?? "<unknown>", _reportedFailure).ConfigureAwait(false);
         }
         _active = false;
     }
@@ -1010,7 +1013,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             if (_owned is { } owned)
             {
                 _owned = null;
-                await _host.CloseOwnedDescriptorAsync(owned, earlier).ConfigureAwait(false);
+                await _host.CloseOwnedDescriptorAsync(owned, CurrentName ?? "<unknown>", earlier is not null || _reportedFailure).ConfigureAwait(false);
             }
         }
         finally

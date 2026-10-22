@@ -211,7 +211,7 @@ public sealed partial class JqTests
         public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) =>
             inner.OpenReadAsync(path, cancellationToken);
 
-        public async Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+        public async Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
         {
             Closing.TrySetResult();
             await CloseRelease.Task.ConfigureAwait(false);

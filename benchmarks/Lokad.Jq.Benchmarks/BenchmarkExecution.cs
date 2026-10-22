@@ -90,7 +90,7 @@ internal sealed class BenchmarkHost : IJqHost, IDisposable
         return Task.FromResult(JqOpenedFile.OpenFailure);
     }
 
-    public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>
+    public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>
         throw new InvalidOperationException("Benchmark standard descriptors are borrowed.");
 
     public void Dispose()

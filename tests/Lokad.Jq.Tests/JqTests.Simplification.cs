@@ -235,12 +235,12 @@ public sealed partial class JqTests
             return Task.FromResult(JqOpenedFile.Success(_input));
         }
 
-        public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+        public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Assert.Equal(_input, descriptor);
             Closes++;
-            return Task.FromResult(0);
+            return Task.FromResult(JqCloseResult.Success);
         }
     }
 }

@@ -197,7 +197,7 @@ public sealed partial class JqTests
     [InlineData(true, 0)]
     [InlineData(false, 7)]
     [InlineData(true, 7)]
-    public async Task Jq_DiagnosticClosureDoesNotHideOwnedCloseFaults(bool overflow, int status)
+    public async Task Jq_DiagnosticClosureKeepsCloseFaultsUnlessAppendAlreadyFailed(bool overflow, int status)
     {
         Exception sentinel = overflow ? new OverflowException("close sentinel") : new ArgumentException("close sentinel");
         var inner = new MockFileSystem();
@@ -210,8 +210,12 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "try debug catch \"caught\"", "/input")));
 
-        var failure = await Assert.ThrowsAsync<JqHostFailureException>(() => command.ExecuteAsync(host, memory, CancellationToken.None));
-        Assert.Same(sentinel, failure.InnerException);
+        if (status == 0)
+        {
+            var failure = await Assert.ThrowsAsync<JqHostFailureException>(() => command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Same(sentinel, failure.InnerException);
+        }
+        else Assert.Equal(status, await command.ExecuteAsync(host, memory, CancellationToken.None));
         Assert.Equal(1, host.CloseCalls);
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("[\"DEBUG:\",42]\n", inner.GetOutput(JqFileDescriptor.StdErr));
@@ -309,7 +313,7 @@ public sealed partial class JqTests
         }
 
         public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) => inner.OpenReadAsync(path, cancellationToken);
-        public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+        public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
         {
             CloseCalls++;
             if (CloseFailure is { } failure) throw failure;

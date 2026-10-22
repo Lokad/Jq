@@ -20,8 +20,10 @@ stops when a file opens; a read failure does not select a later candidate.
 Standard descriptors are borrowed. Successful `OpenReadAsync` calls transfer an
 owned descriptor to execution; `JqOpenedFile.OpenFailure` transfers none. Execution calls `CloseDescriptorAsync` when exhausted
 or abandoned, including on cancellation or failure. Cleanup uses
-`CancellationToken.None`, retries a reported unsuccessful close once and preserves
-an earlier failure.
+`CancellationToken.None`. Each close retires its descriptor and returns
+`JqCloseResult.Success` or `Failure(JqOperationError)`; execution never retries.
+A lone reported close error stops execution with its path and host detail.
+Earlier failures, including nonzero write or evaluation statuses, remain primary.
 
 `ReadBytesAsync` copies at most the requested size and releases its buffer borrow
 on completion. Reads must make progress or report EOF/failure; EOF may accompany

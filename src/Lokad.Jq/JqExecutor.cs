@@ -160,11 +160,15 @@ internal static class JqExecutor
                             ReadOnlyMemory<byte> rendered = outputRenderer.Render(output);
                             var appended = await JqHostExtensions.GuardedAppendAsync(host, invocation.StdOut, rendered, cancellationToken).ConfigureAwait(false);
                             if (!appended.CanAcceptMore)
+                            {
+                                if (appended.IsError) cursor.RecordFailure();
                                 return appended.ExitCode == 0 ? stickyError : appended.ExitCode;
+                            }
                         }
                     }
                     catch (Exception exception) when (JqErrors.IsCatchable(exception))
                     {
+                        cursor.RecordFailure();
                         if (await WriteErrorAsync(host, invocation, RenderUncaughtError(context, exception),
                             memoryScope, cancellationToken).ConfigureAwait(false) is not { CanAcceptMore: true })
                         {
@@ -182,7 +186,8 @@ internal static class JqExecutor
             }
             catch (Exception unwind)
             {
-                unwindError = unwind is JqOutputClosedException ? null : unwind;
+                unwindError = unwind is JqOutputClosedException { ExitCode: 0 }
+                    or JqHaltException { ExitCode: 0 } ? null : unwind;
                 throw;
             }
             finally
@@ -224,6 +229,11 @@ internal static class JqExecutor
             return await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
                 cancellationToken).ConfigureAwait(false) is not null ? ex.ExitCode : 5;
         }
+        catch (JqCloseException ex)
+        {
+            return await WriteErrorAsync(host, invocation, ["jq: error closing ", ex.Path, ": ", ex.Error.Message], memoryScope,
+                cancellationToken).ConfigureAwait(false) is not null ? stage == 4 ? 5 : stage : 5;
+        }
         catch (JqCompileException ex)
         {
             return await WriteErrorAsync(host, invocation,
@@ -263,7 +273,7 @@ internal static class JqExecutor
                         await context.EmitStderrAsync("jq: ignoring parse error: " + resync.Message + "\n").ConfigureAwait(false);
                         continue;
                     }
-                    catch (JqException input) when (input is not JqQuotaException and not JqInputException)
+                    catch (JqException input) when (input is not JqQuotaException and not JqInputException and not JqCloseException)
                     {
                         throw new JqInputException("parse error: " + input.Message, 5);
                     }
@@ -304,7 +314,7 @@ internal static class JqExecutor
                     await context.EmitStderrAsync("jq: ignoring parse error: " + resync.Message + "\n").ConfigureAwait(false);
                     continue;
                 }
-                catch (JqException input) when (input is not JqQuotaException and not JqInputException)
+                catch (JqException input) when (input is not JqQuotaException and not JqInputException and not JqCloseException)
                 {
                     throw new JqInputException("parse error: " + input.Message, 5);
                 }
@@ -362,6 +372,7 @@ internal static class JqExecutor
             catch (Exception exception) when (exception is not OperationCanceledException
                 && exception is not JqQuotaException
                 && exception is not JqHostFailureException
+                && exception is not JqCloseException
                 && exception is not OutOfMemoryException)
             {
                 throw new JqException($"Bad JSON in --{which} {name} {path}: {exception.Message}");
@@ -400,9 +411,11 @@ internal static class JqExecutor
         if (opened.FileDescriptor is not { } descriptor)
             throw new JqException($"cannot open {path.Display}");
         Exception? failure = null;
+        JqReadResult.Complete? content = null;
         try
         {
-            return await ReadAllAsync(host, descriptor, budget, cancellationToken).ConfigureAwait(false);
+            content = await ReadAllAsync(host, descriptor, budget, cancellationToken).ConfigureAwait(false);
+            return content;
         }
         catch (Exception exception)
         {
@@ -411,7 +424,8 @@ internal static class JqExecutor
         }
         finally
         {
-            await host.CloseOwnedDescriptorAsync(descriptor, failure).ConfigureAwait(false);
+            try { await host.CloseOwnedDescriptorAsync(descriptor, path.Display, failure is not null).ConfigureAwait(false); }
+            catch { content?.Dispose(); throw; }
         }
     }
 

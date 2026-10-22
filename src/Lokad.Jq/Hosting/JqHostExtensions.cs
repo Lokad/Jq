@@ -95,24 +95,21 @@ internal static class JqHostExtensions
         (await GuardedAppendAsync(host, descriptor, content, cancellationToken).ConfigureAwait(false)).ExitCode;
 
     internal static async Task CloseOwnedDescriptorAsync(
-        this IJqHost host, JqFileDescriptor descriptor, Exception? earlierException)
+        this IJqHost host, JqFileDescriptor descriptor, string path, bool earlierFailure)
     {
-        for (var attempt = 0; attempt < 2; attempt++)
+        JqCloseResult result;
+        try
         {
-            try
-            {
-                if (await host.CloseDescriptorAsync(descriptor, CancellationToken.None).ConfigureAwait(false) == 0)
-                    return;
-            }
-            catch (Exception exception)
-            {
-                if (earlierException is not null) return;
-                if (JqErrors.IsCatchableClr(exception))
-                    throw new JqHostFailureException("host operation violated its contract", exception);
-                throw;
-            }
+            result = await host.CloseDescriptorAsync(descriptor, CancellationToken.None).ConfigureAwait(false);
         }
-        if (earlierException != null) return;
-        throw new JqException("input close failed");
+        catch (Exception exception)
+        {
+            if (earlierFailure) return;
+            if (JqErrors.IsCatchableClr(exception))
+                throw new JqHostFailureException("host operation violated its contract", exception);
+            throw;
+        }
+        if (!earlierFailure && result.Error is { } error)
+            throw new JqCloseException(path, error);
     }
 }

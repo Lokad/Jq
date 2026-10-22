@@ -486,9 +486,9 @@ public sealed partial class JqTests
             return Task.FromResult(JqOpenedFile.OpenFailure);
         }
 
-        public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+        public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
         {
-            return Task.FromResult(0);
+            return Task.FromResult(JqCloseResult.Success);
         }
     }
 }

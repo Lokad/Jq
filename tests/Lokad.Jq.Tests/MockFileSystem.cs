@@ -16,7 +16,7 @@ internal sealed class MockFileSystem : IJqHost
     public bool AppendRemainsOpen { get; init; } = true;
     public Action<Memory<byte>>? BeforeByteRead { get; set; }
     public Action? BeforeByteAppend { get; set; }
-    public int CloseFailuresRemaining { get; set; }
+    public JqOperationError? CloseFailure { get; init; }
     public List<JqFileDescriptor> ClosedDescriptors { get; } = [];
 
     public void AddFile(string path, string content) => _files[path] = Encoding.UTF8.GetBytes(content);
@@ -62,16 +62,11 @@ internal sealed class MockFileSystem : IJqHost
         return Task.FromResult(JqOpenedFile.Success(descriptor));
     }
 
-    public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
+    public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         ClosedDescriptors.Add(descriptor);
-        if (CloseFailuresRemaining > 0)
-        {
-            CloseFailuresRemaining--;
-            return Task.FromResult(1);
-        }
         _inputs.Remove(descriptor);
-        return Task.FromResult(0);
+        return Task.FromResult(CloseFailure is { } error ? JqCloseResult.Failure(error) : JqCloseResult.Success);
     }
 }

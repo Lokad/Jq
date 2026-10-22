@@ -125,7 +125,7 @@ public sealed partial class JqTests
 
         public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Unexpected hosted open.");
-        public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>
+        public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Borrowed descriptor was closed.");
     }
 }
