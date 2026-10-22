@@ -18,8 +18,8 @@
   including update targets, lazy termination and cancellation.
 - Compare path heap values by identity, rejecting equal fresh results without
   recursively comparing their contents.
-- Admit diagnostic queue backing and message storage, including empty writes;
-  release burst backing after drains while preserving small-queue reuse.
+- Await debug, stderr and sequence-warning writes before continuing evaluation.
+  Preserve effect order, backpressure, early closure and bounded serialization reuse.
 - Materialize only accepted `paths(filter)` results and retain only the last
   `rindex` match, keeping rejected deep traversal and dense search bounded.
 - Parse command arguments in one pass: accept mixed option aliases, preserve
@@ -131,7 +131,7 @@
 - Reduce governor traffic with coarse owners and bounded charged buffer credit.
   Reconcile completed predicates, scalar reductions and substitution temporaries;
   retain aliases and escaping values. Reuse serialization, subject and diagnostic
-  storage, and drain diagnostics without copying the queue.
+  encoding storage through pending host writes.
 - Parse metadata/imports once before linking program and module bodies. Remove
   unused runtime state, helper implementations and redundant regex wrappers.
   Consolidate reference subprocess execution so timeout and cancellation cover

@@ -1825,11 +1825,11 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "env": yield return context.Runtime.Clone(context.Variables.TryGetValue("ENV", out JsonNode? envValue) ? envValue : new JsonObject()); break;
                 case "stderr":
                     if (TryGetString(input, out string? message) && message is not null)
-                        context.EmitStderr(message);
+                        await context.EmitStderrAsync(message).ConfigureAwait(false);
                     else
                     {
                         using var bytes = context.Runtime.SerializeUtf8(input, false, null, false);
-                        context.EmitStderr(bytes.Value, false);
+                        await context.EmitStderrAsync(bytes.Value).ConfigureAwait(false);
                     }
                     yield return input;
                     break;

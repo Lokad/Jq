@@ -24,12 +24,18 @@ internal sealed partial class JqRuntime(JqBudget budget)
     }
 
     internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs) =>
-        SerializeUtf8(node, ascii, indent, tabs, sorted: false);
+        SerializeUtf8(node, ascii, indent, tabs, false);
 
     internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted) =>
-        SerializeUtf8(node, ascii, indent, tabs, sorted, false);
+        SerializeUtf8(node, ascii, indent, tabs, sorted, false, false);
 
-    private JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted, bool preview)
+    internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeDebug(JsonNode? value, bool ascii, bool sorted)
+    {
+        var line = new JsonArray(JsonValue.Create("DEBUG:"), budget.CopyValue(value, 1));
+        return SerializeUtf8(line, ascii, null, false, sorted, false, true);
+    }
+
+    private JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted, bool preview, bool newline)
     {
         using var keyOrder = sorted ? new JqComparer(budget) : null;
         JqJsonBuffer buffer = budget.RentSerializationBuffer();
@@ -41,6 +47,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 finally { writer.Reset(); }
             }
             buffer.LowercaseUnicodeEscapes();
+            if (newline)
+            {
+                buffer.GetSpan(1)[0] = (byte)'\n';
+                buffer.Advance(1);
+            }
             return new JqMemoryValue<ReadOnlyMemory<byte>>(buffer.WrittenMemory, budget.OwnSerializationBuffer(buffer));
         }
         catch
@@ -510,7 +521,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     // that prefix, including when a string or property name is much longer.
     internal string TruncatedDump(JsonNode? node)
     {
-        using var rendered = SerializeUtf8(node, false, null, false, false, true);
+        using var rendered = SerializeUtf8(node, false, null, false, false, true, false);
         ReadOnlySpan<byte> dumped = rendered.Value.Span;
         if (dumped.Length <= 29)
         {

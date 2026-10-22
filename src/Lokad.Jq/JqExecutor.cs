@@ -63,6 +63,7 @@ internal static class JqExecutor
         using var context = new JqContext(invocation.Variables, budget)
         {
             Clock = invocation.Clock,
+            Stderr = (host, invocation.StdErr),
             SortKeys = invocation.SortKeys,
             AsciiOutput = invocation.AsciiOutput,
         };
@@ -159,22 +160,16 @@ internal static class JqExecutor
                             ReadOnlyMemory<byte> rendered = outputRenderer.Render(output);
                             var appended = await JqHostExtensions.GuardedAppendAsync(host, invocation.StdOut, rendered, cancellationToken).ConfigureAwait(false);
                             if (!appended.CanAcceptMore) return appended.ExitCode;
-                            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int stopped)
-                                return stopped;
                         }
                     }
                     catch (Exception exception) when (JqErrors.IsCatchable(exception))
                     {
-                        if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int errorStopped)
-                            return errorStopped;
                         if (!await WriteErrorAsync(host, invocation, RenderUncaughtError(context, exception),
                             memoryScope, cancellationToken).ConfigureAwait(false))
                             return 5;
                         stickyError = 5;
                     }
                 }
-                if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int tailStopped)
-                    return tailStopped;
                 if (stickyError != 0)
                     return stickyError;
                 if (invocation.ExitStatus)
@@ -196,8 +191,6 @@ internal static class JqExecutor
             // Immediate termination: pending outputs and remaining inputs
             // are abandoned. String payloads render raw; anything else was
             // already shaped at the throw site.
-            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int haltStopped)
-                return haltStopped;
             if (ex.StderrText is not null)
             {
                 if (!await JqDiagnosticWriter.TryWriteAsync(host, invocation.StdErr, [ex.StderrText],
@@ -212,8 +205,6 @@ internal static class JqExecutor
             // stage was active when the budget tripped.
             // A stopped diagnostic descriptor prevents further writes, but
             // cannot replace the resource failure with success or another code.
-            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is not null)
-                return 5;
             await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
                 cancellationToken).ConfigureAwait(false);
             return 5;
@@ -222,8 +213,6 @@ internal static class JqExecutor
         {
             // Malformed inputs report status 5 and missing input operands
             // report status 2, matching the reference command.
-            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int inputStopped)
-                return inputStopped;
             return await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
                 cancellationToken).ConfigureAwait(false) ? ex.ExitCode : 5;
         }
@@ -237,29 +226,10 @@ internal static class JqExecutor
         }
         catch (Exception ex) when (ex is JqException or JsonException or FormatException or ArgumentException or OverflowException)
         {
-            if (await DrainStderrAsync(host, invocation, context, cancellationToken).ConfigureAwait(false) is int errorStopped)
-                return errorStopped;
             return await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
                 cancellationToken).ConfigureAwait(false) ? stage : 5;
         }
 
-        static async Task<int?> DrainStderrAsync(IJqHost host, JqInvocation invocation, JqContext context, CancellationToken cancellationToken)
-        {
-            if (!context.HasPendingStderr)
-                return null;
-            try
-            {
-                var chunks = context.PendingStderr;
-                for (int index = 0; index < chunks.Count; index++)
-                {
-                    JqAppendResult appended = await JqHostExtensions.GuardedAppendAsync(host, invocation.StdErr, chunks[index], cancellationToken).ConfigureAwait(false);
-                    if (!appended.CanAcceptMore)
-                        return appended.ExitCode;
-                }
-            }
-            finally { context.ReleaseDrainedStderr(); }
-            return null;
-        }
         static async IAsyncEnumerable<JsonNode?> OuterInputsAsync(
             JqInputCursor cursor, JqInvocation invocation, JqContext context)
         {
@@ -282,7 +252,7 @@ internal static class JqExecutor
                     }
                     catch (JqSeqResyncException resync)
                     {
-                        WarnIgnoringParseError(context, resync.Message);
+                        await context.EmitStderrAsync("jq: ignoring parse error: " + resync.Message + "\n").ConfigureAwait(false);
                         continue;
                     }
                     catch (JqException input) when (input is not JqQuotaException and not JqInputException)
@@ -323,7 +293,7 @@ internal static class JqExecutor
                 }
                 catch (JqSeqResyncException resync)
                 {
-                    WarnIgnoringParseError(context, resync.Message);
+                    await context.EmitStderrAsync("jq: ignoring parse error: " + resync.Message + "\n").ConfigureAwait(false);
                     continue;
                 }
                 catch (JqException input) when (input is not JqQuotaException and not JqInputException)
@@ -339,15 +309,6 @@ internal static class JqExecutor
             context.InputLineNumber = cursor.LastLine;
             yield return slurped;
         }
-    }
-
-    // Sequence-mode record failures are warnings, never fatal: the cursor
-    // already resynchronized past the separator, so outer iteration continues.
-    private static void WarnIgnoringParseError(JqContext context, string message)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(message);
-        context.EmitStderr("jq: ignoring parse error: " + message + "\n");
     }
 
     // Hosted `--rawfile`/`--slurpfile` variables resolve after the filter

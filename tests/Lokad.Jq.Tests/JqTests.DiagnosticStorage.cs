@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
@@ -5,92 +6,157 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Theory]
+    [InlineData("debug", "[\"DEBUG:\",\"ready\"]\n")]
+    [InlineData("debug(.)", "[\"DEBUG:\",\"ready\"]\n")]
+    [InlineData("stderr", "ready")]
+    public async Task Jq_DiagnosticEffectPrecedesInputAndOutput(string effect, string expected)
+    {
+        var inner = new MockFileSystem();
+        inner.SetStandardInput("42\n");
+        var host = new DiagnosticHost(inner) { AwaitDiagnosticBeforeRead = true };
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
+            "(\"ready\" | " + effect + " | empty), input")));
+
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        Assert.Equal(expected, inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("42\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal([JqFileDescriptor.StdErr, JqFileDescriptor.StdOut], host.Writes);
+        Assert.Equal(1, inner.ReadBytesCallCount);
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
     [Fact]
-    public void Jq_EmptyDiagnosticPreflightsQueueStorage()
+    public async Task Jq_SequenceWarningPrecedesTheNextHostRead()
     {
-        var root = new BenchmarkMemoryBudget(0);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
-        {
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            Assert.True(Assert.Throws<JqQuotaException>(() => context.EmitStderr("")).IsMemoryAdmission);
-            Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 16 * 1024);
-            Assert.Empty(context.PendingStderr);
-        }
-        Assert.Equal(0, root.ReservedBytes);
+        var inner = new MockFileSystem();
+        inner.SetStandardInput("\u001ebad\n\u001e");
+        var host = new DiagnosticHost(inner) { AwaitDiagnosticBeforeRead = true, FirstReadNotFinal = true };
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--seq", ".")));
+
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        Assert.StartsWith("jq: ignoring parse error:", inner.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
+        Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(2, inner.ReadBytesCallCount);
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    [InlineData(4096)]
-    public void Jq_DiagnosticBurstRefusalPreservesQueuedMessagesAndReleasesBacking(int length)
+    [InlineData("try (range(10000) | debug | empty) catch \"caught\"", 0)]
+    [InlineData("(range(10000) | debug | empty)?", 7)]
+    [InlineData("try (range(10000) | debug(.) | empty) catch \"caught\"", 7)]
+    [InlineData("(range(10000) | \"x\" | stderr | empty)?", 0)]
+    public async Task Jq_DiagnosticClosureStopsBeforeFurtherEvaluation(string expression, int status)
     {
-        var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        var counted = new CountingMemoryBudget(memory);
+        var inner = new MockFileSystem();
+        inner.AddFile("/first", "42\n");
+        inner.AddFile("/later", "invalid JSON");
+        var host = new DiagnosticHost(inner)
         {
-            string message = new('a', length);
-            int count = 0;
-            Assert.True(Assert.Throws<JqQuotaException>(() =>
-            {
-                for (; count < 100000; count++) context.EmitStderr(message);
-            }).IsMemoryAdmission);
-            Assert.InRange(count, 1, 4096);
-            Assert.Equal(count, context.PendingStderr.Count);
-            Assert.All(context.PendingStderr, chunk => Assert.Equal(length, chunk.Length));
-            Assert.True(root.ReservedBytes >= 16L * count);
-            context.ReleaseDrainedStderr();
-            Assert.Empty(context.PendingStderr);
-            Assert.InRange(root.ReservedBytes, 0, 352);
-            Assert.InRange(((List<ReadOnlyMemory<byte>>)context.PendingStderr).Capacity, 0, 4);
-        }
-        Assert.Equal(0, root.ReservedBytes);
+            StderrResult = status == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(status),
+        };
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r",
+            "\"before\", (" + expression + "), \"after\"", "/first", "/later")));
+
+        Assert.Equal(status, await command.ExecuteAsync(host, counted, CancellationToken.None));
+        Assert.Equal("before\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal([JqFileDescriptor.StdOut, JqFileDescriptor.StdErr], host.Writes);
+        Assert.Equal(1, inner.ReadBytesCallCount);
+        Assert.Single(inner.ClosedDescriptors);
+        Assert.Equal(0, inner.OpenFileCount);
+        Assert.Equal(0, counted.Counts.Refusals);
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Theory]
-    [InlineData("try (range(100000) | \"\" | stderr | empty) catch \"caught\"")]
-    [InlineData("(range(100000) | \"\" | stderr | empty)?")]
-    public async Task Jq_EmptyDiagnosticBurstRefusalIsTerminalAndClosesOwnedInput(string source)
+    [InlineData("debug", "[\"DEBUG:\",\"é\"]\n")]
+    [InlineData("stderr", "é")]
+    [InlineData("stderr", "")]
+    public async Task Jq_LongDiagnosticStreamUsesBoundedStorage(string effect, string message)
     {
-        var root = new BenchmarkMemoryBudget(64 * 1024);
+        const int count = 10000;
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
-        host.AddFile("/input", "null");
-        host.AddFile("/later", "invalid JSON");
-        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "\"ready\", (" + source + ")", "/input", "/later")));
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
-        Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Single(host.ClosedDescriptors);
-        Assert.Equal(0, host.OpenFileCount);
-        Assert.Equal(0, root.ReservedBytes);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n",
+            "range(" + count + ") | " + (message.Length == 0 ? "\"\"" : "\"é\"") + " | " + effect + " | empty")));
+
+        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(message, count))), host.GetOutputBytes(JqFileDescriptor.StdErr));
+        Assert.Equal(count, host.AppendCallCount);
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Fact]
-    public void Jq_DiagnosticAdmissionCancellationDoesNotPublishAMessage()
+    public async Task Jq_DiagnosticAdmissionCancellationDoesNotWrite()
     {
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token)))
+        var host = new MockFileSystem();
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+            { Stderr = (host, JqFileDescriptor.StdErr) })
         {
-            Assert.ThrowsAny<OperationCanceledException>(() => context.EmitStderr(new string('a', 10000)));
-            Assert.Empty(context.PendingStderr);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+                await context.EmitStderrAsync(new string('a', 10000)));
+            Assert.Equal(0, host.AppendCallCount);
         }
         Assert.Equal(0, root.ReservedBytes);
     }
 
     [Fact]
-    public void Jq_SmallDiagnosticBurstsAmortizeAdmissionAndRefundLargeCredit()
+    public async Task Jq_EmptyDiagnosticAvoidsAdmissionAndChecksLifetimeAndCancellation()
     {
-        var root = new BenchmarkMemoryBudget(1024 * 1024);
-        var memory = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
-        {
-            for (int i = 0; i < 1000; i++) context.EmitStderr("a");
-            Assert.Equal(1000, context.PendingStderr.Count);
-            Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 100);
-            context.ReleaseDrainedStderr();
-            Assert.InRange(root.ReservedBytes, 0, 256);
-        }
+        var root = new BenchmarkMemoryBudget(0);
+        using var cancellation = new CancellationTokenSource();
+        var host = new MockFileSystem();
+        using var context = new JqContext(new Dictionary<string, JsonNode?>(),
+            new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token))
+            { Stderr = (host, JqFileDescriptor.StdErr) };
+        await context.EmitStderrAsync("");
+        await context.EmitStderrAsync(ReadOnlyMemory<byte>.Empty);
+        Assert.Equal(2, host.AppendCallCount);
         Assert.Equal(0, root.ReservedBytes);
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await context.EmitStderrAsync(""));
+        context.Dispose();
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await context.EmitStderrAsync(ReadOnlyMemory<byte>.Empty));
+        Assert.Equal(2, host.AppendCallCount);
+    }
+
+    private sealed class DiagnosticHost(MockFileSystem inner) : IJqHost
+    {
+        internal bool AwaitDiagnosticBeforeRead { get; init; }
+        internal bool FirstReadNotFinal { get; init; }
+        internal JqAppendResult? StderrResult { get; init; }
+        internal List<JqFileDescriptor> Writes { get; } = [];
+        private readonly TaskCompletionSource _diagnostic = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask<JqByteReadResult> ReadBytesAsync(JqFileDescriptor descriptor, Memory<byte> buffer, CancellationToken cancellationToken)
+        {
+            if (AwaitDiagnosticBeforeRead && (!FirstReadNotFinal || inner.ReadBytesCallCount != 0))
+                await _diagnostic.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            JqByteReadResult read = await inner.ReadBytesAsync(descriptor, buffer, cancellationToken).ConfigureAwait(false);
+            return FirstReadNotFinal && inner.ReadBytesCallCount == 1
+                ? JqByteReadResult.Success(read.BytesRead, false) : read;
+        }
+
+        public async Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
+        {
+            Writes.Add(descriptor);
+            if (descriptor == JqFileDescriptor.StdErr) _diagnostic.TrySetResult();
+            JqAppendResult result = await inner.AppendWhileOpenAsync(descriptor, content, cancellationToken).ConfigureAwait(false);
+            return descriptor == JqFileDescriptor.StdErr && StderrResult is { } stderr ? stderr : result;
+        }
+
+        public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) => inner.OpenReadAsync(path, cancellationToken);
+        public Task<int> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) => inner.CloseDescriptorAsync(descriptor, cancellationToken);
     }
 }

@@ -26,7 +26,8 @@ on completion. Reads must make progress or report EOF/failure; EOF may accompany
 the last bytes. `AppendWhileOpenAsync` may stay pending to apply backpressure and
 must copy bytes retained beyond completion.
 Execution awaits writes before reusing buffers and stops production on downstream
-closure or failure. Cancellation alone does not end a pending buffer borrow.
+closure or failure. Debug, stderr and sequence warnings await their writes before
+continuing evaluation. Cancellation alone does not end a pending buffer borrow.
 Pending reads, including `input`, `inputs` and `modulemeta`, suspend evaluation
 without blocking the caller. Pure evaluation completes synchronously.
 
@@ -113,9 +114,8 @@ steps below 4 KiB and one 4 KiB block above it. Credit is acquired on demand.
 | --- | --- |
 | Outer record | 4 KiB after a safe boundary; retained values stay charged. |
 | Sequence/stream cursor | Retained demand plus 256 bytes; 512 after 32 small charges. |
-| Serialization | One returned buffer within 4 KiB after 32 results. |
+| Serialization and diagnostic encoding | One returned buffer within 4 KiB after 32 results. |
 | Regex subject | One returned UTF-8 buffer within 4 KiB. |
-| Diagnostics | Four queue slots plus up to 256 bytes after 32 small messages; burst backing refunds after draining. |
 
 Cold or oversized storage is refunded; overlapping borrowers keep separate owners.
 

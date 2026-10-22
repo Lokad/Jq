@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -27,66 +26,9 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(4096)]
-    public void Jq_GovernedDiagnosticBurstsTrackAllQueuedBytesWithBoundedPadding(int width)
-    {
-        var root = new BenchmarkMemoryBudget(8 * 1024 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
-        {
-            byte[] message = Encoding.UTF8.GetBytes(new string('a', width));
-            for (int i = 1; i <= 1000; i++)
-            {
-                context.EmitStderr(message, false);
-                Assert.InRange(root.ReservedBytes, (long)i * (width + 16), 2L * i * (width + 128) + 4096);
-            }
-            var pending = context.PendingStderr;
-            Assert.Equal(1000, pending.Count);
-            foreach (ReadOnlyMemory<byte> chunk in pending) Assert.Equal(message, chunk.ToArray());
-            Assert.True(root.ReservedBytes >= 1000L * width);
-            context.ReleaseDrainedStderr();
-            Assert.InRange(root.ReservedBytes, 0, 256);
-        }
-        Assert.Equal(0, root.ReservedBytes);
-    }
-
-    [Fact]
-    public void Jq_GovernedDiagnosticPaddingRefusalKeepsQueuedBytesWithoutRetrying()
-    {
-        var root = new BenchmarkMemoryBudget(1024);
-        var memory = new CountingMemoryBudget(root);
-        Assert.True(root.TryReserve(800, out var pressure));
-        using (pressure)
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
-        {
-            for (int i = 0; i < 30; i++)
-            {
-                context.EmitStderr("a");
-                context.ReleaseDrainedStderr();
-                Assert.Equal(896, root.ReservedBytes);
-            }
-            context.EmitStderr("a");
-            Assert.Equal(929, root.ReservedBytes);
-            MemoryCallCounts before = memory.Counts;
-            var failure = Assert.Throws<JqQuotaException>(() => context.EmitStderr("bb"));
-            Assert.True(failure.IsMemoryAdmission);
-            Assert.Equal(before.Resizes + 1, memory.Counts.Resizes);
-            Assert.Equal(1, memory.Counts.Refusals);
-            Assert.Equal(929, root.ReservedBytes);
-            var pending = context.PendingStderr;
-            Assert.Equal("a"u8.ToArray(), Assert.Single(pending).ToArray());
-            context.ReleaseDrainedStderr();
-            Assert.Equal(pressure.Bytes + 96, root.ReservedBytes);
-        }
-        Assert.Equal(0, root.ReservedBytes);
-    }
-
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Jq_GovernedHotDiagnosticQueueStaysChargedUntilPendingDrainEnds(bool cancel)
+    public async Task Jq_GovernedDiagnosticStorageStaysChargedUntilPendingWriteEnds(bool cancel)
     {
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         using var cancellation = new CancellationTokenSource();
@@ -98,7 +40,7 @@ public sealed partial class JqTests
         Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal("a"u8.ToArray(), pending.ToArray());
-        Assert.Equal(large + "\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
         long retained = memory.ReservedBytes;
         Assert.True(retained >= 32 + 2048);
         if (cancel) cancellation.Cancel();
@@ -131,7 +73,7 @@ public sealed partial class JqTests
         Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.True(pending.IsEmpty);
-        Assert.Equal("\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
         long retained = memory.ReservedBytes;
         Assert.True(retained > 0);
         if (cancel) cancellation.Cancel();
@@ -141,7 +83,7 @@ public sealed partial class JqTests
         if (cancel)
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
-            Assert.Equal("\n", inner.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
         }
         else
         {
@@ -150,57 +92,6 @@ public sealed partial class JqTests
         }
         Assert.Empty(inner.GetOutputBytes(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
-    }
-
-    [Fact]
-    public void Jq_GovernedEmptyDiagnosticQueueKeepsPriorBytesAndValidatesLifetime()
-    {
-        var root = new BenchmarkMemoryBudget(256);
-        var memory = new CountingMemoryBudget(root);
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None));
-        context.EmitStderr("é");
-        MemoryCallCounts admitted = memory.Counts;
-        context.EmitStderr("");
-        context.EmitStderr(ReadOnlyMemory<byte>.Empty, false);
-        Assert.Equal(admitted, memory.Counts);
-        Assert.Equal(130, root.ReservedBytes);
-        var chunks = context.PendingStderr;
-        Assert.Equal(3, chunks.Count);
-        Assert.Equal("é"u8.ToArray(), chunks[0].ToArray());
-        Assert.True(chunks[1].IsEmpty);
-        Assert.True(chunks[2].IsEmpty);
-        Assert.Equal(130, root.ReservedBytes);
-        context.ReleaseDrainedStderr();
-        Assert.Equal(96, root.ReservedBytes);
-        Assert.Empty(chunks);
-        Assert.False(context.HasPendingStderr);
-        MemoryCallCounts refunded = memory.Counts;
-        context.EmitStderr("");
-        context.ReleaseDrainedStderr();
-        Assert.Equal(refunded, memory.Counts);
-        context.Dispose();
-        Assert.Equal(0, root.ReservedBytes);
-        Assert.Throws<ObjectDisposedException>(() => context.EmitStderr(""));
-        Assert.Throws<ObjectDisposedException>(() => context.EmitStderr(ReadOnlyMemory<byte>.Empty, false));
-        Assert.Throws<ObjectDisposedException>(() => context.ReleaseDrainedStderr());
-        Assert.Throws<ObjectDisposedException>(() => context.PendingStderr);
-    }
-
-    [Fact]
-    public void Jq_GovernedEmptyDiagnosticsStillCheckCancellationAndPermitRefunds()
-    {
-        var memory = new BenchmarkMemoryBudget(256);
-        using var cancellation = new CancellationTokenSource();
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token));
-        context.EmitStderr("x");
-        cancellation.Cancel();
-        Assert.Throws<OperationCanceledException>(() => context.EmitStderr(""));
-        Assert.Throws<OperationCanceledException>(() => context.EmitStderr(ReadOnlyMemory<byte>.Empty, false));
-        Assert.Equal(129, memory.ReservedBytes);
-        context.ReleaseDrainedStderr();
-        Assert.Equal(96, memory.ReservedBytes);
     }
 
     [Theory]
