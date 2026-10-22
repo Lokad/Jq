@@ -78,6 +78,18 @@ public sealed class BenchmarkComparisonTests
             FixtureAsync("overflow", [], TimeSpan.FromSeconds(30), CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData("early-success", 0)]
+    [InlineData("early-error", 7)]
+    public async Task EarlyStdinClosurePreservesChildOutputAndStatus(string fixture, int expectedStatus)
+    {
+        byte[] input = new byte[3_000_000];
+        ExecutionResult result = await FixtureAsync(fixture, input, TimeSpan.FromSeconds(10), CancellationToken.None);
+        Assert.Equal(expectedStatus, result.ExitCode);
+        Assert.Equal("42\n"u8.ToArray(), result.Output);
+        Assert.Equal("early\n"u8.ToArray(), result.Error);
+    }
+
     private static Task<ExecutionResult> FixtureAsync(string mode, byte[] input, TimeSpan timeout, CancellationToken cancellationToken)
     {
         string executable = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(),

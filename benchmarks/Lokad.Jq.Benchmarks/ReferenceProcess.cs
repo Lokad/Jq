@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Pipes;
 
 namespace Lokad.Jq.Benchmarking;
 
@@ -76,13 +77,19 @@ internal static class ReferenceProcess
         async Task WriteInputAsync()
         {
             try { await process.StandardInput.BaseStream.WriteAsync(input, linked.Token).ConfigureAwait(false); }
-            catch (IOException)
+            catch (IOException exception) when (ClosedInput(exception))
             {
-                // Parser/error exits may close stdin before all input is sent.
+                // Successful selectors and error exits can both stop consuming
+                // stdin early. Keep the child's actual output and status.
                 await exit.ConfigureAwait(false);
-                if (process.ExitCode == 0) throw;
             }
             finally { process.StandardInput.Close(); }
+
+            bool ClosedInput(IOException exception) =>
+                process.StandardInput.BaseStream is PipeStream { IsConnected: false }
+                // Windows Process uses FileStream for its redirected handle:
+                // ERROR_BROKEN_PIPE, ERROR_NO_DATA and ERROR_PIPE_NOT_CONNECTED.
+                || OperatingSystem.IsWindows() && (exception.HResult & 0xffff) is 109 or 232 or 233;
         }
 
         async Task DrainAsync(Stream stream, JqFileDescriptor descriptor)

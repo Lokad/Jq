@@ -74,6 +74,12 @@ if (args is ["--process-fixture", var fixture])
 {
     // Development fixture for portable subprocess lifecycle tests; never jq.
     if (fixture == "wait") await Task.Delay(TimeSpan.FromMinutes(5));
+    else if (fixture is "early-success" or "early-error")
+    {
+        await Console.OpenStandardOutput().WriteAsync("42\n"u8.ToArray());
+        await Console.OpenStandardError().WriteAsync("early\n"u8.ToArray());
+        Environment.ExitCode = fixture == "early-success" ? 0 : 7;
+    }
     else if (fixture == "overflow")
     {
         var output = Console.OpenStandardOutput();
