@@ -129,7 +129,13 @@ internal sealed class ForeachFilter(JqFilter Source, IReadOnlyList<BindingPatter
 // argument; negative counts raise a catchable error.
 internal sealed class LimitFilter(JqFilter Count, JqFilter Body) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        Select(input, context, environment, () => Body.Evaluate(input, context, environment));
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        Select(pair.Value, context, environment, () => Body.EvaluatePaths(pair, context, environment));
+
+    private IEnumerable<T> Select<T>(JsonNode? input, JqContext context, JqEnvironment environment, Func<IEnumerable<T>> outputs)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -144,7 +150,7 @@ internal sealed class LimitFilter(JqFilter Count, JqFilter Body) : JqFilter
             if (!(total > 0))
                 throw new JqException("limit doesn't support negative count");
             long pulled = 0;
-            foreach (JsonNode? value in Body.Evaluate(input, context, environment))
+            foreach (T value in outputs())
             {
                 yield return value;
                 if (++pulled >= total)
@@ -157,16 +163,11 @@ internal sealed class LimitFilter(JqFilter Count, JqFilter Body) : JqFilter
 // `first(EXPR)`: the first output only, pulled lazily.
 internal sealed class FirstFilter(JqFilter Body) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
-        foreach (JsonNode? value in Body.Evaluate(input, context, environment))
-        {
-            yield return value;
-            yield break;
-        }
-    }
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        Body.Evaluate(input, context, environment).Take(1);
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        Body.EvaluatePaths(pair, context, environment).Take(1);
 }
 
 // `last(EXPR)`: the last output only, empty when the argument yields nothing.
@@ -191,7 +192,13 @@ internal sealed class LastFilter(JqFilter Body) : JqFilter
 // `nth($n; EXPR)`: drops n outputs, then yields the next once.
 internal sealed class NthFilter(JqFilter Index, JqFilter Body) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        Select(input, context, environment, () => Body.Evaluate(input, context, environment));
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        Select(pair.Value, context, environment, () => Body.EvaluatePaths(pair, context, environment));
+
+    private IEnumerable<T> Select<T>(JsonNode? input, JqContext context, JqEnvironment environment, Func<IEnumerable<T>> outputs)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -208,7 +215,7 @@ internal sealed class NthFilter(JqFilter Index, JqFilter Body) : JqFilter
             if (double.IsNaN(position))
                 throw new JqException("skip doesn't support negative count");
             long skip = (long)position;
-            using IEnumerator<JsonNode?> results = Body.Evaluate(input, context, environment).GetEnumerator();
+            using IEnumerator<T> results = outputs().GetEnumerator();
             bool exhausted = false;
             for (long taken = 0; taken < skip; taken++)
             {
@@ -242,27 +249,36 @@ internal sealed class WhileFilter(JqFilter Condition, JqFilter Update) : JqFilte
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
         JqLoop.Evaluate(input, context, environment, Condition, Update, JqLoop.Kind.While);
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        JqLoop.EvaluatePaths(pair, context, environment, Condition, Update, JqLoop.Kind.While);
 }
 
 internal sealed class UntilFilter(JqFilter Condition, JqFilter Next) : JqFilter
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
         JqLoop.Evaluate(input, context, environment, Condition, Next, JqLoop.Kind.Until);
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        JqLoop.EvaluatePaths(pair, context, environment, Condition, Next, JqLoop.Kind.Until);
 }
 
 // `repeat(filter)`: re-evaluates the argument against the original input
 // forever. Cancellation stops iteration; body construction uses shared storage.
 internal sealed class RepeatFilter(JqFilter Body) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        Repeat(Body.Evaluate(input, context, environment), context.Budget);
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        Repeat(Body.EvaluatePaths(pair, context, environment), context.Budget);
+
+    private static IEnumerable<T> Repeat<T>(IEnumerable<T> outputs, JqBudget budget)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(environment);
         while (true)
         {
-            context.Budget.CheckCancellation();
-            foreach (JsonNode? value in Body.Evaluate(input, context, environment))
-                yield return value;
+            budget.CheckCancellation();
+            foreach (T value in outputs) yield return value;
         }
     }
 }
@@ -272,6 +288,9 @@ internal sealed class RecurseFilter(JqFilter Body, JqFilter? Condition) : JqFilt
 {
     protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
         JqLoop.Evaluate(input, context, environment, Condition, Body, JqLoop.Kind.Recurse);
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        JqLoop.EvaluatePaths(pair, context, environment, Condition, Body, JqLoop.Kind.Recurse);
 }
 
 // Pending siblings stay lazy. Only genuinely branching continuations are retained;
@@ -279,23 +298,33 @@ internal sealed class RecurseFilter(JqFilter Body, JqFilter? Condition) : JqFilt
 internal static class JqLoop
 {
     internal enum Kind { While, Until, Recurse }
-    private readonly record struct Step(JsonNode? Value, bool Descend, bool Tail);
+    private readonly record struct Step<T>(T Value, bool Descend, bool Tail);
 
     internal static IEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context,
-        JqEnvironment environment, JqFilter? condition, JqFilter update, Kind kind)
+        JqEnvironment environment, JqFilter? condition, JqFilter update, Kind kind) =>
+        Run(input, context, environment, condition, update, kind,
+            state => update.Evaluate(state, context, environment), static state => state);
+
+    internal static IEnumerable<JqValuePath> EvaluatePaths(JqValuePath pair, JqContext context,
+        JqEnvironment environment, JqFilter? condition, JqFilter update, Kind kind) =>
+        Run(pair, context, environment, condition, update, kind,
+            state => update.EvaluatePaths(state, context, environment), static state => state.Value);
+
+    private static IEnumerable<T> Run<T>(T input, JqContext context, JqEnvironment environment,
+        JqFilter? condition, JqFilter update, Kind kind, Func<T, IEnumerable<T>> next, Func<T, JsonNode?> valueOf)
     {
         bool singleUpdate = update.IsSingleValued(environment, 0);
         bool singleCondition = condition is null || condition.IsSingleValued(environment, 0);
         using var memory = new JqMemoryReservation(context.Budget.MemoryBudget);
-        var pending = new List<IEnumerator<Step>>();
-        IEnumerator<Step>? current = Steps(input).GetEnumerator();
+        var pending = new List<IEnumerator<Step<T>>>();
+        IEnumerator<Step<T>>? current = Steps(input).GetEnumerator();
         try
         {
-            while (Advance(out JsonNode? value)) yield return value;
+            while (Advance(out Step<T> output)) yield return output.Value;
         }
         finally { DisposeAll(null); }
 
-        bool Advance(out JsonNode? value)
+        bool Advance(out Step<T> output)
         {
             try
             {
@@ -304,7 +333,7 @@ internal static class JqLoop
                     context.Budget.CheckCancellation();
                     if (!current.MoveNext())
                     {
-                        IEnumerator<Step> completed = current;
+                        IEnumerator<Step<T>> completed = current;
                         current = null;
                         completed.Dispose();
                         if (pending.Count == 0) break;
@@ -312,15 +341,15 @@ internal static class JqLoop
                         pending.RemoveAt(pending.Count - 1);
                         continue;
                     }
-                    Step step = current.Current;
+                    Step<T> step = current.Current;
                     if (!step.Descend)
                     {
-                        value = step.Value;
+                        output = step;
                         return true;
                     }
                     if (step.Tail)
                     {
-                        IEnumerator<Step> completed = current;
+                        IEnumerator<Step<T>> completed = current;
                         current = null;
                         completed.Dispose();
                     }
@@ -340,7 +369,7 @@ internal static class JqLoop
                     }
                     current = Steps(step.Value).GetEnumerator();
                 }
-                value = null;
+                output = default;
                 return false;
             }
             catch (Exception exception)
@@ -360,7 +389,7 @@ internal static class JqLoop
             if (failure is not null && !ReferenceEquals(failure, primary))
                 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
 
-            void Dispose(IEnumerator<Step>? iterator)
+            void Dispose(IEnumerator<Step<T>>? iterator)
             {
                 try { iterator?.Dispose(); }
                 catch (Exception exception)
@@ -373,35 +402,35 @@ internal static class JqLoop
             }
         }
 
-        IEnumerable<Step> Steps(JsonNode? state)
+        IEnumerable<Step<T>> Steps(T state)
         {
             if (kind == Kind.Recurse)
             {
-                yield return new Step(state, false, false);
-                foreach (JsonNode? expanded in update.Evaluate(state, context, environment))
+                yield return new Step<T>(state, false, false);
+                foreach (T expanded in next(state))
                 {
                     if (condition is null)
-                        yield return new Step(expanded, true, singleUpdate);
+                        yield return new Step<T>(expanded, true, singleUpdate);
                     else
-                        foreach (JsonNode? probe in condition.Evaluate(expanded, context, environment))
+                        foreach (JsonNode? probe in condition.Evaluate(valueOf(expanded), context, environment))
                             if (Truthy(probe))
-                                yield return new Step(expanded, true, singleUpdate && singleCondition);
+                                yield return new Step<T>(expanded, true, singleUpdate && singleCondition);
                 }
                 yield break;
             }
             if (condition is null) throw new InvalidOperationException("A loop condition is required.");
-            foreach (JsonNode? probe in condition.Evaluate(state, context, environment))
+            foreach (JsonNode? probe in condition.Evaluate(valueOf(state), context, environment))
             {
                 bool truthy = Truthy(probe);
                 if (kind == Kind.Until && truthy)
-                    yield return new Step(state, false, false);
+                    yield return new Step<T>(state, false, false);
                 else if (kind == Kind.While && !truthy)
                     continue;
                 else
                 {
-                    if (kind == Kind.While) yield return new Step(state, false, false);
-                    foreach (JsonNode? updated in update.Evaluate(state, context, environment))
-                        yield return new Step(updated, true, singleCondition && singleUpdate);
+                    if (kind == Kind.While) yield return new Step<T>(state, false, false);
+                    foreach (T updated in next(state))
+                        yield return new Step<T>(updated, true, singleCondition && singleUpdate);
                 }
             }
         }
@@ -567,7 +596,13 @@ internal sealed class PathsFilter(JqFilter? Condition) : JqFilter
 // `skip($n; EXPR)`: drops n outputs, then streams the rest.
 internal sealed class SkipFilter(JqFilter Count, JqFilter Body) : JqFilter
 {
-    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override IEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+        Select(input, context, environment, () => Body.Evaluate(input, context, environment));
+
+    protected override IEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        Select(pair.Value, context, environment, () => Body.EvaluatePaths(pair, context, environment));
+
+    private IEnumerable<T> Select<T>(JsonNode? input, JqContext context, JqEnvironment environment, Func<IEnumerable<T>> outputs)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -581,7 +616,7 @@ internal sealed class SkipFilter(JqFilter Count, JqFilter Body) : JqFilter
             if (total < 0 || double.IsNaN(total))
                 throw new JqException("skip doesn't support negative count");
             long skip = (long)total;
-            using IEnumerator<JsonNode?> results = Body.Evaluate(input, context, environment).GetEnumerator();
+            using IEnumerator<T> results = outputs().GetEnumerator();
             for (long dropped = 0; dropped < skip; dropped++)
             {
                 if (!results.MoveNext())

@@ -92,6 +92,8 @@ Computed index/slice keys evaluate against the enclosing input before source
 results, in the same order for reads, paths and updates. Optional access suppresses
 read failures; errors in key/bound expressions propagate. Early output closure
 stops deferred work.
+Selectors and loop transitions carry selected paths through updates; `last(expr)`
+retains its reduction semantics.
 Iterative tree/path operations retain ancestor cursors rather than whole traversal
 inventories. Filtered paths materialize only accepted results; `rindex` retains
 only the last match. Recursive consumers still enforce their construction depth.

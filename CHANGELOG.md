@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve selected paths through stream selectors and loop transitions,
+  including update targets, lazy termination and cancellation.
 - Compare path heap values by identity, rejecting equal fresh results without
   recursively comparing their contents.
 - Admit diagnostic queue backing and message storage, including empty writes;
