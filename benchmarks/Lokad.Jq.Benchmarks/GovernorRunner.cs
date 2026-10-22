@@ -494,6 +494,22 @@ internal static class GovernorRunner
             "[1,2] | try path(JOIN({a:2};.;((\"a\"|debug),(\"b\"|debug));debug)) catch startswith(\"Invalid path expression\")"],
             "", "true\n", "[\"DEBUG:\",\"a\"]\n");
         Add("mixed-option-aliases", 1, ["-n", "--null-input", "--raw-output", "-r", "-c", "1"], "", "1\n");
+        AddDiagnostic("stderr-empty-burst", records, ["-nr", "range(1000) | \"\" | stderr | empty"], "", "", "");
+        string pathRecords = string.Concat(Enumerable.Repeat("{\"a\":null}\n", records));
+        Add("selector-path-first", records, ["-c", "path(first(.a))"], pathRecords,
+            string.Concat(Enumerable.Repeat("[\"a\"]\n", records)));
+        Add("selector-path-until", records, ["-c", "path(until(. == null;.a))"], pathRecords,
+            string.Concat(Enumerable.Repeat("[\"a\"]\n", records)));
+        foreach (string operation in new[] { "walk(.)", "fromstream(tostream)" })
+            Add(operation == "walk(.)" ? "fresh-walk-update" : "fresh-fromstream-update", records,
+                ["-c", "try (" + operation + " |= 7) catch startswith(\"Invalid path\")"],
+                string.Concat(Enumerable.Repeat("[1]\n", records)), string.Concat(Enumerable.Repeat("true\n", records)));
+        Add("ordinary-map-empty", records, ["-c", "map(empty)"],
+            string.Concat(Enumerable.Repeat("[null,[null]]\n", records)), string.Concat(Enumerable.Repeat("[]\n", records)));
+        Add("indices-field-fallback", records, ["-c", "indices(\"x\")"],
+            string.Concat(Enumerable.Repeat("{\"x\":[0]}\n", records)), string.Concat(Enumerable.Repeat("[0]\n", records)));
+        AddDiagnostic("selector-path-effects", 1, ["-nc", "{a:1} | path(first((.a|debug),error(\"late\")))"],
+            "", "[\"a\"]\n", "[\"DEBUG:\",1]\n");
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>
