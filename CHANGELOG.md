@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Admit diagnostic queue backing and message storage, including empty writes;
+  release burst backing after drains while preserving small-queue reuse.
 - Materialize only accepted `paths(filter)` results and retain only the last
   `rindex` match, keeping rejected deep traversal and dense search bounded.
 - Parse command arguments in one pass: accept mixed option aliases, preserve

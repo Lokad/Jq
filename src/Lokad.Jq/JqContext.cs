@@ -63,7 +63,11 @@ internal sealed class JqContext(
         int length = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, Budget.CancellationToken), 0);
         Budget.CheckCancellation();
         long previous = ReserveStderr(length);
-        try { _stderr.Add(Utf8Text.Encode(text)); }
+        try
+        {
+            Budget.CheckCancellation();
+            _stderr.Add(Utf8Text.Encode(text));
+        }
         catch
         {
             if (_stderrMemory.LastAdmittedBytes != previous) _stderrMemory.Resize(previous);
@@ -80,7 +84,8 @@ internal sealed class JqContext(
         long previous = ReserveStderr(length);
         try
         {
-            var bytes = new byte[length];
+            Budget.CheckCancellation();
+            var bytes = length == 0 ? Array.Empty<byte>() : new byte[length];
             content.Span.CopyTo(bytes);
             if (newline) bytes[^1] = (byte)'\n';
             _stderr.Add(bytes);
@@ -95,8 +100,27 @@ internal sealed class JqContext(
 
     private long ReserveStderr(int length)
     {
+        if (_stderr.Count == _stderr.Capacity)
+        {
+            int capacity = JqBudget.BufferCapacity((long)_stderr.Count + 1, Math.Max(4, 2L * _stderr.Capacity));
+            long previousBacking = QueueBytes(_stderr.Capacity);
+            long previousAdmission = _stderrMemory.LastAdmittedBytes;
+            long backing = QueueBytes(capacity);
+            _stderrMemory.Resize(checked(previousAdmission + backing));
+            try
+            {
+                Budget.CheckCancellation();
+                _stderr.Capacity = capacity;
+            }
+            catch
+            {
+                _stderrMemory.Resize(previousAdmission);
+                throw;
+            }
+            if (previousBacking != 0) _stderrMemory.Resize(previousAdmission + backing - previousBacking);
+        }
         long previous = _stderrMemory.LastAdmittedBytes;
-        long required = checked(_stderrBytes + length);
+        long required = checked(QueueBytes(_stderr.Capacity) + _stderrBytes + MessageBytes(length));
         if (required > previous)
         {
             long target = required;
@@ -110,7 +134,7 @@ internal sealed class JqContext(
 
     private void CommitStderr(int length)
     {
-        _stderrBytes += length;
+        _stderrBytes += MessageBytes(length);
         if (length is > 0 and < StderrCreditBytes)
             _smallStderrMessages = Math.Min(32, _smallStderrMessages + 1);
     }
@@ -119,11 +143,19 @@ internal sealed class JqContext(
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _stderr.Clear();
+        // Keep the small queue used by ordinary diagnostics; release burst
+        // inventories before refunding their backing admission.
+        if (_stderr.Capacity > 4) _stderr.Capacity = 0;
         long previous = _stderrMemory.LastAdmittedBytes;
-        long retained = _smallStderrMessages == 32 ? Math.Min(previous, StderrCreditBytes) : 0;
+        long backing = QueueBytes(_stderr.Capacity);
+        long retained = backing + (_smallStderrMessages == 32 ? Math.Min(previous - backing, StderrCreditBytes) : 0);
         if (previous != retained) _stderrMemory.Resize(retained);
         _stderrBytes = 0;
     }
+
+    private static long QueueBytes(int capacity) => capacity == 0 ? 0 : 32 + 16L * capacity;
+
+    private static long MessageBytes(int length) => length == 0 ? 0 : 32L + length;
 
     // Evaluation and drains are serialized. The queue and its byte owners stay
     // live through every pending host write; clear only when the drain ends.

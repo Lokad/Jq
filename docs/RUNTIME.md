@@ -111,7 +111,7 @@ steps below 4 KiB and one 4 KiB block above it. Credit is acquired on demand.
 | Sequence/stream cursor | Retained demand plus 256 bytes; 512 after 32 small charges. |
 | Serialization | One returned buffer within 4 KiB after 32 results. |
 | Regex subject | One returned UTF-8 buffer within 4 KiB. |
-| Diagnostics | 256 bytes after 32 nonempty messages smaller than 256 bytes. |
+| Diagnostics | Four queue slots plus up to 256 bytes after 32 small messages; burst backing refunds after draining. |
 
 Cold or oversized storage is refunded; overlapping borrowers keep separate owners.
 
