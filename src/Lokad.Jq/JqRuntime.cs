@@ -1105,11 +1105,23 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JsonNode? AddValues(IEnumerable<JsonNode?> values)
     {
         JsonNode? result = null;
-        bool ownsArray = false;
+        bool ownsContainer = false;
+        StringBuilder? text = null;
         foreach (JsonNode? value in values)
         {
             budget.CheckCancellation();
-            if (ownsArray && result is JsonArray accumulated && value is JsonArray incoming)
+            if (text is not null)
+            {
+                if (value is null) continue;
+                if (TryGetString(value, out string? piece))
+                {
+                    budget.Append(text, piece);
+                    continue;
+                }
+                result = JsonValue.Create(budget.Finish(text));
+                text = null;
+            }
+            if (ownsContainer && result is JsonArray accumulated && value is JsonArray incoming)
             {
                 // This accumulator was constructed here and has never escaped.
                 foreach (JsonNode? item in incoming)
@@ -1118,15 +1130,31 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     accumulated.Add(budget.CopyValue(item, 1));
                 }
             }
+            else if (ownsContainer && result is JsonObject merged && value is JsonObject properties)
+            {
+                foreach (var property in properties)
+                {
+                    budget.ReserveObjectItem(property.Value);
+                    merged[property.Key] = budget.CopyValue(property.Value, 1);
+                }
+            }
+            else if (TryGetString(result, out string? left) && TryGetString(value, out string? right))
+            {
+                text = new StringBuilder();
+                budget.Append(text, left);
+                budget.Append(text, right);
+                result = null;
+            }
             else
             {
-                bool retainsOwnedArray = ownsArray && value is null;
-                bool concatenatesArrays = result is JsonArray && value is JsonArray;
+                bool retainsOwned = ownsContainer && value is null;
+                bool combinesContainers = result is JsonArray && value is JsonArray
+                    || result is JsonObject && value is JsonObject;
                 result = Add(result, value);
-                ownsArray = retainsOwnedArray || concatenatesArrays;
+                ownsContainer = retainsOwned || combinesContainers;
             }
         }
-        return result;
+        return text is null ? result : JsonValue.Create(budget.Finish(text));
     }
 
     internal JsonNode Flatten(JsonNode? input, JsonNode? depth)
