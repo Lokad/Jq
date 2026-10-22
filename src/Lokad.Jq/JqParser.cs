@@ -1273,11 +1273,6 @@ internal sealed class JqParser(
             return new LimitFilter(args[0], args[1]);
         }
 
-        if (name == "rindex")
-        {
-            return new IndexFilter(new SliceFilter(new FunctionFilter("indices", args), new LiteralFilter(JsonValue.Create(-1)), null, false), new LiteralFilter(JsonValue.Create(0)), false);
-        }
-
         if (name == "skip")
         {
             return new SkipFilter(args[0], args[1]);

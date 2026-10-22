@@ -233,10 +233,13 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("")]
-    [InlineData("x")]
-    [InlineData("xxxxxxxxxxxxxxxz")]
-    public void Jq_StringIndexBorrowsInputWithoutSearchTables(string needle)
+    [InlineData("", false)]
+    [InlineData("x", false)]
+    [InlineData("xxxxxxxxxxxxxxxz", false)]
+    [InlineData("", true)]
+    [InlineData("x", true)]
+    [InlineData("xxxxxxxxxxxxxxxz", true)]
+    public void Jq_StringIndexBorrowsInputWithoutSearchTables(string needle, bool last)
     {
         JsonNode input = JsonValue.Create(new string('x', 100000));
         var root = new BenchmarkMemoryBudget(0);
@@ -244,16 +247,18 @@ public sealed partial class JqTests
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token);
         var runtime = new JqRuntime(budget);
         JsonNode pattern = JsonValue.Create(needle);
-        JsonNode? result = runtime.Index(input, pattern);
-        if (needle == "x") Assert.Equal(0, result?.GetValue<int>());
+        JsonNode? result = runtime.Index(input, pattern, last);
+        if (needle == "x") Assert.Equal(last ? 99999 : 0, result?.GetValue<int>());
         else Assert.Null(result);
         Assert.Equal(0, root.ReservedBytes);
         cancellation.Cancel();
-        Assert.Throws<OperationCanceledException>(() => runtime.Index(input, pattern));
+        Assert.Throws<OperationCanceledException>(() => runtime.Index(input, pattern, last));
     }
 
-    [Fact]
-    public async Task Jq_RepetitiveUnsuccessfulSearchObservesCancellation()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jq_RepetitiveUnsuccessfulSearchObservesCancellation(bool last)
     {
         JsonNode input = JsonValue.Create(new string('x', 20000));
         JsonNode pattern = JsonValue.Create(new string('x', 9999) + "z");
@@ -266,12 +271,28 @@ public sealed partial class JqTests
             started.SetResult();
             // Finite repetitive work lets cancellation race any unsuccessful scan,
             // including a scan started after the cancellation request.
-            for (int index = 0; index < 100; index++) Assert.Null(runtime.Index(input, pattern));
+            for (int index = 0; index < 100; index++) Assert.Null(runtime.Index(input, pattern, last));
         });
         await started.Task;
         cancellation.Cancel();
         var failure = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => work);
         Assert.Equal(cancellation.Token, failure.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Jq_DenseLastIndexKeepsLongInputStreamsBounded()
+    {
+        var root = new BenchmarkMemoryBudget(1024 * 1024);
+        var host = new MockFileSystem();
+        string record = new JsonArray(new string('a', 100000)).ToJsonString();
+        host.AddFile("/input", string.Concat(Enumerable.Repeat(record + "\n", 20)));
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".[0] | rindex(\"a\")", "/input")));
+        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(string.Concat(Enumerable.Repeat("99999\n", 20)), host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.Equal(0, root.ReservedBytes);
     }
 
     [Theory]

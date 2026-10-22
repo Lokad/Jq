@@ -1851,11 +1851,17 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                             yield return got;
                     break;
                 case "index":
+                case "rindex":
                     if (UsesSubstringSearch(input, Arg(0)))
-                        yield return context.Runtime.Index(input, Arg(0));
+                        yield return context.Runtime.Index(input, Arg(0), name == "rindex");
                     else
-                        foreach (JsonNode? got in new IndexFilter(FallthroughGet(Arg(0)), new LiteralFilter(JsonValue.Create(0)), false).Evaluate(input, context, environment))
-                            yield return got;
+                    {
+                        _ = JqPathReads.TryIndex(input, Arg(0), false, context, out JsonNode? values);
+                        if (name == "rindex")
+                            _ = JqPathReads.TrySlice(values, JsonValue.Create(-1), null, false, context, out values);
+                        _ = JqPathReads.TryIndex(values, JsonValue.Create(0), false, context, out JsonNode? got);
+                        yield return got;
+                    }
                     break;
                 case "startswith": yield return JsonValue.Create(StartsEndsWith(input, Arg(0), true)); break;
                 case "endswith": yield return JsonValue.Create(StartsEndsWith(input, Arg(0), false)); break;

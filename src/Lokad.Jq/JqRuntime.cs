@@ -1339,10 +1339,15 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return arr;
     }
 
-    internal JsonNode? Index(JsonNode? input, JsonNode? needle)
+    internal JsonNode? Index(JsonNode? input, JsonNode? needle, bool last)
     {
-        foreach (var index in MatchingIndices(input, needle)) return JsonValue.Create(index);
-        return null;
+        int? position = null;
+        foreach (int index in MatchingIndices(input, needle))
+        {
+            if (!last) return JsonValue.Create(index);
+            position = index;
+        }
+        return position is { } found ? JsonValue.Create(found) : null;
     }
 
     private IEnumerable<int> MatchingIndices(JsonNode? input, JsonNode? needle)
