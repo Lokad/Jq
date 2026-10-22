@@ -7,6 +7,66 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(false, 7)]
+    [InlineData(true, 7)]
+    public async Task Jq_ErrorDiagnosticClosureStopsOuterInput(bool owned, int appendStatus)
+    {
+        var inner = new MockFileSystem();
+        string input = string.Concat(Enumerable.Repeat("0\n", 100));
+        if (owned) inner.AddFile("/first", input);
+        else inner.SetStandardInput(input);
+        inner.AddFile("/later", "1\n");
+        var host = new DiagnosticHost(inner)
+        {
+            ChunkBytes = 2,
+            StderrResult = appendStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(appendStatus),
+        };
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        string[] arguments = owned
+            ? ["-r", "\"before\", error(\"bad\"), \"after\"", "/first", "/later"]
+            : ["-r", "\"before\", error(\"bad\"), \"after\""];
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
+
+        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("before\n", inner.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("jq: error (at " + (owned ? "/first" : "<stdin>") + ":1): bad\n",
+            inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal([JqFileDescriptor.StdOut, JqFileDescriptor.StdErr], host.Writes);
+        Assert.Equal(1, inner.ReadBytesCallCount);
+        Assert.Equal(owned ? 1 : 0, host.CloseCalls);
+        Assert.Equal(0, inner.OpenFileCount);
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    public async Task Jq_TerminalDiagnosticClosurePreservesCommandStatus(int appendStatus)
+    {
+        foreach (var (arguments, status) in new (string[], int)[]
+        {
+            (["--unknown"], 2),
+            (["-n", "("], 3),
+            ([".", "/missing"], 2),
+            (["-n", "\"bad\" | halt_error(9)"], 9),
+        })
+        {
+            var inner = new MockFileSystem();
+            var host = new DiagnosticHost(inner)
+            {
+                StderrResult = appendStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(appendStatus),
+            };
+            var memory = new BenchmarkMemoryBudget(64 * 1024);
+            var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
+            Assert.Equal(status, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal([JqFileDescriptor.StdErr], host.Writes);
+            Assert.Equal(0, memory.ReservedBytes);
+        }
+    }
+
+    [Theory]
     [InlineData("debug", "[\"DEBUG:\",\"ready\"]\n")]
     [InlineData("debug(.)", "[\"DEBUG:\",\"ready\"]\n")]
     [InlineData("stderr", "ready")]
@@ -159,6 +219,7 @@ public sealed partial class JqTests
 
     private sealed class DiagnosticHost(MockFileSystem inner) : IJqHost
     {
+        internal int ChunkBytes { get; init; } = 8192;
         internal bool AwaitDiagnosticBeforeRead { get; init; }
         internal bool FirstReadNotFinal { get; init; }
         internal JqAppendResult? StderrResult { get; init; }
@@ -171,7 +232,7 @@ public sealed partial class JqTests
         {
             if (AwaitDiagnosticBeforeRead && (!FirstReadNotFinal || inner.ReadBytesCallCount != 0))
                 await _diagnostic.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-            JqByteReadResult read = await inner.ReadBytesAsync(descriptor, buffer, cancellationToken).ConfigureAwait(false);
+            JqByteReadResult read = await inner.ReadBytesAsync(descriptor, buffer[..Math.Min(ChunkBytes, buffer.Length)], cancellationToken).ConfigureAwait(false);
             return FirstReadNotFinal && inner.ReadBytesCallCount == 1
                 ? JqByteReadResult.Success(read.BytesRead, false) : read;
         }

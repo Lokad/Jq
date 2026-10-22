@@ -34,7 +34,7 @@ internal static class JqExecutor
         if (invocation.Error != null)
         {
             return await WriteErrorAsync(host, invocation, [invocation.Error], memoryScope,
-                cancellationToken).ConfigureAwait(false) ? 2 : 5;
+                cancellationToken).ConfigureAwait(false) is not null ? 2 : 5;
         }
         string? information = invocation.Help ? JqHelp.Text
             : invocation.Version ? "Lokad jq\n"
@@ -164,8 +164,8 @@ internal static class JqExecutor
                     }
                     catch (Exception exception) when (JqErrors.IsCatchable(exception))
                     {
-                        if (!await WriteErrorAsync(host, invocation, RenderUncaughtError(context, exception),
-                            memoryScope, cancellationToken).ConfigureAwait(false))
+                        if (await WriteErrorAsync(host, invocation, RenderUncaughtError(context, exception),
+                            memoryScope, cancellationToken).ConfigureAwait(false) is not { CanAcceptMore: true })
                             return 5;
                         stickyError = 5;
                     }
@@ -197,8 +197,8 @@ internal static class JqExecutor
             // already shaped at the throw site.
             if (ex.StderrText is not null)
             {
-                if (!await JqDiagnosticWriter.TryWriteAsync(host, invocation.StdErr, [ex.StderrText],
-                    false, memoryScope, cancellationToken).ConfigureAwait(false))
+                if (await JqDiagnosticWriter.TryWriteAsync(host, invocation.StdErr, [ex.StderrText],
+                    false, memoryScope, cancellationToken).ConfigureAwait(false) is null)
                     return 5;
             }
             return ex.ExitCode;
@@ -218,7 +218,7 @@ internal static class JqExecutor
             // Malformed inputs report status 5 and missing input operands
             // report status 2, matching the reference command.
             return await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
-                cancellationToken).ConfigureAwait(false) ? ex.ExitCode : 5;
+                cancellationToken).ConfigureAwait(false) is not null ? ex.ExitCode : 5;
         }
         catch (JqCompileException ex)
         {
@@ -226,12 +226,12 @@ internal static class JqExecutor
                 ["jq: ", ex.Message, " at line ", ex.Span.Line.ToString(CultureInfo.InvariantCulture),
                     " column ", ex.Span.Column.ToString(CultureInfo.InvariantCulture),
                     " (", ex.ProgramSource.Label, ")"], memoryScope,
-                cancellationToken).ConfigureAwait(false) ? stage : 5;
+                cancellationToken).ConfigureAwait(false) is not null ? stage : 5;
         }
         catch (Exception ex) when (ex is JqException or JsonException or FormatException or ArgumentException or OverflowException)
         {
             return await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
-                cancellationToken).ConfigureAwait(false) ? stage : 5;
+                cancellationToken).ConfigureAwait(false) is not null ? stage : 5;
         }
 
         static async IAsyncEnumerable<JsonNode?> OuterInputsAsync(
@@ -424,7 +424,7 @@ internal static class JqExecutor
         };
     }
 
-    private static Task<bool> WriteErrorAsync(IJqHost host, JqInvocation invocation,
+    private static Task<JqAppendResult?> WriteErrorAsync(IJqHost host, JqInvocation invocation,
         IReadOnlyList<string> parts, IMemoryBudget? memoryBudget, CancellationToken cancellationToken) =>
         JqDiagnosticWriter.TryWriteAsync(host, invocation.StdErr, parts, true, memoryBudget, cancellationToken);
 }

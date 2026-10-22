@@ -104,7 +104,7 @@ public sealed partial class JqTests
         var inner = new MockFileSystem();
         var host = new MemoryBorrowHost(inner) { DelayedDescriptor = JqFileDescriptor.StdErr };
         byte[] expected = Encoding.UTF8.GetBytes("jq: café 😀\n");
-        Task<bool> writing = JqDiagnosticWriter.TryWriteAsync(host, JqFileDescriptor.StdErr,
+        Task<JqAppendResult?> writing = JqDiagnosticWriter.TryWriteAsync(host, JqFileDescriptor.StdErr,
             ["jq: ", "café ", "😀"], true, memory, cancellation.Token);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(expected, pending.ToArray());
@@ -120,7 +120,7 @@ public sealed partial class JqTests
         }
         else
         {
-            Assert.True(await writing);
+            Assert.Equal(JqAppendResult.Open, await writing);
             Assert.Equal(expected, inner.GetOutputBytes(JqFileDescriptor.StdErr));
         }
         Assert.Equal(0, memory.ReservedBytes);
@@ -135,7 +135,7 @@ public sealed partial class JqTests
         using (retained)
         {
             var host = new MockFileSystem();
-            Assert.False(await JqDiagnosticWriter.TryWriteAsync(host, JqFileDescriptor.StdErr,
+            Assert.Null(await JqDiagnosticWriter.TryWriteAsync(host, JqFileDescriptor.StdErr,
                 ["large diagnostic"], true, memory, CancellationToken.None));
             Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(8, retained.Bytes);

@@ -9,7 +9,8 @@ internal static class JqDiagnosticWriter
     // workload storage. Refusal must remain observable when the root is full.
     private static readonly ReadOnlyMemory<byte> Refusal = "jq: memory budget exceeded\n"u8.ToArray();
 
-    internal static async Task<bool> TryWriteAsync(IJqHost host, JqFileDescriptor descriptor,
+    // Null denotes admission refusal; an admitted write retains the host outcome.
+    internal static async Task<JqAppendResult?> TryWriteAsync(IJqHost host, JqFileDescriptor descriptor,
         IReadOnlyList<string> parts, bool newline, IMemoryBudget? memoryBudget,
         CancellationToken cancellationToken)
     {
@@ -21,7 +22,7 @@ internal static class JqDiagnosticWriter
             if (count > Array.MaxLength - length)
             {
                 await host.AppendAsync(descriptor, Refusal, cancellationToken).ConfigureAwait(false);
-                return false;
+                return null;
             }
             length += count;
         }
@@ -29,7 +30,7 @@ internal static class JqDiagnosticWriter
         if (length > Array.MaxLength || !memory.TryResize(length))
         {
             await host.AppendAsync(descriptor, Refusal, cancellationToken).ConfigureAwait(false);
-            return false;
+            return null;
         }
         var bytes = new byte[(int)length];
         int offset = 0;
@@ -37,7 +38,6 @@ internal static class JqDiagnosticWriter
             offset += Utf8Text.Encode(part, bytes.AsSpan(offset));
         if (newline) bytes[offset] = (byte)'\n';
         cancellationToken.ThrowIfCancellationRequested();
-        await host.AppendAsync(descriptor, bytes, cancellationToken).ConfigureAwait(false);
-        return true;
+        return await JqHostExtensions.GuardedAppendAsync(host, descriptor, bytes, cancellationToken).ConfigureAwait(false);
     }
 }
