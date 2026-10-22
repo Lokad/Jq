@@ -38,7 +38,7 @@ can restore its path.
   have an engine limitation. See [regex behavior](REGEX.md).
 - **Diagnostics and Unicode:** JSON reader wording, UTF-16 source columns and
   strict unpaired-surrogate rejection are deliberate policies. Input line numbers
-  on unterminated tails can exceed jq's newline-based count by one.
+  can differ on unterminated tails and explicit EOF.
 - **CLI/host identity:** `-V` and `--build-configuration` identify Lokad.Jq.
   `--unbuffered`, `-M` and `-b` are inert; `-C`, internal tool switches and process
   search/origin queries are rejected. ANSI color and native OS filenames are
@@ -49,7 +49,6 @@ can restore its path.
 - **Modules:** hosted `import`, `include`, `-L` and `modulemeta` are supported.
   Automatic `~/.jq`, home expansion and `$ORIGIN` lookup are excluded. Main-file
   `$__loc__` reports the file path; qualified calls use hierarchical scopes.
-  `modulemeta` synchronously waits for host reads during evaluation.
 - **Recursion:** direct tails and proven single-valued control paths flatten.
   Recursive calls with active handlers, optional suppression or labels retain
   their scopes and use the evaluation depth safeguard. Direct filter forwarding
