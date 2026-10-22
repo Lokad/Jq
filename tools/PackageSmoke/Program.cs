@@ -284,10 +284,14 @@ int checks = 0;
     }
     if (memory.ReservedBytes != 0) throw new InvalidOperationException("Invocation storage was not refunded.");
 }
+foreach (bool refuse in new[] { false, true })
 {
+    string filter = refuse
+        ? "\"prefix\", try (\"x\" * 1000000) catch \"caught\", \"later\""
+        : "\"prefix\", (\"note\" | stderr | empty), (\"x\" * 1000000)";
     var memory = new BenchmarkMemoryBudget(64 * 1024);
     if (!JqCommandInvocation.TryCreateWithStandardDescriptors("jq", ["-r",
-        "\"prefix\", (\"note\" | stderr | empty), try (\"x\" * 1000000) catch \"caught\", \"later\"",
+        filter,
         "/first", "/later"], [], memory, out var invocation))
         throw new InvalidOperationException("Expected governed snapshot admission.");
     using (invocation)
@@ -297,8 +301,9 @@ int checks = 0;
         host.AddFile("/first", "0\n");
         host.AddFile("/later", "1\n");
         var command = Jq.TryParse(invocation) ?? throw new InvalidOperationException("Expected a jq command.");
-        Check("governed refusal keeps failure after stderr closure", await command.ExecuteAsync(host, CancellationToken.None) == 5
-            && host.Output(JqFileDescriptor.StdOut) == "prefix\n" && host.Output(JqFileDescriptor.StdErr) == "note"
+        Check(refuse ? "governed refusal keeps failure after stderr closure" : "diagnostic closure stops later work",
+            await command.ExecuteAsync(host, CancellationToken.None) == (refuse ? 5 : 0)
+            && host.Output(JqFileDescriptor.StdOut) == "prefix\n" && host.Output(JqFileDescriptor.StdErr) == (refuse ? "jq: memory budget exceeded\n" : "note")
             && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == snapshot);
     }
     if (memory.ReservedBytes != 0) throw new InvalidOperationException("Invocation storage was not refunded.");
