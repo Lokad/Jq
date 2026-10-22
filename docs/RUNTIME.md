@@ -34,7 +34,8 @@ without blocking the caller. Pure evaluation completes synchronously.
 Outer iteration and `input`/`inputs` share one pull cursor. File operands open
 lazily; `-` uses borrowed stdin at its current position. UTF-8 JSON values and raw
 lines may span reads. JSON decoding retains completed nodes across reads,
-including non-finite literals. LF splits raw input; CR is data. Slurp aggregates the cursor;
+including non-finite literals. Definitive JSON errors stop further reads; incomplete
+tokens wait for more bytes. LF splits raw input; CR is data. Slurp aggregates the cursor;
 `--stream` emits path/leaf events, and `--seq` separates records at RS and recovers
 after malformed records.
 

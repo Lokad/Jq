@@ -8,7 +8,7 @@ internal sealed partial class JqRuntime
 {
     // Keeps the standard JSON reader and DOM stack across host reads. The cursor
     // retains the original bytes until a value completes. Extended literals share
-    // the whole-value token reader; malformed final input keeps its diagnostics.
+    // the whole-value token reader; invalid input fails without another host read.
     internal sealed class InputReader(JqRuntime runtime, JqBudget budget)
     {
         private static readonly JsonReaderOptions Options = new()
@@ -50,16 +50,13 @@ internal sealed partial class JqRuntime
                 Reset();
                 return true;
             }
-            int checkpoint = _offset;
-            JsonReaderState checkpointState = _state;
             try
             {
                 int consumedBase = _offset;
                 var reader = new Utf8JsonReader(source[_offset..], isFinal, _state);
                 while (true)
                 {
-                    checkpoint = consumedBase + (int)reader.BytesConsumed;
-                    checkpointState = reader.CurrentState;
+                    JsonReaderState checkpointState = reader.CurrentState;
                     JsonTokenType previous = reader.TokenType;
                     bool propertyValue = _frames.Count != 0 && _frames[^1].Key is not null;
                     runtime.ReadToken(ref reader, source, ref consumedBase,
@@ -118,20 +115,11 @@ internal sealed partial class JqRuntime
                 _state = reader.CurrentState;
                 if (!isFinal) return false;
             }
-            catch (System.Exception exception) when (exception is JsonException or System.InvalidOperationException
-                || exception is JqException and not JqQuotaException)
+            catch (JsonException exception)
             {
-                if (!isFinal)
-                {
-                    _offset = checkpoint;
-                    _state = checkpointState;
-                    return false;
-                }
+                throw new JqException(exception.Message, exception);
             }
-            // Only malformed final input needs the established diagnostic path.
-            value = runtime.ReadJsonValue(source, out consumed);
-            Reset();
-            return true;
+            throw new JqException("truncated JSON value");
 
             void Attach(JsonNode? node)
             {

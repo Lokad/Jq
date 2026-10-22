@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Report definitive JSON syntax errors without waiting for EOF or buffering an
+  irrelevant suffix; preserve fragmented tokens and non-finite literals.
+
 - Suspend evaluation for pending host reads in `input`, `inputs` and `modulemeta`.
   Preserve lazy output, cancellation, scoped bindings and cleanup through suspension.
 - Keep host contract faults terminal during descriptor close, preserving earlier

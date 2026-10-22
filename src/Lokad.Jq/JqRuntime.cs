@@ -323,6 +323,14 @@ internal sealed partial class JqRuntime(JqBudget budget)
             catch (JsonException)
             {
                 int failure = consumedBase + (int)reader.BytesConsumed;
+                if (!reader.IsFinalBlock && IsValuePreceded(source, failure)
+                    && IsIncompleteNonFinite(source, failure))
+                {
+                    reader = new Utf8JsonReader(source[checkpoint..], false, checkpointState);
+                    consumedBase = checkpoint;
+                    hasToken = false;
+                    return;
+                }
                 if (IsValuePreceded(source, failure)
                     && TryInvalidNonFiniteLiteral(source, failure, out string nestedInvalid))
                     throw new JqException(nestedInvalid);
@@ -348,6 +356,26 @@ internal sealed partial class JqRuntime(JqBudget budget)
                     return;
                 }
                 throw;
+            }
+
+            static bool IsIncompleteNonFinite(ReadOnlySpan<byte> source, int position)
+            {
+                int index = SkipJsonWhitespace(source, position);
+                if (index < source.Length && source[index] is (byte)'+' or (byte)'-') index++;
+                ReadOnlySpan<byte> word = source[index..];
+                return IsPrefix(word, "nan"u8) || IsPrefix(word, "infinity"u8);
+
+                static bool IsPrefix(ReadOnlySpan<byte> word, ReadOnlySpan<byte> literal)
+                {
+                    if (word.Length > literal.Length) return false;
+                    for (int i = 0; i < word.Length; i++)
+                    {
+                        byte candidate = word[i];
+                        if (candidate is >= (byte)'A' and <= (byte)'Z') candidate += 32;
+                        if (candidate != literal[i]) return false;
+                    }
+                    return true;
+                }
             }
         }
 
@@ -465,7 +493,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
         length += Encoding.UTF8.GetCharCount(remaining);
         budget.ReserveString(length);
-        return reader.GetString() ?? throw new JqException("expected a JSON string");
+        try { return reader.GetString() ?? throw new JqException("expected a JSON string"); }
+        catch (InvalidOperationException exception) { throw new JqException(exception.Message, exception); }
     }
 
     // Like the reference fromjson, only strings parse; other inputs fail
