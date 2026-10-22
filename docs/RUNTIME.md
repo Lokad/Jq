@@ -31,7 +31,8 @@ the last bytes. `AppendWhileOpenAsync` may stay pending to apply backpressure an
 must copy bytes retained beyond completion.
 Execution awaits writes before reusing buffers and stops production on downstream
 closure or failure. Debug, stderr and sequence warnings await their writes before
-continuing evaluation. Cancellation alone does not end a pending buffer borrow.
+continuing evaluation. Earlier reported evaluation errors remain nonzero after
+normal downstream closure. Cancellation alone does not end a pending buffer borrow.
 Pending reads, including `input`, `inputs` and `modulemeta`, suspend evaluation
 without blocking the caller. Pure evaluation completes synchronously.
 
@@ -43,6 +44,9 @@ reads. Definitive JSON errors stop further reads; incomplete
 tokens wait for more bytes. LF splits raw input; CR is data. Slurp aggregates the cursor;
 `--stream` emits path/leaf events, and `--seq` separates records at RS and recovers
 after malformed records.
+
+JSON data imports and `--slurpfile` accept one leading UTF-8 BOM; raw file values
+retain it as text.
 
 ## Memory admission
 
@@ -66,6 +70,8 @@ jq `try` and `?` cannot catch it. Work stops, pending users and cleanup finish, 
 relinquished storage is refunded. Earlier effects remain; status 5 is preserved
 even if stderr closes or fails. An immutable emergency diagnostic reports
 exhaustion if diagnostic admission also fails.
+Later cancellation can stop diagnostic reporting but cannot replace an established
+refusal status. Pending borrows and cleanup still finish before storage refunds.
 
 The caller owns the supplied budget. Execution disposes its scope after evaluation,
 pending I/O, enumeration and owned-descriptor cleanup finish. Governed invocation

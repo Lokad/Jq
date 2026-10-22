@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Preserve earlier evaluation errors after normal output closure and retain
+  refused admission status 5 when later cancellation stops diagnostic reporting.
+- Use boolean regex matching for exact-true `_match_impl` mode. Build scan/split
+  results directly from captures, preserve eager failure order and advance
+  whole-match scalar offsets without repeated prefix scans.
+- Accept a leading UTF-8 BOM in JSON data imports through the shared whole-file
+  parser; retain raw text and caller-specific construction depth.
+
 - Breaking host API: `CloseDescriptorAsync` returns `Task<JqCloseResult>`.
   Success and failure both retire the descriptor; close is never retried.
   Return `Success` or `Failure(new JqOperationError(detail))`. Lone failures report
