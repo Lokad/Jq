@@ -1917,9 +1917,11 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     }
                     else
                     {
+                        List<JsonNode> values = JqMatch.Split(context, input, Arg(0), Arg(1));
+                        context.Budget.ReserveMetadata(64 + 24L * values.Count, 1);
                         var pieces = new JsonArray();
-                        foreach (string piece in JqMatch.SplitPieces(context, input, Arg(0), Arg(1)))
-                            pieces.Add(JsonValue.Create(piece));
+                        foreach (JsonNode piece in values)
+                            pieces.Add(piece);
                         yield return pieces;
                         break;
                     }

@@ -13,7 +13,7 @@ internal sealed class MatchFilter(IReadOnlyList<JqFilter> args) : JqFilter
             await foreach (JsonNode? value in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
             {
                 JqMatch.SplitArgument(context, value, out JsonNode? pattern, out JsonNode? modifiers);
-                foreach (JsonObject match in JqMatch.Search(context, input, pattern, modifiers))
+                foreach (JsonNode match in JqMatch.Search(context, input, pattern, modifiers))
                     yield return match;
             }
             yield break;
@@ -21,7 +21,7 @@ internal sealed class MatchFilter(IReadOnlyList<JqFilter> args) : JqFilter
         // jq evaluates the flags stream before the pattern stream.
         await foreach (JsonNode? flags in args[1].Evaluate(input, context, environment).ConfigureAwait(false))
             await foreach (JsonNode? pattern in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
-                foreach (JsonObject match in JqMatch.Search(context, input, pattern, flags))
+                foreach (JsonNode match in JqMatch.Search(context, input, pattern, flags))
                     yield return match;
     }
 }
@@ -44,10 +44,11 @@ internal sealed class MatchImplFilter(IReadOnlyList<JqFilter> args) : JqFilter
             }
             else
             {
-                List<JsonObject> matches = JqMatch.Search(context, input, pattern, modifiers);
+                List<JsonNode> matches = JqMatch.Search(context, input, pattern, modifiers);
+                context.Budget.ReserveMetadata(64 + 24L * matches.Count, 1);
                 var array = new JsonArray();
                 context.Budget.CheckCancellation();
-                foreach (JsonObject match in matches)
+                foreach (JsonNode match in matches)
                 {
                     context.Budget.CheckCancellation();
                     array.Add(match);

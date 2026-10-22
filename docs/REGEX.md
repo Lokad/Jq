@@ -47,6 +47,10 @@ scalar-based offsets and lengths, unmatched capture nulls, and numbered capture
 order are retained. Duplicate names fold in numbered order, last wins, including
 nulls for non-participating groups.
 
+Detailed searches finish before their first result is emitted. `scan` and regex
+splitting build their result strings directly from captures without retaining
+match metadata. Whole-match scalar positions advance with the search.
+
 After an empty global match Jq advances one Unicode scalar; an empty
 match at the end is the last match. Detailed capture searches are separate
 engine operations. `sub`/`gsub` evaluate jq replacement filters and align

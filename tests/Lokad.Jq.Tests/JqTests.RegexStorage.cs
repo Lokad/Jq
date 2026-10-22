@@ -5,13 +5,13 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
-    [InlineData("match(\"x\";\"g\")")]
-    [InlineData("scan(\"(x)\")")]
-    [InlineData("splits(\"x\")")]
-    [InlineData("gsub(\"x\"; range(10000) | tostring)")]
-    public async Task Jq_RegexRetainedConstructionRefusesBeforePublishingResults(string operation)
+    [InlineData("match(\"x\";\"g\")", 1024 * 1024)]
+    [InlineData("scan(\"(x)\")", 128 * 1024)]
+    [InlineData("splits(\"x\")", 128 * 1024)]
+    [InlineData("gsub(\"x\"; range(10000) | tostring)", 1024 * 1024)]
+    public async Task Jq_RegexRetainedConstructionRefusesBeforePublishingResults(string operation, long allowance)
     {
-        var memory = new BenchmarkMemoryBudget(1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(allowance);
         var host = new MockFileSystem();
         host.AddFile("/first", "\"" + new string('x', 4000) + "\"\n");
         host.AddFile("/later", "\"later\"\n");
@@ -25,7 +25,7 @@ public sealed partial class JqTests
         Assert.Single(host.ClosedDescriptors);
         Assert.Equal(0, host.OpenFileCount);
         Assert.Equal(0, memory.ReservedBytes);
-        Assert.True(memory.TryReserve(1024 * 1024, out var reusable));
+        Assert.True(memory.TryReserve(allowance, out var reusable));
         reusable.Dispose();
     }
 
