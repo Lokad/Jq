@@ -39,7 +39,7 @@ public sealed partial class JqTests
             for (int i = 1; i <= 1000; i++)
             {
                 context.EmitStderr(message, false);
-                Assert.InRange(root.ReservedBytes, (long)i * (width + 16), 2L * i * (width + 128) + 256);
+                Assert.InRange(root.ReservedBytes, (long)i * (width + 16), 2L * i * (width + 128) + 4096);
             }
             var pending = context.PendingStderr;
             Assert.Equal(1000, pending.Count);

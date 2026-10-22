@@ -77,4 +77,20 @@ public sealed partial class JqTests
         }
         Assert.Equal(0, root.ReservedBytes);
     }
+
+    [Fact]
+    public void Jq_SmallDiagnosticBurstsAmortizeAdmissionAndRefundLargeCredit()
+    {
+        var root = new BenchmarkMemoryBudget(1024 * 1024);
+        var memory = new CountingMemoryBudget(root);
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
+        {
+            for (int i = 0; i < 1000; i++) context.EmitStderr("a");
+            Assert.Equal(1000, context.PendingStderr.Count);
+            Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 100);
+            context.ReleaseDrainedStderr();
+            Assert.InRange(root.ReservedBytes, 0, 256);
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
 }

@@ -124,9 +124,10 @@ internal sealed class JqContext(
         if (required > previous)
         {
             long target = required;
+            int quantum = required > 4096 ? 4096 : StderrCreditBytes;
             if (length < StderrCreditBytes && _smallStderrMessages >= 31
-                && required <= long.MaxValue - (StderrCreditBytes - 1))
-                target = ((required + StderrCreditBytes - 1) / StderrCreditBytes) * StderrCreditBytes;
+                && required <= long.MaxValue - (quantum - 1))
+                target = ((required + quantum - 1) / quantum) * quantum;
             _stderrMemory.Resize(target);
         }
         return previous;
