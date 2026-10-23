@@ -319,7 +319,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 JqAppendResult? written = await JqDiagnosticWriter.TryWriteAsync(host, stderr,
                     ["jq: cannot open ", source.Display], true, _budget.MemoryBudget, _cancellationToken).ConfigureAwait(false);
                 if (written is not { CanAcceptMore: true })
-                    throw new JqOutputClosedException(written?.ExitCode ?? 5);
+                    throw new JqOutputClosedException(written is null ? 5 : 2);
                 _active = false;
                 continue;
             }

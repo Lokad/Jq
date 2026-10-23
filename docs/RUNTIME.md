@@ -48,7 +48,7 @@ reads. Definitive JSON errors stop further reads; incomplete
 tokens wait for more bytes. LF splits raw input; CR is data. Slurp aggregates the cursor;
 `--stream` emits path/leaf events. `--seq` uses incremental JSON decoding with RS
 framing: complete values can return before another read or a malformed tail;
-ignored prefixes are discarded as they arrive. Truncated numbers require a
+ignored prefixes are discarded as they arrive. Top-level numbers require a
 terminating delimiter. Outer iteration warns and resynchronizes after malformed
 sequence input; explicit reads expose those parse errors to jq handlers.
 
