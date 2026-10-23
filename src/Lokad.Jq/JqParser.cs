@@ -19,6 +19,7 @@ internal sealed class JqParser(
     private int _index;
     private int _depth;
     private bool _inspectLibrary;
+    private bool _functionsSeeded;
 
     public JqParser(string source, JqProgramSource programSource, JqEnvironment environment, JqBudget budget)
         : this(Lexer.Tokenize(source, programSource, budget), programSource, environment, budget) { }
@@ -32,12 +33,12 @@ internal sealed class JqParser(
     internal JqFilter ParseBody(int bodyIndex)
     {
         _index = bodyIndex;
-        SeedFunctionsFromEnvironment();
         return ParseBody();
     }
 
     private JqFilter ParseBody()
     {
+        SeedFunctionsFromEnvironment();
         if (Peek().Kind == TokenKind.End)
             throw Error("Top-level program not given (try \".\")", Peek().Span);
         var filter = ParseQuery(topLevel: true);
@@ -49,7 +50,9 @@ internal sealed class JqParser(
     // where parsing resumes with the linked environment.
     internal (JsonObject? Metadata, IReadOnlyList<JqModuleImport> Imports, int BodyIndex) ParsePrefix()
     {
-        SeedFunctionsFromEnvironment();
+        _budget.CheckCancellation();
+        if (Peek() is { Kind: TokenKind.Identifier, Text: "module" or "import" or "include" })
+            SeedFunctionsFromEnvironment();
         var metadata = ParseModuleHeader();
         var imports = ParseImportList();
         return (metadata, imports, _index);
@@ -116,17 +119,13 @@ internal sealed class JqParser(
 
     private IReadOnlyList<JqModuleImport> ParseImportList()
     {
-        var imports = new List<JqModuleImport>();
-        while (true)
+        List<JqModuleImport>? imports = null;
+        while (Peek() is { Kind: TokenKind.Identifier, Text: "import" or "include" })
         {
-            if (Peek() is { Kind: TokenKind.Identifier, Text: "import" })
-                imports.Add(ParseImportDirective(isInclude: false));
-            else if (Peek() is { Kind: TokenKind.Identifier, Text: "include" })
-                imports.Add(ParseImportDirective(isInclude: true));
-            else
-                break;
+            bool include = Peek().Text == "include";
+            (imports ??= new()).Add(ParseImportDirective(include));
         }
-        return imports;
+        return imports is null ? [] : imports;
     }
 
     private JqModuleImport ParseImportDirective(bool isInclude)
@@ -252,16 +251,16 @@ internal sealed class JqParser(
 
     private sealed class ParserScope
     {
-        internal readonly HashSet<string> Variables = new(StringComparer.Ordinal);
-        internal readonly HashSet<string> FilterParams = new(StringComparer.Ordinal);
-        internal readonly Dictionary<string, object> Labels = new(StringComparer.Ordinal);
-        internal readonly Dictionary<(string Name, int Arity), JqFunctionDefinition> Functions = new();
+        internal HashSet<string>? Variables;
+        internal HashSet<string>? FilterParams;
+        internal Dictionary<string, object>? Labels;
+        internal Dictionary<(string Name, int Arity), JqFunctionDefinition>? Functions;
     }
 
     private bool IsBound(string name)
     {
         foreach (var scope in _scopes)
-            if (scope.Variables.Contains(name))
+            if (scope.Variables?.Contains(name) == true)
                 return true;
         return _environment.TryGetValue(name, out _);
     }
@@ -272,14 +271,14 @@ internal sealed class JqParser(
     {
         if (_scopes.Count == 0)
             throw new InvalidOperationException("No open binding scope.");
-        _scopes.Peek().Variables.Add(name);
+        (_scopes.Peek().Variables ??= new(StringComparer.Ordinal)).Add(name);
     }
 
     private void DeclareFilterParam(string name)
     {
         if (_scopes.Count == 0)
             throw new InvalidOperationException("No open binding scope.");
-        _scopes.Peek().FilterParams.Add(name);
+        (_scopes.Peek().FilterParams ??= new(StringComparer.Ordinal)).Add(name);
     }
 
     private void DeclareFunction(JqFunctionDefinition definition)
@@ -287,7 +286,7 @@ internal sealed class JqParser(
         ArgumentNullException.ThrowIfNull(definition);
         if (_scopes.Count == 0)
             _scopes.Push(new ParserScope());
-        _scopes.Peek().Functions[(definition.Name, definition.Arity)] = definition;
+        (_scopes.Peek().Functions ??= new())[(definition.Name, definition.Arity)] = definition;
     }
 
     // Resolves a bare `name` use: a zero-argument user function wins over a
@@ -296,12 +295,12 @@ internal sealed class JqParser(
     {
         foreach (var scope in _scopes)
         {
-            if (scope.Functions.ContainsKey((name, 0)))
+            if (scope.Functions?.ContainsKey((name, 0)) == true)
             {
                 isFilterParam = false;
                 return true;
             }
-            if (scope.FilterParams.Contains(name))
+            if (scope.FilterParams?.Contains(name) == true)
             {
                 isFilterParam = true;
                 return true;
@@ -314,7 +313,7 @@ internal sealed class JqParser(
     private bool TryLookupFunction(string name, int arity)
     {
         foreach (var scope in _scopes)
-            if (scope.Functions.ContainsKey((name, arity)))
+            if (scope.Functions?.ContainsKey((name, arity)) == true)
                 return true;
         return false;
     }
@@ -324,10 +323,10 @@ internal sealed class JqParser(
     // Nearest bindings win.
     private void SeedFunctionsFromEnvironment()
     {
-        var scope = new ParserScope();
-        _environment.CollectFunctions(scope.Functions, _budget);
-        if (scope.Functions.Count == 0) return;
-        _scopes.Push(scope);
+        if (_functionsSeeded) return;
+        _functionsSeeded = true;
+        if (_environment.CollectFunctions(_budget) is { } functions)
+            _scopes.Push(new ParserScope { Functions = functions });
     }
 
     private void ExitScope()
@@ -931,7 +930,7 @@ internal sealed class JqParser(
             try
             {
                 var label = new object();
-                _scopes.Peek().Labels.Add(name.Text, label);
+                (_scopes.Peek().Labels ??= new(StringComparer.Ordinal)).Add(name.Text, label);
                 return new LabelFilter(label, ParseQuery());
             }
             finally
@@ -946,7 +945,7 @@ internal sealed class JqParser(
                 throw Error($"expected $, got {dollar.Text}", dollar.Span);
             Token name = Expect(TokenKind.Identifier);
             foreach (var scope in _scopes)
-                if (scope.Labels.TryGetValue(name.Text, out object? label))
+                if (scope.Labels is { } labels && labels.TryGetValue(name.Text, out object? label))
                     return new BreakFilter(label);
             if (_inspectLibrary) return new BreakFilter(new object());
             throw Error($"undefined label ${name.Text}", dollar.Span);

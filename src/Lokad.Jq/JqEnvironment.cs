@@ -238,11 +238,11 @@ internal sealed class JqEnvironment
         }
     }
 
-    // Seeds compilation of interpolation fragments with visible module
-    // definitions. Nearest bindings win; fragments compile once at definition.
-    internal void CollectFunctions(IDictionary<(string Name, int Arity), JqFunctionDefinition> definitions, JqBudget budget)
+    // Collect visible definitions only when compilation needs them. Nearest
+    // bindings win; an environment without functions needs no dictionary.
+    internal Dictionary<(string Name, int Arity), JqFunctionDefinition>? CollectFunctions(JqBudget budget)
     {
-        ArgumentNullException.ThrowIfNull(definitions);
+        Dictionary<(string Name, int Arity), JqFunctionDefinition>? definitions = null;
         JqEnvironment? scope = this;
         while (scope is not null)
         {
@@ -253,15 +253,16 @@ internal sealed class JqEnvironment
                 if (definition is not null)
                 {
                     var key = (scope._name, scope._arity);
-                    if (!definitions.ContainsKey(key))
+                    if (definitions is null || !definitions.ContainsKey(key))
                     {
                         budget.ReserveMetadata(128, 1);
-                        definitions[key] = definition;
+                        (definitions ??= new())[key] = definition;
                     }
                 }
             }
             scope = scope._parent;
         }
+        return definitions;
     }
 
     internal void CollectFunctionClosures(IDictionary<(string Name, int Arity), JqUserClosure> closures, JqBudget budget)
