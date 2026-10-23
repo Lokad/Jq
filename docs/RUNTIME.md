@@ -11,6 +11,9 @@ later information switches, argument errors and program-file loading; duplicate
 names keep the first binding. Updates copy borrowed branches, keeping reused and
 overlapping executions independent.
 
+Source identifiers and syntax whitespace use jq's ASCII grammar; quoted data
+retains Unicode. Unicode escapes follow jq surrogate-pair and replacement rules.
+
 ## Host I/O
 
 The embedding application supplies byte I/O, files and modules through `IJqHost`.

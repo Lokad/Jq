@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text;
 
 namespace Lokad.Jq;
@@ -148,16 +147,16 @@ internal static class Lexer
             {
                 budget.CheckCancellation();
                 var c = source[i];
-                if (char.IsWhiteSpace(c)) { i++; continue; }
+                if (c is ' ' or '\t' or '\r' or '\n') { i++; continue; }
                 if (c == '#')
                 {
                     i = SkipComment(source, i, budget);
                     continue;
                 }
-                if (char.IsLetter(c) || c == '_')
+                if (char.IsAsciiLetter(c) || c == '_')
                 {
                     var start = i++;
-                    while (i < source.Length && (char.IsLetterOrDigit(source[i]) || source[i] == '_'))
+                    while (i < source.Length && (char.IsAsciiLetterOrDigit(source[i]) || source[i] == '_'))
                     {
                         budget.CheckCancellation();
                         i++;
@@ -172,10 +171,10 @@ internal static class Lexer
                         // matching the reference IDENT rule. A trailing :: without a
                         // following name stays separate symbols.
                         while (i + 2 < source.Length && source[i] == ':' && source[i + 1] == ':'
-                            && (char.IsLetter(source[i + 2]) || source[i + 2] == '_'))
+                            && (char.IsAsciiLetter(source[i + 2]) || source[i + 2] == '_'))
                         {
                             i += 2;
-                            while (i < source.Length && (char.IsLetterOrDigit(source[i]) || source[i] == '_'))
+                            while (i < source.Length && (char.IsAsciiLetterOrDigit(source[i]) || source[i] == '_'))
                             {
                                 budget.CheckCancellation();
                                 i++;
@@ -191,10 +190,10 @@ internal static class Lexer
                 // `1 - -2` parse. A trailing dot stays literal (even before
                 // keywords, as in `1.then`), while `+`/`-` only continue exponents.
                 // Leading-dot fractions (`.5`) match the reference literal syntax.
-                if (char.IsDigit(c) || (c == '.' && i + 1 < source.Length && char.IsDigit(source[i + 1])))
+                if (char.IsAsciiDigit(c) || (c == '.' && i + 1 < source.Length && char.IsAsciiDigit(source[i + 1])))
                 {
                     var start = i;
-                    while (i < source.Length && char.IsDigit(source[i]))
+                    while (i < source.Length && char.IsAsciiDigit(source[i]))
                     {
                         budget.CheckCancellation();
                         i++;
@@ -202,7 +201,7 @@ internal static class Lexer
                     if (i < source.Length && source[i] == '.')
                     {
                         i++;
-                        while (i < source.Length && char.IsDigit(source[i]))
+                        while (i < source.Length && char.IsAsciiDigit(source[i]))
                         {
                             budget.CheckCancellation();
                             i++;
@@ -213,7 +212,7 @@ internal static class Lexer
                         i++;
                         if (i < source.Length && source[i] is '+' or '-')
                             i++;
-                        while (i < source.Length && char.IsDigit(source[i]))
+                        while (i < source.Length && char.IsAsciiDigit(source[i]))
                         {
                             budget.CheckCancellation();
                             i++;
@@ -262,31 +261,55 @@ internal static class Lexer
                                 i = end + 1;
                                 continue;
                             }
-                            var e = source[i++];
-                            // Keep escaped backslash pairs raw so the interpolation
-                            // splitter can tell literal backslash-paren from a marker.
-                            if (e == (char)92)
+                            int escape = i - 1;
+                            char escaped = source[i++];
+                            char decoded;
+                            if (escaped == 'u')
                             {
-                                Ensure(2);
-                                sb.Append((char)92);
-                                sb.Append(e);
-                            }
-                            else
-                            {
-                                Ensure(1);
-                                sb.Append(e switch
+                                decoded = ReadHex();
+                                if (char.IsHighSurrogate(decoded))
                                 {
-                                    '"' => '"',
-                                    '/' => '/',
-                                    'b' => '\b',
-                                    'f' => '\f',
-                                    'n' => '\n',
-                                    'r' => '\r',
-                                    't' => '\t',
-                                    'u' when i + 4 <= source.Length && int.TryParse(source[(i)..(i += 4)], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var codePoint) => (char)codePoint,
-                                    'u' => throw new JqCompileException("invalid unicode escape", SpanAt(i - 2), programSource),
-                                    _ => throw new JqCompileException($"invalid escape '\\{e}'", SpanAt(i - 2), programSource),
-                                });
+                                    if (i + 2 > source.Length || source[i] != '\\' || source[i + 1] != 'u')
+                                        throw new JqCompileException("invalid unicode surrogate pair", SpanAt(escape), programSource);
+                                    i += 2;
+                                    char low = ReadHex();
+                                    if (!char.IsLowSurrogate(low))
+                                        throw new JqCompileException("invalid unicode surrogate pair", SpanAt(escape), programSource);
+                                    Ensure(2);
+                                    sb.Append(decoded);
+                                    sb.Append(low);
+                                    continue;
+                                }
+                                if (char.IsLowSurrogate(decoded)) decoded = '\uFFFD';
+                            }
+                            else decoded = escaped switch
+                            {
+                                '"' => '"', '/' => '/', '\\' => '\\',
+                                'b' => '\b', 'f' => '\f', 'n' => '\n', 'r' => '\r', 't' => '\t',
+                                _ => throw new JqCompileException($"invalid escape '\\{escaped}'", SpanAt(escape), programSource),
+                            };
+                            // Decoded backslashes remain escaped in the template
+                            // alphabet, including those written as a Unicode escape.
+                            Ensure(decoded == '\\' ? 2 : 1);
+                            if (decoded == '\\') sb.Append(decoded);
+                            sb.Append(decoded);
+
+                            char ReadHex()
+                            {
+                                if (source.Length - i < 4)
+                                    throw new JqCompileException("invalid unicode escape", SpanAt(escape), programSource);
+                                int value = 0;
+                                for (int digit = 0; digit < 4; digit++)
+                                {
+                                    char hex = source[i++];
+                                    int part = hex is >= '0' and <= '9' ? hex - '0'
+                                        : hex is >= 'A' and <= 'F' ? hex - 'A' + 10
+                                        : hex is >= 'a' and <= 'f' ? hex - 'a' + 10 : -1;
+                                    if (part < 0)
+                                        throw new JqCompileException("invalid unicode escape", SpanAt(escape), programSource);
+                                    value = (value << 4) | part;
+                                }
+                                return (char)value;
                             }
                         }
                         else

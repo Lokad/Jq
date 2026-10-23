@@ -39,7 +39,7 @@ can restore its path.
   flags `m`/`s`/`p`, longest matching and `\C` differ. Sparse numeric captures
   have an engine limitation. See [regex behavior](REGEX.md).
 - **Diagnostics and Unicode:** JSON reader wording, UTF-16 source columns and
-  strict unpaired-surrogate rejection are deliberate policies. Input line numbers
+  strict JSON-input unpaired-surrogate rejection are deliberate policies. Input line numbers
   can differ on unterminated tails and explicit EOF. Operand previews in type
   errors follow the bounded native form; explicit error payloads remain complete.
 - **CLI/host identity:** `-V` and `--build-configuration` identify Lokad.Jq.
