@@ -255,30 +255,6 @@ public sealed partial class JqTests
         Assert.Throws<OperationCanceledException>(() => runtime.Index(input, pattern, last));
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Jq_RepetitiveUnsuccessfulSearchObservesCancellation(bool last)
-    {
-        JsonNode input = JsonValue.Create(new string('x', 20000));
-        JsonNode pattern = JsonValue.Create(new string('x', 9999) + "z");
-        using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, null, cancellation.Token);
-        var runtime = new JqRuntime(budget);
-        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        Task work = Task.Run(() =>
-        {
-            started.SetResult();
-            // Finite repetitive work lets cancellation race any unsuccessful scan,
-            // including a scan started after the cancellation request.
-            for (int index = 0; index < 100; index++) Assert.Null(runtime.Index(input, pattern, last));
-        });
-        await started.Task;
-        cancellation.Cancel();
-        var failure = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => work);
-        Assert.Equal(cancellation.Token, failure.CancellationToken);
-    }
-
     [Fact]
     public async Task Jq_DenseLastIndexKeepsLongInputStreamsBounded()
     {

@@ -165,7 +165,7 @@ public sealed partial class JqTests
     {
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem { AppendRemainsOpen = false };
-        host.AddFile("/input", "0");
+        host.AddFile("/input", "0\n");
         host.AddFile("/later", "0");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", source, "/input", "/later")));
         Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));

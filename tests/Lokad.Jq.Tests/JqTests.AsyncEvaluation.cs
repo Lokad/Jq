@@ -178,7 +178,7 @@ public sealed partial class JqTests
     public async Task Jq_ResumedReadPreservesRefusalAndDownstreamClosure(bool refuse)
     {
         var inner = new MockFileSystem { AppendRemainsOpen = false };
-        inner.AddFile("/input", "42");
+        inner.AddFile("/input", "42\n");
         inner.AddFile("/later", "99");
         var host = new EvaluationReadHost(inner);
         var root = new BenchmarkMemoryBudget(64 * 1024);
