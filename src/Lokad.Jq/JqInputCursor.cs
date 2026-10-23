@@ -59,6 +59,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private bool _reportedFailure;
 
     internal void RecordFailure() => _reportedFailure = true;
+    internal bool HasOpenFailures { get; private set; }
     private JqFileDescriptor? _owned;
     private int _newlines;
     private bool _disposed;
@@ -269,44 +270,59 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     private async Task<bool> ActivateNextAsync()
     {
-        _budget.CheckCancellation();
-        _index++;
-        if (_index >= Math.Max(1, _sources.Count))
-            return false;
-        if (!_seq && !_stream)
+        while (true)
         {
-            _start = 0;
-            _count = 0;
-        }
-        _eof = false;
-        _bomPending = true;
-        _newlines = 0;
-        _active = true;
-        LastName = CurrentName;
-        // Like the reference file activation, the filename is known before
-        // the first value parses, so explicit-read failures report the
-        // source instead of unknown; the line stays zero until pulls advance it.
-        _context.InputFilename = LastName;
-        _context.InputLineNumber = 0;
-        if (_sources.Count == 0 || _sources[_index] == "-")
-        {
-            _owned = null;
+            _budget.CheckCancellation();
+            _index++;
+            if (_index >= Math.Max(1, _sources.Count))
+                return false;
+            if (!_seq && !_stream)
+            {
+                _start = 0;
+                _count = 0;
+            }
+            _eof = false;
+            _bomPending = true;
+            _newlines = 0;
+            _active = true;
+            LastName = CurrentName;
+            // Like the reference file activation, the filename is known before
+            // the first value parses, so explicit-read failures report the
+            // source instead of unknown; the line stays zero until pulls advance it.
+            _context.InputFilename = LastName;
+            _context.InputLineNumber = 0;
+            if (_sources.Count == 0 || _sources[_index] == "-")
+            {
+                _owned = null;
+                return true;
+            }
+            string operand = _sources[_index];
+            using var pathMemory = new JqMemoryReservation(_budget.MemoryBudget);
+            long length = (long)operand.Length + (operand.StartsWith('/') ? 0 : _workingDirectory.Path.Length + 1L);
+            pathMemory.Resize(128 + 64 * length);
+            JqResolvedPath source;
+            try { source = JqPathResolution.ResolveArgument(operand, _workingDirectory); }
+            catch (Exception exception) when (exception is FormatException or JqPathException)
+            { throw new JqInputException(exception.Message, 2); }
+            JqOpenedFile opened = await JqHostExtensions.GuardedOpenAsync(
+                _host, source.Absolute, _cancellationToken).ConfigureAwait(false);
+            if (opened.FileDescriptor is not { } descriptor)
+            {
+                HasOpenFailures = true;
+                RecordFailure();
+                pathMemory.Dispose();
+                var (host, stderr) = _context.Stderr
+                    ?? throw new InvalidOperationException("Input diagnostics require a host descriptor.");
+                JqAppendResult? written = await JqDiagnosticWriter.TryWriteAsync(host, stderr,
+                    ["jq: cannot open ", source.Display], true, _budget.MemoryBudget, _cancellationToken).ConfigureAwait(false);
+                if (written is not { CanAcceptMore: true })
+                    throw new JqOutputClosedException(written?.ExitCode ?? 5);
+                _active = false;
+                continue;
+            }
+            _owned = descriptor;
             return true;
         }
-        string operand = _sources[_index];
-        using var pathMemory = new JqMemoryReservation(_budget.MemoryBudget);
-        long length = (long)operand.Length + (operand.StartsWith('/') ? 0 : _workingDirectory.Path.Length + 1L);
-        pathMemory.Resize(128 + 64 * length);
-        JqResolvedPath source;
-        try { source = JqPathResolution.ResolveArgument(operand, _workingDirectory); }
-        catch (Exception exception) when (exception is FormatException or JqPathException)
-        { throw new JqInputException(exception.Message, 2); }
-        JqOpenedFile opened = await JqHostExtensions.GuardedOpenAsync(
-            _host, source.Absolute, _cancellationToken).ConfigureAwait(false);
-        if (opened.FileDescriptor is not { } descriptor)
-            throw new JqInputException($"cannot open {source.Display}", 2);
-        _owned = descriptor;
-        return true;
     }
 
     private async Task FillAsync()

@@ -143,7 +143,7 @@ internal static class JqExecutor
                 await using var inputs = OuterInputsAsync(cursor, invocation, context).GetAsyncEnumerator();
                 bool sawOutput = false;
                 bool lastFalseNull = false;
-                while (true)
+                while (!cursor.HasOpenFailures)
                 {
                     stage = 4;
                     cursor.ReleaseCompletedRecordStorage();
@@ -162,7 +162,7 @@ internal static class JqExecutor
                             if (!appended.CanAcceptMore)
                             {
                                 if (appended.IsError) cursor.RecordFailure();
-                                return appended.ExitCode == 0 ? stickyError : appended.ExitCode;
+                                return appended.ExitCode == 0 ? cursor.HasOpenFailures ? 2 : stickyError : appended.ExitCode;
                             }
                         }
                     }
@@ -178,6 +178,7 @@ internal static class JqExecutor
                         stickyError = 5;
                     }
                 }
+                if (cursor.HasOpenFailures) return 2;
                 if (stickyError != 0)
                     return stickyError;
                 if (invocation.ExitStatus)
@@ -197,7 +198,7 @@ internal static class JqExecutor
         }
         catch (JqOutputClosedException ex)
         {
-            return ex.ExitCode == 0 ? stickyError : ex.ExitCode;
+            return ex.ExitCode == 0 ? context.InputCursor?.HasOpenFailures == true ? 2 : stickyError : ex.ExitCode;
         }
         catch (JqHaltException ex)
         {
@@ -210,7 +211,7 @@ internal static class JqExecutor
                     false, memoryScope, cancellationToken).ConfigureAwait(false) is null)
                     return 5;
             }
-            return ex.ExitCode;
+            return context.InputCursor?.HasOpenFailures == true ? 2 : ex.ExitCode;
         }
         catch (JqQuotaException ex)
         {
@@ -227,7 +228,8 @@ internal static class JqExecutor
             // Malformed inputs report status 5 and missing input operands
             // report status 2, matching the reference command.
             return await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
-                cancellationToken).ConfigureAwait(false) is not null ? ex.ExitCode : 5;
+                cancellationToken).ConfigureAwait(false) is not null
+                ? context.InputCursor?.HasOpenFailures == true ? 2 : ex.ExitCode : 5;
         }
         catch (JqCloseException ex)
         {
