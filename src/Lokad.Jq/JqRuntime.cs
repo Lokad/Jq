@@ -1036,7 +1036,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         _ => throw new JqException($"{TypeName(node)} ({TruncatedDump(node)}) has no length"),
     };
 
-    private int CountStringScalars(string text)
+    private int CountStringScalars(ReadOnlySpan<char> text)
     {
         budget.CheckCancellation();
         int count = 0;
@@ -1400,13 +1400,65 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode? Index(JsonNode? input, JsonNode? needle, bool last)
     {
+        if (TryGetString(input, out string text) && TryGetString(needle, out string fragment))
+        {
+            int found = FindStringIndex(text, fragment, 0, last);
+            return found < 0 ? null : JsonValue.Create(CountStringScalars(text.AsSpan(0, found)));
+        }
         int? position = null;
         foreach (int index in MatchingIndices(input, needle))
         {
             if (!last) return JsonValue.Create(index);
             position = index;
         }
-        return position is { } found ? JsonValue.Create(found) : null;
+        return position is { } result ? JsonValue.Create(result) : null;
+    }
+
+    // Search bounded UTF-16 windows with the standard ordinal primitives. Long
+    // needles search by their tail and verify the prefix in cancellable chunks.
+    private int FindStringIndex(string text, string fragment, int start, bool last)
+    {
+        budget.CheckCancellation();
+        if (fragment.Length == 0 || fragment.Length > text.Length) return -1;
+        const int windowSize = 65536;
+        const int maximumAnchor = windowSize / 2;
+        int anchorOffset = Math.Max(0, fragment.Length - maximumAnchor);
+        ReadOnlySpan<char> anchor = fragment.AsSpan(anchorOffset);
+        int lastStart = text.Length - fragment.Length;
+        while (start <= lastStart)
+        {
+            budget.CheckCancellation();
+            int count = Math.Min(windowSize - anchor.Length + 1, lastStart - start + 1);
+            int first = last ? lastStart - count + 1 : start;
+            ReadOnlySpan<char> window = text.AsSpan(first + anchorOffset, count + anchor.Length - 1);
+            int relative = last ? window.LastIndexOf(anchor) : window.IndexOf(anchor);
+            budget.CheckCancellation();
+            if (relative < 0)
+            {
+                if (last) lastStart = first - 1;
+                else start += count;
+                continue;
+            }
+            int found = first + relative;
+            // Rune-based callers never start a match inside a surrogate pair.
+            if (!(found != 0 && char.IsLowSurrogate(text[found]) && char.IsHighSurrogate(text[found - 1]))
+                && PrefixMatches(found)) return found;
+            if (last) lastStart = found - 1;
+            else start = found + 1;
+        }
+        return -1;
+
+        bool PrefixMatches(int found)
+        {
+            for (int offset = 0; offset < anchorOffset;)
+            {
+                budget.CheckCancellation();
+                int count = Math.Min(maximumAnchor, anchorOffset - offset);
+                if (!text.AsSpan(found + offset, count).SequenceEqual(fragment.AsSpan(offset, count))) return false;
+                offset += count;
+            }
+            return true;
+        }
     }
 
     private IEnumerable<int> MatchingIndices(JsonNode? input, JsonNode? needle)
@@ -1414,34 +1466,18 @@ internal sealed partial class JqRuntime(JqBudget budget)
         budget.CheckCancellation();
         if (TryGetString(input, out var text) && text is not null && TryGetString(needle, out var fragment))
         {
-            // Scalar offsets, matching rune-wise substring search. Like the
-            // reference byte search, an empty needle matches nowhere and the
-            // scan resumes one scalar past each hit so overlaps are reported.
-            if (string.IsNullOrEmpty(fragment))
-                yield break;
             int position = 0;
             int scalar = 0;
-            foreach (Rune rune in text.EnumerateRunes())
+            while (true)
             {
-                if (position > text.Length - fragment.Length) break;
-                budget.CheckCancellation();
-                bool match = true;
-                for (int offset = 0; offset < fragment.Length;)
-                {
-                    budget.CheckCancellation();
-                    int count = Math.Min(4096, fragment.Length - offset);
-                    if (!text.AsSpan(position + offset, count).SequenceEqual(fragment.AsSpan(offset, count)))
-                    {
-                        match = false;
-                        break;
-                    }
-                    offset += count;
-                }
-                if (match) yield return scalar;
-                position += rune.Utf16SequenceLength;
+                int found = FindStringIndex(text, fragment, position, false);
+                if (found < 0) yield break;
+                scalar += CountStringScalars(text.AsSpan(position, found - position));
+                yield return scalar;
+                Rune.DecodeFromUtf16(text.AsSpan(found), out _, out int width);
+                position = found + width;
                 scalar++;
             }
-            yield break;
         }
         if (input is JsonArray values)
         {
