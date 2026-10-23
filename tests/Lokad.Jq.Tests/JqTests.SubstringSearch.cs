@@ -62,6 +62,47 @@ public sealed partial class JqTests
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 
+    [Theory]
+    [InlineData(131072, 65537)]
+    [InlineData(262144, 65537)]
+    [InlineData(262144, 131073)]
+    public void Jq_StringSearchLongNeedleMissKeepsTheWholePattern(int size, int length)
+    {
+        string fragment = new string('a', length / 4) + "b" + new string('a', length - length / 4 - 1);
+        var input = JsonValue.Create(new string('a', size));
+        var needle = JsonValue.Create(fragment);
+        using var budget = new JqBudget(CancellationToken.None);
+        var runtime = new JqRuntime(budget);
+        Assert.Null(runtime.Index(input, needle, false));
+        Assert.Null(runtime.Index(input, needle, true));
+        Assert.Empty(Assert.IsType<JsonArray>(runtime.Indices(input, needle)));
+    }
+
+    [Fact]
+    public void Jq_StringSearchLongNeedlesPreserveOverlapsAndCancellation()
+    {
+        string fragment = new('a', 65537);
+        using (var budget = new JqBudget(CancellationToken.None))
+        {
+            var runtime = new JqRuntime(budget);
+            var input = JsonValue.Create(fragment + "aaa");
+            var needle = JsonValue.Create(fragment);
+            Assert.Equal("[0,1,2,3]", runtime.Indices(input, needle).ToJsonString());
+            Assert.Equal(3, runtime.Index(input, needle, true)?.GetValue<int>());
+        }
+        using var cancellation = new CancellationTokenSource();
+        var root = new BenchmarkMemoryBudget(64 * 1024);
+        var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        {
+            var runtime = new JqRuntime(budget);
+            Assert.ThrowsAny<OperationCanceledException>(() => runtime.Indices(
+                JsonValue.Create(fragment + "b" + new string('a', 262144)), JsonValue.Create(fragment)));
+            Assert.ThrowsAny<OperationCanceledException>(() => runtime.Index(JsonValue.Create(fragment), JsonValue.Create(fragment), true));
+        }
+        Assert.Equal(0, root.ReservedBytes);
+    }
+
     [Fact]
     public void Jq_StringSearchObservesCancellationDuringResultAdmission()
     {

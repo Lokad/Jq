@@ -1379,24 +1379,21 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return position is { } result ? JsonValue.Create(result) : null;
     }
 
-    // Search bounded UTF-16 windows with the standard ordinal primitives. Long
-    // needles search by their tail and verify the prefix in cancellable chunks.
+    // Each ordinal call searches at most 64 Ki candidate starts. Its source
+    // window also includes the whole needle; cancellation is checked around it.
     private int FindStringIndex(string text, string fragment, int start, bool last)
     {
         budget.CheckCancellation();
         if (fragment.Length == 0 || fragment.Length > text.Length) return -1;
-        const int windowSize = 65536;
-        const int maximumAnchor = windowSize / 2;
-        int anchorOffset = Math.Max(0, fragment.Length - maximumAnchor);
-        ReadOnlySpan<char> anchor = fragment.AsSpan(anchorOffset);
+        const int windowStarts = 65536;
         int lastStart = text.Length - fragment.Length;
         while (start <= lastStart)
         {
             budget.CheckCancellation();
-            int count = Math.Min(windowSize - anchor.Length + 1, lastStart - start + 1);
+            int count = Math.Min(windowStarts, lastStart - start + 1);
             int first = last ? lastStart - count + 1 : start;
-            ReadOnlySpan<char> window = text.AsSpan(first + anchorOffset, count + anchor.Length - 1);
-            int relative = last ? window.LastIndexOf(anchor) : window.IndexOf(anchor);
+            ReadOnlySpan<char> window = text.AsSpan(first, fragment.Length + (count - 1));
+            int relative = last ? window.LastIndexOf(fragment.AsSpan()) : window.IndexOf(fragment.AsSpan());
             budget.CheckCancellation();
             if (relative < 0)
             {
@@ -1406,24 +1403,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
             int found = first + relative;
             // Rune-based callers never start a match inside a surrogate pair.
-            if (!(found != 0 && char.IsLowSurrogate(text[found]) && char.IsHighSurrogate(text[found - 1]))
-                && PrefixMatches(found)) return found;
+            if (!(found != 0 && char.IsLowSurrogate(text[found]) && char.IsHighSurrogate(text[found - 1])))
+                return found;
             if (last) lastStart = found - 1;
             else start = found + 1;
         }
         return -1;
-
-        bool PrefixMatches(int found)
-        {
-            for (int offset = 0; offset < anchorOffset;)
-            {
-                budget.CheckCancellation();
-                int count = Math.Min(maximumAnchor, anchorOffset - offset);
-                if (!text.AsSpan(found + offset, count).SequenceEqual(fragment.AsSpan(offset, count))) return false;
-                offset += count;
-            }
-            return true;
-        }
     }
 
     private IEnumerable<int> MatchingIndices(JsonNode? input, JsonNode? needle)
