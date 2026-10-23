@@ -138,7 +138,7 @@ steps below 4 KiB and one 4 KiB block above it. Credit is acquired on demand.
 | Owner | Maximum reusable admission |
 | --- | --- |
 | Outer record | 4 KiB after a safe boundary; retained values stay charged. |
-| Sequence/stream cursor | Retained demand plus 256 bytes; 512 after 32 small charges. |
+| Stream cursor | Retained demand plus 256 bytes; 512 after 32 small charges. |
 | Serialization and diagnostic encoding | One returned buffer within 4 KiB after 32 results. |
 | Regex subject | One returned UTF-8 buffer within 4 KiB. |
 

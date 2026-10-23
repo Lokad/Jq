@@ -47,7 +47,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private byte[] _readBuffer = [];
     private readonly JqMemoryReservation _readMemory;
     private readonly JqMemoryReservation _bufferMemory;
-    private readonly JqStorage _retainedValues;
+    private readonly JqStorage? _retainedValues;
 
     private int _index = -1;
     private bool _active;
@@ -73,7 +73,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private bool _seqEof;
     private int _seqSearched;
     private int _seqBoundary = -1;
-    private long _seqPendingBytes;
     private bool _seqStarted;
     private int _seqOriginLine;
     private int _seqOriginCol;
@@ -91,7 +90,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _budget = context.Budget;
         _readMemory = new JqMemoryReservation(_budget.MemoryBudget);
         _bufferMemory = new JqMemoryReservation(_budget.MemoryBudget);
-        _retainedValues = _budget.CreateStorageOwner();
+        _retainedValues = invocation.Stream ? _budget.CreateStorageOwner() : null;
         _runtime = context.Runtime;
         _context = context;
         _stdin = invocation.StdIn;
@@ -114,8 +113,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     internal void ReleaseCompletedRecordStorage()
     {
-        long retained = (_scanner?.RetainedValueBytes ?? 0) + _seqPendingBytes;
-        _retainedValues.ReconcileCursor(retained);
+        _retainedValues?.ReconcileCursor(_scanner?.RetainedValueBytes ?? 0);
     }
 
     // Async pull for outer iteration. Returns false when every source is
@@ -365,8 +363,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private async Task CloseAndAdvanceAsync(Exception? earlier)
     {
         _jsonReader?.Reset();
-        _retainedValues.DiscardBytes(_seqPendingBytes);
-        _seqPendingBytes = 0;
         _seqStarted = false;
         _seqSearched = 0;
         _seqBoundary = -1;
@@ -475,7 +471,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     private async Task<(bool HasValue, JsonNode? Value)> PullSeqAsync()
     {
-        using var storage = _budget.UseStorage(_retainedValues);
+        // A pull finishes or abandons its tree before yielding. Unlike stream
+        // events, sequence values need no owner beyond the current outer record.
+        var storage = _budget.TemporaryStorage
+            ?? throw new InvalidOperationException("Sequence input requires record storage.");
+        long pendingBytes = 0;
         if (_jsonReader is not { } reader)
             throw new InvalidOperationException("JSON input reader is unavailable.");
         while (true)
@@ -514,7 +514,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 _seqOriginCol = _scanCol + 1;
                 _seqStarted = true;
             }
-            long before = _retainedValues.UsedBytes;
+            long before = storage.UsedBytes;
             try
             {
                 // Sequence literals need a following delimiter. The standard
@@ -526,18 +526,18 @@ internal sealed class JqInputCursor : IAsyncDisposable
                     _seqEof && bareLiteral, out JsonNode? value, out consumed))
                 {
                     Advance(consumed);
-                    _seqPendingBytes = 0;
+                    pendingBytes = 0;
                     _seqStarted = false;
                     SetPosition(1 + _newlines);
                     return (true, value);
                 }
-                _seqPendingBytes += _retainedValues.UsedBytes - before;
+                pendingBytes += storage.UsedBytes - before;
                 // Retire committed tokens, keeping the unfinished token bytes.
                 Advance(consumed);
             }
             catch (JqException error) when (error is not JqQuotaException)
             {
-                _seqPendingBytes += _retainedValues.UsedBytes - before;
+                pendingBytes += storage.UsedBytes - before;
                 throw await ParseWarningAsync(error, reader.ContainerDepth).ConfigureAwait(false);
             }
             length = SectionLength();
@@ -591,8 +591,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
         void AbandonValue()
         {
             reader.Reset();
-            _retainedValues.DiscardBytes(_seqPendingBytes);
-            _seqPendingBytes = 0;
+            storage.DiscardBytes(pendingBytes);
+            pendingBytes = 0;
             _seqStarted = false;
         }
 
@@ -686,6 +686,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     private async Task<(bool HasValue, JsonNode? Value)> PullStreamAsync()
     {
+        ArgumentNullException.ThrowIfNull(_retainedValues);
         using var storage = _budget.UseStorage(_retainedValues);
         ArgumentNullException.ThrowIfNull(_scanner);
         while (true)
