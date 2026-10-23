@@ -2046,37 +2046,35 @@ internal sealed class InterpolatedStringFilter : JqFilter
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(program);
         ArgumentNullException.ThrowIfNull(parsePiece);
+        budget.ReserveMetadata(64, 1);
         var segments = new List<Segment>();
-        var literal = new StringBuilder();
-        for (var i = 0; i < template.Length; i++)
+        int literalStart = 0;
+        for (int i = 0; i < template.Length; i++)
         {
             budget.CheckCancellation();
-            if (template[i] == (char)92 && i + 1 < template.Length && template[i + 1] == (char)92)
-            {
-                literal.Append(template, i, 2);
-                i++;
-            }
-            else if (template[i] == (char)92 && i + 1 < template.Length && template[i + 1] == (char)40)
-            {
-                var start = i + 2;
-                i = Lexer.FindInterpolationEnd(template, start, span, program, budget);
-                if (i == template.Length)
-                    throw new JqCompileException("unterminated string interpolation", span, program);
-                if (literal.Length > 0)
-                {
-                    segments.Add(new Literal(Lexer.DecodeLiterals(literal.ToString())));
-                    literal.Clear();
-                }
-                segments.Add(new Interpolation(parsePiece(template[start..i])));
-            }
-            else
-            {
-                literal.Append(template[i]);
-            }
+            if (template[i] != '\\' || i + 1 == template.Length) continue;
+            if (template[i + 1] == '\\') { i++; continue; }
+            if (template[i + 1] != '(') continue;
+            AddLiteral(literalStart, i);
+            int start = i + 2;
+            i = Lexer.FindInterpolationEnd(template, start, span, program, budget);
+            if (i == template.Length)
+                throw new JqCompileException("unterminated string interpolation", span, program);
+            budget.ReserveString(i - start);
+            budget.ReserveMetadata(64, 1);
+            segments.Add(new Interpolation(parsePiece(template[start..i])));
+            literalStart = i + 1;
         }
-        if (literal.Length > 0)
-            segments.Add(new Literal(Lexer.DecodeLiterals(literal.ToString())));
+        AddLiteral(literalStart, template.Length);
         return segments;
+
+        void AddLiteral(int start, int end)
+        {
+            if (start == end) return;
+            budget.ReserveString(end - start);
+            budget.ReserveMetadata(64, 1);
+            segments.Add(new Literal(Lexer.DecodeLiterals(template[start..end], budget)));
+        }
     }
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)

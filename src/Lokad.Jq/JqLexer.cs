@@ -33,9 +33,14 @@ internal static class Lexer
 
     // Collapses the surviving escaped backslash pairs after splitting. Other
     // escapes were decoded while lexing, so no other backslashes remain.
-    internal static string DecodeLiterals(string raw)
+    internal static string DecodeLiterals(string raw, JqBudget budget)
     {
-        return raw.Replace("\\\\", "\\");
+        budget.CheckCancellation();
+        if (!raw.Contains("\\\\", StringComparison.Ordinal)) return raw;
+        budget.ReserveString(raw.Length);
+        string result = raw.Replace("\\\\", "\\", StringComparison.Ordinal);
+        budget.CheckCancellation();
+        return result;
     }
 
     // Comments share one continuation rule in ordinary code and interpolation.
@@ -108,194 +113,232 @@ internal static class Lexer
         ArgumentNullException.ThrowIfNull(programSource);
         ArgumentNullException.ThrowIfNull(budget);
         budget.CheckCancellation();
-        budget.ReserveBytes(128 + 4L * source.Length);
-        var tokens = new List<Token>();
-        int position = 0;
-        int line = 1;
-        int lineStart = 0;
-        JqSourceSpan SpanAt(int offset)
+        budget.ReserveBytes(128);
+        JqScopeStorage? literalStorage = null;
+        try
         {
-            for (; position < offset; position++)
+            var tokens = new List<Token>();
+            int position = 0;
+            int line = 1;
+            int lineStart = 0;
+            JqSourceSpan SpanAt(int offset)
             {
-                if ((position & 4095) == 0) budget.CheckCancellation();
-                if (source[position] == '\n') { line++; lineStart = position + 1; }
-            }
-            return new JqSourceSpan(line, offset - lineStart + 1);
-        }
-        void AddToken(Token token)
-        {
-            if (tokens.Count == tokens.Capacity)
-            {
-                int capacity = (int)Math.Min(Array.MaxLength, Math.Max(4, 2L * tokens.Capacity));
-                if (tokens.Count == Array.MaxLength)
-                    throw new JqQuotaException("token backing cannot be represented");
-                // Token backing capacity plus a coarse allowance for syntax and
-                // literal metadata retained with this compiled program.
-                budget.ReserveBytes(128L * capacity);
-                tokens.EnsureCapacity(capacity);
-            }
-            tokens.Add(token);
-        }
-        for (var i = 0; i < source.Length;)
-        {
-            budget.CheckCancellation();
-            var c = source[i];
-            if (char.IsWhiteSpace(c)) { i++; continue; }
-            if (c == '#')
-            {
-                i = SkipComment(source, i, budget);
-                continue;
-            }
-            if (char.IsLetter(c) || c == '_')
-            {
-                var start = i++;
-                while (i < source.Length && (char.IsLetterOrDigit(source[i]) || source[i] == '_'))
+                for (; position < offset; position++)
                 {
-                    budget.CheckCancellation();
-                    i++;
+                    if ((position & 4095) == 0) budget.CheckCancellation();
+                    if (source[position] == '\n') { line++; lineStart = position + 1; }
                 }
-                // An adjacent dot token distinguishes .else from . else without mistaking
-                // a numeric decimal point (1.then) for field access.
-                var isField = start > 0 && source[start - 1] == '.'
-                    && tokens.Count > 0 && tokens[^1] is { Kind: TokenKind.Symbol, Text: "." };
-                if (!isField)
+                return new JqSourceSpan(line, offset - lineStart + 1);
+            }
+            void AddToken(Token token)
+            {
+                if (tokens.Count == tokens.Capacity)
                 {
-                    // Qualified names (foo::bar) are single tokens when contiguous,
-                    // matching the reference IDENT rule. A trailing :: without a
-                    // following name stays separate symbols.
-                    while (i + 2 < source.Length && source[i] == ':' && source[i + 1] == ':'
-                        && (char.IsLetter(source[i + 2]) || source[i + 2] == '_'))
+                    int capacity = (int)Math.Min(Array.MaxLength, Math.Max(4, 2L * tokens.Capacity));
+                    if (tokens.Count == Array.MaxLength)
+                        throw new JqQuotaException("token backing cannot be represented");
+                    // Token backing capacity plus a coarse allowance for syntax and
+                    // literal metadata retained with this compiled program.
+                    budget.ReserveBytes(128L * capacity);
+                    tokens.EnsureCapacity(capacity);
+                }
+                tokens.Add(token);
+            }
+            for (var i = 0; i < source.Length;)
+            {
+                budget.CheckCancellation();
+                var c = source[i];
+                if (char.IsWhiteSpace(c)) { i++; continue; }
+                if (c == '#')
+                {
+                    i = SkipComment(source, i, budget);
+                    continue;
+                }
+                if (char.IsLetter(c) || c == '_')
+                {
+                    var start = i++;
+                    while (i < source.Length && (char.IsLetterOrDigit(source[i]) || source[i] == '_'))
                     {
-                        i += 2;
-                        while (i < source.Length && (char.IsLetterOrDigit(source[i]) || source[i] == '_'))
+                        budget.CheckCancellation();
+                        i++;
+                    }
+                    // An adjacent dot token distinguishes .else from . else without mistaking
+                    // a numeric decimal point (1.then) for field access.
+                    var isField = start > 0 && source[start - 1] == '.'
+                        && tokens.Count > 0 && tokens[^1] is { Kind: TokenKind.Symbol, Text: "." };
+                    if (!isField)
+                    {
+                        // Qualified names (foo::bar) are single tokens when contiguous,
+                        // matching the reference IDENT rule. A trailing :: without a
+                        // following name stays separate symbols.
+                        while (i + 2 < source.Length && source[i] == ':' && source[i + 1] == ':'
+                            && (char.IsLetter(source[i + 2]) || source[i + 2] == '_'))
+                        {
+                            i += 2;
+                            while (i < source.Length && (char.IsLetterOrDigit(source[i]) || source[i] == '_'))
+                            {
+                                budget.CheckCancellation();
+                                i++;
+                            }
+                        }
+                    }
+                    var kind = isField ? TokenKind.FieldName : TokenKind.Identifier;
+                    budget.ReserveString(i - start);
+                    AddToken(new Token(kind, source[start..i], SpanAt(start)));
+                    continue;
+                }
+                // Numbers never take a sign; `-` stays an operator so `1+2` and
+                // `1 - -2` parse. A trailing dot stays literal (even before
+                // keywords, as in `1.then`), while `+`/`-` only continue exponents.
+                // Leading-dot fractions (`.5`) match the reference literal syntax.
+                if (char.IsDigit(c) || (c == '.' && i + 1 < source.Length && char.IsDigit(source[i + 1])))
+                {
+                    var start = i;
+                    while (i < source.Length && char.IsDigit(source[i]))
+                    {
+                        budget.CheckCancellation();
+                        i++;
+                    }
+                    if (i < source.Length && source[i] == '.')
+                    {
+                        i++;
+                        while (i < source.Length && char.IsDigit(source[i]))
                         {
                             budget.CheckCancellation();
                             i++;
                         }
                     }
-                }
-                var kind = isField ? TokenKind.FieldName : TokenKind.Identifier;
-                AddToken(new Token(kind, source[start..i], SpanAt(start)));
-                continue;
-            }
-            // Numbers never take a sign; `-` stays an operator so `1+2` and
-            // `1 - -2` parse. A trailing dot stays literal (even before
-            // keywords, as in `1.then`), while `+`/`-` only continue exponents.
-            // Leading-dot fractions (`.5`) match the reference literal syntax.
-            if (char.IsDigit(c) || (c == '.' && i + 1 < source.Length && char.IsDigit(source[i + 1])))
-            {
-                var start = i;
-                while (i < source.Length && char.IsDigit(source[i]))
-                {
-                    budget.CheckCancellation();
-                    i++;
-                }
-                if (i < source.Length && source[i] == '.')
-                {
-                    i++;
-                    while (i < source.Length && char.IsDigit(source[i]))
+                    if (i < source.Length && source[i] is 'e' or 'E')
                     {
-                        budget.CheckCancellation();
                         i++;
-                    }
-                }
-                if (i < source.Length && source[i] is 'e' or 'E')
-                {
-                    i++;
-                    if (i < source.Length && source[i] is '+' or '-')
-                        i++;
-                    while (i < source.Length && char.IsDigit(source[i]))
-                    {
-                        budget.CheckCancellation();
-                        i++;
-                    }
-                }
-                AddToken(new Token(TokenKind.Number, source[start..i], SpanAt(start)));
-                continue;
-            }
-            if (c == '"')
-            {
-                var start = i;
-                var sb = new StringBuilder();
-                i++;
-                var closed = false;
-                while (i < source.Length)
-                {
-                    budget.CheckCancellation();
-                    c = source[i++];
-                    if (c == '"') { closed = true; break; }
-                    if (c == '\\' && i < source.Length)
-                    {
-                        if (source[i] == '(')
+                        if (i < source.Length && source[i] is '+' or '-')
+                            i++;
+                        while (i < source.Length && char.IsDigit(source[i]))
                         {
-                            int end = FindInterpolationEnd(source, i + 1, SpanAt(start), programSource, budget);
-                            if (end == source.Length) break;
-                            sb.Append(source, i - 1, end - i + 2);
-                            i = end + 1;
-                            continue;
+                            budget.CheckCancellation();
+                            i++;
                         }
-                        var e = source[i++];
-                        // Keep escaped backslash pairs raw so the interpolation
-                        // splitter can tell literal backslash-paren from a marker.
-                        if (e == (char)92)
+                    }
+                    budget.ReserveString(i - start);
+                    AddToken(new Token(TokenKind.Number, source[start..i], SpanAt(start)));
+                    continue;
+                }
+                if (c == '"')
+                {
+                    var start = i;
+                    JqScopeStorage workspace = literalStorage ??= new JqScopeStorage(budget);
+                    long workspaceBytes = 64 + 2 * 16;
+                    workspace.Reserve(workspaceBytes, 1);
+                    budget.CheckCancellation();
+                    var sb = new StringBuilder(16);
+                    void Ensure(int count)
+                    {
+                        long required = (long)sb.Length + count;
+                        if (required > int.MaxValue) throw new JqQuotaException("string result cannot be represented");
+                        if (required <= sb.Capacity) return;
+                        int capacity = (int)Math.Min(int.MaxValue, Math.Max(required, 2L * sb.Capacity));
+                        long nextBytes = 64 + 2L * capacity;
+                        workspace.Reserve(nextBytes, 1);
+                        budget.CheckCancellation();
+                        sb.EnsureCapacity(capacity);
+                        workspace.Release(workspaceBytes);
+                        workspaceBytes = nextBytes;
+                    }
+                    i++;
+                    var closed = false;
+                    while (i < source.Length)
+                    {
+                        budget.CheckCancellation();
+                        c = source[i++];
+                        if (c == '"') { closed = true; break; }
+                        if (c == '\\' && i < source.Length)
                         {
-                            sb.Append((char)92);
-                            sb.Append(e);
+                            if (source[i] == '(')
+                            {
+                                int end = FindInterpolationEnd(source, i + 1, SpanAt(start), programSource, budget);
+                                if (end == source.Length) break;
+                                Ensure(end - i + 2);
+                                sb.Append(source, i - 1, end - i + 2);
+                                i = end + 1;
+                                continue;
+                            }
+                            var e = source[i++];
+                            // Keep escaped backslash pairs raw so the interpolation
+                            // splitter can tell literal backslash-paren from a marker.
+                            if (e == (char)92)
+                            {
+                                Ensure(2);
+                                sb.Append((char)92);
+                                sb.Append(e);
+                            }
+                            else
+                            {
+                                Ensure(1);
+                                sb.Append(e switch
+                                {
+                                    '"' => '"',
+                                    '/' => '/',
+                                    'b' => '\b',
+                                    'f' => '\f',
+                                    'n' => '\n',
+                                    'r' => '\r',
+                                    't' => '\t',
+                                    'u' when i + 4 <= source.Length && int.TryParse(source[(i)..(i += 4)], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var codePoint) => (char)codePoint,
+                                    'u' => throw new JqCompileException("invalid unicode escape", SpanAt(i - 2), programSource),
+                                    _ => throw new JqCompileException($"invalid escape '\\{e}'", SpanAt(i - 2), programSource),
+                                });
+                            }
                         }
                         else
-                        sb.Append(e switch
                         {
-                            '"' => '"',
-                            '/' => '/',
-                            'b' => '\b',
-                            'f' => '\f',
-                            'n' => '\n',
-                            'r' => '\r',
-                            't' => '\t',
-                            'u' when i + 4 <= source.Length && int.TryParse(source[(i)..(i += 4)], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var codePoint) => (char)codePoint,
-                            'u' => throw new JqCompileException("invalid unicode escape", SpanAt(i - 2), programSource),
-                            _ => throw new JqCompileException($"invalid escape '\\{e}'", SpanAt(i - 2), programSource),
-                        });
+                            Ensure(1);
+                            sb.Append(c);
+                        }
                     }
-                    else
-                        sb.Append(c);
+                    if (!closed)
+                        throw new JqCompileException("unterminated string", SpanAt(start), programSource);
+                    string text = budget.Finish(sb);
+                    workspace.Release(workspaceBytes);
+                    AddToken(new Token(TokenKind.String, text, SpanAt(start)));
+                    continue;
                 }
-                if (!closed)
-                    throw new JqCompileException("unterminated string", SpanAt(start), programSource);
-                AddToken(new Token(TokenKind.String, sb.ToString(), SpanAt(start)));
-                continue;
-            }
 
-            var two = i + 1 < source.Length ? source.Substring(i, 2) : string.Empty;
-            // The destructuring alternative is one token only when contiguous;
-            // spaced `?` and `//` stay a postfix suppression plus alternative.
-            if (i + 3 <= source.Length && source.Substring(i, 3) == "?//")
-            {
-                AddToken(new Token(TokenKind.Symbol, "?//", SpanAt(i)));
-                i += 3;
-                continue;
+                ReadOnlySpan<char> remaining = source.AsSpan(i);
+                if (remaining.StartsWith("?//", StringComparison.Ordinal))
+                {
+                    AddToken(new Token(TokenKind.Symbol, "?//", SpanAt(i)));
+                    i += 3;
+                    continue;
+                }
+                if (remaining.StartsWith("//=", StringComparison.Ordinal))
+                {
+                    AddToken(new Token(TokenKind.Symbol, "//=", SpanAt(i)));
+                    i += 3;
+                    continue;
+                }
+                string? pair = i + 1 == source.Length ? null : (c, source[i + 1]) switch
+                {
+                    ('=', '=') => "==", ('!', '=') => "!=", ('<', '=') => "<=", ('>', '=') => ">=",
+                    ('/', '/') => "//", ('|', '=') => "|=", ('+', '=') => "+=", ('-', '=') => "-=",
+                    ('*', '=') => "*=", ('/', '=') => "/=", ('%', '=') => "%=", _ => null,
+                };
+                if (pair is not null)
+                {
+                    AddToken(new Token(TokenKind.Symbol, pair, SpanAt(i)));
+                    i += 2;
+                    continue;
+                }
+                if (".,|+-*/%()[]{}:;$?<>@=".Contains(c, StringComparison.Ordinal))
+                {
+                    AddToken(new Token(TokenKind.Symbol, c.ToString(), SpanAt(i)));
+                    i++;
+                    continue;
+                }
+                throw new JqCompileException($"invalid character {c}", SpanAt(i), programSource);
             }
-            if (i + 3 <= source.Length && source.Substring(i, 3) == "//=")
-            {
-                AddToken(new Token(TokenKind.Symbol, "//=", SpanAt(i)));
-                i += 3;
-                continue;
-            }
-            if (two is "==" or "!=" or "<=" or ">=" or "//" or "|=" or "+=" or "-=" or "*=" or "/=" or "%=")
-            {
-                AddToken(new Token(TokenKind.Symbol, two, SpanAt(i)));
-                i += 2;
-                continue;
-            }
-            if (".,|+-*/%()[]{}:;$?<>@=".Contains(c, StringComparison.Ordinal))
-            {
-                AddToken(new Token(TokenKind.Symbol, c.ToString(), SpanAt(i)));
-                i++;
-                continue;
-            }
-            throw new JqCompileException($"invalid character {c}", SpanAt(i), programSource);
+            AddToken(new Token(TokenKind.End, "<end>", SpanAt(source.Length)));
+            return tokens;
         }
-        AddToken(new Token(TokenKind.End, "<end>", SpanAt(source.Length)));
-        return tokens;
+        finally { literalStorage?.Dispose(); }
     }
 }

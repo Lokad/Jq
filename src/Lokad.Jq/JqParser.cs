@@ -136,7 +136,7 @@ internal sealed class JqParser(
         var pathToken = Next();
         if (Lexer.ContainsInterpolation(pathToken.Text))
             throw Error("Import path must be constant", pathToken.Span);
-        string relPath = Lexer.DecodeLiterals(pathToken.Text);
+        string relPath = Lexer.DecodeLiterals(pathToken.Text, _budget);
         string? alias = null;
         bool isData = false;
         if (!isInclude)
@@ -800,7 +800,7 @@ internal sealed class JqParser(
                 }
                 else if (Peek().Kind == TokenKind.String)
                 {
-                    var name = Lexer.DecodeLiterals(Next().Text);
+                    var name = Lexer.DecodeLiterals(Next().Text, _budget);
                     var optional = Match("?");
                     filter = new FieldFilter(filter, name, optional);
                 }
@@ -879,9 +879,9 @@ internal sealed class JqParser(
                 return new RecursiveDescentFilter();
             var identity = new IdentityFilter();
             if (Peek().Kind == TokenKind.FieldName)
-            return new FieldFilter(identity, Lexer.DecodeLiterals(Next().Text), Match("?"));
+            return new FieldFilter(identity, Lexer.DecodeLiterals(Next().Text, _budget), Match("?"));
             if (Peek().Kind == TokenKind.String)
-                return new FieldFilter(identity, Lexer.DecodeLiterals(Next().Text), Match("?"));
+                return new FieldFilter(identity, Lexer.DecodeLiterals(Next().Text, _budget), Match("?"));
             if (Match("["))
                 return ParseBracket(identity);
             return identity;
@@ -985,7 +985,7 @@ internal sealed class JqParser(
         if (token.Kind == TokenKind.String)
             return Lexer.ContainsInterpolation(token.Text)
                 ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource, ParseInterpolationPiece, _budget)
-                : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text)));
+                : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text, _budget)));
         if (token.Kind == TokenKind.Identifier)
         {
             if (token.Text == "null") return new LiteralFilter(null);
@@ -1047,7 +1047,7 @@ internal sealed class JqParser(
                     bool isDynamic = KeyFilterForIsDynamic(keyToken);
                     properties.Add(isDynamic
                         ? new ObjectProperty(null, KeyFilterFor(keyToken), ParseDictValue())
-                        : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text), null, ParseDictValue()));
+                        : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text, _budget), null, ParseDictValue()));
                 }
                 else if (keyToken.Kind == TokenKind.String)
                 {
@@ -1056,7 +1056,7 @@ internal sealed class JqParser(
                     bool interpolated = KeyFilterForIsDynamic(keyToken);
                     properties.Add(interpolated
                         ? new ObjectProperty(null, KeyFilterFor(keyToken), new IndexFilter(new IdentityFilter(), KeyFilterFor(keyToken), false))
-                        : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text), null, new FieldFilter(new IdentityFilter(), Lexer.DecodeLiterals(keyToken.Text), true)));
+                        : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text, _budget), null, new FieldFilter(new IdentityFilter(), Lexer.DecodeLiterals(keyToken.Text, _budget), true)));
                 }
                 else
                 {
@@ -1070,7 +1070,7 @@ internal sealed class JqParser(
 
     private JqFilter KeyFilterFor(Token token) => Lexer.ContainsInterpolation(token.Text)
         ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource, ParseInterpolationPiece, _budget)
-        : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text)));
+        : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text, _budget)));
 
     private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && Lexer.ContainsInterpolation(token.Text);
 
