@@ -11,10 +11,10 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        string text = JqMatch.RequireText(context, input);
         await foreach (var flags in (args.Count == 3 ? args[2].Evaluate(input, context, environment) : Enumerable.Repeat<JsonNode?>(null, 1).ToAsyncEnumerable()).ConfigureAwait(false))
         await foreach (var pattern in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
         {
+            string text = JqMatch.RequireText(context, input);
             string flagText = JqMatch.RequireModifiers(context, flags);
             JqRegexOptions options = JqRegexOptions.ParseOrThrow(flagText);
             // sub without an explicit g flag stops after the first match.

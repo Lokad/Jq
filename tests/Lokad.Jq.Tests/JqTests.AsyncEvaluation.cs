@@ -67,6 +67,11 @@ public sealed partial class JqTests
     [InlineData("try input catch .")]
     [InlineData("first(inputs)")]
     [InlineData("\"m\" | modulemeta")]
+    [InlineData("try bsearch(input) catch .")]
+    [InlineData("try sub(input; \"x\") catch .")]
+    [InlineData("try gsub(input; \"x\") catch .")]
+    [InlineData("try sub(\"x\"; \"x\"; input) catch .")]
+    [InlineData("try gsub(\"x\"; \"x\"; input) catch .")]
     public async Task Jq_PendingEvaluationReadCancelsAndRefunds(string body)
     {
         var inner = new MockFileSystem();
@@ -77,7 +82,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/", body, "/input")));
         Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
-        await host.Entered.Task;
+        await host.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));

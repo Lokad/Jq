@@ -397,10 +397,10 @@ internal sealed class BsearchFilter(JqFilter Target) : JqFilter
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (input is not JsonArray sorted)
-            throw new JqException($"{JqRuntime.TypeName(input)} ({context.Runtime.TruncatedDump(input)}) cannot be searched from");
         await foreach (JsonNode? target in Target.Evaluate(input, context, environment).ConfigureAwait(false))
         {
+            if (input is not JsonArray sorted)
+                throw new JqException($"{JqRuntime.TypeName(input)} ({context.Runtime.TruncatedDump(input)}) cannot be searched from");
             using var comparer = new JqComparer(context.Budget);
             int low = 0;
             int high = sorted.Count;
