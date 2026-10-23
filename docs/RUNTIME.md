@@ -34,16 +34,17 @@ on completion. Reads must make progress or report EOF/failure; EOF may accompany
 the last bytes. `AppendWhileOpenAsync` may stay pending to apply backpressure and
 must copy bytes retained beyond completion.
 Execution awaits writes before reusing buffers and stops production on downstream
-closure or failure. Debug, stderr and sequence warnings await their writes before
-continuing evaluation. Earlier reported evaluation errors remain nonzero after
+closure or failure. Debug renders its envelope around the borrowed value;
+debug, stderr and sequence warnings await writes before continuing evaluation. Earlier reported evaluation errors remain nonzero after
 normal downstream closure. Cancellation alone does not end a pending buffer borrow.
 Pending reads, including `input`, `inputs` and `modulemeta`, suspend evaluation
 without blocking the caller. Pure evaluation completes synchronously.
 
 Outer iteration and `input`/`inputs` share one pull cursor. File operands resolve and open
 lazily; `-` uses borrowed stdin at its current position. UTF-8 JSON values and raw
-lines may span reads. JSON decoding retains completed nodes across reads,
-including non-finite literals, and discards parsed byte prefixes before further
+lines may span reads. JSON files form one parse stream: tokens can span sources,
+and one leading UTF-8 BOM belongs to that stream. Decoding retains completed
+nodes, including non-finite literals, and discards parsed prefixes before further
 reads. Definitive JSON errors stop further reads; incomplete
 tokens wait for more bytes. LF splits raw input; CR is data. Slurp aggregates the cursor;
 `--stream` emits path/leaf events. `--seq` uses incremental JSON decoding with RS
@@ -123,13 +124,14 @@ stops deferred work.
 Selectors and loop transitions carry selected paths through updates; `last(expr)`
 retains its reduction semantics.
 Iterative tree/path operations retain ancestor cursors rather than whole traversal
-inventories. Filtered paths materialize only accepted results; `rindex` retains
-only the last match. Recursive consumers still enforce their construction depth.
+inventories. Filtered paths materialize only accepted results. String searches
+preserve overlapping scalar indices; `rindex` searches from the end. Recursive consumers still enforce their construction depth.
 
 Comparisons, ordering, serialization and regex subjects reuse admitted scratch
 where its lifetime is known. Replacements cover overlapping old/new capacity.
 Fresh strings, date remainders and constructed error messages admit before copying;
-long scans observe cancellation. Shared error payloads keep their existing charge.
+long scans observe cancellation. Type errors render bounded operand previews;
+explicit error and halt payloads keep their full contents and existing ownership.
 
 Already-admitted credit amortizes host calls and stays charged. Cold small charges
 and large payload copies stay exact; repeated small headers can round in 256-byte

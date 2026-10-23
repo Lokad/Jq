@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Treat JSON input files as one logical stream: continue split values across
+  sources and recognize one initial UTF-8 BOM in JSON, stream and sequence modes.
+- Render debug envelopes around borrowed values, avoiding discarded tree copies.
+- Bound type-error operand previews using the shared writer; retain complete
+  explicit error/halt payloads and output. Match native numeric time-type errors.
+- Search strings with ordinal primitives while preserving Unicode scalar offsets,
+  overlaps and cancellation; search backwards for the last match.
+- Skip inactive streaming machinery in raw mode and localize sequence pull state.
+
 - Recover failed input opens within the shared pull cursor and preserve system
   status outside jq handlers, including explicit reads and slurp.
 - Load selected file-valued arguments in option order before later options and

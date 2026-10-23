@@ -40,7 +40,8 @@ can restore its path.
   have an engine limitation. See [regex behavior](REGEX.md).
 - **Diagnostics and Unicode:** JSON reader wording, UTF-16 source columns and
   strict unpaired-surrogate rejection are deliberate policies. Input line numbers
-  can differ on unterminated tails and explicit EOF.
+  can differ on unterminated tails and explicit EOF. Operand previews in type
+  errors follow the bounded native form; explicit error payloads remain complete.
 - **CLI/host identity:** `-V` and `--build-configuration` identify Lokad.Jq.
   `--unbuffered`, `-M` and `-b` are inert; `-C`, internal tool switches and process
   search/origin queries are rejected. ANSI color and native OS filenames are
@@ -49,7 +50,9 @@ can restore its path.
   as a file, including in groups; use separate values for long options
   (`--indent 4`, `--from-file program.jq`, `--library-path modules`). Selected file
   arguments load in option order before later options and the program file.
-- **Input:** failed opens skip within the shared pull and retain system status 2
+- **Input:** JSON files form one parse stream, with tokens spanning sources and
+  one initial UTF-8 BOM across JSON modes. Failed opens skip within the shared
+  pull and retain system status 2
   outside jq handlers. Outer iteration evaluates that pull's next value before
   stopping; explicit `inputs` and slurp can drain further. Sequence input publishes
   complete values before truncated tails and without waiting for another RS/EOF;

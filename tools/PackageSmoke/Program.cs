@@ -56,6 +56,51 @@ if (args.Length != 0)
 int checks = 0;
 {
     var host = new SmokeHost();
+    host.AddFile("/first", "[1,");
+    host.AddFile("/second", "2]\n");
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("logical JSON across files", await Command(["-c", ".", "/first", "/second"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[1,2]\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && host.ClosedDescriptors.Count == 2 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    host.SetInput("\ufeff[1]\n");
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("stream input BOM", await Command(["--stream", "-c", "."], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[[0],1]\n[[0]]\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    host.SetInput(JsonSerializer.Serialize(new string('x', 65536)));
+    var memory = new BenchmarkMemoryBudget(384 * 1024);
+    Check("bounded operand preview", await Command(["-c", "try contains([]) catch length"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "91\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    string input = "[" + string.Join(',', Enumerable.Range(0, 128)) + "]";
+    host.SetInput(input);
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("bounded debug tree logging", await Command(["-c", ". as $x | range(64) | $x | debug | empty"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == ""
+        && host.Output(JqFileDescriptor.StdErr) == string.Concat(Enumerable.Repeat("[\"DEBUG:\"," + input + "]\n", 64))
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("substring scalar offsets", await Command(["-nc", "\"🚀ababa\" | [indices(\"aba\"),index(\"aba\"),rindex(\"aba\")]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[[1,3],1,3]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
     host.AddFile("/later", "1\n2\n");
     var memory = new BenchmarkMemoryBudget(64 * 1024);
     Check("input open recovery", await Command(["-nc", "try inputs catch \"caught\"", "/missing", "/later"], [])
