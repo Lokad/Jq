@@ -394,21 +394,21 @@ internal static class JqExecutor
         var opened = await JqHostExtensions.GuardedOpenAsync(host, path.Absolute, cancellationToken).ConfigureAwait(false);
         if (opened.FileDescriptor is not { } descriptor)
             throw new JqException($"cannot open {path.Display}");
-        Exception? failure = null;
+        bool failed = false;
         JqReadResult.Complete? content = null;
         try
         {
             content = await ReadAllAsync(host, descriptor, budget, cancellationToken).ConfigureAwait(false);
             return content;
         }
-        catch (Exception exception)
+        catch
         {
-            failure = exception;
+            failed = true;
             throw;
         }
         finally
         {
-            try { await host.CloseOwnedDescriptorAsync(descriptor, path.Display, failure is not null).ConfigureAwait(false); }
+            try { await host.CloseOwnedDescriptorAsync(descriptor, path.Display, failed).ConfigureAwait(false); }
             catch { content?.Dispose(); throw; }
         }
     }

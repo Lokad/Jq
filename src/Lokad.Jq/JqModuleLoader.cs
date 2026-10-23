@@ -314,22 +314,21 @@ internal sealed class JqModuleLoader(
     {
         var opened = await JqHostExtensions.GuardedOpenAsync(host, path, cancellationToken).ConfigureAwait(false);
         if (opened.FileDescriptor is not { } descriptor) return null;
-        Exception? failure = null;
+        bool failed = false;
         JqReadResult? content = null;
         try
         {
             content = await host.TryReadAllBytesAsync(descriptor, budget, cancellationToken).ConfigureAwait(false);
-            if (content is JqReadResult.Failed)
-                failure = new JqException("input read failed");
+            failed = content is JqReadResult.Failed;
         }
-        catch (Exception exception)
+        catch
         {
-            failure = exception;
+            failed = true;
             throw;
         }
         finally
         {
-            try { await host.CloseOwnedDescriptorAsync(descriptor, path.Path, failure is not null).ConfigureAwait(false); }
+            try { await host.CloseOwnedDescriptorAsync(descriptor, path.Path, failed).ConfigureAwait(false); }
             catch { (content as JqReadResult.Complete)?.Dispose(); throw; }
         }
         return content;

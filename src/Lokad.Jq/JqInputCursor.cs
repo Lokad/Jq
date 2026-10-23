@@ -131,7 +131,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         }
         catch (Exception exception) when (ShouldAbandonSource(exception))
         {
-            await AbandonCurrentAsync(exception).ConfigureAwait(false);
+            await CloseAndAdvanceAsync(exception).ConfigureAwait(false);
             throw;
         }
     }
@@ -355,20 +355,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _start = 0;
         _count = 0;
         _eof = false;
-    }
-
-    private async Task AbandonCurrentAsync(Exception earlier)
-    {
-        try
-        {
-            await CloseAndAdvanceAsync(earlier).ConfigureAwait(false);
-        }
-        catch (Exception abandon) when (!ReferenceEquals(abandon, earlier))
-        {
-            if (earlier is JqException)
-                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(earlier).Throw();
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(abandon).Throw();
-        }
     }
 
     // Drops one leading UTF-8 byte-order mark per source like the reference
