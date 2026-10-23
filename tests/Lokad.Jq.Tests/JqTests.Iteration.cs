@@ -170,16 +170,13 @@ public sealed partial class JqTests
     [InlineData("[range(0)]", "[]\n")]
     [InlineData("[range(-1)]", "[]\n")]
     [InlineData("range(nan)", "")]
-    // NaN range bounds terminate empty here. The reference range/2 loop keeps
-    // iterating while !(current >= end), which never trips on NaN, so it hangs
-    // where this yields nothing; range/3 with a NaN step is empty on both sides
-    // through its sign desugar.
+    // NaN range bounds remain empty under the numeric profile.
     [InlineData("[range(0; nan)]", "[]\n")]
     [InlineData("[range(nan; 5)]", "[]\n")]
     [InlineData("[range(5; nan)]", "[]\n")]
     [InlineData("[range(nan; nan)]", "[]\n")]
     [InlineData("[range(nan; nan; nan)]", "[]\n")]
-    [InlineData("[range(\"3\")]", "[\n  0,\n  1,\n  2\n]\n")]
+    [InlineData("try [range(\"3\")] catch .", "\"Range bounds must be numeric\"\n")]
     [InlineData("try range(\"a\") catch .", "\"Range bounds must be numeric\"\n")]
     [InlineData("[limit(3; while(1; .+1))]", "[\n  null,\n  1,\n  2\n]\n")]
     [InlineData("until(1; .+1)", "null\n")]
