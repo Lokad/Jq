@@ -122,7 +122,7 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("\"x\" | gmtime", "string (\"x\") gmtime() requires numeric inputs")]
+    [InlineData("\"x\" | gmtime", "gmtime requires numeric inputs")]
     [InlineData("1e1000 | gmtime", "error converting number of seconds since epoch to datetime")]
     [InlineData("(-1 | sqrt) | gmtime", "error converting number of seconds since epoch to datetime")]
     [InlineData("5 | mktime", "mktime requires array inputs")]
@@ -133,12 +133,12 @@ public sealed partial class JqTests
     [InlineData("\"x\" | strftime(5)", "strftime/1 requires parsed datetime inputs")]
     [InlineData("\"x\" | strftime(\"%Y\")", "strftime/1 requires parsed datetime inputs")]
     [InlineData("[2015,\"x\"] | strftime(\"%Y\")", "strftime/1 requires parsed datetime inputs")]
-    [InlineData("\"x\" | localtime", "string (\"x\") localtime() requires numeric inputs")]
+    [InlineData("\"x\" | localtime", "localtime requires numeric inputs")]
     // Fractional ISO instants fail like system strptime without fraction support, not just garbage inputs.
     [InlineData("\"2015-03-05T23:51:47.123Z\" | fromdate", "date \"2015-03-05T23:51:47.123Z\" does not match format \"%Y-%m-%dT%H:%M:%SZ\"")]
     [InlineData("\"1425599507.5\" | strptime(\"%s\")", "does not match format")]
-    [InlineData("null | gmtime", "null (null) gmtime() requires numeric inputs")]
-    [InlineData("null | localtime", "null (null) localtime() requires numeric inputs")]
+    [InlineData("null | gmtime", "gmtime requires numeric inputs")]
+    [InlineData("null | localtime", "localtime requires numeric inputs")]
     [InlineData("null | mktime", "mktime requires array inputs")]
     [InlineData("null | fromdate", "strptime/1 requires string inputs and arguments")]
     [InlineData("null | todate", "strftime/1 requires parsed datetime inputs")]

@@ -179,7 +179,7 @@ internal static class JqMath
         ArgumentNullException.ThrowIfNull(runtime);
         if (TypeName(node) == "number")
             return Number(node);
-        throw new JqRuntimeException(TypeName(node) + " (" + runtime.Serialize(node, false, null, false) + ") number required");
+        throw new JqRuntimeException(TypeName(node) + " (" + runtime.TruncatedDump(node) + ") number required");
     }
 
     // The reference defines abs as if . < 0 then -. else . end over the total

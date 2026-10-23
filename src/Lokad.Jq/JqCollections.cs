@@ -392,7 +392,7 @@ internal sealed class BsearchFilter(JqFilter Target) : JqFilter
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         if (input is not JsonArray sorted)
-            throw new JqException($"{JqRuntime.TypeName(input)} ({context.Runtime.Serialize(input, false, null, false)}) cannot be searched from");
+            throw new JqException($"{JqRuntime.TypeName(input)} ({context.Runtime.TruncatedDump(input)}) cannot be searched from");
         await foreach (JsonNode? target in Target.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             using var comparer = new JqComparer(context.Budget);
@@ -430,8 +430,8 @@ internal static class CollectionKeys
         // effects and failures; only this invalid-input path needs JSON keys.
         JsonNode? mapped = await new MapFilter(new ArrayFilter(keys)).Evaluate(input, context, environment).SingleAsync().ConfigureAwait(false);
         string operation = sorting ? "cannot be sorted, as they are not both arrays" : "cannot be iterated over";
-        throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false)
-            + ") and array (" + context.Runtime.Serialize(mapped, false, null, false) + ") " + operation);
+        throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input)
+            + ") and array (" + context.Runtime.TruncatedDump(mapped) + ") " + operation);
     }
 
     internal static async IAsyncEnumerable<(JsonNode? Element, IReadOnlyList<JsonNode?> Keys)> Keyed(JsonNode? input, JqFilter keys, JqContext context, JqEnvironment environment)
@@ -454,8 +454,8 @@ internal static class CollectionKeys
     internal static IEnumerable<(JsonNode? Element, JsonNode? Key)> OrderPrecomputed(JsonNode? input, JsonNode? keysValue, JqContext context)
     {
         if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
-            throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and "
-                + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be sorted, as they are not both arrays");
+            throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") and "
+                + TypeName(keysValue) + " (" + context.Runtime.TruncatedDump(keysValue) + ") cannot be sorted, as they are not both arrays");
         context.Budget.ReserveBytes(32L * elements.Count);
         return Ordered();
 
@@ -722,9 +722,9 @@ internal sealed class MinMaxByImplFilter(JqFilter Keys, bool TakeMax) : JqFilter
         await foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             if (input is not JsonArray elements || keysValue is not JsonArray keys)
-                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") cannot be iterated over");
+                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") and " + TypeName(keysValue) + " (" + context.Runtime.TruncatedDump(keysValue) + ") cannot be iterated over");
             if (elements.Count != keys.Count)
-                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") and " + TypeName(keysValue) + " (" + context.Runtime.Serialize(keysValue, false, null, false) + ") have wrong length");
+                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") and " + TypeName(keysValue) + " (" + context.Runtime.TruncatedDump(keysValue) + ") have wrong length");
             if (elements.Count == 0)
             {
                 yield return null;

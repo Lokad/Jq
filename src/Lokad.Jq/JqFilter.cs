@@ -351,7 +351,7 @@ internal sealed class AsFilter(
             await foreach (JsonNode? keyValue in property.Key.Evaluate(value, context, current).ConfigureAwait(false))
             {
                 if (!TryGetString(keyValue, out string key))
-                    throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
+                    throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.TruncatedDump(keyValue)}) as object key");
                 JsonNode? field = ExtractField(value, key);
                 await foreach (JqEnvironment bound in Match(property.Value, field, current, context, storage, depth + 1).ConfigureAwait(false))
                     yield return bound;
@@ -1338,7 +1338,7 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
                 await foreach (var keyValue in Values(keyFilter).ConfigureAwait(false))
                 {
                     if (!TryGetString(keyValue, out string keyName))
-                        throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.ToJqString(keyValue)}) as object key");
+                        throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.TruncatedDump(keyValue)}) as object key");
                     await foreach (var value in Values(property.Value).ConfigureAwait(false)) yield return (keyName, value);
                 }
             }
@@ -1862,14 +1862,14 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "_negate": if (TypeName(input) != "number") throw new JqRuntimeException(context.Runtime.UnaryTypeError(input, "cannot be negated")); yield return JsonValue.Create(-Number(input)); break;
                 case "_strindices":
                     if (!TryGetString(input, out string? strHaystack) || strHaystack is null)
-                        throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") cannot be searched, as it is not a string");
+                        throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") cannot be searched, as it is not a string");
                     if (!TryGetString(Arg(0), out string? strNeedle) || strNeedle is null)
-                        throw new JqRuntimeException(TypeName(Arg(0)) + " (" + context.Runtime.Serialize(Arg(0), false, null, false) + ") is not a string");
+                        throw new JqRuntimeException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a string");
                     yield return context.Runtime.Indices(input, Arg(0));
                     break;
                 case "format":
                     if (!TryGetString(Arg(0), out string? formatName) || formatName is null)
-                        throw new JqRuntimeException(TypeName(Arg(0)) + " (" + context.Runtime.Serialize(Arg(0), false, null, false) + ") is not a valid format");
+                        throw new JqRuntimeException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a valid format");
                     if (formatName != "json" && formatName != "text" && formatName != "csv" && formatName != "tsv" && formatName != "html" && formatName != "uri" && formatName != "urid" && formatName != "sh" && formatName != "base64" && formatName != "base64d")
                         throw new JqRuntimeException(formatName + " is not a valid format");
                     yield return JsonValue.Create(context.Runtime.Format(formatName, input));

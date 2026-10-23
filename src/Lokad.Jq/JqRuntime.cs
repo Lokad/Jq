@@ -531,7 +531,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JsonNode? ParseJson(JsonNode? input)
     {
         if (!TryGetString(input, out string? text) || text is null)
-            throw new JqException($"{TypeName(input)} ({Serialize(input, false, null, false)}) only strings can be parsed");
+            throw new JqException($"{TypeName(input)} ({TruncatedDump(input)}) only strings can be parsed");
         return ParseJson(text);
     }
 
@@ -789,7 +789,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             if (TryParseNonFiniteNumber(text, out JsonNode? nonFinite) && nonFinite is not null)
                 return nonFinite;
         }
-        throw new JqException($"{TypeName(node)} ({Serialize(node, false, null, false)}) cannot be parsed as a number");
+        throw new JqException($"{TypeName(node)} ({TruncatedDump(node)}) cannot be parsed as a number");
     }
 
     // Non-finite spellings mirror the reference strtod fallback (builtin.c
@@ -882,7 +882,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             if (text == "false")
                 return false;
         }
-        throw new JqException($"{TypeName(node)} ({Serialize(node, false, null, false)}) cannot be parsed as a boolean");
+        throw new JqException($"{TypeName(node)} ({TruncatedDump(node)}) cannot be parsed as a boolean");
     }
 
     internal static long Utf8ByteLength(JsonNode? input, JqContext context)
@@ -890,7 +890,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         ArgumentNullException.ThrowIfNull(context);
         if (TryGetString(input, out string? text) && text is not null)
             return Utf8Text.GetByteCount(text, context.Budget.CancellationToken);
-        throw new JqException($"{TypeName(input)} ({context.Runtime.Serialize(input, false, null, false)}) only strings have UTF-8 byte length");
+        throw new JqException($"{TypeName(input)} ({context.Runtime.TruncatedDump(input)}) only strings have UTF-8 byte length");
     }
 
 
@@ -1033,7 +1033,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // Like the reference number branch, the length of a number is its
         // absolute value; anything else has no length.
         JsonValue v when TypeName(v) == "number" => JsonValue.Create(Math.Abs(Number(v))),
-        _ => throw new JqException($"{TypeName(node)} ({Serialize(node, false, null, false)}) has no length"),
+        _ => throw new JqException($"{TypeName(node)} ({TruncatedDump(node)}) has no length"),
     };
 
     private int CountStringScalars(string text)
@@ -1105,7 +1105,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
             return keys;
         }
-        throw new JqException($"{TypeName(input)} ({Serialize(input, false, null, false)}) has no keys");
+        throw new JqException($"{TypeName(input)} ({TruncatedDump(input)}) has no keys");
     }
 
     internal bool Has(JsonNode? input, JsonNode? key)
@@ -1155,7 +1155,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
             return entries;
         }
-        throw new JqException($"{TypeName(input)} ({Serialize(input, false, null, false)}) has no keys");
+        throw new JqException($"{TypeName(input)} ({TruncatedDump(input)}) has no keys");
     }
 
     internal JsonNode FromEntries(JsonNode? input) =>
@@ -1172,7 +1172,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             if (!Truthy(key)) key = JqPathReads.ReadField(element, "name", this);
             if (!Truthy(key)) key = JqPathReads.ReadField(element, "Name", this);
             if (key is null || !TryGetString(key, out string? keyName) || keyName is null)
-                throw new JqException($"Cannot use {TypeName(key)} ({ToJqString(key)}) as object key");
+                throw new JqException($"Cannot use {TypeName(key)} ({TruncatedDump(key)}) as object key");
             budget.CheckCancellation();
             JsonNode? value = element is JsonObject entry && entry.TryGetPropertyValue("value", out JsonNode? direct)
                 ? direct : JqPathReads.ReadField(element, "Value", this);
@@ -1342,7 +1342,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal bool Contains(JsonNode? container, JsonNode? contained)
     {
         if (TypeName(container) != TypeName(contained))
-            throw new JqException($"{TypeName(container)} ({Serialize(container, false, null, false)}) and {TypeName(contained)} ({Serialize(contained, false, null, false)}) cannot have their containment checked");
+            throw new JqException($"{TypeName(container)} ({TruncatedDump(container)}) and {TypeName(contained)} ({TruncatedDump(contained)}) cannot have their containment checked");
         return ContainsSameKind(container, contained);
     }
 
@@ -1619,7 +1619,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             else if (item is JsonValue real && real.TryGetValue<double>(out double value) && !double.IsNaN(value))
                 point = (long)value;
             else
-                throw new JqException($"{TypeName(item)} ({Serialize(item, false, null, false)}) can't be imploded, unicode codepoint needs to be numeric");
+                throw new JqException($"{TypeName(item)} ({TruncatedDump(item)}) can't be imploded, unicode codepoint needs to be numeric");
             return point < 0 || point > 0x10FFFF || (point >= 0xD800 && point <= 0xDFFF) ? 0xFFFD : (int)point;
         }
     }
@@ -1678,7 +1678,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 if (!hasSepText)
                 {
                     JsonNode accNode = JsonValue.Create(budget.Finish(builder));
-                    throw new JqRuntimeException(TypeName(accNode) + " (" + Serialize(accNode, false, null, false) + ") and " + TypeName(separator) + " (" + Serialize(separator, false, null, false) + ") cannot be added");
+                    throw new JqRuntimeException(TypeName(accNode) + " (" + TruncatedDump(accNode) + ") and " + TypeName(separator) + " (" + TruncatedDump(separator) + ") cannot be added");
                 }
                 budget.Append(builder, sepText);
             }
@@ -1698,7 +1698,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             else
             {
                 JsonNode leftNode = JsonValue.Create(budget.Finish(builder));
-                throw new JqRuntimeException(TypeName(leftNode) + " (" + Serialize(leftNode, false, null, false) + ") and " + TypeName(item) + " (" + Serialize(item, false, null, false) + ") cannot be added");
+                throw new JqRuntimeException(TypeName(leftNode) + " (" + TruncatedDump(leftNode) + ") and " + TypeName(item) + " (" + TruncatedDump(item) + ") cannot be added");
             }
             budget.Append(builder, elemText);
             first = false;
@@ -1805,7 +1805,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 if ((index & 4095) == 0) budget.CheckCancellation();
                 int digit = Base64Value(source[index]);
                 if (digit < 0)
-                    throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") is not valid base64 data");
+                    throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") is not valid base64 data");
                 code = (code << 6) | (uint)digit;
                 pending++;
                 if (pending == 4)
@@ -1828,7 +1828,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
             else if (pending == 1)
             {
-                throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") trailing base64 byte found");
+                throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") trailing base64 byte found");
             }
             budget.ReserveString(Encoding.UTF8.GetCharCount(decoded.AsSpan(0, written)));
             // Invalid UTF-8 becomes U+FFFD, matching the reference replacement.
@@ -1863,11 +1863,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 if (ch == (char)37)
                 {
                     if (index + 2 >= source.Length)
-                        throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") is not a valid uri encoding");
+                        throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") is not a valid uri encoding");
                     int hi = HexValue(source[index + 1]);
                     int lo = HexValue(source[index + 2]);
                     if (hi < 0 || lo < 0)
-                        throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") is not a valid uri encoding");
+                        throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") is not a valid uri encoding");
                     decoded[written++] = (byte)((hi << 4) | lo);
                     index += 2;
                 }
@@ -1890,7 +1890,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
             catch (DecoderFallbackException)
             {
-                throw new JqException(TypeName(original) + " (" + Serialize(original, false, null, false) + ") is not a valid uri encoding");
+                throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") is not a valid uri encoding");
             }
         }
 
@@ -1935,14 +1935,14 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 budget.Append(builder, "'");
                 return;
             }
-            throw new JqException(TypeName(element) + " (" + Serialize(element, false, null, false) + ") can not be escaped for shell");
+            throw new JqException(TypeName(element) + " (" + TruncatedDump(element) + ") can not be escaped for shell");
         }
 
         // String fields are always quoted with embedded quotes doubled.
         string Csv(JsonNode? rows)
         {
             if (rows is not JsonArray array)
-                throw new JqException(TypeName(rows) + " (" + Serialize(rows, false, null, false) + ") cannot be csv-formatted, only array");
+                throw new JqException(TypeName(rows) + " (" + TruncatedDump(rows) + ") cannot be csv-formatted, only array");
             var builder = new StringBuilder();
             for (int index = 0; index < array.Count; index++)
             {
@@ -1975,7 +1975,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 }
                 else
                 {
-                    throw new JqException(TypeName(field) + " (" + Serialize(field, false, null, false) + ") is not valid in a csv row");
+                    throw new JqException(TypeName(field) + " (" + TruncatedDump(field) + ") is not valid in a csv row");
                 }
             }
             return budget.Finish(builder);
@@ -1984,7 +1984,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         string Tsv(JsonNode? rows)
         {
             if (rows is not JsonArray array)
-                throw new JqException(TypeName(rows) + " (" + Serialize(rows, false, null, false) + ") cannot be tsv-formatted, only array");
+                throw new JqException(TypeName(rows) + " (" + TruncatedDump(rows) + ") cannot be tsv-formatted, only array");
             var builder = new StringBuilder();
             for (var i = 0; i < array.Count; i++)
             {
@@ -1992,7 +1992,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 var field = array[i];
                 if (field is null || IsNaNNumber(field)) continue;
                 if (field is JsonArray or JsonObject)
-                    throw new JqException(TypeName(field) + " (" + Serialize(field, false, null, false) + ") is not valid in a csv row");
+                    throw new JqException(TypeName(field) + " (" + TruncatedDump(field) + ") is not valid in a csv row");
 
                 ReadOnlySpan<char> remaining = ToJqString(field);
                 while (true)

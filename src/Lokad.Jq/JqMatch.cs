@@ -34,7 +34,7 @@ internal static class JqMatch
     {
         ArgumentNullException.ThrowIfNull(context);
         if (!TryGetString(patternNode, out string? pattern) || pattern is null)
-            throw new JqException(TypeName(patternNode) + " (" + context.Runtime.Serialize(patternNode, false, null, false) + ") is not a string");
+            throw new JqException(TypeName(patternNode) + " (" + context.Runtime.TruncatedDump(patternNode) + ") is not a string");
         return pattern;
     }
 
@@ -42,7 +42,7 @@ internal static class JqMatch
     {
         ArgumentNullException.ThrowIfNull(context);
         if (!TryGetString(input, out string? text) || text is null)
-            throw new JqException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") cannot be matched, as it is not a string");
+            throw new JqException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") cannot be matched, as it is not a string");
         return text;
     }
 
@@ -53,7 +53,7 @@ internal static class JqMatch
             return string.Empty;
         if (TryGetString(modifiersNode, out string? flags) && flags is not null)
             return flags;
-        throw new JqException(TypeName(modifiersNode) + " (" + context.Runtime.Serialize(modifiersNode, false, null, false) + ") is not a string");
+        throw new JqException(TypeName(modifiersNode) + " (" + context.Runtime.TruncatedDump(modifiersNode) + ") is not a string");
     }
 
     private enum Projection { Match, Scan, Split }

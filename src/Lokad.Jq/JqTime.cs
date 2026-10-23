@@ -132,7 +132,7 @@ internal static class JqTime
     {
         ArgumentNullException.ThrowIfNull(context);
         if (TypeName(input) != "number")
-            throw new JqException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") gmtime() requires numeric inputs");
+            throw new JqException("gmtime requires numeric inputs");
         return BreakdownToJson(context, DecomposeUtc(Number(input)));
     }
     internal static JsonNode MktimeUtc(JqContext context, JsonNode? input)
@@ -189,7 +189,7 @@ internal static class JqTime
     {
         ArgumentNullException.ThrowIfNull(context);
         if (TypeName(input) != "number")
-            throw new JqException(TypeName(input) + " (" + context.Runtime.Serialize(input, false, null, false) + ") localtime() requires numeric inputs");
+            throw new JqException("localtime requires numeric inputs");
         return BreakdownToJson(context, DecomposeLocal(context, Number(input), out _, out _));
     }
 

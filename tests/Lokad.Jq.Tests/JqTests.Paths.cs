@@ -226,7 +226,7 @@ public sealed partial class JqTests
     [InlineData("[0,1,2,3]", "try getpath([{\"start\":0,\"end\":\"x\"}]) catch .", "\"Array/string slice indices must be integers\"\n")]
     // The infinite bound renders with the pinned double-domain exponent;
     // only the key shape is oracle-confirmed here.
-    [InlineData("5", "try .[0:infinite] catch .", "\"Cannot index number with object ({\\\"start\\\":0,\\\"end\\\":1.7976931348623157E+308})\"\n")]
+    [InlineData("5", "try .[0:infinite] catch .", "\"Cannot index number with object ({\\\"start\\\":0,\\\"end\\\":1.797693...})\"\n")]
     // Suppressed slice failures yield nothing like other bad reads.
     [InlineData("null", "(5 | .[1:2]?)", "")]
     [InlineData("null", "([1,2] | .[{}]?)", "")]
