@@ -64,7 +64,7 @@ execution settings and default match timeout.
 Providers own syntax validation and admission for compiled patterns, workspace
 and capture storage. Detailed searches return actual captures with an optional
 provider owner, disposed after consumption. Compiled handles outlive their active
-results and subjects. One idle compiled pattern is reused; completed one-use
+results and subjects. Two idle compiled patterns are reused; completed one-use
 patterns are retired. Jq admits its own copied cache keys, encoded subjects, match/scan JSON
 values, lists and substitution builders. Regex splitting advances through scalar
 boundaries. Retained Jq buffers stay charged; every refusal terminates the command.

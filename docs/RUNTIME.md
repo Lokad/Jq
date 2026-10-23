@@ -153,7 +153,7 @@ steps below 4 KiB and one 4 KiB block above it. Credit is acquired on demand.
 | Stream cursor | Retained demand plus 256 bytes; 512 after 32 small charges. |
 | Serialization and diagnostic encoding | One returned buffer within 4 KiB after 32 results. |
 | Regex subject | One returned UTF-8 buffer within 4 KiB. |
-| Compiled regex | One idle pattern; active operations, subjects and results retain their own handles and copied keys. |
+| Compiled regex | Two idle patterns; active operations, subjects and results retain their own handles and copied keys. |
 
 Cold or oversized storage is refunded; overlapping borrowers keep separate owners.
 

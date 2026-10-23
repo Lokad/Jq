@@ -6,31 +6,32 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Jq_RegexIdlePatternReuseHasBoundedAdmission(bool unique)
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(1000)]
+    public void Jq_RegexIdlePatternReuseHasBoundedAdmission(int distinct)
     {
-        var root = new BenchmarkMemoryBudget(140);
+        var root = new BenchmarkMemoryBudget(280);
         var counted = new CountingMemoryBudget(root);
         var engine = new FixedRegexEngine();
         using var budget = new JqBudget(engine, counted, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
         for (int index = 0; index < 1000; index++)
         {
-            using var lease = cache.Rent($"p{(unique ? index : 0):D5}", JqRegexCompileOptions.None);
-            Assert.Equal(140, root.ReservedBytes);
+            using var lease = cache.Rent($"p{index % distinct:D5}", JqRegexCompileOptions.None);
+            Assert.Equal(140 * Math.Min(Math.Min(index + 1, distinct), 2), root.ReservedBytes);
         }
-        Assert.Equal(unique ? 1000 : 1, engine.Compilations);
+        Assert.Equal(distinct, engine.Compilations);
         Assert.Equal(engine.Compilations, counted.Counts.Reservations);
         Assert.Equal(0, counted.Counts.Resizes);
-        Assert.Equal(1, engine.PeakLive);
+        Assert.Equal(Math.Min(distinct, 2), engine.PeakLive);
         cache.Dispose();
         Assert.Equal(engine.Compilations, engine.Disposals);
         Assert.Equal(0, root.ReservedBytes);
     }
 
     [Fact]
-    public void Jq_RegexNestedPatternsKeepOnlyBorrowedHandlesAndOneIdleHandle()
+    public void Jq_RegexNestedPatternsKeepOnlyBorrowedHandlesAndTwoIdleHandles()
     {
         var root = new BenchmarkMemoryBudget(1024);
         var engine = new FixedRegexEngine();
@@ -48,7 +49,7 @@ public sealed partial class JqTests
         using (var same = cache.Rent("outer", JqRegexCompileOptions.None))
             Assert.Same(outer.Value, same.Value);
         Assert.Equal(1001, engine.Compilations);
-        Assert.Equal(2, engine.PeakLive);
+        Assert.Equal(3, engine.PeakLive);
         outer.Dispose();
         outer.Dispose();
         subject.Dispose();
@@ -65,25 +66,30 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_RegexIdleEvictionDoesNotRetryRefusedCompilation()
     {
-        var root = new BenchmarkMemoryBudget(140);
+        var root = new BenchmarkMemoryBudget(280);
         var counted = new CountingMemoryBudget(root);
         var engine = new FixedRegexEngine();
         using var budget = new JqBudget(engine, counted, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
         using (var first = cache.Rent("first", JqRegexCompileOptions.None)) { }
+        using (var second = cache.Rent("second", JqRegexCompileOptions.None)) { }
         var failure = Assert.Throws<JqQuotaException>(() => cache.Rent(new string('x', 100), JqRegexCompileOptions.None));
         Assert.True(failure.IsMemoryAdmission);
         Assert.Equal(1, counted.Counts.Refusals);
-        Assert.Equal(1, engine.Compilations);
+        Assert.Equal(2, engine.Compilations);
         Assert.Equal(1, engine.Disposals);
+        Assert.Equal(140, root.ReservedBytes);
+        cache.Dispose();
+        Assert.Equal(2, engine.Disposals);
         Assert.Equal(0, root.ReservedBytes);
     }
 
     [Theory]
     [InlineData(false, false)]
+    [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task Jq_RegexLongRawStreamsRetainOnlyTheCurrentPattern(bool unique, bool adapted)
+    public async Task Jq_RegexLongRawStreamsRetainBoundedPatterns(bool unique, bool adapted)
     {
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var engine = new FixedRegexEngine();
@@ -98,8 +104,8 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         if (adapted)
         {
-            Assert.Equal(4096, engine.Compilations);
-            Assert.Equal(1, engine.PeakLive);
+            Assert.Equal(unique ? 4096 : 1, engine.Compilations);
+            Assert.Equal(unique ? 2 : 1, engine.PeakLive);
             Assert.Equal(engine.Compilations, engine.Disposals);
         }
         Assert.Single(host.ClosedDescriptors);
@@ -119,7 +125,7 @@ public sealed partial class JqTests
         Assert.Equal(0, await command.ExecuteAsync(host, engine, root, CancellationToken.None));
         Assert.Equal("ok\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Equal(2, engine.PeakLive);
+        Assert.Equal(3, engine.PeakLive);
         Assert.Equal(engine.Compilations, engine.Disposals);
         Assert.Equal(0, root.ReservedBytes);
     }

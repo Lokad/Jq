@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Retain one idle compiled regex pattern while preserving active pattern,
+- Retain two idle compiled regex patterns while preserving active pattern,
   subject and result ownership, allowing long streams of distinct patterns.
 - Evaluate `bsearch`, `sub` and `gsub` value arguments before validating input,
   preserving empty streams, argument effects, input consumption and halt status.

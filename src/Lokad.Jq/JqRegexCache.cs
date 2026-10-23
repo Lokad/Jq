@@ -13,6 +13,7 @@ internal sealed class JqRegexCache : IDisposable
     private const int MaximumIdleBytes = 4096;
     private SubjectMemory? _idleSubject;
     private Pattern? _idlePattern;
+    private Pattern? _olderIdlePattern;
     private readonly Dictionary<(string Pattern, JqRegexCompileOptions Options), Pattern> _patterns = new();
 
     internal JqRegexCache(JqBudget budget)
@@ -27,11 +28,16 @@ internal sealed class JqRegexCache : IDisposable
         if (_patterns.TryGetValue((pattern, options), out Pattern? cached))
         {
             var lease = new JqMemoryValue<Pattern>(cached, cached);
-            if (ReferenceEquals(cached, _idlePattern)) _idlePattern = null;
+            if (ReferenceEquals(cached, _idlePattern))
+            {
+                _idlePattern = _olderIdlePattern;
+                _olderIdlePattern = null;
+            }
+            else if (ReferenceEquals(cached, _olderIdlePattern)) _olderIdlePattern = null;
             cached.Borrowers++;
             return lease;
         }
-        RetireIdlePattern();
+        RetireOlderIdlePattern();
         IJqCompiledRegex? compiled = null;
         var keys = new JqMemoryReservation(_budget.MemoryBudget);
         bool retained = false;
@@ -152,7 +158,12 @@ internal sealed class JqRegexCache : IDisposable
         _disposed = true;
         _idleSubject?.Destroy();
         _idleSubject = null;
-        RetireIdlePattern();
+        RetireOlderIdlePattern();
+        if (_idlePattern is { } idle)
+        {
+            _idlePattern = null;
+            Retire(idle);
+        }
     }
 
     private void Return(SubjectMemory memory, bool keep)
@@ -168,15 +179,19 @@ internal sealed class JqRegexCache : IDisposable
     private void Return(Pattern pattern)
     {
         if (--pattern.Borrowers != 0) return;
-        RetireIdlePattern();
         if (_disposed) Retire(pattern);
-        else _idlePattern = pattern;
+        else
+        {
+            RetireOlderIdlePattern();
+            _olderIdlePattern = _idlePattern;
+            _idlePattern = pattern;
+        }
     }
 
-    private void RetireIdlePattern()
+    private void RetireOlderIdlePattern()
     {
-        if (_idlePattern is not { } idle) return;
-        _idlePattern = null;
+        if (_olderIdlePattern is not { } idle) return;
+        _olderIdlePattern = null;
         Retire(idle);
     }
 
@@ -188,7 +203,7 @@ internal sealed class JqRegexCache : IDisposable
     }
 
     // Each operation, subject and result holds its own borrow. Only the last
-    // returned idle pattern is reusable; active entries are never evicted.
+    // two returned idle patterns are reusable; active entries are never evicted.
     internal sealed class Pattern(JqRegexCache cache, string text, JqRegexCompileOptions options,
         IJqCompiledRegex compiled, JqMemoryReservation keys) : IDisposable
     {
