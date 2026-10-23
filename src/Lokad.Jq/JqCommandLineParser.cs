@@ -161,9 +161,7 @@ internal static class JqCommandLineParser
             var filterFileArgument = fromFile ? program : null;
             var filter = fromFile ? null : program;
             // Reserve path work before expanding working-directory prefixes.
-            foreach (string operand in operands) ChargePathResolution(operand);
             if (filterFileArgument is not null) ChargePathResolution(filterFileArgument);
-            var inputFiles = operands.Select(path => JqPathResolution.ResolveArgument(path, currentDirectory)).ToList();
             var filterFile = filterFileArgument is null ? (JqResolvedPath?)null
                 : JqPathResolution.ResolveArgument(filterFileArgument, currentDirectory);
             var libraryDirs = new List<JqResolvedPath>();
@@ -217,7 +215,7 @@ internal static class JqCommandLineParser
                 Filter = filter,
                 FilterFile = filterFile,
                 Variables = variables,
-                InputFiles = inputFiles,
+                InputFiles = operands,
                 FileVariables = fileVariables,
                 LibraryDirs = libraryDirs,
                 WorkingDirectory = currentDirectory,

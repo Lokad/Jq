@@ -13,7 +13,7 @@ namespace Lokad.Jq;
 // cursor, so values interleave exactly like the reference: each pull
 // consumes the next value or line and advances filename/line state.
 //
-// Sources resolve once up front: no file operands means one stdin source,
+// Sources resolve on demand: no file operands means one stdin source,
 // `-` operands reuse the borrowed stdin descriptor at its current position
 // and are never closed, and every other operand opens lazily on first
 // demand so early termination never touches later files. File descriptors
@@ -41,7 +41,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private readonly JqStreamScanner? _scanner;
     private readonly JqRuntime.InputReader? _jsonReader;
     private bool _streamEofDone;
-    private readonly IReadOnlyList<JqResolvedPath> _sources;
+    private readonly IReadOnlyList<string> _sources;
+    private readonly JqPath _workingDirectory;
     private readonly CancellationToken _cancellationToken;
     private byte[] _readBuffer = [];
     private readonly JqMemoryReservation _readMemory;
@@ -96,10 +97,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _jsonReader = !_raw && !_seq && !_stream ? new JqRuntime.InputReader(_runtime, _budget) : null;
         _cancellationToken = cancellationToken;
         _sources = invocation.InputFiles;
+        _workingDirectory = invocation.WorkingDirectory;
     }
 
     private string? CurrentName => _index < 0 || _index >= Math.Max(1, _sources.Count) ? null
-        : _sources.Count == 0 || _sources[_index].Display == "-" ? "<stdin>" : _sources[_index].Display;
+        : _sources.Count == 0 || _sources[_index] == "-" ? "<stdin>" : _sources[_index];
 
     internal string? LastName { get; private set; }
 
@@ -286,12 +288,19 @@ internal sealed class JqInputCursor : IAsyncDisposable
         // source instead of unknown; the line stays zero until pulls advance it.
         _context.InputFilename = LastName;
         _context.InputLineNumber = 0;
-        if (_sources.Count == 0 || _sources[_index].Display == "-")
+        if (_sources.Count == 0 || _sources[_index] == "-")
         {
             _owned = null;
             return true;
         }
-        JqResolvedPath source = _sources[_index];
+        string operand = _sources[_index];
+        using var pathMemory = new JqMemoryReservation(_budget.MemoryBudget);
+        long length = (long)operand.Length + (operand.StartsWith('/') ? 0 : _workingDirectory.Path.Length + 1L);
+        pathMemory.Resize(128 + 64 * length);
+        JqResolvedPath source;
+        try { source = JqPathResolution.ResolveArgument(operand, _workingDirectory); }
+        catch (Exception exception) when (exception is FormatException or JqPathException)
+        { throw new JqInputException(exception.Message, 2); }
         JqOpenedFile opened = await JqHostExtensions.GuardedOpenAsync(
             _host, source.Absolute, _cancellationToken).ConfigureAwait(false);
         if (opened.FileDescriptor is not { } descriptor)

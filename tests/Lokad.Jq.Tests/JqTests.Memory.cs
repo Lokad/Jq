@@ -475,7 +475,7 @@ public sealed partial class JqTests
         var directory = "/" + new string('x', filterFile ? 4 * 1024 * 1024 : 65536);
         var args = filterFile
             ? new[] { "-n", "-f", "filter" }
-            : new[] { "-n", "empty" }.Concat(Enumerable.Repeat("file", 64)).ToArray();
+            : new[] { "-n", "inputs | empty" }.Concat(Enumerable.Repeat("file", 64)).ToArray();
         var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", args, [new JqEnvironmentVariable("PWD", directory)]);
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();

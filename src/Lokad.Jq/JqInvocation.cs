@@ -29,7 +29,7 @@ internal sealed class JqInvocation
     public string? Filter { get; init; }
     public JqResolvedPath? FilterFile { get; init; }
     public Dictionary<string, JsonNode?> Variables { get; init; } = new(StringComparer.Ordinal);
-    public IReadOnlyList<JqResolvedPath> InputFiles { get; init; } = [];
+    public IReadOnlyList<string> InputFiles { get; init; } = [];
     public IReadOnlyList<(string Name, string Path, bool Raw)> FileVariables { get; init; } = [];
     public string? Error { get; init; }
     public JqClock? Clock { get; init; }
