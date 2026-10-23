@@ -172,14 +172,14 @@ internal sealed class JqEnvironment
         return false;
     }
 
-    internal bool TryGetFunction(string name, int arity, out JqUserClosure? closure)
+    private bool TryGetFunction(ReadOnlySpan<char> name, int arity, out JqUserClosure? closure)
     {
         JqEnvironment? scope = this;
         while (scope is not null)
         {
             if (scope._isFunction
                 && scope._arity == arity
-                && string.Equals(scope._name, name, StringComparison.Ordinal))
+                && name.SequenceEqual(scope._name.AsSpan()))
             {
                 if (scope._closure is not null)
                 {
@@ -199,12 +199,12 @@ internal sealed class JqEnvironment
         return false;
     }
 
-    internal bool TryGetModule(string alias, out JqEnvironment? moduleScope)
+    internal bool TryGetModule(ReadOnlySpan<char> alias, out JqEnvironment? moduleScope)
     {
         JqEnvironment? scope = this;
         while (scope is not null)
         {
-            if (scope._isModule && string.Equals(scope._name, alias, StringComparison.Ordinal))
+            if (scope._isModule && alias.SequenceEqual(scope._name.AsSpan()))
             {
                 moduleScope = scope._moduleScope;
                 return true;
@@ -219,23 +219,23 @@ internal sealed class JqEnvironment
     internal bool TryGetFunctionQualified(string qualifiedName, int arity, out JqUserClosure? closure)
     {
         ArgumentNullException.ThrowIfNull(qualifiedName);
-        var separator = qualifiedName.IndexOf("::", System.StringComparison.Ordinal);
-        if (separator < 0)
-            return TryGetFunction(qualifiedName, arity, out closure);
-
-        var alias = qualifiedName[..separator];
-        var remainder = qualifiedName[(separator + 2)..];
-        if (string.IsNullOrEmpty(alias) || string.IsNullOrEmpty(remainder))
+        ReadOnlySpan<char> remaining = qualifiedName;
+        JqEnvironment scope = this;
+        while (true)
         {
-            closure = null;
-            return false;
+            int separator = remaining.IndexOf("::");
+            if (separator < 0)
+                return scope.TryGetFunction(remaining, arity, out closure);
+            if (separator == 0 || separator + 2 == remaining.Length
+                || !scope.TryGetModule(remaining[..separator], out JqEnvironment? moduleScope)
+                || moduleScope is null)
+            {
+                closure = null;
+                return false;
+            }
+            scope = moduleScope;
+            remaining = remaining[(separator + 2)..];
         }
-
-        if (TryGetModule(alias, out JqEnvironment? moduleScope) && moduleScope is not null)
-            return moduleScope.TryGetFunctionQualified(remainder, arity, out closure);
-
-        closure = null;
-        return false;
     }
 
     // Seeds compilation of interpolation fragments with visible module
