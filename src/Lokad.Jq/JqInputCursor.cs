@@ -24,7 +24,7 @@ namespace Lokad.Jq;
 // boundaries; shared admission preflights staging and scalar storage. JSON
 // decoding retains reader state and completed DOM nodes across reads. Extended
 // literals share the token reader; malformed input keeps its diagnostics.
-// Failures at end-of-source surface as input errors. Slurp stays an explicit
+// Logical EOF finalizes JSON; source transitions retain partial values. Slurp stays an explicit
 // aggregating loop over this cursor in the executor.
 internal sealed class JqInputCursor : IAsyncDisposable
 {
@@ -55,7 +55,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private int _start;
     private int _count;
     private bool _eof;
-    private bool _bomPending;
+    private int _bomPosition;
     private bool _reportedFailure;
 
     internal void RecordFailure() => _reportedFailure = true;
@@ -70,7 +70,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private bool _seqDone;
     private int _scanLine = 1;
     private int _scanCol;
-    private bool _seqEof;
+    private bool _inputEof;
     private int _seqSearched;
     private int _seqBoundary = -1;
     private bool _seqStarted;
@@ -125,6 +125,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
         {
             if (_raw)
                 return await PullRawAsync().ConfigureAwait(false);
+            if (_bomPosition < BomBytes.Length)
+                await StripLeadingBomAsync().ConfigureAwait(false);
             if (_stream)
                 return await PullStreamAsync().ConfigureAwait(false);
             if (_seq)
@@ -149,19 +151,10 @@ internal sealed class JqInputCursor : IAsyncDisposable
         while (true)
         {
             _budget.CheckCancellation();
-            if (!_active && !await ActivateNextAsync().ConfigureAwait(false))
-                return (false, null);
-            if (_bomPending)
-                await StripLeadingBomAsync().ConfigureAwait(false);
             SkipWhitespace();
             if (_count == 0)
             {
-                if (_eof)
-                {
-                    await CloseAndAdvanceAsync(null).ConfigureAwait(false);
-                    continue;
-                }
-                await FillAsync().ConfigureAwait(false);
+                if (!await ReadMoreAsync().ConfigureAwait(false)) return (false, null);
                 continue;
             }
             JsonNode? value;
@@ -172,14 +165,21 @@ internal sealed class JqInputCursor : IAsyncDisposable
             {
                 if (_jsonReader is not { } reader)
                     throw new InvalidOperationException("JSON input reader is unavailable.");
-                while (!reader.TryRead(_buffer.AsSpan(_start, _count), _eof, out value, out consumed))
+                while (!reader.TryRead(_buffer.AsSpan(_start, _count),
+                    _inputEof || _eof && _index == Math.Max(1, _sources.Count) - 1, out value, out consumed))
                 {
                     int newlines = CountLf(_start, consumed);
                     valueHasLineFeed |= newlines != 0;
                     _newlines += newlines;
                     _start += consumed;
                     _count -= consumed;
-                    await FillAsync().ConfigureAwait(false);
+                    int previousSource = _index;
+                    await ReadMoreAsync().ConfigureAwait(false);
+                    if (_index != previousSource)
+                    {
+                        valueStartLine = _newlines;
+                        valueHasLineFeed = false;
+                    }
                 }
             }
             catch (JqException exception) when (exception is not JqQuotaException)
@@ -277,13 +277,12 @@ internal sealed class JqInputCursor : IAsyncDisposable
             _index++;
             if (_index >= Math.Max(1, _sources.Count))
                 return false;
-            if (!_seq && !_stream)
+            if (_raw)
             {
                 _start = 0;
                 _count = 0;
             }
             _eof = false;
-            _bomPending = true;
             _newlines = 0;
             _active = true;
             LastName = CurrentName;
@@ -377,33 +376,45 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _eof = false;
     }
 
-    // Drops one leading UTF-8 byte-order mark per source like the reference
-    // document-start strip. Split marks resolve across fills; anything else
-    // (including leading whitespace first) leaves bytes for normal parsing.
+    // The command input is one JSON stream, including across physical files.
+    // Consume its initial BOM incrementally without adding diagnostic columns.
     private async Task StripLeadingBomAsync()
     {
-        _bomPending = false;
-        while (true)
+        while (_bomPosition < BomBytes.Length)
         {
-            int available = Math.Min(_count, 3);
-            int matched = 0;
-            while (matched < available && _buffer[_start + matched] == BomBytes[matched])
-                matched++;
-            if (matched < available)
-                return;
-            if (available == 3)
+            _budget.CheckCancellation();
+            if (_count == 0)
             {
-                _start += 3;
-                _count -= 3;
+                if (await ReadMoreAsync().ConfigureAwait(false)) continue;
+                _bomPosition = BomBytes.Length;
                 return;
             }
-            if (_eof)
+            if (_buffer[_start] != BomBytes[_bomPosition])
+            {
+                bool malformed = _bomPosition != 0;
+                _bomPosition = BomBytes.Length;
+                if (malformed && !_seq) throw new JqException("Malformed BOM");
                 return;
-            int before = _count;
-            await FillAsync().ConfigureAwait(false);
-            if (_count == before)
-                return;
+            }
+            _start++;
+            _count--;
+            _bomPosition++;
         }
+    }
+
+    private async Task<bool> ReadMoreAsync()
+    {
+        while (!_inputEof)
+        {
+            if (_active && !_eof)
+            {
+                await FillAsync().ConfigureAwait(false);
+                return true;
+            }
+            if (_active) await AdvanceSourceKeepBufferAsync().ConfigureAwait(false);
+            if (!await ActivateNextAsync().ConfigureAwait(false)) _inputEof = true;
+        }
+        return false;
     }
 
     private static readonly byte[] BomBytes = [0xEF, 0xBB, 0xBF];
@@ -522,8 +533,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 bool bareLiteral = reader.ContainerDepth == 0
                     && IsCompleteSeqLiteral(_buffer.AsSpan(_start, length));
                 int consumed = 0;
-                if ((!bareLiteral || _seqEof) && reader.TryRead(_buffer.AsSpan(_start, length),
-                    _seqEof && bareLiteral, out JsonNode? value, out consumed))
+                if ((!bareLiteral || _inputEof) && reader.TryRead(_buffer.AsSpan(_start, length),
+                    _inputEof && bareLiteral, out JsonNode? value, out consumed))
                 {
                     Advance(consumed);
                     pendingBytes = 0;
@@ -541,7 +552,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 throw await ParseWarningAsync(error, reader.ContainerDepth).ConfigureAwait(false);
             }
             length = SectionLength();
-            if (_seqBoundary >= 0 || _seqEof)
+            if (_seqBoundary >= 0 || _inputEof)
             {
                 bool inString = length != 0 && _buffer[_start] == (byte)'"';
                 bool number = reader.ContainerDepth == 0
@@ -565,21 +576,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 else _seqSearched = _count;
             }
             return _seqBoundary < 0 ? _count : _seqBoundary;
-        }
-
-        async Task<bool> ReadMoreAsync()
-        {
-            while (!_seqEof)
-            {
-                if (_active && !_eof)
-                {
-                    await FillAsync().ConfigureAwait(false);
-                    return true;
-                }
-                if (_active) await AdvanceSourceKeepBufferAsync().ConfigureAwait(false);
-                if (!await ActivateNextAsync().ConfigureAwait(false)) _seqEof = true;
-            }
-            return false;
         }
 
         JqSeqResyncException Warning(string message)
@@ -672,7 +668,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                         if (literal) { reportLine = _scanLine; reportColumn = _scanCol + 1; }
                         break;
                     }
-                    if (_seqBoundary == 0 || _seqEof)
+                    if (_seqBoundary == 0 || _inputEof)
                         return BoundaryWarning(0, quoted ? "Unfinished string" : depth != 0
                             ? "Unfinished JSON term" : "Invalid literal", false);
                     await ReadMoreAsync().ConfigureAwait(false);
@@ -699,7 +695,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             }
             if (_streamEofDone)
                 return (false, null);
-            if (!_active && !await ActivateNextAsync().ConfigureAwait(false))
+            if (_count == 0 && !await ReadMoreAsync().ConfigureAwait(false))
             {
                 StreamScanOutcome end;
                 try
@@ -724,16 +720,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 _streamEofDone = true;
                 return (false, null);
             }
-            if (_count == 0)
-            {
-                if (_eof)
-                {
-                    await AdvanceSourceKeepBufferAsync().ConfigureAwait(false);
-                    continue;
-                }
-                await FillAsync().ConfigureAwait(false);
-                continue;
-            }
+            if (_count == 0) continue;
             StreamScanOutcome outcome = _scanner.Consume(_buffer.AsSpan(_start, _count), isFinal: false);
             Advance(outcome.Consumed);
             if (outcome.DropRest && _count > 0)

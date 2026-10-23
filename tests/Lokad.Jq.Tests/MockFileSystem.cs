@@ -19,7 +19,8 @@ internal sealed class MockFileSystem : IJqHost
     public JqOperationError? CloseFailure { get; init; }
     public List<JqFileDescriptor> ClosedDescriptors { get; } = [];
 
-    public void AddFile(string path, string content) => _files[path] = Encoding.UTF8.GetBytes(content);
+    public void AddFile(string path, string content) => AddFile(path, Encoding.UTF8.GetBytes(content));
+    public void AddFile(string path, byte[] content) => _files[path] = content;
     public void SetStandardInput(string content) => SetStandardInputBytes(Encoding.UTF8.GetBytes(content));
     public void SetStandardInputBytes(byte[] content) => _inputs[JqFileDescriptor.StdIn] = content;
     public byte[] GetOutputBytes(JqFileDescriptor descriptor) =>

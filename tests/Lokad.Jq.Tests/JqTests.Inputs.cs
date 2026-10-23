@@ -313,7 +313,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_InputBomAppliesOncePerSource()
+    public async Task Jq_InputBomAppliesOncePerLogicalStream()
     {
         var cases = new (string Stdin, string ExpectedOut, int ExpectedExit)[]
         {
@@ -337,14 +337,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_InputBomResetsPerFile()
+    public async Task Jq_InputBomDoesNotRestartAtAFileBoundary()
     {
         var inner = new MockFileSystem();
-        inner.AddFile("/a.json", "\uFEFF1");
-        inner.AddFile("/b.json", "\uFEFF2");
+        inner.AddFile("/a.json", "\uFEFF1\n");
+        inner.AddFile("/b.json", "\uFEFF2\n");
         var (exit, stdout, stderr) = await RunInputAsync(inner, ".", "/a.json", "/b.json");
-        Assert.True(exit == 0, stderr);
-        Assert.Equal("1\n2\n", stdout);
+        Assert.Equal(5, exit);
+        Assert.Equal("1\n", stdout);
+        Assert.StartsWith("jq: parse error:", stderr);
     }
 
     [Fact]

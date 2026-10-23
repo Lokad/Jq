@@ -54,7 +54,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "/first", "/second", "/later")));
 
         Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("1\n22\n3\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("1223\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(new[] { 8192, 8192, 8192 }, requests);
         Assert.Equal(3, host.ClosedDescriptors.Count);
