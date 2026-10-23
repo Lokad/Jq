@@ -56,6 +56,35 @@ if (args.Length != 0)
 int checks = 0;
 {
     var host = new SmokeHost();
+    host.AddFile("/later", "1\n2\n");
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("input open recovery", await Command(["-nc", "try inputs catch \"caught\"", "/missing", "/later"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 2
+        && host.Output(JqFileDescriptor.StdOut) == "1\n2\n"
+        && host.Output(JqFileDescriptor.StdErr) == "jq: cannot open /missing\n"
+        && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("file argument effect order", await Command(["--rawfile", "d", "/missing", "--help"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 2
+        && host.Output(JqFileDescriptor.StdOut) == ""
+        && host.Output(JqFileDescriptor.StdErr) == "jq: Bad JSON in --rawfile d /missing: cannot open /missing\n"
+        && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    host.SetInput("\u001e1 [2,\u001e3\n");
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("sequence complete prefix", await Command(["--seq", "-c", "."], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "\u001e1\n\u001e3\n"
+        && host.Output(JqFileDescriptor.StdErr) == "jq: ignoring parse error: Truncated value at line 1, column 7\n"
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
     host.AddFile("/data", "42");
     var memory = new BenchmarkMemoryBudget(128 * 1024);
     Check("intrinsic and named bindings", await Command(["-nc", "--arg", "ENV", "named",

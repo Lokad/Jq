@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Recover failed input opens within the shared pull cursor and preserve system
+  status outside jq handlers, including explicit reads and slurp.
+- Load selected file-valued arguments in option order before later options and
+  program-file loading; remove deferred binding.
+- Decode sequence values incrementally, preserving complete values before
+  truncated tails and returning without unnecessary reads. Discard ignored
+  prefixes and scan only new bytes for record separators.
+- Borrow qualified function names during lookup and create compiler scope
+  collections only when needed; avoid function seeding for empty prefix inspection.
+
 - Keep intrinsic `$ENV`/`env` separate from named arguments, and load file
   arguments named `ENV` or `ARGS` into `$ARGS.named` normally.
 - Resolve input paths when requested and admit automatic invocation directories

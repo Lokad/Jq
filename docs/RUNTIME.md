@@ -6,8 +6,10 @@ through `IJqHost`, using the supplied cancellation token and optional shared
 `IMemoryBudget`. Each execution has fresh evaluation state. Its argument values are owned once by
 `$ARGS`; ordinary named variables borrow the corresponding entries. Named `ENV`
 and `ARGS` values stay in `$ARGS.named`; intrinsic `$ENV` and `env` use the host
-snapshot. Updates copy borrowed branches, keeping reused and overlapping executions
-independent.
+snapshot. Selected `--rawfile`/`--slurpfile` values load in option order, before
+later information switches, argument errors and program-file loading; duplicate
+names keep the first binding. Updates copy borrowed branches, keeping reused and
+overlapping executions independent.
 
 ## Host I/O
 
@@ -44,8 +46,16 @@ lines may span reads. JSON decoding retains completed nodes across reads,
 including non-finite literals, and discards parsed byte prefixes before further
 reads. Definitive JSON errors stop further reads; incomplete
 tokens wait for more bytes. LF splits raw input; CR is data. Slurp aggregates the cursor;
-`--stream` emits path/leaf events, and `--seq` separates records at RS and recovers
-after malformed records.
+`--stream` emits path/leaf events. `--seq` uses incremental JSON decoding with RS
+framing: complete values can return before another read or a malformed tail;
+ignored prefixes are discarded as they arrive. Truncated numbers require a
+terminating delimiter. Outer iteration warns and resynchronizes after malformed
+sequence input; explicit reads expose those parse errors to jq handlers.
+
+Failed input opens report a system diagnostic and skip to the next source within
+the pull. Status 2 stays outside jq handlers. Outer iteration stops after evaluating
+that pull's value; explicit `inputs` and slurp may consume further values within
+the same evaluation. Memory refusal still takes precedence as status 5.
 
 JSON data imports and `--slurpfile` accept one leading UTF-8 BOM; raw file values
 retain it as text.

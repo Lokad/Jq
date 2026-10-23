@@ -47,7 +47,13 @@ can restore its path.
   outside the hosted API.
   Mixed short/long aliases are idempotent. `-f` selects the first program operand
   as a file, including in groups; use separate values for long options
-  (`--indent 4`, `--from-file program.jq`, `--library-path modules`).
+  (`--indent 4`, `--from-file program.jq`, `--library-path modules`). Selected file
+  arguments load in option order before later options and the program file.
+- **Input:** failed opens skip within the shared pull and retain system status 2
+  outside jq handlers. Outer iteration evaluates that pull's next value before
+  stopping; explicit `inputs` and slurp can drain further. Sequence input publishes
+  complete values before truncated tails and without waiting for another RS/EOF;
+  unterminated top-level numbers retain sequence truncation checks.
 - **Modules:** hosted `import`, `include`, `-L` and `modulemeta` are supported.
   Explicit search metadata replaces default paths; unreadable selected files
   fail loading without falling back to another candidate.
