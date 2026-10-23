@@ -17,8 +17,9 @@ internal static class JqMatch
         string text = RequireText(context, input);
         string pattern = RequirePattern(context, patternNode);
         JqRegexOptions options = JqRegexOptions.ParseOrThrow(RequireModifiers(context, flagsNode));
-        var regex = context.Regexes.Get(pattern, options.Pattern);
-        using var subject = context.Regexes.EncodeSubject(text);
+        using var patternLease = context.Regexes.Rent(pattern, options.Pattern);
+        var regex = patternLease.Value;
+        using var subject = context.Regexes.EncodeSubject(text, regex);
         return context.Regexes.IsMatch(regex, subject.Value, options.Match);
     }
 
@@ -62,9 +63,10 @@ internal static class JqMatch
     {
         JqRegexOptions options = JqRegexOptions.ParseOrThrow(modifiers);
         bool global = modifiers.Contains('g');
-        IJqCompiledRegex compiled = context.Regexes.Get(pattern, options.Pattern);
+        using var patternLease = context.Regexes.Rent(pattern, options.Pattern);
+        var compiled = patternLease.Value;
         var names = projection == Projection.Match ? JqRegexCache.GetGroupNames(compiled) : null;
-        using var ownedSubject = context.Regexes.EncodeSubject(text);
+        using var ownedSubject = context.Regexes.EncodeSubject(text, compiled);
         ReadOnlyMemory<byte> subject = ownedSubject.Value;
         context.Budget.ReserveMetadata(32, 1);
         var results = new List<JsonNode>();

@@ -60,17 +60,17 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_ScalarReductionDoesNotRefundPersistentRegexKeys()
+    public async Task Jq_ScalarReductionRetiresCompletedRegexPatterns()
     {
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var engine = new FixedRegexEngine();
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
             "\"prefix\", (reduce range(1000) as $i (\"\"; ($i | tostring) as $p | (\"x\" | test($p)) | \"x\" * 128))")));
-        Assert.Equal(5, await command.ExecuteAsync(host, engine, memory, CancellationToken.None));
-        Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.InRange(engine.Compilations, 1, 999);
+        Assert.Equal(0, await command.ExecuteAsync(host, engine, memory, CancellationToken.None));
+        Assert.Equal("prefix\n" + new string('x', 128) + "\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(1000, engine.Compilations);
         Assert.Equal(engine.Compilations, engine.Disposals);
         Assert.Equal(0, memory.ReservedBytes);
     }

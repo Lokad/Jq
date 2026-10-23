@@ -19,8 +19,9 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
             JqRegexOptions options = JqRegexOptions.ParseOrThrow(flagText);
             // sub without an explicit g flag stops after the first match.
             bool stopFirst = firstOnly && !flagText.Contains('g');
-            var regex = context.Regexes.Get(JqMatch.RequirePattern(context, pattern), options.Pattern);
-            using var ownedSubject = context.Regexes.EncodeSubject(text);
+            using var patternLease = context.Regexes.Rent(JqMatch.RequirePattern(context, pattern), options.Pattern);
+            var regex = patternLease.Value;
+            using var ownedSubject = context.Regexes.EncodeSubject(text, regex);
             ReadOnlyMemory<byte> subject = ownedSubject.Value;
             var matchOptions = options.Match;
             // jq aligns replacement streams by their result index across successive matches.

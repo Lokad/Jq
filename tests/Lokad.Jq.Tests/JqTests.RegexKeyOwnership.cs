@@ -13,13 +13,15 @@ public sealed partial class JqTests
         using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
         string text = new('x', 10000);
-        var pattern = cache.Get(text, JqRegexCompileOptions.None);
+        using var patternLease = cache.Rent(text, JqRegexCompileOptions.None);
+        var pattern = patternLease.Value;
         Assert.Equal(20128, memory.ReservedBytes);
-        Assert.Same(pattern, cache.Get(new string(text.AsSpan()), JqRegexCompileOptions.None));
+        using (var same = cache.Rent(new string(text.AsSpan()), JqRegexCompileOptions.None)) Assert.Same(pattern, same.Value);
         Assert.Equal(1, engine.Compilations);
-        using var subject = cache.EncodeSubject("x");
+        using var subject = cache.EncodeSubject("x", pattern);
         Assert.True(cache.IsMatch(pattern, subject.Value, JqRegexMatchOptions.None));
         cache.Dispose();
+        patternLease.Dispose();
         Assert.Equal(20128 + 65, memory.ReservedBytes);
         Assert.Equal(0, engine.Disposals);
         subject.Dispose();
@@ -35,7 +37,7 @@ public sealed partial class JqTests
         var engine = new FixedRegexEngine();
         using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
-        Assert.True(Assert.Throws<JqQuotaException>(() => cache.Get(new string('x', 10000), JqRegexCompileOptions.None)).IsMemoryAdmission);
+        Assert.True(Assert.Throws<JqQuotaException>(() => cache.Rent(new string('x', 10000), JqRegexCompileOptions.None)).IsMemoryAdmission);
         Assert.Equal(0, engine.Compilations);
         Assert.Equal(1, memory.Counts.Refusals);
         Assert.Equal(0, memory.Counts.SameSizeResizes);
@@ -48,12 +50,14 @@ public sealed partial class JqTests
     {
         internal int Compilations { get; private set; }
         internal int Disposals { get; private set; }
+        internal int PeakLive { get; private set; }
 
         public bool TryCompile(string pattern, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
             CancellationToken cancellationToken, [NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Compilations++;
+            PeakLive = Math.Max(PeakLive, Compilations - Disposals);
             regex = new Compiled(this);
             error = null;
             return true;

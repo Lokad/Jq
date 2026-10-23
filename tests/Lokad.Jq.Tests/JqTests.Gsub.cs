@@ -125,7 +125,8 @@ public sealed partial class JqTests
     public void Jq_RegexCacheSupportsRepeatedSearches()
     {
         using var regexes = new JqRegexCache(new JqBudget(JqUtf8RegexEngine.Instance, CancellationToken.None));
-        var pattern = regexes.Get("x", JqRegexCompileOptions.None);
+        using var patternLease = regexes.Rent("x", JqRegexCompileOptions.None);
+        var pattern = patternLease.Value;
         for (int i = 0; i < 100; i++)
         {
             using var match = regexes.Match(pattern, "x"u8.ToArray(), 0, JqRegexMatchOptions.None);

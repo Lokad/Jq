@@ -88,10 +88,12 @@ public sealed partial class JqTests
         var engine = new ObservedRegexEngine((_, _, _) => { });
         using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
-        var pattern = cache.Get("x", JqRegexCompileOptions.None);
-        using var subject = cache.EncodeSubject("x");
+        using var patternLease = cache.Rent("x", JqRegexCompileOptions.None);
+        var pattern = patternLease.Value;
+        using var subject = cache.EncodeSubject("x", pattern);
         var match = cache.Match(pattern, subject.Value, 0, JqRegexMatchOptions.None);
         cache.Dispose();
+        patternLease.Dispose();
         subject.Dispose();
         Assert.Equal(0, engine.Disposed);
         Assert.True(memory.ReservedBytes > 0);

@@ -12,14 +12,16 @@ public sealed partial class JqTests
         var engine = new OwnedResultRegexEngine();
         using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
-        var pattern = cache.Get("x", JqRegexCompileOptions.None);
+        using var patternLease = cache.Rent("x", JqRegexCompileOptions.None);
+        var pattern = patternLease.Value;
         long compiled = memory.ReservedBytes;
-        using var subject = cache.EncodeSubject("x");
+        using var subject = cache.EncodeSubject("x", pattern);
         var match = cache.Match(pattern, subject.Value, 0, JqRegexMatchOptions.None);
         var copy = match;
         Assert.Equal(compiled + 65 + 32, memory.ReservedBytes);
 
         cache.Dispose();
+        patternLease.Dispose();
         subject.Dispose();
         Assert.Empty(engine.Cleanup);
         Assert.Equal(compiled + 32, memory.ReservedBytes);
