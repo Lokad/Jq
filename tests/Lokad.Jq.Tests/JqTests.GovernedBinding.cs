@@ -31,20 +31,25 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_ArgumentBindingPreservesFiveThousandOrderedFileNames()
+    public async Task Jq_ArgumentBindingPreservesFiveThousandOrderedFileNames()
     {
         var arguments = new List<string> { "-n", "." };
         for (int index = 0; index < 5000; index++)
             arguments.AddRange(["--rawfile", "v" + index.ToString(System.Globalization.CultureInfo.InvariantCulture), "/data"]);
-        var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
+        var memory = new BenchmarkMemoryBudget(8 * 1024 * 1024);
         using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
         {
-            var invocation = JqCommandLineParser.Parse(arguments, JqPath.Root, JqFileDescriptor.StdIn,
+            var host = new MockFileSystem();
+            host.AddFile("/data", "one");
+            var invocation = await JqCommandLineParser.ParseAsync(host, arguments, JqPath.Root, JqFileDescriptor.StdIn,
                 JqFileDescriptor.StdOut, JqFileDescriptor.StdErr, [], null, budget);
             Assert.Null(invocation.Error);
-            Assert.Equal(5000, invocation.FileVariables.Count);
+            var args = Assert.IsType<System.Text.Json.Nodes.JsonObject>(invocation.Variables["ARGS"]);
+            var named = Assert.IsType<System.Text.Json.Nodes.JsonObject>(args["named"]);
+            Assert.Equal(5000, named.Count);
             Assert.Equal(Enumerable.Range(0, 5000).Select(index => "v" + index.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-                invocation.FileVariables.Select(binding => binding.Name));
+                named.Select(binding => binding.Key));
+            Assert.Equal(5000, host.ClosedDescriptors.Count);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }

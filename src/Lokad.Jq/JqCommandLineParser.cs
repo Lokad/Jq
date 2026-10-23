@@ -64,8 +64,8 @@ internal static class JqCommandLineParser
         && argument[0] == '-'
         && (argument[1] == '-' || char.IsAsciiLetter(argument[1]));
 
-    public static JqInvocation Parse(
-        IReadOnlyList<string> args,
+    public static async ValueTask<JqInvocation> ParseAsync(
+        IJqHost host, IReadOnlyList<string> args,
         JqPath currentDirectory,
         JqFileDescriptor stdIn,
         JqFileDescriptor stdOut,
@@ -85,7 +85,6 @@ internal static class JqCommandLineParser
             var variables = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
             var positionalArguments = new JsonArray();
             var operands = new List<string>();
-            var fileVariables = new List<(string Name, string Path, bool Raw)>();
             var libraryPaths = new List<string>();
             var boundNames = new HashSet<string>(StringComparer.Ordinal);
             string? program = null;
@@ -118,8 +117,34 @@ internal static class JqCommandLineParser
                 }
                 if (argument[1] == '-')
                 {
-                    string? error = ApplyOption(argument[2..], null, ref i);
-                    if (error is not null) return Error(error);
+                    string option = argument[2..];
+                    if (option is "rawfile" or "slurpfile")
+                    {
+                        if (i + 2 >= args.Count)
+                            return Error("jq: --" + option + " takes two parameters (e.g. --" + option + " varname filename)");
+                        string name = args[++i];
+                        string path = args[++i];
+                        if (!boundNames.Add(name)) continue;
+                        try
+                        {
+                            ChargePathResolution(path);
+                            var resolved = JqPathResolution.ResolveArgument(path, currentDirectory);
+                            using var content = await host.ReadFileAsync(resolved, budget, budget.CancellationToken).ConfigureAwait(false);
+                            if (option == "rawfile")
+                            {
+                                budget.ReserveString(System.Text.Encoding.UTF8.GetCharCount(content.Content.Span));
+                                variables[name] = JsonValue.Create(Utf8Text.Decode(content.Content));
+                            }
+                            else variables[name] = runtime.ReadJsonArray(content.Content.Span, 0);
+                        }
+                        catch (Exception exception) when (JqErrors.IsCatchable(exception) || exception is JqPathException)
+                        { return Error("jq: Bad JSON in --" + option + " " + name + " " + path + ": " + exception.Message); }
+                    }
+                    else
+                    {
+                        string? error = ApplyOption(option, null, ref i);
+                        if (error is not null) return Error(error);
+                    }
                 }
                 else
                 {
@@ -216,7 +241,6 @@ internal static class JqCommandLineParser
                 FilterFile = filterFile,
                 Variables = variables,
                 InputFiles = operands,
-                FileVariables = fileVariables,
                 LibraryDirs = libraryDirs,
                 WorkingDirectory = currentDirectory,
                 Clock = clock
@@ -244,16 +268,13 @@ internal static class JqCommandLineParser
                     case "jsonargs": positional = true; jsonArguments = true; break;
                     case "arg":
                     case "argjson":
-                    case "rawfile":
-                    case "slurpfile":
                         if (position + 2 >= args.Count)
                             return $"jq: --{name} takes two parameters (e.g. --{name} varname "
-                                + (name is "rawfile" or "slurpfile" ? "filename)" : name == "argjson" ? "text)" : "value)");
+                                + (name == "argjson" ? "text)" : "value)");
                         string variable = args[++position];
                         string value = args[++position];
                         if (!boundNames.Add(variable)) break;
-                        if (name is "rawfile" or "slurpfile") fileVariables.Add((variable, value, name == "rawfile"));
-                        else if (name == "arg") variables[variable] = JsonValue.Create(value);
+                        if (name == "arg") variables[variable] = JsonValue.Create(value);
                         else
                         {
                             try { variables[variable] = runtime.ParseJson(value); }
@@ -288,7 +309,7 @@ internal static class JqCommandLineParser
             }
 
         }
-        catch (Exception ex) when (ex is not JqQuotaException
+        catch (Exception ex) when (ex is not JqQuotaException and not JqCloseException
             && ex is JqException or FormatException or JqPathException)
         {
             return Error($"jq: {ex.Message}");

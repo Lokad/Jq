@@ -30,7 +30,6 @@ internal sealed class JqInvocation
     public JqResolvedPath? FilterFile { get; init; }
     public Dictionary<string, JsonNode?> Variables { get; init; } = new(StringComparer.Ordinal);
     public IReadOnlyList<string> InputFiles { get; init; } = [];
-    public IReadOnlyList<(string Name, string Path, bool Raw)> FileVariables { get; init; } = [];
     public string? Error { get; init; }
     public JqClock? Clock { get; init; }
     public List<JqResolvedPath> LibraryDirs { get; init; } = [];

@@ -21,15 +21,21 @@ internal static class JqExecutor
         JqInvocation invocation;
         try
         {
-            invocation = JqCommandLineParser.Parse(commandInvocation.Arguments,
+            invocation = await JqCommandLineParser.ParseAsync(host, commandInvocation.Arguments,
                 commandInvocation.CurrentDirectory, commandInvocation.StdIn, commandInvocation.StdOut,
-                commandInvocation.StdErr, commandInvocation.Environment, commandInvocation.Clock, budget);
+                commandInvocation.StdErr, commandInvocation.Environment, commandInvocation.Clock, budget).ConfigureAwait(false);
         }
         catch (JqQuotaException exception)
         {
             await JqDiagnosticWriter.WriteQuotaAsync(host, commandInvocation.StdErr,
                 exception.Message, memoryScope, cancellationToken).ConfigureAwait(false);
             return 5;
+        }
+        catch (JqCloseException exception)
+        {
+            return await JqDiagnosticWriter.TryWriteAsync(host, commandInvocation.StdErr,
+                ["jq: error closing ", exception.Path, ": ", exception.Error.Message], true, memoryScope,
+                cancellationToken).ConfigureAwait(false) is not null ? 2 : 5;
         }
         if (invocation.Error != null)
         {
@@ -110,14 +116,13 @@ internal static class JqExecutor
             var filterText = invocation.Filter ?? ".";
             if (invocation.FilterFile is { } filterFile)
             {
-                using var content = await ReadFileAsync(filterFile, host, budget, cancellationToken).ConfigureAwait(false);
+                using var content = await host.ReadFileAsync(filterFile, budget, cancellationToken).ConfigureAwait(false);
                 ReadOnlyMemory<byte> bytes = content.Content;
                 if (bytes.Span.Contains((byte)0))
                     throw new JqException("program file contains NUL bytes");
                 budget.ReserveString(Encoding.UTF8.GetCharCount(bytes.Span));
                 filterText = Utf8Text.Decode(bytes);
             }
-            await LoadFileVariablesAsync(host, invocation, context, cancellationToken).ConfigureAwait(false);
             stage = 3;
             var tokens = Lexer.Tokenize(filterText, programSource, budget);
             var preParser = new JqParser(tokens, programSource, context.RootEnvironment, budget);
@@ -331,56 +336,6 @@ internal static class JqExecutor
         }
     }
 
-    // Hosted `--rawfile`/`--slurpfile` variables resolve after the filter
-    // file so failures surface as system errors before compilation. Argument
-    // binding has already selected the first occurrence of each name.
-    private static async Task LoadFileVariablesAsync(
-        IJqHost host, JqInvocation invocation, JqContext context, CancellationToken cancellationToken)
-    {
-        if (invocation.FileVariables.Count == 0)
-            return;
-        var variables = invocation.Variables;
-        foreach (var (name, path, raw) in invocation.FileVariables)
-        {
-            string which = raw ? "rawfile" : "slurpfile";
-            try
-            {
-                long pathLength = (long)path.Length + invocation.WorkingDirectory.Path.Length + 1;
-                context.Budget.ReserveBytes(128 + 64 * pathLength);
-                var resolved = JqPathResolution.ResolveArgument(path, invocation.WorkingDirectory);
-                using var content = await ReadFileAsync(resolved, host, context.Budget, cancellationToken).ConfigureAwait(false);
-                ReadOnlyMemory<byte> bytes = content.Content;
-                JsonNode? value;
-                if (raw)
-                {
-                    context.Budget.ReserveString(Encoding.UTF8.GetCharCount(bytes.Span));
-                    value = JsonValue.Create(Utf8Text.Decode(bytes));
-                }
-                else
-                {
-                    value = context.Runtime.ReadJsonArray(bytes.Span, 0);
-                }
-                if (name is not "ENV" and not "ARGS")
-                    variables[name] = value;
-                if (variables.TryGetValue("ARGS", out JsonNode? args)
-                    && args is JsonObject argsObject
-                    && argsObject.TryGetPropertyValue("named", out JsonNode? named)
-                    && named is JsonObject namedObject)
-                {
-                    namedObject[name] = value;
-                }
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException
-                && exception is not JqQuotaException
-                && exception is not JqHostFailureException
-                && exception is not JqCloseException
-                && exception is not OutOfMemoryException)
-            {
-                throw new JqException($"Bad JSON in --{which} {name} {path}: {exception.Message}");
-            }
-        }
-    }
-
     private static string ParentDir(string canonicalPath)
     {
         ArgumentNullException.ThrowIfNull(canonicalPath);
@@ -388,44 +343,6 @@ internal static class JqExecutor
         if (slash <= 0)
             return "/";
         return canonicalPath[..slash];
-    }
-
-    private static async Task<JqReadResult.Complete> ReadFileAsync(
-        JqResolvedPath path, IJqHost host, JqBudget budget, CancellationToken cancellationToken)
-    {
-        var opened = await JqHostExtensions.GuardedOpenAsync(host, path.Absolute, cancellationToken).ConfigureAwait(false);
-        if (opened.FileDescriptor is not { } descriptor)
-            throw new JqException($"cannot open {path.Display}");
-        bool failed = false;
-        JqReadResult.Complete? content = null;
-        try
-        {
-            content = await ReadAllAsync(host, descriptor, budget, cancellationToken).ConfigureAwait(false);
-            return content;
-        }
-        catch
-        {
-            failed = true;
-            throw;
-        }
-        finally
-        {
-            try { await host.CloseOwnedDescriptorAsync(descriptor, path.Display, failed).ConfigureAwait(false); }
-            catch { content?.Dispose(); throw; }
-        }
-    }
-
-    private static async Task<JqReadResult.Complete> ReadAllAsync(
-        IJqHost host, JqFileDescriptor descriptor, JqBudget budget, CancellationToken cancellationToken)
-    {
-        var result = await host.TryReadAllBytesAsync(
-            descriptor, budget, cancellationToken).ConfigureAwait(false);
-        return result switch
-        {
-            JqReadResult.Complete complete => complete,
-            JqReadResult.Failed => throw new JqException("input read failed"),
-            _ => throw new InvalidOperationException("Unknown bounded read result.")
-        };
     }
 
     private static Task<JqAppendResult?> WriteErrorAsync(IJqHost host, JqInvocation invocation,
