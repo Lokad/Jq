@@ -2059,25 +2059,8 @@ internal sealed class InterpolatedStringFilter : JqFilter
             else if (template[i] == (char)92 && i + 1 < template.Length && template[i + 1] == (char)40)
             {
                 var start = i + 2;
-                var depth = 1;
-                i = start;
-for (; i < template.Length; i++)
-                {
-                    budget.CheckCancellation();
-                    if (template[i] == '"')
-                    {
-                        i++;
-                        while (i < template.Length && template[i] != '"')
-                        {
-                            budget.CheckCancellation();
-                            if (template[i] == '\\' && i + 1 < template.Length) i++;
-                            i++;
-                        }
-                    }
-                    else if (template[i] == '(') depth++;
-                    else if (template[i] == ')' && --depth == 0) break;
-                }
-                if (depth != 0)
+                i = Lexer.FindInterpolationEnd(template, start, span, program, budget);
+                if (i == template.Length)
                     throw new JqCompileException("unterminated string interpolation", span, program);
                 if (literal.Length > 0)
                 {

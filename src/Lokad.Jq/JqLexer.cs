@@ -38,6 +38,70 @@ internal static class Lexer
         return raw.Replace("\\\\", "\\");
     }
 
+    // Comments share one continuation rule in ordinary code and interpolation.
+    internal static int SkipComment(string source, int index, JqBudget budget)
+    {
+        while (index < source.Length)
+        {
+            budget.CheckCancellation();
+            if (source[index] == '\\' && index + 1 < source.Length
+                && (source[index + 1] == '\\' || source[index + 1] == '\n'
+                    || (source[index + 1] == '\r' && index + 2 < source.Length && source[index + 2] == '\n')))
+            {
+                index += source[index + 1] == '\r' ? 3 : 2;
+                continue;
+            }
+            if (source[index] == '\n') break;
+            index++;
+        }
+        return index;
+    }
+
+    // Locate a fragment boundary without interpreting parentheses in comments or
+    // strings. Nested string interpolations use the same code scanner.
+    internal static int FindInterpolationEnd(string source, int start, JqSourceSpan span,
+        JqProgramSource program, JqBudget budget)
+    {
+        return Scan(start, 0);
+
+        int Scan(int index, int nesting)
+        {
+            if (nesting > JqRecursion.MaximumDepth)
+                throw new JqCompileException("filter nesting limit exceeded", span, program);
+            int parentheses = 1;
+            while (index < source.Length)
+            {
+                budget.CheckCancellation();
+                char ch = source[index];
+                if (ch == '#') { index = SkipComment(source, index, budget); continue; }
+                if (ch == '"') { index = SkipString(index + 1, nesting); continue; }
+                if (ch == '(') parentheses++;
+                else if (ch == ')' && --parentheses == 0) return index;
+                index++;
+            }
+            return index;
+        }
+
+        int SkipString(int index, int nesting)
+        {
+            while (index < source.Length)
+            {
+                budget.CheckCancellation();
+                char ch = source[index++];
+                if (ch == '"') return index;
+                if (ch != '\\' || index == source.Length) continue;
+                if (source[index] == '(')
+                {
+                    index = Scan(index + 1, nesting + 1);
+                    if (index == source.Length) return index;
+                }
+                index++;
+            }
+            return index;
+        }
+
+    }
+
     public static List<Token> Tokenize(string source, JqProgramSource programSource, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -77,26 +141,9 @@ internal static class Lexer
             budget.CheckCancellation();
             var c = source[i];
             if (char.IsWhiteSpace(c)) { i++; continue; }
-            // Comments mirror the reference IN_COMMENT state: a backslash
-            // escapes the next character (a line break included, across CRLF),
-            // so only a bare line break ends the comment while odd trailing
-            // backslash runs continue it; the newline itself stays whitespace.
             if (c == '#')
             {
-                while (i < source.Length)
-                {
-                    budget.CheckCancellation();
-                    if (source[i] == '\\' && i + 1 < source.Length
-                        && (source[i + 1] == '\\' || source[i + 1] == '\n'
-                            || (source[i + 1] == '\r' && i + 2 < source.Length && source[i + 2] == '\n')))
-                    {
-                        i += source[i + 1] == '\r' ? 3 : 2;
-                        continue;
-                    }
-                    if (source[i] == '\n')
-                        break;
-                    i++;
-                }
+                i = SkipComment(source, i, budget);
                 continue;
             }
             if (char.IsLetter(c) || c == '_')
@@ -166,46 +213,27 @@ internal static class Lexer
                 AddToken(new Token(TokenKind.Number, source[start..i], SpanAt(start)));
                 continue;
             }
-if (c == '"')
+            if (c == '"')
             {
                 var start = i;
                 var sb = new StringBuilder();
                 i++;
                 var closed = false;
-                // Interpolation nesting: `\(` opens code mode where nested
-                // strings, comments, and parentheses stay raw for the inner
-                // parse; only the matching `)` returns to decoding.
-                var depth = 0;
                 while (i < source.Length)
                 {
                     budget.CheckCancellation();
                     c = source[i++];
-                    if (c == '"' && depth == 0) { closed = true; break; }
-                    if (c == '"')
-                    {
-                        sb.Append(c);
-                        while (i < source.Length)
-                        {
-                            budget.CheckCancellation();
-                            char nested = source[i++];
-                            sb.Append(nested);
-                            if (nested == '\\' && i < source.Length) { sb.Append(source[i++]); continue; }
-                            if (nested == '"') break;
-                        }
-                        continue;
-                    }
-                    if (c == '#' && depth > 0)
-                    {
-                        sb.Append(c);
-                        while (i < source.Length && source[i] != '\n') { budget.CheckCancellation(); sb.Append(source[i++]); }
-                        continue;
-                    }
-                    if (c == '(' && depth > 0) { depth++; sb.Append(c); continue; }
-                    if (c == ')' && depth > 0) { depth--; sb.Append(c); continue; }
+                    if (c == '"') { closed = true; break; }
                     if (c == '\\' && i < source.Length)
                     {
-                        if (depth > 0) { sb.Append(c); sb.Append(source[i++]); continue; }
-                        if (source[i] == '(') { sb.Append("\\("); i++; depth++; continue; }
+                        if (source[i] == '(')
+                        {
+                            int end = FindInterpolationEnd(source, i + 1, SpanAt(start), programSource, budget);
+                            if (end == source.Length) break;
+                            sb.Append(source, i - 1, end - i + 2);
+                            i = end + 1;
+                            continue;
+                        }
                         var e = source[i++];
                         // Keep escaped backslash pairs raw so the interpolation
                         // splitter can tell literal backslash-paren from a marker.
