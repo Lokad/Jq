@@ -8,8 +8,6 @@ namespace Lokad.Jq;
 
 internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) : JqFilter
 {
-    // Substitutions build fresh strings, so results travel untracked.
-    internal override bool PreservesPathIdentity => false;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {

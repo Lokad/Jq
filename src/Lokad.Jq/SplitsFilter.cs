@@ -5,8 +5,6 @@ namespace Lokad.Jq;
 
 internal sealed class SplitsFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
-    // Splits emit fresh substrings, so results travel untracked.
-    internal override bool PreservesPathIdentity => false;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {

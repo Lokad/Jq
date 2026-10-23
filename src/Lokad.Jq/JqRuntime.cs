@@ -744,8 +744,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode ToJsonNumber(JsonNode? node)
     {
-        if (TypeName(node) == "number")
-            return Clone(node) ?? JsonValue.Create(0);
+        if (node is JsonValue numberValue && TypeName(numberValue) == "number")
+            return numberValue;
         if (TryGetString(node, out string? text) && text is not null && !text.Contains('\0'))
         {
             if (TryParseStrictNumber(text, out JsonNode? number) && number is not null)
@@ -1001,7 +1001,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         _ => throw new JqException($"{TypeName(node)} ({TruncatedDump(node)}) has no length"),
     };
 
-    private int CountStringScalars(ReadOnlySpan<char> text)
+    internal int CountStringScalars(ReadOnlySpan<char> text)
     {
         budget.CheckCancellation();
         int count = 0;
@@ -1511,12 +1511,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
             : text.EndsWith(fix, StringComparison.Ordinal);
     }
 
-    internal string TrimAffix(JsonNode? input, JsonNode? affix, bool left, bool right)
+    internal JsonNode TrimAffix(JsonNode? input, JsonNode? affix, bool left, bool right)
     {
         budget.CheckCancellation();
-        if (!TryGetString(input, out string? text) || text is null || !TryGetString(affix, out string? fix) || fix is null)
+        if (input is not JsonValue scalar || !TryGetString(input, out string? text) || text is null || !TryGetString(affix, out string? fix) || fix is null)
             throw new JqException((left ? "startswith" : "endswith") + "() requires string inputs");
-        if (fix.Length == 0) return text;
+        if (fix.Length == 0) return scalar;
         if (left && text.StartsWith(fix, StringComparison.Ordinal))
         {
             budget.ReserveString(text.Length - fix.Length);
@@ -1527,7 +1527,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             budget.ReserveString(text.Length - fix.Length);
             text = text[..^fix.Length];
         }
-        return text;
+        return ReferenceEquals(String(scalar), text) ? scalar : JsonValue.Create(text);
     }
 
     internal static bool IsJqWhitespace(int codepoint) =>
@@ -1543,9 +1543,9 @@ internal sealed partial class JqRuntime(JqBudget budget)
         || codepoint == 0x205F
         || codepoint == 0x3000;
 
-    internal string TrimSides(JsonNode? input, bool left, bool right)
+    internal JsonNode TrimSides(JsonNode? input, bool left, bool right)
     {
-        if (!TryGetString(input, out string? text) || text is null)
+        if (input is not JsonValue scalar || !TryGetString(input, out string? text) || text is null)
             throw new JqException("trim input must be a string");
         budget.CheckCancellation();
         int start = 0;
@@ -1572,9 +1572,9 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
         }
         budget.CheckCancellation();
-        if (start == 0 && end == text.Length) return text;
+        if (start == 0 && end == text.Length) return scalar;
         budget.ReserveString(end - start);
-        return text[start..end];
+        return JsonValue.Create(text[start..end]);
     }
 
     internal JsonNode Explode(JsonNode? input)
@@ -1717,6 +1717,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
             return JsonValue.Create((long)value);
         return JsonValue.Create(value);
     }
+
+    internal JsonNode FormatValue(string format, JsonNode? value) =>
+        format == "text" && value is JsonValue scalar && TryGetString(scalar, out _)
+            ? scalar : JsonValue.Create(Format(format, value));
 
     internal string Format(string format, JsonNode? value)
     {

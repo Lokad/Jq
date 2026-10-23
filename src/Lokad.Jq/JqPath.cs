@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Diagnostics.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -67,8 +68,7 @@ internal sealed record InvalidSegment(JsonNode? Raw) : JqValueSegment
 // at the next path boundary).
 internal sealed record JqValuePath(IReadOnlyList<JqValueSegment> Segments, JsonNode? Value, bool Tracked)
 {
-    // Borrow the last tracked value so loading that same binding can restore
-    // the path after an intervening expression constructs a fresh value.
+    // Keep the selected value so a later identical result can restore its path.
     internal JqValuePath? Origin { get; init; }
 
     internal JqValuePath WithValue(JsonNode? value, bool tracked) =>
@@ -620,6 +620,19 @@ internal static class JqPathReads
             + context.Runtime.TruncatedDump(SliceKey(lower, upper, context)) + ")");
     }
 
+    internal static bool TrySlicePath(JqValuePath pair, JsonNode? lower, JsonNode? upper, bool optional,
+        JqContext context, [NotNullWhen(true)] out JqValuePath? result)
+    {
+        JqValueSegment Segment() => JqPaths.TrySliceBoundValue(lower, out double? from)
+            && JqPaths.TrySliceBoundValue(upper, out double? to)
+            ? new SliceSegment(from, to) : new InvalidSegment(SliceKey(lower, upper, context));
+        if (!pair.Tracked) JqPaths.RequireTracked(pair, Segment(), context);
+        result = null;
+        if (!TrySlice(pair.Value, lower, upper, optional, context, out JsonNode? value)) return false;
+        result = new JqValuePath(JqPaths.Extend(pair.Segments, Segment(), context.Budget), value, true);
+        return true;
+    }
+
     internal static JsonObject SliceKey(JsonNode? lower, JsonNode? upper, JqContext context)
     {
         context.Budget.ReserveBytes(384);
@@ -1129,8 +1142,6 @@ internal sealed class PathBuiltinFilter(JqFilter Paths) : JqFilter
 // `del(EXPRS...)`: collects paths from every argument, then deletes once.
 internal sealed class DelBuiltinFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 {
-    // Deletion rebuilds the root, so results travel untracked.
-    internal override bool PreservesPathIdentity => false;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -1183,8 +1194,6 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
 // `setpath(PATHS; VALUES)`: cartesian value-outer combinations.
 internal sealed class SetpathBuiltinFilter(JqFilter Paths, JqFilter Values) : JqFilter
 {
-    // Updates rebuild the root, so results travel untracked.
-    internal override bool PreservesPathIdentity => false;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -1199,8 +1208,6 @@ internal sealed class SetpathBuiltinFilter(JqFilter Paths, JqFilter Values) : Jq
 // `delpaths(PATHS)`: deletes a value holding an array of paths.
 internal sealed class DelpathsBuiltinFilter(JqFilter Paths) : JqFilter
 {
-    // Deletion rebuilds the root, so results travel untracked.
-    internal override bool PreservesPathIdentity => false;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -1227,8 +1234,6 @@ internal sealed class DelpathsBuiltinFilter(JqFilter Paths) : JqFilter
 // `pick(EXPRS...)`: rebuilds from null with the original values at each path.
 internal sealed class PickFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 {
-    // Pick rebuilds from null, so its output is never identical to the input.
-    internal override bool PreservesPathIdentity => false;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -1248,10 +1253,6 @@ internal sealed class PickFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 // whose update yields nothing.
 internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) : JqFilter
 {
-    // Assignment results are rebuilt, so they travel untracked like any
-    // fresh container: upstream compiles `=` to _assign and updates to
-    // _modify, whose opaque results fail path tracking the same way.
-    internal override bool PreservesPathIdentity => false;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -1314,8 +1315,6 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
 // empty-update deletion, exactly like the reference builtin.jq definition.
 internal sealed class ModifyBuiltinFilter(JqFilter Paths, JqFilter Update) : JqFilter
 {
-    // Updates rebuild the root, so results travel untracked.
-    internal override bool PreservesPathIdentity => false;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {

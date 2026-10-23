@@ -42,18 +42,11 @@ internal abstract class JqFilter
         }
     }
 
-    // Default path transparency: ordinary evaluation, keeping tracking
-    // only for outputs identical to the incoming value. Filters that build
-    // fresh containers override PreservesPathIdentity so their results travel
-    // untracked and fail at the next path boundary, like the reference,
-    // even when a rebuilt container coincides with the input value.
-    internal virtual bool PreservesPathIdentity => true;
-
     // Proven cardinality lets iterative traversals discard exhausted tail frames
     // without probing ahead into deferred errors or side effects.
     internal virtual bool IsSingleValued(JqEnvironment environment, int depth) => false;
 
-    internal static JqValuePath BoundValuePath(JqValuePath pair, JsonNode? value)
+    internal static JqValuePath TrackResult(JqValuePath pair, JsonNode? value)
     {
         JqValuePath? origin = pair.Tracked ? pair : pair.Origin;
         bool intact = origin is not null && PathIntact(origin.Value, value);
@@ -63,7 +56,7 @@ internal abstract class JqFilter
     protected virtual async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
         await foreach (JsonNode? value in Evaluate(pair.Value, context, environment).ConfigureAwait(false))
-            yield return pair.WithValue(value, pair.Tracked && PreservesPathIdentity && PathIntact(pair.Value, value));
+            yield return TrackResult(pair, value);
     }
 
     // Heap values retain their identity by reference. Immediate numbers keep
@@ -152,15 +145,9 @@ internal sealed class LiteralFilter(JsonNode? value) : SingleValueFilter
 {
     internal JsonNode? Value => value;
 
-    // Upstream identity keeps immediates (numbers, booleans, null) intact
-    // by value while heap values (strings, arrays, objects) break on fresh
-    // copies, so literals follow the same split.
-    internal override bool PreservesPathIdentity =>
-        value is null || (value is JsonValue scalar && !TryGetString(scalar, out _));
-
     protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        return context.Runtime.Clone(value);
+        return value;
     }
 }
 
@@ -184,7 +171,7 @@ internal sealed class VariableFilter(string name) : SingleValueFilter
     {
         if (!environment.TryGetValue(name, out JsonNode? value))
             throw new JqException($"undefined variable ${name}");
-        yield return BoundValuePath(pair, value);
+        yield return TrackResult(pair, value);
     }
 }
 
@@ -1131,14 +1118,8 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
             await foreach (JsonNode? upper in Bounds(end, outer.Value, context, environment).ConfigureAwait(false))
                 await foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment).ConfigureAwait(false))
                 {
-                    if (!pair.Tracked) RequireTracked(pair, Segment(), context);
-                    if (JqPathReads.TrySlice(pair.Value, lower, upper, optional, context, out JsonNode? result))
-                        yield return new JqValuePath(Extend(pair.Segments, Segment(), context.Budget), result, true);
-
-                    JqValueSegment Segment() => JqPaths.TrySliceBoundValue(lower, out double? from)
-                        && JqPaths.TrySliceBoundValue(upper, out double? to)
-                        ? new SliceSegment(from, to)
-                        : new InvalidSegment(JqPathReads.SliceKey(lower, upper, context));
+                    if (JqPathReads.TrySlicePath(pair, lower, upper, optional, context, out JqValuePath? result))
+                        yield return result;
                 }
     }
 
@@ -1252,8 +1233,6 @@ internal sealed class ArrayFilter(JqFilter item) : JqFilter
 {
     internal JqFilter Item => item;
 
-    internal override bool PreservesPathIdentity => false;
-
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         context.Budget.ReserveBytes(64);
@@ -1272,8 +1251,6 @@ internal sealed record ObjectProperty(string? StaticKey, JqFilter? KeyFilter, Jq
 internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : JqFilter
 {
     internal IReadOnlyList<ObjectProperty> Properties => properties;
-
-    internal override bool PreservesPathIdentity => false;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -1371,10 +1348,6 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
     internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
         depth < JqRecursion.MaximumDepth && left.IsSingleValued(environment, depth + 1)
         && right.IsSingleValued(environment, depth + 1);
-    // Arithmetic builds fresh values and breaks path identity; boolean
-    // connectives and comparisons agree with the reference through boolean
-    // singletons on both sides, so they keep the default rule.
-    internal override bool PreservesPathIdentity => op is "and" or "or" or "==" or "!=" or "<" or "<=" or ">" or ">=";
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -1526,7 +1499,6 @@ internal sealed class OptionalFilter(JqFilter inner) : JqFilter
             yield return results.Current;
         }
     }
-
 
 }
 
@@ -1693,13 +1665,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
         depth < JqRecursion.MaximumDepth && name != "inputs"
         && args.All(arg => arg.IsSingleValued(environment, depth + 1));
 
-    // Freshly computed values break path identity: only pass-through
-    // selectors, unchanged abs, subvalue extrema, and stderr keep the default
-    // identity rule. Everything else built here
-    // (conversions, string operations, math, search predicates, formats,
-    // dates, and the remaining rebuilt containers) travels untracked.
-    internal override bool PreservesPathIdentity => name is ("abs" or "stderr" or "min" or "max" or "arrays" or "objects" or "iterables" or "booleans" or "numbers" or "strings" or "nulls" or "values" or "scalars" or "finites" or "normals");
-
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         if (name == "empty")
@@ -1744,7 +1709,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 throw NewHalt(context, input, HaltCode(value));
             yield break;
         }
-
 
         if (args.Count == 0)
         {
@@ -1834,9 +1798,9 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     yield return input;
                     break;
                 case "tonumber": yield return context.Runtime.ToJsonNumber(input); break;
-                case "toboolean": yield return JsonValue.Create(context.Runtime.ToJsonBoolean(input)); break;
+                case "toboolean": yield return TypeName(input) == "boolean" ? input : JsonValue.Create(context.Runtime.ToJsonBoolean(input)); break;
                 case "utf8bytelength": yield return JsonValue.Create(Utf8ByteLength(input, context)); break;
-                case "tostring": yield return JsonValue.Create(context.Runtime.ToJqString(input)); break;
+                case "tostring": yield return TryGetString(input, out _) ? input : JsonValue.Create(context.Runtime.ToJqString(input)); break;
                 case "tojson": yield return JsonValue.Create(context.Runtime.Serialize(input, false, null, false)); break;
                 case "fromjson": yield return context.Runtime.ParseJson(input); break;
                 case "min": yield return context.Runtime.MinMax(input, false); break;
@@ -1872,7 +1836,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                         throw new JqRuntimeException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a valid format");
                     if (formatName != "json" && formatName != "text" && formatName != "csv" && formatName != "tsv" && formatName != "html" && formatName != "uri" && formatName != "urid" && formatName != "sh" && formatName != "base64" && formatName != "base64d")
                         throw new JqRuntimeException(formatName + " is not a valid format");
-                    yield return JsonValue.Create(context.Runtime.Format(formatName, input));
+                    yield return context.Runtime.FormatValue(formatName, input);
                     break;
                 case "contains": yield return JsonValue.Create(context.Runtime.Contains(input, Arg(0))); break;
                 case "inside": yield return JsonValue.Create(context.Runtime.Contains(Arg(0), input)); break;
@@ -1901,12 +1865,12 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     break;
                 case "startswith": yield return JsonValue.Create(StartsEndsWith(input, Arg(0), true)); break;
                 case "endswith": yield return JsonValue.Create(StartsEndsWith(input, Arg(0), false)); break;
-                case "ltrimstr": yield return JsonValue.Create(context.Runtime.TrimAffix(input, Arg(0), true, false)); break;
-                case "rtrimstr": yield return JsonValue.Create(context.Runtime.TrimAffix(input, Arg(0), false, true)); break;
-                case "trimstr": yield return JsonValue.Create(context.Runtime.TrimAffix(input, Arg(0), true, true)); break;
-                case "trim": yield return JsonValue.Create(context.Runtime.TrimSides(input, true, true)); break;
-                case "ltrim": yield return JsonValue.Create(context.Runtime.TrimSides(input, true, false)); break;
-                case "rtrim": yield return JsonValue.Create(context.Runtime.TrimSides(input, false, true)); break;
+                case "ltrimstr": yield return context.Runtime.TrimAffix(input, Arg(0), true, false); break;
+                case "rtrimstr": yield return context.Runtime.TrimAffix(input, Arg(0), false, true); break;
+                case "trimstr": yield return context.Runtime.TrimAffix(input, Arg(0), true, true); break;
+                case "trim": yield return context.Runtime.TrimSides(input, true, true); break;
+                case "ltrim": yield return context.Runtime.TrimSides(input, true, false); break;
+                case "rtrim": yield return context.Runtime.TrimSides(input, false, true); break;
                 case "explode": yield return context.Runtime.Explode(input); break;
                 case "implode": yield return context.Runtime.Implode(input); break;
                 case "split":
@@ -2001,26 +1965,49 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     yield return pair;
             yield break;
         }
+        if (name is "ltrimstr" or "rtrimstr" or "trimstr")
+        {
+            await foreach (JsonNode? affix in args[0].Evaluate(pair.Value, context, environment).ConfigureAwait(false))
+            {
+                bool left = name != "rtrimstr", right = name != "ltrimstr";
+                if (!TryGetString(pair.Value, out string text) || !TryGetString(affix, out string fix))
+                    throw new JqException((left ? "startswith" : "endswith") + "() requires string inputs");
+                JqValuePath current = pair;
+                if (left && text.StartsWith(fix, StringComparison.Ordinal))
+                {
+                    int width = context.Runtime.CountStringScalars(fix);
+                    if (!JqPathReads.TrySlicePath(current, JsonValue.Create(width), null, false, context, out JqValuePath? sliced))
+                        yield break;
+                    current = sliced;
+                    text = String(current.Value);
+                }
+                if (right && text.EndsWith(fix, StringComparison.Ordinal))
+                {
+                    int end = context.Runtime.CountStringScalars(text) - context.Runtime.CountStringScalars(fix);
+                    if (!JqPathReads.TrySlicePath(current, null, JsonValue.Create(end), false, context, out JqValuePath? sliced))
+                        yield break;
+                    current = sliced;
+                }
+                yield return current;
+            }
+            yield break;
+        }
         await foreach (JqValuePath next in base.EvaluatePathsCore(pair, context, environment).ConfigureAwait(false))
             yield return next;
     }
 }
 internal sealed class FormatFilter(string format) : JqFilter
 {
-    // Formatted encodings build fresh strings, so results travel untracked.
-    internal override bool PreservesPathIdentity => false;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
-        yield return JsonValue.Create(context.Runtime.Format(format, input));
+        yield return context.Runtime.FormatValue(format, input);
     }
 
 }
 
 internal sealed class InterpolatedStringFilter : JqFilter
 {
-    // Templates always build fresh strings, so results travel untracked.
-    internal override bool PreservesPathIdentity => false;
 
     private abstract record Segment;
 

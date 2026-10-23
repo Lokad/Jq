@@ -175,9 +175,9 @@ public sealed partial class JqTests
         using var budget = new JqBudget(CancellationToken.None);
         var runtime = new JqRuntime(budget);
         JsonNode input = JsonValue.Create(text);
-        Assert.Equal(both, runtime.TrimSides(input, true, true));
-        Assert.Equal(left, runtime.TrimSides(input, true, false));
-        Assert.Equal(right, runtime.TrimSides(input, false, true));
+        Assert.Equal(both, runtime.TrimSides(input, true, true).GetValue<string>());
+        Assert.Equal(left, runtime.TrimSides(input, true, false).GetValue<string>());
+        Assert.Equal(right, runtime.TrimSides(input, false, true).GetValue<string>());
     }
 
     [Fact]
@@ -189,10 +189,10 @@ public sealed partial class JqTests
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token);
         var runtime = new JqRuntime(budget);
         JsonNode input = JsonValue.Create(text);
-        Assert.Same(text, runtime.TrimSides(input, true, true));
+        Assert.Same(text, runtime.TrimSides(input, true, true).GetValue<string>());
         Assert.Equal(0, root.ReservedBytes);
         cancellation.Cancel();
-        Assert.Throws<OperationCanceledException>(() => runtime.TrimSides(input, true, true));
+        Assert.Throws<OperationCanceledException>(() => runtime.TrimSides(input, true, true).GetValue<string>());
     }
 
     [Fact]
@@ -202,7 +202,7 @@ public sealed partial class JqTests
         using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
-            Assert.Equal("x", runtime.TrimSides(JsonValue.Create(new string(' ', 100000) + "x"), true, true));
+            Assert.Equal("x", runtime.TrimSides(JsonValue.Create(new string(' ', 100000) + "x"), true, true).GetValue<string>());
             Assert.Equal(2, root.ReservedBytes);
             Assert.True(Assert.Throws<JqQuotaException>(() => runtime.TrimSides(JsonValue.Create(" xy "), true, true)).IsMemoryAdmission);
         }

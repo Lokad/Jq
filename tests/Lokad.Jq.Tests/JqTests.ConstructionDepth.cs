@@ -17,7 +17,7 @@ public sealed partial class JqTests
         ];
         string[] copies =
         [
-            ". + []", ". - []", "add(.,.)", "sort", "unique", "reverse", "flatten(0)",
+            ". + [0]", ". - []", "add(.,.)", "sort", "unique", "reverse", "flatten(0)",
             "sort_by(empty)", "unique_by(empty)", "_sort_by_impl([0])", "_unique_by_impl([0])",
         ];
         foreach (int depth in new[] { 63, 64 })
@@ -40,7 +40,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "\"prefix\", (try (" + source + " | length) catch \"caught\")")));
         Assert.Equal(depth == 63 ? 0 : 5, await command.ExecuteAsync(host, memory, CancellationToken.None));
-        string result = source.Contains("add(.,.)", StringComparison.Ordinal) ? "2\n" : "1\n";
+        string result = (source.Contains("add(.,.)", StringComparison.Ordinal) || source.Contains(". + [0]", StringComparison.Ordinal)) ? "2\n" : "1\n";
         Assert.Equal(depth == 63 ? "\"prefix\"\n" + result : "\"prefix\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(depth == 63 ? "" : "jq: value nesting limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);

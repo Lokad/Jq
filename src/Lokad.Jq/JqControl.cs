@@ -105,10 +105,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
                 {
                     faulted = true;
                     JsonNode? payload = JqErrors.Payload(exception, context.Budget);
-                    bool identical = ReferenceEquals(payload, pair.Value)
-                        || ((payload is null || (payload is JsonValue scalar && !JqRuntime.TryGetString(scalar, out _)))
-                            && PathIntact(pair.Value, payload));
-                    failure = pair.WithValue(payload, pair.Tracked && identical);
+                    failure = TrackResult(pair, payload);
                 }
             }
             if (faulted && failure is not null && Handler is JqFilter handler)
