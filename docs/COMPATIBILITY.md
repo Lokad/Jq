@@ -25,6 +25,9 @@ updates preserve the enclosing input and key-major effects/results; `?` leaves
 key-expression errors visible. `join` and `from_entries` iterate array elements
 or object values in insertion order; null join elements remain valid.
 `JOIN` lookups follow ordinary indexing, including array searches and slice keys.
+`bsearch`, `sub` and `gsub` evaluate value arguments before input validation;
+replacement filters remain lazy. `transpose` calculates row lengths before
+requesting numeric indices, including zero-width scalar/object rows.
 Writable paths retain heap identity and immediate-value representation. A result
 that returns the selected representation can restore its path; fresh containers
 cannot become targets through equal contents.

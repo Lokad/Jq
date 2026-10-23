@@ -531,6 +531,36 @@ foreach (bool refuse in new[] { false, true })
         && host.Output(JqFileDescriptor.StdErr) == "jq: error closing /first: storage unavailable\n"
         && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
 }
+{
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    var host = new SmokeHost();
+    host.AddFile("/records", string.Concat(Enumerable.Range(0, 4096).Select(i => $"p{i:D5}\n")));
+    Check("distinct regex stream retains bounded storage", await Command(["-Rc",
+        ". as $p | \"x\" | test($p) | empty", "/records"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr) == ""
+        && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("empty value arguments precede invalid input", await Command(["-nc",
+        "[bsearch(empty)], [sub(empty; \"x\")], [gsub(\"a\"; \"x\"; empty)]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[]\n[]\n[]\n"
+        && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    Check("argument halt status", await Command(["-nc", "try bsearch(halt_error(7)) catch ."], [])
+        .ExecuteAsync(host, CancellationToken.None) == 7
+        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    Check("zero-width transpose rows", await Command(["-nc", "[0,\"\",{},null] | transpose"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 

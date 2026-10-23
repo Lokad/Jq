@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Retain one idle compiled regex pattern while preserving active pattern,
+  subject and result ownership, allowing long streams of distinct patterns.
+- Evaluate `bsearch`, `sub` and `gsub` value arguments before validating input,
+  preserving empty streams, argument effects, input consumption and halt status.
+- Transpose zero-width scalar/object rows and use length/index error boundaries.
+
 - Compare shared containers by identity while preserving scalar/separate-tree NaN semantics.
 - Track paths through selected-value identity, preserving pass-through scalars,
   immediate round trips and affix slice segments.
