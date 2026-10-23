@@ -11,6 +11,8 @@ retain aliases, including named arguments and their `$ARGS.named` entries,
 `getpath` and selected extrema. Updates rebuild
 containers while preserving the tested path rules and independent source values.
 All I/O, modules, environment, clock and timezone inputs come from the embedding host.
+Named `ENV` and `ARGS` arguments remain in `$ARGS.named`; intrinsic bindings retain
+their meaning, including when those named values come from files.
 String search indices count Unicode scalars. String and array searches report
 overlapping matches.
 Loops preserve depth-first condition multiplicity, effects and lazy termination.
@@ -50,6 +52,8 @@ can restore its path.
   Explicit search metadata replaces default paths; unreadable selected files
   fail loading without falling back to another candidate.
   Unresolved function calls can fail during evaluation rather than compilation.
+  `modulemeta` inspects fresh library syntax independently of dependency resolution
+  and executable import caching.
   Automatic `~/.jq`, home expansion and `$ORIGIN` lookup are excluded. Main-file
   `$__loc__` reports the file path; qualified calls use hierarchical scopes.
 - **Recursion:** direct tails and proven single-valued control paths flatten.

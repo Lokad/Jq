@@ -4,8 +4,10 @@
 invocation. `ExecuteAsync` binds arguments, compiles the filter and streams results
 through `IJqHost`, using the supplied cancellation token and optional shared
 `IMemoryBudget`. Each execution has fresh evaluation state. Its argument values are owned once by
-`$ARGS`; named variables borrow the corresponding entries. Updates copy borrowed
-branches, keeping reused and overlapping executions independent.
+`$ARGS`; ordinary named variables borrow the corresponding entries. Named `ENV`
+and `ARGS` values stay in `$ARGS.named`; intrinsic `$ENV` and `env` use the host
+snapshot. Updates copy borrowed branches, keeping reused and overlapping executions
+independent.
 
 ## Host I/O
 
@@ -36,7 +38,7 @@ normal downstream closure. Cancellation alone does not end a pending buffer borr
 Pending reads, including `input`, `inputs` and `modulemeta`, suspend evaluation
 without blocking the caller. Pure evaluation completes synchronously.
 
-Outer iteration and `input`/`inputs` share one pull cursor. File operands open
+Outer iteration and `input`/`inputs` share one pull cursor. File operands resolve and open
 lazily; `-` uses borrowed stdin at its current position. UTF-8 JSON values and raw
 lines may span reads. JSON decoding retains completed nodes across reads,
 including non-finite literals, and discards parsed byte prefixes before further
@@ -91,9 +93,10 @@ set.
 Reads and pass-through results borrow existing values. Writes copy borrowed
 branches; private accumulators such as `add` and `fromstream` update their owned
 containers directly. Emitted stream values stay independent of later updates.
-Data imports parse directly into their owning array. Cached function modules and
-module metadata reuse loaded sources while preserving search precedence; data
-imports read fresh contents. Module exports stay charged with their cache; linked
+Data imports parse directly into their owning array. Executable function imports
+reuse linked modules while preserving search precedence. `modulemeta` reads current
+library syntax for metadata, dependencies and definition names. Metadata inspection
+and data imports read fresh contents. Module exports stay charged with their cache; linked
 bindings and temporary merge metadata admit separately. Interpolation fragments
 borrow visible compiler scopes and keep their declarations private.
 

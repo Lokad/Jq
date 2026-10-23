@@ -156,7 +156,7 @@ marked comparison table and provenance sections above.
 
 ## Governor diagnostics
 
-The 87-case catalog checks separate stdout/stderr digests and complete refunds
+The governor catalog checks separate stdout/stderr digests and complete refunds
 under a shared 256 MiB allowance with one/four workers. Instrumented call counts
 are separate from uninstrumented timing/allocation lanes, which warm for at least
 eight calls and one second, then collect three alternating pairs. These local

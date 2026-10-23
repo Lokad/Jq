@@ -56,6 +56,35 @@ if (args.Length != 0)
 int checks = 0;
 {
     var host = new SmokeHost();
+    host.AddFile("/data", "42");
+    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    Check("intrinsic and named bindings", await Command(["-nc", "--arg", "ENV", "named",
+        "--slurpfile", "ARGS", "/data", "[$ENV.COLOR,env.COLOR,$ARGS.named.ENV,$ARGS.named.ARGS]"],
+        [new("COLOR", "green")]).ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[\"green\",\"green\",\"named\",[42]]\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && host.ClosedDescriptors.Count == 1
+        && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    host.AddFile("/first", "42\n43\n");
+    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    Check("demand-time input paths", await Command(["-nc", "first(inputs)", "/first", ""], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "42\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    host.AddFile("/m.jq", "module {version:1}; import \"missing\" as m; def f: absent;");
+    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    Check("module metadata inspection", await Command(["-nc", "\"m\"|modulemeta|[.version,.defs,.deps[0].relpath]"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[1,[\"f/0\"],\"missing\"]\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
     var memory = new BenchmarkMemoryBudget(128 * 1024);
     host.SetInput("{\"a\":[10,20,30],\"b\":1,\"c\":2}");
     Check("computed paths", await Command(["-c", "[path(.a[.b]),path(.a[.b:.c])]"], [])

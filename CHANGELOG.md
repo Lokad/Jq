@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Keep intrinsic `$ENV`/`env` separate from named arguments, and load file
+  arguments named `ENV` or `ARGS` into `$ARGS.named` normally.
+- Resolve input paths when requested and admit automatic invocation directories
+  without charging for copies of borrowed `PWD` text. Skip invalid module search
+  candidates while preserving virtual-root policy and required/optional outcomes.
+- Inspect fresh module metadata through the shared library parser without loading
+  dependencies or retaining inspection-only compiled modules. Preserve executable
+  import caching, cancellation, admission and terminal descriptor cleanup.
+
 - Preserve earlier evaluation errors after normal output closure and retain
   refused admission status 5 when later cancellation stops diagnostic reporting.
 - Use boolean regex matching for exact-true `_match_impl` mode. Build scan/split
@@ -75,7 +84,7 @@
   before construction and release completed demand while retaining captures and
   pending consumers.
 - Borrow visible compiler scopes for interpolation while keeping fragment
-  declarations private. Reuse cached function modules and module metadata before
+  declarations private. Reuse cached executable function modules before
   source reads; preserve search precedence and fresh data imports. Refund source
   buffers when descriptor closure fails before publication.
 - Preserve pending source/condition outputs and active control scopes around
