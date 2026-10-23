@@ -12,8 +12,8 @@ public sealed partial class JqTests
     [InlineData("0", "limit(0; error(\"x\"))", "")]
     [InlineData("0", "try skip(2; (1, error(\"x\"), 2)) catch .", "\"x\"\n")]
     // Numeric-string counts coerce instead of following the reference order-branches, which would subtract and fail.
-    [InlineData("[1,2,3]", "[limit(\"2\"; .[])]", "[\n  1,\n  2\n]\n")]
-    [InlineData("0", "nth(\"1\"; (10, 20, 30))", "20\n")]
+    [InlineData("[1,2,3]", "try [limit(\"2\"; .[])] catch .", "\"string (\\\"2\\\") and number (1) cannot be subtracted\"\n")]
+    [InlineData("0", "try nth(\"1\"; (10, 20, 30)) catch .", "\"string (\\\"1\\\") and number (1) cannot be subtracted\"\n")]
     [InlineData("[5, 6]", "first(.[])", "5\n")]
     [InlineData("[1, 2]", "first", "1\n")]
     [InlineData("[1, 2]", "last", "2\n")]
@@ -114,10 +114,9 @@ public sealed partial class JqTests
     [InlineData("try limit(-1; 1) catch .", "\"limit doesn't support negative count\"\n")]
     [InlineData("try nth(-1; 1) catch .", "\"nth doesn't support negative indices\"\n")]
     [InlineData("try skip(-1; error) catch .", "\"skip doesn't support negative count\"\n")]
-    // NaN counts fall through to the reference else branches: limit rejects
-    // with its own diagnostic while nth surfaces the desugared skip one.
+    // NaN counts follow the reference comparison branches.
     [InlineData("try limit(nan; 1) catch .", "\"limit doesn't support negative count\"\n")]
-    [InlineData("try nth(nan; 1) catch .", "\"skip doesn't support negative count\"\n")]
+    [InlineData("try nth(nan; 1) catch .", "\"nth doesn't support negative indices\"\n")]
     [InlineData("try skip(nan; 1) catch .", "\"skip doesn't support negative count\"\n")]
     // Null and boolean counts rank below numbers, so they take the same
     // else branches as negatives (and NaN) in the reference order checks.

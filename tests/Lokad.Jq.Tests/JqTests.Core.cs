@@ -155,7 +155,7 @@ public sealed partial class JqTests
     [InlineData("1 + \"x\"", "number (1) and string (\"x\") cannot be added")]
     [InlineData("nan + \"a\"", "number (null) and string (\"a\") cannot be added")]
     [InlineData("\"a\" * {}", "string (\"a\") and object ({}) cannot be multiplied")]
-    // Arithmetic stays strict even for numeric strings; only count positions coerce.
+    // Arithmetic rejects numeric strings.
     [InlineData("\"2\" + 1", "string (\"2\") and number (1) cannot be added")]
     [InlineData("\"6\" / 2", "string (\"6\") and number (2) cannot be divided")]
     [InlineData("123456789012345678901234567890 + \"x\"", "and string (\"x\") cannot be added")]

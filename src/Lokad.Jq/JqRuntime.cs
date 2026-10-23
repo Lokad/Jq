@@ -729,52 +729,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return merged;
     }
 
-    // Numeric projection with a string fallback. Callers decide strictness:
-    // arithmetic, negation, math builtins, and halt codes kind-check first
-    // (numeric strings stay rejected); count positions use TryCountLevel to
-    // keep the recorded leniency; flatten depths and slice bounds use
-    // TryDepthLevel to follow their reference kind rules instead.
-    // Count positions keep the Number() leniency for numeric strings while
-    // reporting kind failures with the caller-chosen diagnostic.
-    internal static bool TryCountLevel(JsonNode? depth, out double level)
-    {
-        if (depth is JsonValue value)
-        {
-            if (value.TryGetValue<double>(out level))
-                return true;
-            if (value.TryGetValue<long>(out long whole))
-            {
-                level = whole;
-                return true;
-            }
-            if (value.TryGetValue<int>(out int integer))
-            {
-                level = integer;
-                return true;
-            }
-            if (value.TryGetValue<decimal>(out decimal dec))
-            {
-                level = (double)dec;
-                return true;
-            }
-            if (value.TryGetValue<string>(out string? raw) &&
-                double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
-            {
-                level = parsed;
-                return true;
-            }
-        }
-        level = double.NaN;
-        return false;
-    }
-
+    // Projects a number already checked by its caller; textual conversion is tonumber.
     internal static double Number(JsonNode? node)
     {
         if (node is JsonValue v && v.TryGetValue<double>(out var d)) return d;
         if (node is JsonValue i && i.TryGetValue<int>(out var intValue)) return intValue;
         if (node is JsonValue l && l.TryGetValue<long>(out var longValue)) return longValue;
         if (node is JsonValue m && m.TryGetValue<decimal>(out var decimalValue)) return (double)decimalValue;
-        if (node is JsonValue s && s.TryGetValue<string>(out var text) && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)) return parsed;
         throw new JqRuntimeException($"expected number, got {TypeName(node)}");
     }
 

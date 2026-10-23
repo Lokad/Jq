@@ -8,13 +8,13 @@ public sealed partial class JqTests
     [InlineData("[range(3)]", "[0,1,2]\n")]
     [InlineData("[range((0,1);(2,3);(1,2))]", "[0,1,0,0,1,2,0,2,1,1,1,2,1]\n")]
     [InlineData("try [range(false;empty;error(\"unused\"))] catch .", "[]\n")]
-    [InlineData("try [range(0;1;false)] catch .", "\"Range bounds must be numeric\"\n")]
+    [InlineData("try [range(0;1;false)] catch .", "[]\n")]
     [InlineData("[range(0;3;0),range(0;3;nan),range(0;3;-1)]", "[]\n")]
     [InlineData("[range(3;0;-1)]", "[3,2,1]\n")]
     [InlineData("[range(0.5;2;0.5)]", "[0.5,1,1.5]\n")]
-    [InlineData("[range(\"0\";\"2\";\"1\")]", "[0,1]\n")]
+    [InlineData("[limit(3;range(\"0\";\"2\";\"1\"))]", "[\"0\",\"01\",\"011\"]\n")]
     [InlineData("first(range(0;1e100))", "0\n")]
-    public async Task Jq_RangeArgumentsRemainOrderedLazyAndNumeric(string filter, string expected)
+    public async Task Jq_RangeArgumentsFollowAritySpecificOperations(string filter, string expected)
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", filter)));

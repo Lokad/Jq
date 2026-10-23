@@ -241,8 +241,8 @@ internal sealed class TransposeFilter : JqFilter
 // prelude that the remaining builtins share with the reference.
 internal sealed class RangeFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
-    // Generated scalars are always fresh, so results travel untracked.
-    internal override bool PreservesPathIdentity => false;
+    // The three-argument definition can pass its initial heap value through.
+    internal override bool PreservesPathIdentity => args.Count == 3;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
@@ -255,14 +255,33 @@ internal sealed class RangeFilter(IReadOnlyList<JqFilter> args) : JqFilter
         {
             if (index >= args.Count)
             {
-                double start = args.Count == 1 ? 0 : Bound(current[0]);
-                double end = Bound(current[args.Count == 1 ? 0 : 1]);
-                double step = args.Count > 2 ? Bound(current[2]) : 1;
-                if (!(step > 0) && !(step < 0)) yield break;
-                for (double value = start; step > 0 ? value < end : value > end; value += step)
+                JsonNode? startValue = args.Count == 1 ? JsonValue.Create(0) : current[0];
+                JsonNode? endValue = current[args.Count == 1 ? 0 : 1];
+                if (args.Count < 3 || (TypeName(startValue) == "number" && TypeName(endValue) == "number" && TypeName(current[2]) == "number"))
                 {
-                    context.Budget.CheckCancellation();
-                    yield return CreateNumber(value);
+                    double start = Bound(startValue);
+                    double end = Bound(endValue);
+                    double step = args.Count == 3 ? Number(current[2]) : 1;
+                    bool positive = step > 0;
+                    if (!positive && !(step < 0) && !double.IsNaN(step)) yield break;
+                    for (double value = start; positive ? value < end : value > end; value += step)
+                    {
+                        context.Budget.CheckCancellation();
+                        yield return CreateNumber(value);
+                    }
+                }
+                else
+                {
+                    JsonNode? step = current[2];
+                    int direction = context.Runtime.Compare(step, JsonValue.Create(0));
+                    if (direction == 0) yield break;
+                    for (JsonNode? value = startValue;
+                        direction > 0 ? context.Runtime.Compare(value, endValue) < 0 : context.Runtime.Compare(value, endValue) > 0;
+                        value = context.Runtime.Add(value, step))
+                    {
+                        context.Budget.CheckCancellation();
+                        yield return value;
+                    }
                 }
                 yield break;
             }
@@ -275,8 +294,8 @@ internal sealed class RangeFilter(IReadOnlyList<JqFilter> args) : JqFilter
 
         static double Bound(JsonNode? value)
         {
-            if (!TryCountLevel(value, out double bound)) throw new JqException("Range bounds must be numeric");
-            return bound;
+            if (TypeName(value) != "number") throw new JqException("Range bounds must be numeric");
+            return Number(value);
         }
     }
 }
@@ -308,10 +327,9 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
         }
         await foreach (JsonNode? count in Count.Evaluate(input, context, environment).ConfigureAwait(false))
         {
-            // Like range bounds upstream, non-numbers fail with the range
-            // diagnostic while numeric strings still coerce.
-            if (!JqRuntime.TryCountLevel(count, out double level))
+            if (TypeName(count) != "number")
                 throw new JqException("Range bounds must be numeric");
+            double level = Number(count);
             // Like the reference [range(n)|$dot] prelude, the repetition count
             // is the number of range outputs: ceiling for positive fractionals.
             int times = level <= 0 || double.IsNaN(level) ? 0 : Math.Max(0, (int)Math.Ceiling(level));

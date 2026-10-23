@@ -142,20 +142,18 @@ internal sealed class LimitFilter(JqFilter Count, JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         await foreach (JsonNode? count in Count.Evaluate(input, context, environment).ConfigureAwait(false))
         {
-            // Null and booleans rank below numbers, so the reference order branches reject them like negatives.
-            if (count is null || (count is JsonValue countBool && countBool.TryGetValue<bool>(out _)))
+            bool numeric = TypeName(count) == "number";
+            double remaining = numeric ? Number(count) : 0;
+            if (numeric && remaining == 0) continue;
+            if (numeric ? !(remaining > 0) : context.Runtime.Compare(count, JsonValue.Create(0)) <= 0)
                 throw new JqException("limit doesn't support negative count");
-            double total = Number(count);
-            if (total == 0)
-                continue;
-            if (!(total > 0))
-                throw new JqException("limit doesn't support negative count");
-            long pulled = 0;
             await foreach (T value in outputs().ConfigureAwait(false))
             {
+                // The reference subtracts only after the generator yields.
+                if (!numeric) _ = context.Runtime.Subtract(count, JsonValue.Create(1));
+                remaining -= 1;
                 yield return value;
-                if (++pulled >= total)
-                    break;
+                if (remaining <= 0) break;
             }
         }
     }
@@ -205,30 +203,18 @@ internal sealed class NthFilter(JqFilter Index, JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         await foreach (JsonNode? index in Index.Evaluate(input, context, environment).ConfigureAwait(false))
         {
-            // Null and booleans rank below numbers, so the reference order branches reject them like negatives.
-            if (index is null || (index is JsonValue indexBool && indexBool.TryGetValue<bool>(out _)))
+            bool numeric = TypeName(index) == "number";
+            double remaining = numeric ? Number(index) : 0;
+            if (numeric ? !(remaining >= 0) : context.Runtime.Compare(index, JsonValue.Create(0)) < 0)
                 throw new JqException("nth doesn't support negative indices");
-            double position = Number(index);
-            if (position < 0)
-                throw new JqException("nth doesn't support negative indices");
-            // The desugared skip surfaces its own diagnostic for NaN like the
-            // reference else branch (NaN is neither positive nor zero).
-            if (double.IsNaN(position))
-                throw new JqException("skip doesn't support negative count");
-            long skip = (long)position;
-            var results = outputs().GetAsyncEnumerator();
-            await using var resultsLifetime = results.ConfigureAwait(false);
-            bool exhausted = false;
-            for (long taken = 0; taken < skip; taken++)
+            await foreach (T value in outputs().ConfigureAwait(false))
             {
-                if (!await results.MoveNextAsync().ConfigureAwait(false))
-                {
-                    exhausted = true;
-                    break;
-                }
+                if (!numeric) _ = context.Runtime.Subtract(index, JsonValue.Create(1));
+                remaining -= 1;
+                if (remaining >= 0) continue;
+                yield return value;
+                break;
             }
-            if (!exhausted && await results.MoveNextAsync().ConfigureAwait(false))
-                yield return results.Current;
         }
     }
 }
@@ -613,23 +599,16 @@ internal sealed class SkipFilter(JqFilter Count, JqFilter Body) : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         await foreach (JsonNode? count in Count.Evaluate(input, context, environment).ConfigureAwait(false))
         {
-            // Null and booleans rank below numbers, so the reference order branches reject them like negatives.
-            if (count is null || (count is JsonValue skipBool && skipBool.TryGetValue<bool>(out _)))
+            bool numeric = TypeName(count) == "number";
+            double remaining = numeric ? Number(count) : 0;
+            if (numeric ? !(remaining >= 0) : context.Runtime.Compare(count, JsonValue.Create(0)) <= 0)
                 throw new JqException("skip doesn't support negative count");
-            double total = Number(count);
-            // NaN falls through to the reference else branch like negatives.
-            if (total < 0 || double.IsNaN(total))
-                throw new JqException("skip doesn't support negative count");
-            long skip = (long)total;
-            var results = outputs().GetAsyncEnumerator();
-            await using var resultsLifetime = results.ConfigureAwait(false);
-            for (long dropped = 0; dropped < skip; dropped++)
+            await foreach (T value in outputs().ConfigureAwait(false))
             {
-                if (!await results.MoveNextAsync().ConfigureAwait(false))
-                    break;
+                if (!numeric) _ = context.Runtime.Subtract(count, JsonValue.Create(1));
+                remaining -= 1;
+                if (remaining < 0) yield return value;
             }
-            while (await results.MoveNextAsync().ConfigureAwait(false))
-                yield return results.Current;
         }
     }
 }

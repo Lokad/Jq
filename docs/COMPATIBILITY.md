@@ -71,8 +71,8 @@ can restore its path.
   stays flat; composite captured-filter chains retain the depth guard.
 - **Bindings:** object-pattern key expressions can see provisional null bindings
   when the pattern shadows an outer variable used by its key expression.
-- **Other edges:** NaN `range` bounds yield no values. Range validates numeric
-  arguments before iteration; a nonnumeric step can error where jq yields nothing.
+- **Other edges:** NaN `range` bounds yield no values. One/two-argument range requires
+  numbers; three-argument range follows jq comparison and addition.
   Local-time conversion is constrained by .NET's date range. Partial `strptime`
   fields can retain weekday 8 / year-day 367 sentinels; C-library defaults and
   epoch directives can differ across jq builds. A whitespace boundary permits

@@ -324,7 +324,7 @@ public sealed partial class JqTests
     [InlineData("[1, 2]", "combinations(2.5) | length", "3\n3\n3\n3\n3\n3\n3\n3\n")]
     [InlineData("[1, 2]", "combinations(nan)", "[]\n")]
     // Numeric-string counts coerce like other count positions; other kinds fail with the reference range diagnostic.
-    [InlineData("[[1,2],[3,4]]", "combinations(\"2\")", "[\n  [\n    1,\n    2\n  ],\n  [\n    1,\n    2\n  ]\n]\n[\n  [\n    1,\n    2\n  ],\n  [\n    3,\n    4\n  ]\n]\n[\n  [\n    3,\n    4\n  ],\n  [\n    1,\n    2\n  ]\n]\n[\n  [\n    3,\n    4\n  ],\n  [\n    3,\n    4\n  ]\n]\n")]
+    [InlineData("[[1,2],[3,4]]", "try combinations(\"2\") catch .", "\"Range bounds must be numeric\"\n")]
     [InlineData("[]", "combinations", "[]\n")]
     // Length-zero inputs yield one empty combination like the reference length check.
     [InlineData("null", "combinations", "[]\n")]
@@ -365,7 +365,7 @@ public sealed partial class JqTests
     [InlineData("0", "range(0.5; 2)", "0.5\n1.5\n")]
     [InlineData("0", "range(0; 1; 0)", "")]
     [InlineData("0", "range(0; 1; nan)", "")]
-    // Non-numeric bounds fail with the reference range diagnostic while numeric strings keep the recorded leniency.
+    // Non-numeric repetition counts fail with the reference range diagnostic.
     [InlineData("0", "try range(\"a\") catch .", "\"Range bounds must be numeric\"\n")]
     [InlineData("0", "try range(0;\"a\") catch .", "\"Range bounds must be numeric\"\n")]
     [InlineData("0", "[range(\"2\";4)]", "[\n  2,\n  3\n]\n")]
