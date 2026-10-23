@@ -56,6 +56,41 @@ if (args.Length != 0)
 int checks = 0;
 {
     var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    string source = "#" + new string(' ', 256 * 1024) + "\n1";
+    Check("borrowed comment source", await Command(["-nc", source], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "1\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("interpolation comment and literal backslash", await Command(["-nc", "[\"x\\(1 # )\n)\",\"\\u005c(1)\"]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[\"x1\",\"\\\\(1)\"]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("count error after generator effect", await Command(["-nc", "try limit(\"2\"; (debug,99)) catch ."], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "\"string (\\\"2\\\") and number (1) cannot be subtracted\"\n"
+        && host.Output(JqFileDescriptor.StdErr) == "[\"DEBUG:\",null]\n" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("range comparison and addition", await Command(["-nc", "[limit(3;range(\"0\";\"2\";\"1\"))]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[\"0\",\"01\",\"011\"]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    Check("strict source escape", await Command(["-nc", "\"\\u  41\""], [])
+        .ExecuteAsync(host, CancellationToken.None) == 3
+        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr).Contains("invalid unicode escape", StringComparison.Ordinal));
+}
+{
+    var host = new SmokeHost();
     host.AddFile("/first", "[1,");
     host.AddFile("/second", "2]\n");
     var memory = new BenchmarkMemoryBudget(64 * 1024);

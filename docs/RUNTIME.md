@@ -96,6 +96,10 @@ Keep the invocation and borrowed inputs alive through reused/concurrent executio
 Ordinary argument errors remain status 2; admission and structural failures during
 argument setup remain status 5.
 
+Compiler tokens and literal copies admit as constructed; borrowed comments and
+whitespace add no proportional storage. Temporary lexer workspace ends after
+lexing.
+
 Coarse owners track executions, records, buffers, results and caches. Object
 construction workspace ends with enumeration; constant metadata builds private
 children once and releases traversal scratch. Completed temporary work reconciles

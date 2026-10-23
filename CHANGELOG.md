@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Share interpolation boundary rules for comments, continuations and nested strings.
+- Admit constructed compiler storage instead of charging borrowed source length;
+  keep real string/token preflights and reuse temporary string workspace.
+- Follow jq count operations and range arity rules without numeric-string coercion;
+  preserve generator effects and borrowed initial range values.
+- Enforce jq's ASCII source grammar and exact Unicode escapes, preserving quoted
+  Unicode data and literal backslashes in interpolation templates.
+
 - Treat JSON input files as one logical stream: continue split values across
   sources and recognize one initial UTF-8 BOM in JSON, stream and sequence modes.
 - Render debug envelopes around borrowed values, avoiding discarded tree copies.
