@@ -17,7 +17,7 @@ internal readonly struct JqResolvedPath(string display, JqPath absolute)
 /// <summary>Provides canonical path resolution at the jq host boundary.</summary>
 public static class JqPathResolution
 {
-    /// <summary>Resolves the current directory from the first valid exported <c>PWD</c>, or returns root.</summary>
+    /// <summary>Uses the first exported <c>PWD</c> if canonical; otherwise returns root.</summary>
     public static JqPath ResolveCurrentDirectory(IReadOnlyList<JqEnvironmentVariable> environment)
     {
         ArgumentNullException.ThrowIfNull(environment);

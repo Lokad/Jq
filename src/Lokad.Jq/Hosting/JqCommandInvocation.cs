@@ -102,15 +102,9 @@ public sealed class JqCommandInvocation : IDisposable
         ArgumentNullException.ThrowIfNull(memoryBudget);
         long estimate = 256 + (long)IntPtr.Size * arguments.Count
             + 2L * IntPtr.Size * environment.Count;
-        if (currentDirectory is null)
-        {
-            foreach (JqEnvironmentVariable entry in environment)
-            {
-                if (entry.Name != "PWD") continue;
-                estimate += 128 + 64L * entry.Value.Length;
-                break;
-            }
-        }
+        // Automatic directory selection validates borrowed text and can create
+        // one small path wrapper; it does not normalize or copy the string.
+        if (currentDirectory is null) estimate += 32;
         IMemoryScope scope = memoryBudget.CreateScope();
         bool published = false;
         try
