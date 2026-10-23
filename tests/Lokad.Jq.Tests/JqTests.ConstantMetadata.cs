@@ -33,13 +33,14 @@ public sealed partial class JqTests
         Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
         Assert.Equal("[[1,[2,3],{\"b\":[4]}],2]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(2, host.ClosedDescriptors.Count);
+        Assert.Equal(2, host.ReadBytesCallCount);
         Assert.Equal(0, host.OpenFileCount);
         Assert.Equal(0, root.ReservedBytes);
     }
 
     [Fact]
-    public async Task Jq_ConstantMetadataResultsStayIndependentOfTheCache()
+    public async Task Jq_ConstantMetadataResultsStayIndependentAcrossReads()
     {
         var root = new BenchmarkMemoryBudget(256 * 1024);
         var host = new MockFileSystem();
@@ -49,7 +50,8 @@ public sealed partial class JqTests
         Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
         Assert.Equal("[[9,2],[1,2],[1,2]]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(2, host.ClosedDescriptors.Count);
+        Assert.Equal(2, host.ReadBytesCallCount);
         Assert.Equal(0, root.ReservedBytes);
     }
 
