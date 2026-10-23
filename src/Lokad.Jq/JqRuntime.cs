@@ -29,13 +29,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted) =>
         SerializeUtf8(node, ascii, indent, tabs, sorted, false, false);
 
-    internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeDebug(JsonNode? value, bool ascii, bool sorted)
-    {
-        var line = new JsonArray(JsonValue.Create("DEBUG:"), budget.CopyValue(value, 1));
-        return SerializeUtf8(line, ascii, null, false, sorted, false, true);
-    }
+    internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeDebug(JsonNode? value, bool ascii, bool sorted) =>
+        SerializeUtf8(value, ascii, null, false, sorted, false, true);
 
-    private JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted, bool preview, bool newline)
+    private JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JsonNode? node, bool ascii, int? indent, bool tabs, bool sorted, bool preview, bool debug)
     {
         using var keyOrder = sorted ? new JqComparer(budget) : null;
         JqJsonBuffer buffer = budget.RentSerializationBuffer();
@@ -43,11 +40,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
         {
             using (var writer = new Utf8JsonWriter(buffer, CreateWriterOptions(ascii, indent, tabs)))
             {
-                try { WriteJson(node, ascii, writer, keyOrder, preview); }
+                try { WriteJson(node, ascii, writer, keyOrder, preview, debug); }
                 finally { writer.Reset(); }
             }
             buffer.LowercaseUnicodeEscapes();
-            if (newline)
+            if (debug)
             {
                 buffer.GetSpan(1)[0] = (byte)'\n';
                 buffer.Advance(1);
@@ -71,9 +68,15 @@ internal sealed partial class JqRuntime(JqBudget budget)
             NewLine = "\n"
         };
 
-    private void WriteJson(JsonNode? node, bool ascii, Utf8JsonWriter writer, JqComparer? keyOrder, bool preview)
+    private void WriteJson(JsonNode? node, bool ascii, Utf8JsonWriter writer, JqComparer? keyOrder, bool preview, bool debug)
     {
-        WriteValue(node, 0, budget, ascii, writer, keyOrder, preview);
+        if (debug)
+        {
+            writer.WriteStartArray();
+            writer.WriteStringValue("DEBUG:");
+        }
+        WriteValue(node, debug ? 1 : 0, budget, ascii, writer, keyOrder, preview);
+        if (debug) writer.WriteEndArray();
         writer.Flush();
         budget.CheckCancellation();
 
