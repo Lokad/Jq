@@ -163,7 +163,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_CachedModulesAndMetadataAvoidSourceReadsUnderPressure()
+    public async Task Jq_CachedExecutableModulesAvoidSourceReadsUnderPressure()
     {
         const long allowance = 64 * 1024 * 1024;
         var root = new BenchmarkMemoryBudget(allowance);
@@ -185,8 +185,6 @@ public sealed partial class JqTests
                     var env = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
                     Assert.Equal(42, JqRuntime.Number(await new UserCallFilter("f", 0, []).Evaluate(null, context, env).SingleAsync()));
                 }
-                var metadata = await loader.GetModuleMetadataAsync("m", CancellationToken.None);
-                Assert.Equal("f/0", metadata["defs"]?[0]?.GetValue<string>());
                 Assert.Equal(reads, host.ReadBytesCallCount);
                 Assert.Single(host.ClosedDescriptors);
             }

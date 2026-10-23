@@ -7,31 +7,8 @@ using System.Threading.Tasks;
 
 namespace Lokad.Jq;
 
-// Per-execution module cache and loading stack. Search and reads are hosted;
-// no ambient filesystem, home, or executable-origin lookups are performed.
-internal sealed class JqLoadedModule
-{
-    internal JqLoadedModule(
-        JsonObject? metadata,
-        IReadOnlyList<JqModuleImport> imports,
-        IReadOnlyList<JqFunctionDefinition> definitions,
-        JqEnvironment moduleEnv,
-        IReadOnlyDictionary<(string Name, int Arity), JqUserClosure> exports)
-    {
-        Metadata = metadata;
-        Imports = imports;
-        Definitions = definitions;
-        ModuleEnv = moduleEnv;
-        Exports = exports;
-    }
-
-    internal JsonObject? Metadata { get; }
-    internal IReadOnlyList<JqModuleImport> Imports { get; }
-    internal IReadOnlyList<JqFunctionDefinition> Definitions { get; }
-    internal JqEnvironment ModuleEnv { get; }
-    internal IReadOnlyDictionary<(string Name, int Arity), JqUserClosure> Exports { get; }
-}
-
+// Executable imports retain linked bindings; metadata inspection reads fresh
+// library syntax. All search and byte I/O goes through the host.
 internal sealed class JqModuleLoader(
     IJqHost host,
     JqBudget budget,
@@ -40,7 +17,10 @@ internal sealed class JqModuleLoader(
     IReadOnlyList<string> libraryDirs,
     string workingDirectory)
 {
-    private readonly Dictionary<string, JqLoadedModule> _cache = new(StringComparer.Ordinal);
+    private sealed record LoadedModule(JqEnvironment ModuleEnv,
+        IReadOnlyDictionary<(string Name, int Arity), JqUserClosure> Exports);
+
+    private readonly Dictionary<string, LoadedModule> _cache = new(StringComparer.Ordinal);
     private readonly HashSet<string> _loading = new(StringComparer.Ordinal);
 
     internal async Task<JqEnvironment> LoadMainImportsAsync(
@@ -130,7 +110,7 @@ internal sealed class JqModuleLoader(
         }
     }
 
-    private async Task<JqLoadedModule?> TryLoadFuncModuleAsync(
+    private async Task<LoadedModule?> TryLoadFuncModuleAsync(
         JqModuleImport import,
         string importerDir,
         int depth,
@@ -138,7 +118,7 @@ internal sealed class JqModuleLoader(
     {
         foreach (JqPath path in ModulePaths(import, importerDir, ".jq", cancellationToken))
         {
-            if (_cache.TryGetValue(path.Path, out JqLoadedModule? cached)) return cached;
+            if (_cache.TryGetValue(path.Path, out LoadedModule? cached)) return cached;
             var result = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
             if (result is null) continue;
             if (result is JqReadResult.Failed)
@@ -208,35 +188,23 @@ internal sealed class JqModuleLoader(
         }
     }
 
-    private async Task<JqLoadedModule> LoadFuncModuleAtPathAsync(
+    private async Task<LoadedModule> LoadFuncModuleAtPathAsync(
         string canonicalPath,
         ReadOnlyMemory<byte> content,
         int depth,
         CancellationToken cancellationToken)
     {
         using var storage = budget.UseExecutionStorage();
-        // Cache keys must survive a record-local modulemeta search path.
-        budget.ReserveString(canonicalPath.Length);
-        canonicalPath = new string(canonicalPath.AsSpan());
         if (!_loading.Add(canonicalPath))
             throw new JqException("circular import of " + canonicalPath);
         try
         {
-            budget.ReserveString(Encoding.UTF8.GetCharCount(content.Span));
-            string sourceText;
-            try
-            {
-                sourceText = Helpers.Utf8Text.Decode(content);
-            }
-            catch (Exception ex) when (ex is ArgumentException or DecoderFallbackException)
-            {
-                throw new JqException("error loading module " + canonicalPath + ": " + ex.Message);
-            }
+            string sourceText = DecodeModuleSource(canonicalPath, content);
             var programSource = new JqProgramSource("file \"" + canonicalPath + "\"", canonicalPath);
             // Pre-scan imports before loading dependencies.
             var tokens = Lexer.Tokenize(sourceText, programSource, budget);
             var preParser = new JqParser(tokens, programSource, rootEnvironment, budget);
-            (JsonObject? metadata, IReadOnlyList<JqModuleImport> imports, int bodyIndex) = preParser.ParsePrefix();
+            (_, IReadOnlyList<JqModuleImport> imports, int bodyIndex) = preParser.ParsePrefix();
             string childImporterDir = ParentDir(canonicalPath);
             JqEnvironment env = rootEnvironment;
             foreach (JqModuleImport import in imports)
@@ -249,7 +217,7 @@ internal sealed class JqModuleLoader(
             }
             var exports = new Dictionary<(string Name, int Arity), JqUserClosure>();
             env.CollectFunctionClosures(exports, budget);
-            var loaded = new JqLoadedModule(metadata, imports, definitions, env, exports);
+            var loaded = new LoadedModule(env, exports);
             _cache[canonicalPath] = loaded;
             return loaded;
         }
@@ -383,20 +351,39 @@ internal sealed class JqModuleLoader(
         if (validation is not null)
             throw new JqException(validation);
         var probe = new JqModuleImport(relPath, null, false, null);
-        var loaded = await TryLoadFuncModuleAsync(probe, workingDirectory, 0, cancellationToken).ConfigureAwait(false);
-        if (loaded is null) throw new JqException("module not found: " + relPath);
-        return BuildMetadataObject(loaded);
+        foreach (JqPath path in ModulePaths(probe, workingDirectory, ".jq", cancellationToken))
+        {
+            var result = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
+            if (result is null) continue;
+            if (result is JqReadResult.Failed)
+                throw new JqException("error loading module " + path.Path + ": input read failed");
+            using var content = (JqReadResult.Complete)result;
+            string source = DecodeModuleSource(path.Path, content.Content);
+            var programSource = JqProgramSource.File(path.Path);
+            var parser = new JqParser(source, programSource, rootEnvironment, budget);
+            var (metadata, imports, definitions) = parser.InspectLibrary();
+            return BuildMetadataObject(metadata, imports, definitions);
+        }
+        throw new JqException("module not found: " + relPath);
     }
 
-    private JsonObject BuildMetadataObject(JqLoadedModule loaded)
+    private string DecodeModuleSource(string path, ReadOnlyMemory<byte> content)
     {
-        ArgumentNullException.ThrowIfNull(loaded);
+        budget.ReserveString(Encoding.UTF8.GetCharCount(content.Span));
+        try { return Helpers.Utf8Text.Decode(content); }
+        catch (Exception exception) when (exception is ArgumentException or DecoderFallbackException)
+        { throw new JqException("error loading module " + path + ": " + exception.Message); }
+    }
+
+    private JsonObject BuildMetadataObject(JsonObject? metadata, IReadOnlyList<JqModuleImport> imports,
+        IReadOnlyList<JqFunctionDefinition> definitions)
+    {
         budget.ReserveBytes(192);
-        JsonObject baseObject = loaded.Metadata is not null
-            ? (JsonObject)budget.CopyValue(loaded.Metadata, 0)
+        JsonObject baseObject = metadata is not null
+            ? (JsonObject)budget.CopyValue(metadata, 0)
             : new JsonObject();
         var deps = new JsonArray();
-        foreach (JqModuleImport import in loaded.Imports)
+        foreach (JqModuleImport import in imports)
         {
             budget.CheckCancellation();
             budget.ReserveBytes(64 + 160 * 3);
@@ -412,7 +399,7 @@ internal sealed class JqModuleLoader(
             deps.Add(dep);
         }
         var defs = new JsonArray();
-        foreach (JqFunctionDefinition definition in loaded.Definitions)
+        foreach (JqFunctionDefinition definition in definitions)
         {
             budget.CheckCancellation();
             budget.ReserveBytes(128 + 2L * (definition.Name.Length + 12));

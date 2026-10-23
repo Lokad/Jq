@@ -18,6 +18,7 @@ internal sealed class JqParser(
     private readonly IReadOnlyList<Token> _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
     private int _index;
     private int _depth;
+    private bool _inspectLibrary;
 
     public JqParser(string source, JqProgramSource programSource, JqEnvironment environment, JqBudget budget)
         : this(Lexer.Tokenize(source, programSource, budget), programSource, environment, budget) { }
@@ -54,6 +55,14 @@ internal sealed class JqParser(
         return (metadata, imports, _index);
     }
 
+    // Inspect library syntax without resolving dependencies or callable names.
+    internal (JsonObject? Metadata, IReadOnlyList<JqModuleImport> Imports, IReadOnlyList<JqFunctionDefinition> Definitions) InspectLibrary()
+    {
+        _inspectLibrary = true;
+        var (metadata, imports, bodyIndex) = ParsePrefix();
+        return (metadata, imports, ParseDefinitions(bodyIndex));
+    }
+
     // Library bodies contain definitions only, with dependencies in scope.
     internal IReadOnlyList<JqFunctionDefinition> ParseDefinitions(int bodyIndex)
     {
@@ -82,7 +91,7 @@ internal sealed class JqParser(
                 ExitScope();
             }
             Expect(";");
-            var complete = AttachBody(definition, RewriteTailCalls(body, definition));
+            var complete = AttachBody(definition, _inspectLibrary ? body : RewriteTailCalls(body, definition));
             DeclareFunction(complete);
             definitions.Add(complete);
         }
@@ -337,6 +346,7 @@ internal sealed class JqParser(
     {
         ArgumentNullException.ThrowIfNull(source);
         var piece = new JqParser(source, _programSource, _environment, _budget);
+        piece._inspectLibrary = _inspectLibrary;
         piece._depth = _depth + 1;
         _budget.CheckCancellation();
         _budget.ReserveMetadata(384 + 32L * _scopes.Count, _scopes.Count + 1);
@@ -403,7 +413,7 @@ internal sealed class JqParser(
                 ExitScope();
             }
             Expect(";");
-            var complete = AttachBody(definition, RewriteTailCalls(body, definition));
+            var complete = AttachBody(definition, _inspectLibrary ? body : RewriteTailCalls(body, definition));
             DeclareFunction(complete);
             definitions.Add(complete);
         }
@@ -888,7 +898,7 @@ internal sealed class JqParser(
             }
             // Qualified data references (alias::name) resolve at runtime via
             // module scopes; unqualified names still fail here when unbound.
-            if (!name.Text.Contains("::", StringComparison.Ordinal) && !IsBound(name.Text))
+            if (!_inspectLibrary && !name.Text.Contains("::", StringComparison.Ordinal) && !IsBound(name.Text))
                 throw Error($"undefined variable ${name.Text}", dollar.Span);
             return new VariableFilter(name.Text);
         }
@@ -938,6 +948,7 @@ internal sealed class JqParser(
             foreach (var scope in _scopes)
                 if (scope.Labels.TryGetValue(name.Text, out object? label))
                     return new BreakFilter(label);
+            if (_inspectLibrary) return new BreakFilter(new object());
             throw Error($"undefined label ${name.Text}", dollar.Span);
         }
         if (MatchIdentifier("reduce"))
@@ -1007,7 +1018,7 @@ internal sealed class JqParser(
                 }
                 else
                 {
-                    if (!name.Text.Contains("::", StringComparison.Ordinal) && !IsBound(name.Text))
+                    if (!_inspectLibrary && !name.Text.Contains("::", StringComparison.Ordinal) && !IsBound(name.Text))
                         throw Error($"undefined variable ${name.Text}", dollar.Span);
                     valueFilter = new VariableFilter(name.Text);
                 }
@@ -1129,6 +1140,8 @@ internal sealed class JqParser(
     private JqFilter ParseFunction(string name, JqSourceSpan span)
     {
         var args = new List<JqFilter>();
+        if (_inspectLibrary && Peek() is { Kind: TokenKind.Symbol, Text: ")" })
+            throw Error("expected function argument", Peek().Span);
         if (!Match(")"))
         {
             do
@@ -1142,6 +1155,16 @@ internal sealed class JqParser(
 
     private JqFilter CreateFunction(string name, IReadOnlyList<JqFilter> args, JqSourceSpan span)
     {
+        if (_inspectLibrary)
+        {
+            // The lexer represents keywords as identifiers. Unresolved callable
+            // names are valid library syntax; standalone grammar keywords are not.
+            if (name is "as" or "import" or "include" or "module" or "def"
+                or "if" or "then" or "else" or "elif" or "and" or "or" or "end"
+                or "reduce" or "foreach" or "try" or "catch" or "label" or "break")
+                throw Error("unexpected token " + name, span);
+            return new FunctionFilter(name, args);
+        }
         // Qualified references (alias::name) resolve at runtime via module
         // scopes; parse them blind so link-time binding can shadow correctly.
         // Later includes and same-alias imports win through environment order.
