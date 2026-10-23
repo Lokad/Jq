@@ -932,12 +932,13 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     // Mirrors the reference value equality: kind-sensitive, objects
     // order-insensitive, arrays ordered, numbers by double value with
-    // NaN unequal to everything including itself.
+    // Scalar NaN is unequal to itself; shared containers compare by identity.
     // Depth-bounded to protect recursive comparison: values deeper than the shared guard
     // fail cleanly instead of consuming CLR frames.
     private bool EqualsValue(JsonNode? left, JsonNode? right, int depth)
     {
         budget.CheckCancellation();
+        if (left is JsonArray or JsonObject && ReferenceEquals(left, right)) return true;
         JqRecursion.CheckValueDepth(left, depth);
         JqRecursion.CheckValueDepth(right, depth);
         if (left is null || right is null)
