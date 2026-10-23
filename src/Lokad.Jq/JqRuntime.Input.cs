@@ -27,6 +27,8 @@ internal sealed partial class JqRuntime
 
         private readonly record struct Frame(JsonNode Container, string? Key);
 
+        internal int ContainerDepth => _frames.Count;
+
         internal void Reset()
         {
             _state = new JsonReaderState(Options);

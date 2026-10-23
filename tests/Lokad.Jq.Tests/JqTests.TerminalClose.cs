@@ -11,7 +11,7 @@ public sealed partial class JqTests
     [InlineData("raw slurp", "text\n", "")]
     [InlineData("explicit", "42\n", "42\n")]
     [InlineData("stream", "[42]\n", "[[0],42]\n[[0]]\n")]
-    [InlineData("sequence", "\u001e42\n", "")]
+    [InlineData("sequence", "\u001e42\n", "\u001e42\n")]
     public async Task Jq_TerminalCloseFailureStopsBeforeOpeningLaterInput(string mode, string input, string output)
     {
         var inner = new MockFileSystem();

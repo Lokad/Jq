@@ -235,15 +235,15 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("1\u001e2 3\n[0,1\u001e[4,5]true\"ab\"{\"c\":4\u001e{}{\"d\":5,\"e\":6\"\u001efalse\n");
         var (exit, stdout, stderr) = await RunSeqAsync(host, "-c", "-e", "-s", "--seq", ". == [2,3,[4,5],true,\"ab\",{},false]");
-        Assert.Equal(1, exit);
-        Assert.Equal("\u001efalse\n", stdout);
+        Assert.Equal(0, exit);
+        Assert.Equal("\u001etrue\n", stdout);
         Assert.Equal("jq: ignoring parse error: Truncated value at line 2, column 5\n" + "jq: ignoring parse error: Truncated value at line 2, column 25\n" + "jq: ignoring parse error: Truncated value at line 2, column 41\n", stderr);
 
         var second = new MockFileSystem();
         second.SetStandardInput("1\u001e2 3\n[0,1\u001e[4,5]true\"ab\"{\"c\":4\u001e{}{\"d\":5,\"e\":6\"false\n\u001enull");
         var (secondExit, secondOut, secondErr) = await RunSeqAsync(second, "-c", "-e", "-s", "--seq", ". == [2,3,[4,5],true,\"ab\",{},null]");
-        Assert.Equal(1, secondExit);
-        Assert.Equal("\u001efalse\n", secondOut);
+        Assert.Equal(0, secondExit);
+        Assert.Equal("\u001etrue\n", secondOut);
         Assert.Equal("jq: ignoring parse error: Truncated value at line 2, column 5\n" + "jq: ignoring parse error: Truncated value at line 2, column 25\n" + "jq: ignoring parse error: Truncated value at line 3, column 1\n", secondErr);
     }
 
