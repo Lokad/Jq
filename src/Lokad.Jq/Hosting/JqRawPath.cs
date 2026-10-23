@@ -60,6 +60,12 @@ internal sealed class JqRawPath
     /// <summary>Resolves this path against <paramref name="current"/>.</summary>
     public JqPath ToAbsolute(JqPath current)
     {
+        if (TryToAbsolute(current, out JqPath? result)) return result;
+        throw new JqPathException($"Cannot resolve '{Raw}': '..' goes above the root.");
+    }
+
+    internal bool TryToAbsolute(JqPath current, [NotNullWhen(true)] out JqPath? result)
+    {
         ArgumentNullException.ThrowIfNull(current);
         var combined = Raw.StartsWith('/')
             ? Raw
@@ -105,7 +111,8 @@ internal sealed class JqRawPath
 
             if (segments.Count == 0)
             {
-                throw new JqPathException($"Cannot resolve '{Raw}': '..' goes above the root.");
+                result = null;
+                return false;
             }
 
             segments.RemoveAt(segments.Count - 1);
@@ -144,7 +151,8 @@ internal sealed class JqRawPath
             });
         }
 
-        return new JqPath(resultPath);
+        result = new JqPath(resultPath);
+        return true;
     }
 
     /// <inheritdoc />

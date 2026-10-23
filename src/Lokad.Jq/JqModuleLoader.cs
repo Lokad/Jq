@@ -338,8 +338,7 @@ internal sealed class JqModuleLoader(
             string combined = entry.StartsWith((char)47) ? entry
                 : importerDir == "/" ? "/" + entry : importerDir + "/" + entry;
             if (!JqRawPath.TryParse(combined, out JqRawPath? raw)) return null;
-            try { return raw.ToAbsolute(JqPath.Root).Path; }
-            catch (ArgumentException) { return null; }
+            return raw.TryToAbsolute(JqPath.Root, out JqPath? absolute) ? absolute.Path : null;
         }
     }
 

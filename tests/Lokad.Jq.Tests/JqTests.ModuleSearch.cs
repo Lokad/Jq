@@ -15,6 +15,9 @@ public sealed partial class JqTests
     [InlineData("[false,\"/explicit\"]", true)]
     [InlineData("[{},0,[],\"/explicit\"]", true)]
     [InlineData("\"/explicit\"", true)]
+    [InlineData("\"..\"", false)]
+    [InlineData("[\"../..\",\"/explicit\"]", true)]
+    [InlineData("[\"/explicit\",\"../..\"]", true)]
     public async Task Jq_ExplicitModuleSearchReplacesDefaultsAndSkipsInvalidEntries(string search, bool found)
     {
         foreach (bool data in new[] { false, true })
@@ -35,6 +38,25 @@ public sealed partial class JqTests
             Assert.Equal(0, host.OpenFileCount);
             Assert.Equal(0, memory.ReservedBytes);
         }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Jq_InvalidModuleSearchKeepsOptionalAndRequiredOutcomes(bool data, bool optional)
+    {
+        var host = new MockFileSystem();
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
+        string filter = "import \"m\" as " + (data ? "$m" : "m")
+            + " {search:\"..\",optional:" + (optional ? "true" : "false") + "};42";
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-nc", filter)));
+        Assert.Equal(optional ? 0 : 3, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(optional ? "42\n" : "", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(optional ? "" : "jq: module not found: m\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.ClosedDescriptors);
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Theory]
