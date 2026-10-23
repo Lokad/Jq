@@ -183,17 +183,14 @@ internal static class JqCommandLineParser
                 namedArguments[key] = value;
             }
             variables["ARGS"] = argsObject;
-            // Snapshot exported variables for $ENV unless the caller bound the name explicitly.
-            if (!variables.ContainsKey("ENV"))
+            // Intrinsic bindings stay separate from named arguments in ARGS.
+            var environmentObject = new JsonObject();
+            foreach (JqEnvironmentVariable variable in environment)
             {
-                var environmentObject = new JsonObject();
-                foreach (JqEnvironmentVariable variable in environment)
-                {
-                    budget.CheckCancellation();
-                    environmentObject[variable.Name] = JsonValue.Create(variable.Value);
-                }
-                variables["ENV"] = environmentObject;
+                budget.CheckCancellation();
+                environmentObject[variable.Name] = JsonValue.Create(variable.Value);
             }
+            variables["ENV"] = environmentObject;
 
             return new JqInvocation
             {

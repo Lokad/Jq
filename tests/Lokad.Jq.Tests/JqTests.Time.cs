@@ -45,15 +45,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_ExplicitArgumentWinsOverEnvironment()
+    public async Task Jq_EnvironmentBindingKeepsNamedArgumentSeparate()
     {
         var invocation = JqCommandInvocation.CreateWithStandardDescriptors(
-            "jq", ["--arg", "ENV", "5", "-n", "$ENV"], [new JqEnvironmentVariable("A", "1")]);
+            "jq", ["--arg", "ENV", "5", "-nc", "[$ENV,env,$ARGS.named.ENV]"], [new JqEnvironmentVariable("A", "1")]);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
         Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Equal("\"5\"\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[{\"A\":\"1\"},{\"A\":\"1\"},\"5\"]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
 

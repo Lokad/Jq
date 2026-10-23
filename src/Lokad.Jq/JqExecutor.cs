@@ -330,8 +330,8 @@ internal static class JqExecutor
     }
 
     // Hosted `--rawfile`/`--slurpfile` variables resolve after the filter
-    // file so failures surface as system errors before compilation. Names
-    // already bound by earlier arguments keep their values without reads.
+    // file so failures surface as system errors before compilation. Argument
+    // binding has already selected the first occurrence of each name.
     private static async Task LoadFileVariablesAsync(
         IJqHost host, JqInvocation invocation, JqContext context, CancellationToken cancellationToken)
     {
@@ -340,8 +340,6 @@ internal static class JqExecutor
         var variables = invocation.Variables;
         foreach (var (name, path, raw) in invocation.FileVariables)
         {
-            if (variables.ContainsKey(name))
-                continue;
             string which = raw ? "rawfile" : "slurpfile";
             try
             {
@@ -360,7 +358,8 @@ internal static class JqExecutor
                 {
                     value = context.Runtime.ReadJsonArray(bytes.Span, 0);
                 }
-                variables[name] = value;
+                if (name is not "ENV" and not "ARGS")
+                    variables[name] = value;
                 if (variables.TryGetValue("ARGS", out JsonNode? args)
                     && args is JsonObject argsObject
                     && argsObject.TryGetPropertyValue("named", out JsonNode? named)
