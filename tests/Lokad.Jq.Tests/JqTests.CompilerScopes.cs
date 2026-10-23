@@ -27,7 +27,7 @@ public sealed partial class JqTests
             Assert.Empty(prefix.Imports);
             Assert.Equal(0, prefix.BodyIndex);
         }
-        Assert.InRange(allocated, 0, 3200);
+        Assert.Equal(0, allocated);
         if (functions != 0)
             Assert.IsType<UserCallFilter>(new JqParser("f0", JqProgramSource.Inline, environment, budget).Parse());
     }

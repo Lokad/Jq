@@ -125,7 +125,7 @@ internal sealed class JqParser(
             bool include = Peek().Text == "include";
             (imports ??= new()).Add(ParseImportDirective(include));
         }
-        return imports is null ? [] : imports;
+        return imports is null ? Array.Empty<JqModuleImport>() : imports;
     }
 
     private JqModuleImport ParseImportDirective(bool isInclude)
