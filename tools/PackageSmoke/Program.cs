@@ -56,6 +56,52 @@ if (args.Length != 0)
 int checks = 0;
 {
     var host = new SmokeHost();
+    Check("shared container equality", await Command(["-nc", "[nan] as $x | [$x==$x,[nan]==[nan]]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[true,false]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    host.SetInput("[" + string.Join(',', Enumerable.Range(0, 128)) + "]");
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("empty right container reuse", await Command(["-c", ". as $x | range(128) | $x + [] | empty"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    host.SetInput(JsonSerializer.Serialize(new string('a', 8192)));
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("empty affix reuse", await Command(["-c", ". as $x | range(128) | $x | trimstr(\"\") | empty"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("selected path identity", await Command(["-nc", "[(0+1|path(.+0)),(true|path(not|not)),(\"abc\"|path(tostring))]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[[],[],[]]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    Check("affix slice paths", await Command(["-nc", "\"abc\"|path(trimstr(\"\"))"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[{\"start\":0,\"end\":null},{\"start\":null,\"end\":3}]\n"
+        && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    host.SetInput(JsonSerializer.Serialize(new { text = new string('a', 131072), needle = new string('a', 16384) + "b" + new string('a', 49152) }));
+    var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
+    Check("long whole-pattern miss", await Command(["-c", ".needle as $p|.text|[index($p),rindex($p)]"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[null,null]\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
     var memory = new BenchmarkMemoryBudget(64 * 1024);
     string source = "#" + new string(' ', 256 * 1024) + "\n1";
     Check("borrowed comment source", await Command(["-nc", source], [])

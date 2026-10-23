@@ -111,6 +111,7 @@ set.
 Reads and pass-through results borrow existing values. Writes copy borrowed
 branches; private accumulators such as `add` and `fromstream` update their owned
 containers directly. Emitted stream values stay independent of later updates.
+Right-empty container operations and empty-affix trims borrow unchanged results.
 Data imports parse directly into their owning array. Executable function imports
 reuse linked modules while preserving search precedence. `modulemeta` reads current
 library syntax for metadata, dependencies and definition names. Metadata inspection
@@ -130,6 +131,8 @@ read failures; errors in key/bound expressions propagate. Early output closure
 stops deferred work.
 Selectors and loop transitions carry selected paths through updates; `last(expr)`
 retains its reduction semantics.
+Results can restore a selected path by representation identity; applied affix
+trims append slice segments.
 Iterative tree/path operations retain ancestor cursors rather than whole traversal
 inventories. Filtered paths materialize only accepted results. String searches
 preserve overlapping scalar indices; `rindex` searches from the end. Recursive consumers still enforce their construction depth.
@@ -198,9 +201,12 @@ This deliberately differs from decimal-enabled jq builds. `have_decnum` and
 Finite doubles use shortest round-trip rendering, integral storage renders exactly,
 negative zero renders `-0`, and exponents use uppercase `E`. Numeric parsing and
 rendering are culture-invariant. NaN renders `null`; infinities clamp to the finite
-double extremes. NaN keeps number type and never equals anything, including itself.
+double extremes. Scalar NaN keeps number type and never equals itself. Shared
+arrays and objects compare equal by identity, including when they contain NaN.
 Input and `tonumber` accept signed `nan`, `inf` and `infinity`, ignoring ASCII case;
 `tonumber` permits no surrounding whitespace.
+Numeric path identity uses this immediate/double profile; decimal-backed jq
+literals can have different identity.
 
 Division by zero, including negative zero, is a language error. Remainder truncates
 operands toward zero with saturation at signed 64-bit extremes, propagates NaN,

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Compare shared containers by identity while preserving scalar/separate-tree NaN semantics.
+- Track paths through selected-value identity, preserving pass-through scalars,
+  immediate round trips and affix slice segments.
+- Borrow results for empty right container operands and empty string affixes.
+- Search complete substrings in ordinal candidate windows, avoiding repeated
+  long matching tails while retaining overlaps, reverse lookup and cancellation.
+
 - Share interpolation boundary rules for comments, continuations and nested strings.
 - Admit constructed compiler storage instead of charging borrowed source length;
   keep real string/token preflights and reuse temporary string workspace.

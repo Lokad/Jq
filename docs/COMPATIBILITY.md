@@ -25,9 +25,9 @@ updates preserve the enclosing input and key-major effects/results; `?` leaves
 key-expression errors visible. `join` and `from_entries` iterate array elements
 or object values in insertion order; null join elements remain valid.
 `JOIN` lookups follow ordinary indexing, including array searches and slice keys.
-Writable paths retain heap identity and immediate-value representation. Fresh
-containers cannot become targets through equal contents; a saved original binding
-can restore its path.
+Writable paths retain heap identity and immediate-value representation. A result
+that returns the selected representation can restore its path; fresh containers
+cannot become targets through equal contents.
 
 ## Known differences and limits
 
