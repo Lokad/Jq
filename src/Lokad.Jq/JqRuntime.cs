@@ -616,6 +616,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
         if (l is JsonArray la && r is JsonArray ra)
         {
+            if (ra.Count == 0) return la;
             var arr = new JsonArray();
             foreach (var value in la.Concat(ra))
             {
@@ -702,6 +703,8 @@ internal sealed partial class JqRuntime(JqBudget budget)
     private JsonObject MergeObjects(JsonObject left, JsonObject right, bool recursive, int depth)
     {
         budget.CheckCancellation();
+        // Nested results need private nodes for their new parent; the root can borrow.
+        if (depth == 0 && right.Count == 0) return left;
         JqRecursion.CheckValueDepth(left, depth);
         JqRecursion.CheckValueDepth(right, depth);
         budget.ReserveBytes(64 + 96L * left.Count);
@@ -1510,8 +1513,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal string TrimAffix(JsonNode? input, JsonNode? affix, bool left, bool right)
     {
+        budget.CheckCancellation();
         if (!TryGetString(input, out string? text) || text is null || !TryGetString(affix, out string? fix) || fix is null)
             throw new JqException((left ? "startswith" : "endswith") + "() requires string inputs");
+        if (fix.Length == 0) return text;
         if (left && text.StartsWith(fix, StringComparison.Ordinal))
         {
             budget.ReserveString(text.Length - fix.Length);

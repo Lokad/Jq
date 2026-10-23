@@ -65,7 +65,7 @@ public sealed partial class JqTests
     {
         const long limit = 4 * 1024 * 1024;
         string input = "{\"left\":{\"drop\":[" + string.Join(',', Enumerable.Repeat("null", 10000))
-            + "],\"keep\":1},\"right\":" + (retain ? "{}" : "{\"drop\":0}") + "}";
+            + "],\"keep\":1},\"right\":" + (retain ? "{\"other\":0}" : "{\"drop\":0}") + "}";
         var root = new BenchmarkMemoryBudget(limit);
         var host = new MockFileSystem();
         host.AddFile("/input", input);
