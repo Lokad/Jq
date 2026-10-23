@@ -564,6 +564,17 @@ internal static class JqPathUpdates
 
 internal static class JqPathReads
 {
+    internal static JsonNode? ReadIndex(JsonNode? value, long index, bool isNaN, JqContext context)
+    {
+        if (value is null) return null;
+        if (value is not JsonArray array)
+            throw new JqRuntimeException("Cannot index " + TypeName(value) + " with number ("
+                + (isNaN ? "null" : index.ToString(System.Globalization.CultureInfo.InvariantCulture)) + ")");
+        if (isNaN) return null;
+        long resolved = index < 0 ? array.Count + index : index;
+        return resolved >= 0 && resolved < array.Count ? array[(int)resolved] : null;
+    }
+
     internal static bool TryIndex(JsonNode? value, JsonNode? key, bool optional, JqContext context, out JsonNode? result)
     {
         context.Budget.CheckCancellation();
@@ -690,20 +701,7 @@ internal static class JqPathReads
                     current = ReadField(current, key.Key, context.Runtime);
                     break;
                 case IndexSegment index:
-                    if (current is JsonArray arr)
-                    {
-                        if (index.IsNaN)
-                            current = null;
-                        else
-                        {
-                            long resolved = index.Index < 0 ? arr.Count + index.Index : index.Index;
-                            current = resolved >= 0 && resolved < arr.Count ? arr[(int)resolved] : null;
-                        }
-                    }
-                    else if (current is null)
-                        current = null;
-                    else
-                        throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with number (" + (index.IsNaN ? "null" : index.Index.ToString(System.Globalization.CultureInfo.InvariantCulture)) + ")");
+                    current = ReadIndex(current, index.Index, index.IsNaN, context);
                     break;
                 case SliceSegment slice:
                     current = Slice(current, slice.Start, slice.End, context);

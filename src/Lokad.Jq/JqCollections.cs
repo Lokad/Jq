@@ -189,27 +189,37 @@ internal sealed class TransposeFilter : JqFilter
         ArgumentNullException.ThrowIfNull(environment);
         int height = input is JsonArray array ? array.Count : input is JsonObject fields ? fields.Count
             : throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
-        int width = 0;
+        double width = double.NaN;
+        JsonNode? invalidRow = null;
         foreach (JsonNode? row in Rows())
         {
             context.Budget.CheckCancellation();
-            if (row is not JsonArray && row is not null)
-                throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(row)}");
-            int length = row is JsonArray present ? present.Count : 0;
-            if (length > width)
-                width = length;
+            double length;
+            if (row is JsonArray present) length = present.Count;
+            else if (row is null) length = 0;
+            else
+            {
+                length = Number(context.Runtime.Length(row));
+                invalidRow ??= row;
+            }
+            width = double.MaxNumber(width, length);
             context.Budget.CheckCancellation();
         }
-        context.Budget.ReserveBytes(64 + 24L * width);
+        // Zero-width rows need no indexing. Finish length evaluation before
+        // requesting the first column, including for huge or non-finite widths.
+        if (invalidRow is not null && (width > 0 || double.IsNaN(width)))
+            _ = JqPathReads.ReadIndex(invalidRow, 0, false, context);
+        int columns = width > 0 ? (int)width : 0;
+        context.Budget.ReserveBytes(64 + 24L * columns);
         var result = new JsonArray();
-        for (int column = 0; column < width; column++)
+        for (int column = 0; column < columns; column++)
         {
             context.Budget.ReserveBytes(64 + 24L * height);
             var line = new JsonArray();
             foreach (JsonNode? row in Rows())
             {
                 context.Budget.CheckCancellation();
-                JsonNode? cell = row is JsonArray cells && column < cells.Count ? cells[column] : null;
+                JsonNode? cell = JqPathReads.ReadIndex(row, column, false, context);
                 if (cell is JsonValue) context.Budget.ReserveBytes(64);
                 line.Add(context.Budget.CopyValue(cell, 2));
             }

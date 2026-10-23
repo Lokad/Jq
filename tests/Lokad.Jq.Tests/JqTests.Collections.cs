@@ -230,8 +230,8 @@ public sealed partial class JqTests
     [InlineData("0", "skip(0; error(\"x\"))", "x")]
     [InlineData("0", "limit(1; (error(\"x\"), 1))", "x")]
     [InlineData("0", "skip(2; (1, error(\"x\"), 2))", "x")]
-    [InlineData("[1,2]", "transpose", "cannot iterate over number")]
-    [InlineData("[\"ab\",\"c\"]", "transpose", "cannot iterate over string")]
+    [InlineData("[1,2]", "transpose", "Cannot index number with number (0)")]
+    [InlineData("[\"ab\",\"c\"]", "transpose", "Cannot index string with number (0)")]
     [InlineData("{\"a\":1}", ". as {a: {b: $x}} | $x", "cannot index number with string \"b\"")]
     [InlineData("[1,2]", ". as [$x, [$y]] | [$x,$y]", "cannot index number with number 0")]
     [InlineData("[1]", ". as [[$x]] | $x", "cannot index number with number 0")]
@@ -691,8 +691,6 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_TransposeRejectsNonArrays()
     {
-        // Rows must be arrays or null like the reference map over rows;
-        // anything else fails catchably instead of padding.
         var scalar = new MockFileSystem();
         scalar.SetStandardInput("1");
         var scalarTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "transpose")));
@@ -711,7 +709,7 @@ public sealed partial class JqTests
         row.SetStandardInput("[[1], 5]");
         var rowTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "transpose")));
         Assert.Equal(5, await rowTool.ExecuteAsync(row, CancellationToken.None));
-        Assert.Contains("cannot iterate over number", row.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: error (at <stdin>:1): Cannot index number with number (0)\n", row.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(row.GetOutput(JqFileDescriptor.StdOut));
     }
     [Fact]
