@@ -3,10 +3,8 @@ using System.Collections.Generic;
 
 namespace Lokad.Jq;
 
-// Central name/arity table for the current evaluator. The parser validates
-// every function call before execution so unknown names and wrong overloads
-// fail at compile time (stage 3) instead of during evaluation (stage 5).
-// The parser validates builtin arity before constructing evaluator nodes.
+// Registered builtin names and arities. The parser validates these signatures
+// before constructing evaluator nodes.
 internal static class JqBuiltinRegistry
 {
     private static readonly Dictionary<string, (int Minimum, int Maximum)> Definitions = new(StringComparer.Ordinal)

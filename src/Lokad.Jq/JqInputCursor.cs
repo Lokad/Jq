@@ -73,9 +73,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private bool _inputEof;
     private int _seqSearched;
     private int _seqBoundary = -1;
-    private bool _seqStarted;
-    private int _seqOriginLine;
-    private int _seqOriginCol;
 
     internal JqInputCursor(
         IJqHost host,
@@ -90,14 +87,14 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _budget = context.Budget;
         _readMemory = new JqMemoryReservation(_budget.MemoryBudget);
         _bufferMemory = new JqMemoryReservation(_budget.MemoryBudget);
-        _retainedValues = invocation.Stream ? _budget.CreateStorageOwner() : null;
         _runtime = context.Runtime;
         _context = context;
         _stdin = invocation.StdIn;
         _raw = invocation.RawInput;
-        _seq = invocation.Seq;
-        _stream = invocation.Stream;
-        _scanner = invocation.Stream ? new JqStreamScanner(context.Budget, context.Runtime, invocation.Seq, invocation.StreamErrors) : null;
+        _seq = !_raw && invocation.Seq;
+        _stream = !_raw && invocation.Stream;
+        _retainedValues = _stream ? _budget.CreateStorageOwner() : null;
+        _scanner = _stream ? new JqStreamScanner(context.Budget, context.Runtime, invocation.Seq, invocation.StreamErrors) : null;
         _jsonReader = !_raw && !_stream ? new JqRuntime.InputReader(_runtime, _budget) : null;
         _cancellationToken = cancellationToken;
         _sources = invocation.InputFiles;
@@ -362,7 +359,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private async Task CloseAndAdvanceAsync(Exception? earlier)
     {
         _jsonReader?.Reset();
-        _seqStarted = false;
         _seqSearched = 0;
         _seqBoundary = -1;
         if (_owned is { } owned)
@@ -487,6 +483,9 @@ internal sealed class JqInputCursor : IAsyncDisposable
         var storage = _budget.TemporaryStorage
             ?? throw new InvalidOperationException("Sequence input requires record storage.");
         long pendingBytes = 0;
+        bool started = false;
+        int originLine = 0;
+        int originColumn = 0;
         if (_jsonReader is not { } reader)
             throw new InvalidOperationException("JSON input reader is unavailable.");
         while (true)
@@ -508,7 +507,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 _budget.ReserveString(160);
                 throw Warning($"Unfinished abandoned text at EOF at line {_scanLine}, column {_scanCol}");
             }
-            if (!_seqStarted)
+            if (!started)
             {
                 int whitespace = 0;
                 while (whitespace < length && IsSeqWhitespace(_buffer[_start + whitespace])) whitespace++;
@@ -521,9 +520,9 @@ internal sealed class JqInputCursor : IAsyncDisposable
                     _seqDone = true;
                     return (false, null);
                 }
-                _seqOriginLine = _scanLine;
-                _seqOriginCol = _scanCol + 1;
-                _seqStarted = true;
+                originLine = _scanLine;
+                originColumn = _scanCol + 1;
+                started = true;
             }
             long before = storage.UsedBytes;
             try
@@ -537,8 +536,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
                     _inputEof && bareLiteral, out JsonNode? value, out consumed))
                 {
                     Advance(consumed);
-                    pendingBytes = 0;
-                    _seqStarted = false;
                     SetPosition(1 + _newlines);
                     return (true, value);
                 }
@@ -549,7 +546,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
             catch (JqException error) when (error is not JqQuotaException)
             {
                 pendingBytes += storage.UsedBytes - before;
-                throw await ParseWarningAsync(error, reader.ContainerDepth).ConfigureAwait(false);
+                throw await ParseWarningAsync(error, reader.ContainerDepth, originLine, originColumn).ConfigureAwait(false);
             }
             length = SectionLength();
             if (_seqBoundary >= 0 || _inputEof)
@@ -588,8 +585,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
         {
             reader.Reset();
             storage.DiscardBytes(pendingBytes);
-            pendingBytes = 0;
-            _seqStarted = false;
         }
 
         JqSeqResyncException BoundaryWarning(int length, string eofReason, bool number)
@@ -607,7 +602,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 : $"{eofReason} at EOF at line {line}, column {column}");
         }
 
-        async Task<JqSeqResyncException> ParseWarningAsync(JqException error, int depth)
+        async Task<JqSeqResyncException> ParseWarningAsync(JqException error, int depth, int valueLine, int valueColumn)
         {
             _budget.ReserveString(2L * error.Message.Length + 256);
             int failing = 0;
@@ -615,8 +610,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
             if (error.InnerException is System.Text.Json.JsonException json
                 && json.LineNumber is long relativeLine && json.BytePositionInLine is long relativeColumn)
             {
-                long line = _seqOriginLine + relativeLine;
-                long column = relativeColumn + (relativeLine == 0 ? _seqOriginCol : 1);
+                long line = valueLine + relativeLine;
+                long column = relativeColumn + (relativeLine == 0 ? valueColumn : 1);
                 TryReaderOffset(_buffer.AsSpan(_start, SectionLength()), 0, line - _scanLine,
                     column - (line == _scanLine ? _scanCol + 1 : 1), out failing);
                 if (failing < 0) failing = 0;

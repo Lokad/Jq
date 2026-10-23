@@ -13,10 +13,8 @@ internal sealed class JqErrorException(JsonNode? payload) : JqException("error")
     internal JsonNode? Payload { get; } = payload;
 }
 
-// A sequence-record failure in `--seq` mode. The cursor has already
-// advanced past the record separator, so the remaining sources stay readable
-// and the executor reports `jq: ignoring parse error: ...` without aborting.
-// Catchable by user code like other evaluation failures.
+// A catchable sequence parse failure. The cursor retains its resynchronization
+// state; the next pull can skip to RS. Outer iteration reports a warning.
 internal sealed class JqSeqResyncException(string message) : JqException(message);
 
 // Stop producing after a host append closes or fails. This unwind signal is
