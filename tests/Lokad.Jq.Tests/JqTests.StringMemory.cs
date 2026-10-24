@@ -13,6 +13,8 @@ public sealed partial class JqTests
     [InlineData("@urid", "é%C3%A9", "éé")]
     [InlineData("@base64d", "w6k=", "é")]
     [InlineData("tojson", "\ue000", "\"\\ue000\"")]
+    [InlineData("split(\",\") | length", "a,b,c", "3")]
+    [InlineData(". / \",\" | length", "a,b,c", "3")]
     public async Task Jq_StringOperationsStreamWithBoundedMemoryAndStopOnClosure(string filter, string input, string output)
     {
         const int records = 2500;

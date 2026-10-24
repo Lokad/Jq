@@ -1634,11 +1634,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
         var start = 0;
         while (true)
         {
-            var end = text.IndexOf(delimiter, start, StringComparison.Ordinal);
+            var end = FindStringIndex(text, delimiter, start, false);
             var length = (end < 0 ? text.Length : end) - start;
             budget.CheckCancellation();
             budget.ReserveBytes(88);
-            budget.ReserveString(length);
+            if (start != 0 || length != text.Length) budget.ReserveString(length);
+            budget.CheckCancellation();
             arr.Add(text.Substring(start, length));
             if (end < 0) break;
             start = end + delimiter.Length;
