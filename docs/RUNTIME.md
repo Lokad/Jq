@@ -99,6 +99,8 @@ argument setup remain status 5.
 Compiler tokens and literal copies admit as constructed; borrowed comments and
 whitespace add no proportional storage. Temporary lexer workspace ends after
 lexing.
+Command setup preflights retained bindings, operands, library paths and
+environment entries as constructed.
 
 Coarse owners track executions, records, buffers, results and caches. Object
 construction workspace ends with enumeration; constant metadata builds private
@@ -112,6 +114,8 @@ Reads and pass-through results borrow existing values. Writes copy borrowed
 branches; private accumulators such as `add` and `fromstream` update their owned
 containers directly. Emitted stream values stay independent of later updates.
 Right-empty container operations and empty-affix trims borrow unchanged results.
+Literal splitting borrows unchanged string payloads in fresh result wrappers
+and uses the shared substring search.
 Data imports parse directly into their owning array. Executable function imports
 reuse linked modules while preserving search precedence. `modulemeta` reads current
 library syntax for metadata, dependencies and definition names. Metadata inspection
@@ -223,6 +227,8 @@ from upstream's asymmetric NaN/null sort stability.
 Math builtins use .NET math or managed approximations. Final bits can vary by
 platform. Recorded comparisons of jq 1.8.2 and Lokad.Jq rendered `27 | cbrt` as
 `3` on Windows amd64 and `3.0000000000000004` on Linux amd64.
+`log1p`, `expm1` and `modf` preserve signed zero. The complementary error
+function computes its tail directly; its approximation still limits accuracy.
 
 Bessel orders truncate toward zero with signed 64-bit recurrence indices and
 reflection for negative orders/arguments. Recurrences poll cancellation.

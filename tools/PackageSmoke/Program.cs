@@ -561,6 +561,46 @@ foreach (bool refuse in new[] { false, true })
         .ExecuteAsync(host, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "[]\n" && host.Output(JqFileDescriptor.StdErr) == "");
 }
+{
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    var host = new SmokeHost();
+    Check("information tails need no retained setup", await Command(["--version", .. Enumerable.Repeat("ignored", 2048)], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "Lokad jq\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    var host = new SmokeHost();
+    Check("duplicate bindings retain one value", await Command(["-nr",
+        .. Enumerable.Range(0, 2048).SelectMany(_ => new[] { "--arg", "x", "value" }), "$x"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "value\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    var host = new SmokeHost();
+    Check("literal split borrows unchanged payload", await Command(["-nc", "--arg", "s", new string('x', 131072),
+        "[($s | split(\"z\") | length), ($s / \"z\" | length)]"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[1,1]\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("math signs and error-function tails", await Command(["-nc", "(-1*0) as $x | "
+        + "[copysign(1;$x|log1p),copysign(1;$x|expm1),(-1|modf|.[0]|copysign(1;.)),(6|erfc>0)]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[-1,-1,-1,true]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    Check("near-zero kernels retain tiny inputs", await Command(["-nc",
+        "[(1e-20|expm1 != 0),(-1e-20|log1p != 0)]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[true,true]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 

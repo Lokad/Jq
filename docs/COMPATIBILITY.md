@@ -15,6 +15,7 @@ Named `ENV` and `ARGS` arguments remain in `$ARGS.named`; intrinsic bindings ret
 their meaning, including when those named values come from files.
 String search indices count Unicode scalars. String and array searches report
 overlapping matches.
+Literal split and string division use nonoverlapping separators.
 Loops preserve depth-first condition multiplicity, effects and lazy termination.
 Path-mode `label`/`break`, `try` and `?` preserve earlier outputs and payload
 identity. Labels retain lexical binding across shadowing and captured calls;

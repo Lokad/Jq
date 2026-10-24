@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Admit retained command setup as constructed, keeping repeated flags, duplicate
+  bindings and information tails independent of total supplied argument count.
+- Borrow unchanged literal-split payloads and reuse bounded substring search.
+- Preserve zero signs in `log1p`, `expm1` and `modf`; compute `erfc` tails directly.
+
 - Retain two idle compiled regex patterns while preserving active pattern,
   subject and result ownership, allowing long streams of distinct patterns.
 - Evaluate `bsearch`, `sub` and `gsub` value arguments before validating input,
