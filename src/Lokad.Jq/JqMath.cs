@@ -48,7 +48,7 @@ internal static class JqMath
         ["gamma"] = Gamma,
         ["lgamma"] = static value => LogGammaSigned(value).Value,
         ["erf"] = Erf,
-        ["erfc"] = static value => 1.0 - Erf(value),
+        ["erfc"] = Erfc,
         ["j0"] = JqBessel.J0,
         ["j1"] = JqBessel.J1,
         ["y0"] = JqBessel.Y0,
@@ -274,6 +274,7 @@ internal static class JqMath
 
     private static double Log1p(double x)
     {
+        if (x == 0.0) return x;
         if (x == -1.0)
             return double.NegativeInfinity;
         if (double.IsNaN(x) || x < -1.0 || double.IsPositiveInfinity(x))
@@ -284,7 +285,7 @@ internal static class JqMath
 
     private static double Expm1(double x)
     {
-        if (double.IsNaN(x) || double.IsPositiveInfinity(x))
+        if (x == 0.0 || double.IsNaN(x) || double.IsPositiveInfinity(x))
             return x;
         if (double.IsNegativeInfinity(x))
             return -1.0;
@@ -316,7 +317,7 @@ internal static class JqMath
         if (double.IsInfinity(x))
             return new JsonArray(JsonValue.Create(Math.CopySign(0.0, x)), JsonValue.Create(x));
         double integral = Math.Truncate(x);
-        return new JsonArray(JsonValue.Create(x - integral), JsonValue.Create(integral));
+        return new JsonArray(JsonValue.Create(Math.CopySign(x - integral, x)), JsonValue.Create(integral));
     }
 
     private static JsonNode FrexpArray(double x)
@@ -397,17 +398,25 @@ internal static class JqMath
         if (double.IsNegativeInfinity(x))
             return -1.0;
         if (x < 0.0)
-            return -ErfCore(-x);
+            return -(1.0 - ErfcPositive(-x));
         if (x == 0.0)
             return x;
-        return ErfCore(x);
+        return 1.0 - ErfcPositive(x);
     }
 
-    private static double ErfCore(double x)
+    private static double Erfc(double x)
+    {
+        if (double.IsNaN(x)) return double.NaN;
+        if (x == 0.0) return 1.0;
+        double tail = ErfcPositive(Math.Abs(x));
+        return x < 0.0 ? 2.0 - tail : tail;
+    }
+
+    private static double ErfcPositive(double x)
     {
         double t = 1.0 / (1.0 + 0.3275911 * x);
         double poly = ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592);
-        return 1.0 - (poly * t * Math.Exp(-x * x));
+        return poly * t * Math.Exp(-x * x);
     }
 
 }
