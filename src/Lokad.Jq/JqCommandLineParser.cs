@@ -79,7 +79,7 @@ internal static class JqCommandLineParser
         try
         {
             budget.CheckCancellation();
-            budget.ReserveBytes(128 + 160L * args.Count + 160L * environment.Count);
+            budget.ReserveMetadata(512, 8);
             var parsed = new Options();
             var format = OutputFormat.Default;
             var variables = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
@@ -100,13 +100,21 @@ internal static class JqCommandLineParser
                 if (optionsDone || !Isoptish(argument))
                 {
                     if (program is null) program = argument;
-                    else if (!positional) operands.Add(argument);
-                    else if (!jsonArguments) positionalArguments.Add(JsonValue.Create(argument));
+                    else if (!positional)
+                    {
+                        budget.ReserveMetadata(32, 1);
+                        operands.Add(argument);
+                    }
                     else
                     {
-                        try { positionalArguments.Add(runtime.ParseJson(argument)); }
-                        catch (JqException exception) when (exception is not JqQuotaException)
-                        { return Error($"jq: invalid JSON argument: {exception.Message}"); }
+                        budget.ReserveMetadata(jsonArguments ? 24 : 88, 1);
+                        if (!jsonArguments) positionalArguments.Add(JsonValue.Create(argument));
+                        else
+                        {
+                            try { positionalArguments.Add(runtime.ParseJson(argument)); }
+                            catch (JqException exception) when (exception is not JqQuotaException)
+                            { return Error($"jq: invalid JSON argument: {exception.Message}"); }
+                        }
                     }
                     continue;
                 }
@@ -124,7 +132,7 @@ internal static class JqCommandLineParser
                             return Error("jq: --" + option + " takes two parameters (e.g. --" + option + " varname filename)");
                         string name = args[++i];
                         string path = args[++i];
-                        if (!boundNames.Add(name)) continue;
+                        if (!TryBindName(name)) continue;
                         try
                         {
                             ChargePathResolution(path);
@@ -154,8 +162,12 @@ internal static class JqCommandLineParser
                         char flag = argument[position];
                         if (!TryExpandShortOption(flag, out string name))
                             return Error("jq: Unknown option -" + flag);
-                        string? attached = flag == 'L' && position + 1 < argument.Length
-                            ? argument[(position + 1)..] : null;
+                        string? attached = null;
+                        if (flag == 'L' && position + 1 < argument.Length)
+                        {
+                            budget.ReserveString(argument.Length - position - 1);
+                            attached = argument[(position + 1)..];
+                        }
                         string? error = ApplyOption(name, attached, ref i);
                         if (error is not null) return Error(error);
                         if (flag == 'L' || parsed.Help || parsed.Version || parsed.BuildConfiguration) break;
@@ -198,6 +210,7 @@ internal static class JqCommandLineParser
             }
 
             // ARGS owns argument parent links; the variable table borrows them.
+            budget.ReserveMetadata(512, 8);
             var namedArguments = new JsonObject();
             var argsObject = new JsonObject { ["positional"] = positionalArguments, ["named"] = namedArguments };
             foreach (var (key, value) in variables)
@@ -211,6 +224,7 @@ internal static class JqCommandLineParser
             foreach (JqEnvironmentVariable variable in environment)
             {
                 budget.CheckCancellation();
+                if (!environmentObject.ContainsKey(variable.Name)) budget.ReserveMetadata(160, 2);
                 environmentObject[variable.Name] = JsonValue.Create(variable.Value);
             }
             variables["ENV"] = environmentObject;
@@ -252,9 +266,10 @@ internal static class JqCommandLineParser
                 {
                     case "from-file": fromFile = true; break;
                     case "library-path":
-                        if (attached is not null) libraryPaths.Add(attached);
-                        else if (position + 1 < args.Count) libraryPaths.Add(args[++position]);
-                        else return "-L takes a parameter: (e.g. -L /search/path or -L/search/path)";
+                        if (attached is null && position + 1 >= args.Count)
+                            return "-L takes a parameter: (e.g. -L /search/path or -L/search/path)";
+                        budget.ReserveMetadata(64, 2);
+                        libraryPaths.Add(attached ?? args[++position]);
                         break;
                     case "indent":
                         if (position + 1 >= args.Count) return "jq: --indent takes one parameter";
@@ -273,7 +288,7 @@ internal static class JqCommandLineParser
                                 + (name == "argjson" ? "text)" : "value)");
                         string variable = args[++position];
                         string value = args[++position];
-                        if (!boundNames.Add(variable)) break;
+                        if (!TryBindName(variable)) break;
                         if (name == "arg") variables[variable] = JsonValue.Create(value);
                         else
                         {
@@ -306,6 +321,14 @@ internal static class JqCommandLineParser
                     default: return "jq: Unknown option --" + name;
                 }
                 return null;
+            }
+
+            bool TryBindName(string name)
+            {
+                if (boundNames.Contains(name)) return false;
+                budget.ReserveMetadata(256, 4);
+                boundNames.Add(name);
+                return true;
             }
 
         }
