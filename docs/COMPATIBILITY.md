@@ -65,6 +65,8 @@ cannot become targets through equal contents.
   stopping; explicit `inputs` and slurp can drain further. Sequence input publishes
   complete values before truncated tails and without waiting for another RS/EOF;
   unterminated top-level numbers retain sequence truncation checks.
+  Streaming sequence recovery retains error paths and following records; it can
+  omit secondary syntax-error events before the next RS in malformed input.
 - **Modules:** hosted `import`, `include`, `-L` and `modulemeta` are supported.
   Valid dot segments and repeated separators normalize before hosted lookup.
   Explicit search metadata replaces default paths; unreadable selected files

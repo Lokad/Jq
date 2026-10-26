@@ -501,6 +501,15 @@ internal static class GovernorRunner
             Add(format + "-invalid-borrowed-text", 1048576, ["-nr", "--arg", "text",
                 (format == "base64d" ? "!" : "%ZZ") + new string('A', 1048576), "try ($text|@" + format + ") catch \"caught\""], "", "caught\n");
         Add("uri-decoded-capacity", 32768, ["-nr", "--arg", "text", string.Concat(Enumerable.Repeat("%61", 32768)), "$text|@urid|length"], "", "32768\n");
+        AddDiagnostic("stream-sequence-recovery", 2, ["-c", "--seq", "--stream", "."], "\u001etruex\n\u001e[9]\n",
+            "\u001e[[0],9]\n\u001e[[0]]\n", "jq: ignoring parse error: Invalid literal at line 2, column 0 (need RS to resync)\n");
+        Add("stream-sequence-error-path", 2, ["-c", "--seq", "--stream-errors", "."], "\u001e[1\u001e[9]\n",
+            "\u001e[\"Truncated value at line 1, column 4\",[0]]\n\u001e[[0],9]\n\u001e[[0]]\n");
+        Add("stream-literal-classification", 1, ["-c", "--stream-errors", "."], "[1, x, 2]",
+            "[[0],1]\n[\"Invalid numeric literal at line 1, column 6\",[1]]\n");
+        Add("cli-binding-membership", 512, ["-nc", .. Enumerable.Range(0, 512).SelectMany(index =>
+            new[] { "--arg", "v" + index.ToString(CultureInfo.InvariantCulture), "x" }), "$ARGS.named|length"], "", "512\n");
+        Add("cli-indent-padding", 262144, ["--indent", new string('0', 262144) + "2", "-n", "[1]"], "", "[\n  1\n]\n");
         Add("uri-escaped-records", records, ["-r", "@uri"],
             string.Concat(Enumerable.Repeat("\"a b\"\n", records)), string.Concat(Enumerable.Repeat("a%20b\n", records)));
         Add("ascii-changed-records", records, ["-r", "ascii_upcase"],

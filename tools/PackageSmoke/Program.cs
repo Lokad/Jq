@@ -776,6 +776,60 @@ foreach (bool refuse in new[] { false, true })
         .ExecuteAsync(host, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "[true,true]\n" && host.Output(JqFileDescriptor.StdErr) == "");
 }
+{
+    var host = new SmokeHost();
+    host.SetInput("\u001etruex\n\u001e[9]\n");
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("stream sequence warning progress", await Command(["-c", "--seq", "--stream", "."], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "\u001e[[0],9]\n\u001e[[0]]\n"
+        && host.Output(JqFileDescriptor.StdErr) == "jq: ignoring parse error: Invalid literal at line 2, column 0 (need RS to resync)\n"
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    host.SetInput("\u001e[1\u001e[9]\n");
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("stream sequence error path", await Command(["-c", "--seq", "--stream-errors", "."], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "\u001e[\"Truncated value at line 1, column 4\",[0]]\n\u001e[[0],9]\n\u001e[[0]]\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    host.SetInput("[1, x, 2]");
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("stream literal diagnostic", await Command(["-c", "--stream-errors", "."], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[[0],1]\n[\"Invalid numeric literal at line 1, column 6\",[1]]\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+foreach (bool missingFile in new[] { false, true })
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    string text = new('x', 1048576);
+    string[] arguments = missingFile ? ["--rawfile", "v", "/" + text, "-nc", "1"] : ["--" + text];
+    Check(missingFile ? "missing-path diagnostic admission" : "unknown-option diagnostic admission",
+        await Command(arguments, []).ExecuteAsync(host, memory, CancellationToken.None) == 5
+        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr) == "jq: memory budget exceeded\n"
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    Check("one named-binding table", await Command(["-nc", .. Enumerable.Range(0, 512).SelectMany(index =>
+        new[] { "--arg", "v" + index.ToString(System.Globalization.CultureInfo.InvariantCulture), "x" }), "$ARGS.named|length"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "512\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("borrowed indent padding", await Command(["--indent", new string('0', 262144) + "2", "-n", "[1]"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[\n  1\n]\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 

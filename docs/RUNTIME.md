@@ -58,6 +58,8 @@ framing: complete values can return before another read or a malformed tail;
 ignored prefixes are discarded as they arrive. Top-level numbers require a
 terminating delimiter. Outer iteration warns and resynchronizes after malformed
 sequence input; explicit reads expose those parse errors to jq handlers.
+Streaming sequence warnings commit consumed bytes before returning; error events
+retain their paths and the following record remains available.
 
 Failed input opens report a system diagnostic and skip to the next source within
 the pull. Status 2 stays outside jq handlers. Outer iteration stops after evaluating
@@ -158,7 +160,7 @@ preserve overlapping scalar indices; `rindex` searches from the end. Recursive c
 
 Comparisons, ordering, serialization and regex subjects reuse admitted scratch
 where its lifetime is known. Replacements cover overlapping old/new capacity.
-Fresh strings, date remainders and constructed error messages admit before copying;
+Fresh strings, date remainders and runtime/CLI error text admit before copying;
 long scans observe cancellation. Type errors render bounded operand previews;
 explicit error and halt payloads keep their full contents and existing ownership.
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve streaming sequence progress, error paths and subsequent records across
+  recoverable failures; classify malformed literals before resetting tokens.
+- Admit CLI diagnostic text before construction, borrow long-option names, reuse
+  binding membership and scan indentation widths once with cancellation.
+
 - Resolve module dot segments and repeated separators through canonical hosted
   paths; admit actual candidates, source labels and needed parent-directory copies.
 - Reject malformed base64/percent syntax before allocating decoded buffers, while
