@@ -186,7 +186,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[1, x, 2]");
         var (exit, stdout, stderr) = await RunStreamAsync(host, "--stream-errors", ".");
         Assert.True(exit == 0, stderr + "|" + stdout);
-        Assert.Equal("[\n  [\n    0\n  ],\n  1\n]\n[\n  \"Invalid literal at line 1, column 6\",\n  [\n    1\n  ]\n]\n", stdout);
+        Assert.Equal("[\n  [\n    0\n  ],\n  1\n]\n[\n  \"Invalid numeric literal at line 1, column 6\",\n  [\n    1\n  ]\n]\n", stdout);
         Assert.Empty(stderr);
     }
 

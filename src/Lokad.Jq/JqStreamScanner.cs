@@ -205,26 +205,8 @@ internal sealed class JqStreamScanner : IDisposable
     // means scanning continues after the delimiter.
     private StreamScanOutcome? FinishLiteral(int consumed)
     {
-        JsonNode? scalar;
-        try
-        {
-            scalar = _runtime.ReadJsonValue(_token.AsSpan(0, _tokenLength), out int used);
-            if (used != _tokenLength)
-            {
-                _tokenLength = 0;
-                return Blame(consumed, LiteralError());
-            }
-        }
-        catch (JqException ex) when (ex is not JqQuotaException)
-        {
-            _tokenLength = 0;
-            return Blame(consumed, LiteralError());
-        }
-        catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException)
-        {
-            _tokenLength = 0;
-            return Blame(consumed, LiteralError());
-        }
+        if (!TryDecodeToken(out JsonNode? scalar))
+            return Blame(consumed, TokenStartsWithLiteral(0) ? "Invalid literal" : "Invalid numeric literal");
         _tokenLength = 0;
         string? separator = BindValue(scalar);
         if (separator is not null)
@@ -233,18 +215,6 @@ internal sealed class JqStreamScanner : IDisposable
         return emitted is null
             ? null
             : StreamScanOutcome.WithEvent(consumed, emitted);
-    }
-
-    private string LiteralError()
-    {
-        if (_tokenLength == 0)
-            return "Invalid literal";
-        byte first = _token[0];
-        if (first == (byte)116 || first == (byte)102)
-            return "Invalid literal";
-        if (_tokenLength >= 2 && first == (byte)110 && _token[1] == (byte)117)
-            return "Invalid literal";
-        return "Invalid numeric literal";
     }
 
     private StreamScanOutcome FinishString(int consumed)
@@ -629,20 +599,7 @@ internal sealed class JqStreamScanner : IDisposable
         }
         if (_tokenLength > 0)
         {
-            JsonNode? scalar;
-            bool decoded;
-            try
-            {
-                scalar = _runtime.ReadJsonValue(_token.AsSpan(0, _tokenLength), out int used);
-                decoded = used == _tokenLength;
-            }
-            catch (Exception ex) when (ex is JqException and not JqQuotaException
-                or System.Text.Json.JsonException
-                or InvalidOperationException)
-            {
-                scalar = null;
-                decoded = false;
-            }
+            bool decoded = TryDecodeToken(out JsonNode? scalar);
             bool literalStart = TokenStartsWithLiteral(0);
             _tokenLength = 0;
             if (!decoded)
@@ -712,7 +669,7 @@ internal sealed class JqStreamScanner : IDisposable
 
     // True when the pending token starts like a non-numeric literal
     // (`true`, `false`, or the `nu` prefix), mirroring the reference
-    // literal tables for end-of-input diagnostics.
+    // literal tables for diagnostics.
     private bool TokenStartsWithLiteral(int start)
     {
         if (_tokenLength <= start)
@@ -722,9 +679,7 @@ internal sealed class JqStreamScanner : IDisposable
         return _tokenLength >= start + 2 && _token[start] == (byte)110 && _token[start + 1] == (byte)117;
     }
 
-    // End-of-input failures report the open-container path snapshotted by
-    // the caller: resetting first (as before) would always yield [] while
-    // the reference reports the live path (for example [0] after `[`).
+    // EOF failures retain the live open-container path captured before reset.
     private StreamScanOutcome EofOutcome(string baseMessage, JsonArray errorPath)
     {
         string message = $"{baseMessage} at EOF at line {_line}, column {_column}";
