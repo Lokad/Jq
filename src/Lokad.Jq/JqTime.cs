@@ -302,65 +302,61 @@ internal static class JqTime
                 epochSeconds = wallTotal - (long)offset.TotalSeconds;
             }
         }
-        return RenderStrftime(context, moment, epochSeconds, offset, zoneName, format);
-    }
-
-    internal static string RenderStrftime(JqContext context, BrokenDown moment, long epochSeconds, TimeSpan offset, string zoneName, string format)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(moment);
-        ArgumentNullException.ThrowIfNull(zoneName);
-        ArgumentNullException.ThrowIfNull(format);
         var builder = new StringBuilder();
-        for (int index = 0; index < format.Length; index++)
+        AppendFormat(format);
+        return context.Budget.Finish(builder);
+
+        void AppendFormat(string pattern)
         {
-            if (format[index] != (char)37 || index + 1 >= format.Length)
+            for (int index = 0; index < pattern.Length; index++)
             {
-                int start = index;
-                while (index + 1 < format.Length && format[index + 1] != (char)37)
+                if (pattern[index] != '%' || index + 1 >= pattern.Length)
                 {
-                    index++;
-                    if ((index & 4095) == 0) context.Budget.CheckCancellation();
+                    int start = index;
+                    while (index + 1 < pattern.Length && pattern[index + 1] != '%')
+                    {
+                        index++;
+                        if ((index & 4095) == 0) context.Budget.CheckCancellation();
+                    }
+                    context.Budget.Append(builder, pattern.AsSpan(start, index - start + 1));
+                    continue;
                 }
-                context.Budget.Append(builder, format.AsSpan(start, index - start + 1));
-                continue;
-            }
-            char spec = format[index + 1];
-            index++;
-            switch (spec)
-            {
-                case (char)37: context.Budget.Append(builder, "%"); break;
-                case (char)89: context.Budget.Append(builder, moment.Year.ToString(CultureInfo.InvariantCulture)); break;
-                case (char)121: context.Budget.Append(builder, TwoDigitYear(moment.Year)); break;
-                case (char)109: context.Budget.Append(builder, moment.Month.ToString("D2", CultureInfo.InvariantCulture)); break;
-                case (char)100: context.Budget.Append(builder, moment.Day.ToString("D2", CultureInfo.InvariantCulture)); break;
-                case (char)101: context.Budget.Append(builder, moment.Day.ToString(CultureInfo.InvariantCulture).PadLeft(2, (char)32)); break;
-                case (char)72: context.Budget.Append(builder, moment.Hour.ToString("D2", CultureInfo.InvariantCulture)); break;
-                case (char)73: context.Budget.Append(builder, TwelveHour(moment.Hour).ToString("D2", CultureInfo.InvariantCulture)); break;
-                case (char)77: context.Budget.Append(builder, moment.Minute.ToString("D2", CultureInfo.InvariantCulture)); break;
-                case (char)83: context.Budget.Append(builder, ((int)moment.Second).ToString("D2", CultureInfo.InvariantCulture)); break;
-                case (char)112: context.Budget.Append(builder, moment.Hour < 12 ? "AM" : "PM"); break;
-                case (char)106: context.Budget.Append(builder, (moment.YearDay + 1).ToString("D3", CultureInfo.InvariantCulture)); break;
-                case (char)85: context.Budget.Append(builder, WeekNumber(moment, false).ToString("D2", CultureInfo.InvariantCulture)); break;
-                case (char)87: context.Budget.Append(builder, WeekNumber(moment, true).ToString("D2", CultureInfo.InvariantCulture)); break;
-                case (char)119: context.Budget.Append(builder, ((char)((char)48 + moment.Weekday)).ToString()); break;
-                case (char)117: context.Budget.Append(builder, (((moment.Weekday + 6) % 7) + 1).ToString(CultureInfo.InvariantCulture)); break;
-                case (char)97: context.Budget.Append(builder, WeekdayAbbr(moment.Weekday)); break;
-                case (char)65: context.Budget.Append(builder, WeekdayName(moment.Weekday)); break;
-                case (char)98: context.Budget.Append(builder, MonthAbbr(moment.Month)); break;
-                case (char)66: context.Budget.Append(builder, MonthName(moment.Month)); break;
-                case (char)86: IsoWeek(moment, out int isoWeek, out _); context.Budget.Append(builder, isoWeek.ToString("D2", CultureInfo.InvariantCulture)); break;
-                case (char)71: IsoWeek(moment, out _, out long isoYear); context.Budget.Append(builder, isoYear.ToString(CultureInfo.InvariantCulture)); break;
-                case (char)122: context.Budget.Append(builder, FormatOffset(offset)); break;
-                case (char)90: context.Budget.Append(builder, zoneName); break;
-                case (char)115: context.Budget.Append(builder, epochSeconds.ToString(CultureInfo.InvariantCulture)); break;
-                case (char)99: context.Budget.Append(builder, RenderStrftime(context, moment, epochSeconds, offset, zoneName, "%a %b %e %H:%M:%S %Y")); break;
-                case (char)120: context.Budget.Append(builder, RenderStrftime(context, moment, epochSeconds, offset, zoneName, "%m/%d/%y")); break;
-                case (char)88: context.Budget.Append(builder, RenderStrftime(context, moment, epochSeconds, offset, zoneName, "%H:%M:%S")); break;
-                default: context.Budget.Append(builder, "%"); context.Budget.Append(builder, format.AsSpan(index, 1)); break;
+                char spec = pattern[index + 1];
+                index++;
+                switch (spec)
+                {
+                    case '%': context.Budget.Append(builder, "%"); break;
+                    case 'Y': context.Budget.Append(builder, moment.Year.ToString(CultureInfo.InvariantCulture)); break;
+                    case 'y': context.Budget.Append(builder, TwoDigitYear(moment.Year)); break;
+                    case 'm': context.Budget.Append(builder, moment.Month.ToString("D2", CultureInfo.InvariantCulture)); break;
+                    case 'd': context.Budget.Append(builder, moment.Day.ToString("D2", CultureInfo.InvariantCulture)); break;
+                    case 'e': context.Budget.Append(builder, moment.Day.ToString(CultureInfo.InvariantCulture).PadLeft(2, ' ')); break;
+                    case 'H': context.Budget.Append(builder, moment.Hour.ToString("D2", CultureInfo.InvariantCulture)); break;
+                    case 'I': context.Budget.Append(builder, TwelveHour(moment.Hour).ToString("D2", CultureInfo.InvariantCulture)); break;
+                    case 'M': context.Budget.Append(builder, moment.Minute.ToString("D2", CultureInfo.InvariantCulture)); break;
+                    case 'S': context.Budget.Append(builder, ((int)moment.Second).ToString("D2", CultureInfo.InvariantCulture)); break;
+                    case 'p': context.Budget.Append(builder, moment.Hour < 12 ? "AM" : "PM"); break;
+                    case 'j': context.Budget.Append(builder, (moment.YearDay + 1).ToString("D3", CultureInfo.InvariantCulture)); break;
+                    case 'U': context.Budget.Append(builder, WeekNumber(moment, false).ToString("D2", CultureInfo.InvariantCulture)); break;
+                    case 'W': context.Budget.Append(builder, WeekNumber(moment, true).ToString("D2", CultureInfo.InvariantCulture)); break;
+                    case 'w': context.Budget.Append(builder, ((char)('0' + moment.Weekday)).ToString()); break;
+                    case 'u': context.Budget.Append(builder, (((moment.Weekday + 6) % 7) + 1).ToString(CultureInfo.InvariantCulture)); break;
+                    case 'a': context.Budget.Append(builder, WeekdayAbbr(moment.Weekday)); break;
+                    case 'A': context.Budget.Append(builder, WeekdayName(moment.Weekday)); break;
+                    case 'b': context.Budget.Append(builder, MonthAbbr(moment.Month)); break;
+                    case 'B': context.Budget.Append(builder, MonthName(moment.Month)); break;
+                    case 'V': IsoWeek(moment, out int isoWeek, out _); context.Budget.Append(builder, isoWeek.ToString("D2", CultureInfo.InvariantCulture)); break;
+                    case 'G': IsoWeek(moment, out _, out long isoYear); context.Budget.Append(builder, isoYear.ToString(CultureInfo.InvariantCulture)); break;
+                    case 'z': context.Budget.Append(builder, FormatOffset(offset)); break;
+                    case 'Z': context.Budget.Append(builder, zoneName); break;
+                    case 's': context.Budget.Append(builder, epochSeconds.ToString(CultureInfo.InvariantCulture)); break;
+                    case 'c': AppendFormat("%a %b %e %H:%M:%S %Y"); break;
+                    case 'x': AppendFormat("%m/%d/%y"); break;
+                    case 'X': AppendFormat("%H:%M:%S"); break;
+                    default: context.Budget.Append(builder, "%"); context.Budget.Append(builder, pattern.AsSpan(index, 1)); break;
+                }
             }
         }
-        return context.Budget.Finish(builder);
     }
 
     private static string TwoDigitYear(long year)
@@ -582,7 +578,7 @@ internal static class JqTime
             for (int index = 0; index < pattern.Length; index++)
             {
                 if ((index & 4095) == 0) budget.CheckCancellation();
-                if (pattern[index] != (char)37)
+                if (pattern[index] != '%')
                 {
                     if (IsSpace(pattern[index]))
                     {
@@ -601,15 +597,15 @@ internal static class JqTime
             return true;
         }
 
-        private static bool IsSpace(char value) => value == (char)32 || (value >= (char)9 && value <= (char)13);
+        private static bool IsSpace(char value) => value == ' ' || (value >= '\t' && value <= '\r');
 
         private bool TakeDigits(int maxLength, out long value)
         {
             value = 0;
             int count = 0;
-            while (count < maxLength && _position < text.Length && text[_position] >= (char)48 && text[_position] <= (char)57)
+            while (count < maxLength && _position < text.Length && text[_position] >= '0' && text[_position] <= '9')
             {
-                int digit = text[_position] - (char)48;
+                int digit = text[_position] - '0';
                 if (value > (long.MaxValue - digit) / 10)
                     value = long.MaxValue;
                 else
@@ -639,9 +635,9 @@ internal static class JqTime
                 char wanted = word[index];
                 if (actual == wanted)
                     continue;
-                if (actual >= (char)65 && actual <= (char)90)
+                if (actual >= 'A' && actual <= 'Z')
                     actual = (char)(actual + 32);
-                if (wanted >= (char)65 && wanted <= (char)90)
+                if (wanted >= 'A' && wanted <= 'Z')
                     wanted = (char)(wanted + 32);
                 if (actual != wanted)
                     return false;
@@ -675,85 +671,85 @@ internal static class JqTime
 
         private bool ParseDirective(char spec)
         {
-            switch (spec.ToString())
+            switch (spec)
             {
-                case "%":
-                    if (_position >= text.Length || text[_position] != (char)37)
+                case '%':
+                    if (_position >= text.Length || text[_position] != '%')
                         return false;
                     _position++;
                     return true;
-                case "Y":
+                case 'Y':
                     {
                         bool negative = false;
-                        if (_position < text.Length && (text[_position] == (char)45 || text[_position] == (char)43))
-                            negative = text[_position++] == (char)45;
+                        if (_position < text.Length && (text[_position] == '-' || text[_position] == '+'))
+                            negative = text[_position++] == '-';
                         if (!TakeDigits(4, out long year))
                             return false;
                         _year = negative ? -year : year;
                         _hasYear = true;
                         return true;
                     }
-                case "G":
+                case 'G':
                     {
                         bool negative = false;
-                        if (_position < text.Length && (text[_position] == (char)45 || text[_position] == (char)43))
-                            negative = text[_position++] == (char)45;
+                        if (_position < text.Length && (text[_position] == '-' || text[_position] == '+'))
+                            negative = text[_position++] == '-';
                         if (!TakeDigits(4, out long isoYear))
                             return false;
                         _isoYear = negative ? -isoYear : isoYear;
                         _hasIsoYear = true;
                         return true;
                     }
-                case "y":
+                case 'y':
                     if (!TakeDigits(2, out long shortYear))
                         return false;
                     _year = shortYear >= 69 ? 1900L + shortYear : 2000L + shortYear;
                     _hasYear = true;
                     return true;
-                case "m":
+                case 'm':
                     if (!TakeDigits(2, out long month) || month < 1 || month > 12)
                         return false;
                     _month0 = (int)month - 1;
                     _hasMonth = true;
                     return true;
-                case "d":
+                case 'd':
                     if (!TakeDigits(2, out long day) || day < 1 || day > 31)
                         return false;
                     _day = (int)day;
                     _hasDay = true;
                     return true;
-                case "e":
+                case 'e':
                     TakeSpaces();
                     if (!TakeDigits(2, out long spaceDay) || spaceDay < 1 || spaceDay > 31)
                         return false;
                     _day = (int)spaceDay;
                     _hasDay = true;
                     return true;
-                case "H":
+                case 'H':
                     if (!TakeDigits(2, out long hour) || hour < 0 || hour > 23)
                         return false;
                     _hour = (int)hour;
                     _hasHour = true;
                     return true;
-                case "I":
+                case 'I':
                     if (!TakeDigits(2, out long hour12) || hour12 < 1 || hour12 > 12)
                         return false;
                     _hour12 = (int)hour12;
                     _hasHour12 = true;
                     return true;
-                case "M":
+                case 'M':
                     if (!TakeDigits(2, out long minute) || minute < 0 || minute > 59)
                         return false;
                     _minute = (int)minute;
                     _hasMinute = true;
                     return true;
-                case "S":
+                case 'S':
                     if (!TakeDigits(2, out long second) || second < 0 || second > 61)
                         return false;
                     _second = (int)second;
                     _hasSecond = true;
                     return true;
-                case "p":
+                case 'p':
                     if (StartsWithIgnoreCase(text, _position, "am"))
                     {
                         _position += 2;
@@ -770,70 +766,70 @@ internal static class JqTime
                     }
                     _hasAmPm = true;
                     return true;
-                case "z":
+                case 'z':
                     return TakeZoneOffset();
-                case "Z":
+                case 'Z':
                     return TakeZoneName();
-                case "j":
+                case 'j':
                     if (!TakeDigits(3, out long yearday) || yearday < 1 || yearday > 366)
                         return false;
                     _yearday = (int)yearday - 1;
                     _hasYearday = true;
                     return true;
-                case "U":
+                case 'U':
                     if (!TakeDigits(2, out long weekU) || weekU < 0 || weekU > 53)
                         return false;
                     _week = (int)weekU;
                     _weekMonday = false;
                     _hasWeek = true;
                     return true;
-                case "W":
+                case 'W':
                     if (!TakeDigits(2, out long weekW) || weekW < 0 || weekW > 53)
                         return false;
                     _week = (int)weekW;
                     _weekMonday = true;
                     _hasWeek = true;
                     return true;
-                case "V":
+                case 'V':
                     if (!TakeDigits(2, out long isoWeek) || isoWeek < 1 || isoWeek > 53)
                         return false;
                     _isoWeek = (int)isoWeek;
                     _hasIsoWeek = true;
                     return true;
-                case "u":
-                    if (_position >= text.Length || text[_position] < (char)49 || text[_position] > (char)55)
+                case 'u':
+                    if (_position >= text.Length || text[_position] < '1' || text[_position] > '7')
                         return false;
-                    _weekday = (text[_position] - (char)48) % 7;
+                    _weekday = (text[_position] - '0') % 7;
                     _position++;
                     _hasWeekday = true;
                     return true;
-                case "w":
-                    if (_position >= text.Length || text[_position] < (char)48 || text[_position] > (char)54)
+                case 'w':
+                    if (_position >= text.Length || text[_position] < '0' || text[_position] > '6')
                         return false;
-                    _weekday = text[_position] - (char)48;
+                    _weekday = text[_position] - '0';
                     _position++;
                     _hasWeekday = true;
                     return true;
-                case "a":
-                case "A":
+                case 'a':
+                case 'A':
                     if (!TakeName(WeekdayNames, WeekdayAbbrs, out int weekday))
                         return false;
                     _weekday = weekday;
                     _hasWeekday = true;
                     return true;
-                case "b":
-                case "B":
-                case "h":
+                case 'b':
+                case 'B':
+                case 'h':
                     if (!TakeName(MonthNames, MonthAbbrs, out int monthIndex))
                         return false;
                     _month0 = monthIndex;
                     _hasMonth = true;
                     return true;
-                case "s":
+                case 's':
                     {
                         bool negativeEpoch = false;
-                        if (_position < text.Length && (text[_position] == (char)45 || text[_position] == (char)43))
-                            negativeEpoch = text[_position++] == (char)45;
+                        if (_position < text.Length && (text[_position] == '-' || text[_position] == '+'))
+                            negativeEpoch = text[_position++] == '-';
                         if (!TakeDigits(19, out long epoch))
                             return false;
                         if (negativeEpoch)
@@ -857,14 +853,14 @@ internal static class JqTime
                         _hasYearday = true;
                         return true;
                     }
-                case "c":
+                case 'c':
                     return ParseFormat("%a %b %e %H:%M:%S %Y");
-                case "x":
+                case 'x':
                     return ParseFormat("%m/%d/%y");
-                case "X":
+                case 'X':
                     return ParseFormat("%H:%M:%S");
-                case "n":
-                case "t":
+                case 'n':
+                case 't':
                     TakeSpaces();
                     return true;
                 default:
@@ -874,12 +870,12 @@ internal static class JqTime
 
         private bool TakeZoneOffset()
         {
-            if (_position >= text.Length || (text[_position] != (char)43 && text[_position] != (char)45))
+            if (_position >= text.Length || (text[_position] != '+' && text[_position] != '-'))
                 return false;
             _position++;
             if (!TakeDigits(2, out long hours) || hours < 0 || hours > 23)
                 return false;
-            if (_position < text.Length && text[_position] == (char)58)
+            if (_position < text.Length && text[_position] == ':')
             {
                 _position++;
                 if (!TakeDigits(2, out long colonMinutes) || colonMinutes < 0 || colonMinutes > 59)
@@ -905,7 +901,7 @@ internal static class JqTime
         }
 
         private static bool IsZoneChar(char value) =>
-            (value >= (char)65 && value <= (char)90) || (value >= (char)97 && value <= (char)122) || (value >= (char)48 && value <= (char)57) || value == (char)95 || value == (char)47 || value == (char)43 || value == (char)45;
+            (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '_' || value == '/' || value == '+' || value == '-';
 
         private void SundayWeekToCivil(long year, out int month, out int day, out int yearday)
         {
