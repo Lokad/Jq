@@ -20,14 +20,15 @@ internal sealed record GovernorWorkload(ComparisonWorkload Workload, OutputDiges
 internal sealed record GovernorCostBatch(int Pair, bool Governed, int Executions,
     double Milliseconds, double ManagedBytesPerExecution, int Gen0, int Gen1, int Gen2,
     long PeakReservedBytes, long EndReservedBytes, int PeakScopes);
-internal sealed record GovernorCostRow(ComparisonWorkloadInfo Workload, int Workers,
+internal sealed record GovernorRow(ComparisonWorkloadInfo Workload, int Workers,
     OutputDigest Expected, OutputDigest ExpectedError, MemoryCallCounts Calls,
-    long CountedPeakBytes, int CountedPeakScopes, GovernorCostBatch[] Batches);
-internal sealed record GovernorCostReport(string Runtime, string OS, string Architecture, int Processors,
-    bool ServerGc, string LibrarySha256, string Contract, bool Complete, GovernorCostRow[] Cases);
+    long CountedPeakBytes, int CountedPeakScopes, long CountedEndBytes, int CountedEndScopes,
+    GovernorCostBatch[] Batches);
+internal sealed record GovernorReport(string Runtime, string OS, string Architecture, int Processors,
+    bool ServerGc, string LibrarySha256, string Mode, string Contract, bool Complete, GovernorRow[] Cases);
 
-// Local cost diagnostics, without a reference process or a timing qualification
-// claim. Counted runs and uninstrumented timing/allocation runs are distinct.
+// Count/refund verification runs once per worker. Optional uninstrumented cost
+// diagnostics retain separate samples without a timing qualification claim.
 internal static class GovernorRunner
 {
     private static bool IsReleaseBuild =>
@@ -47,10 +48,13 @@ internal static class GovernorRunner
         var options = new Dictionary<string, string>(StringComparer.Ordinal);
         for (int index = 0; index < arguments.Length; index += 2)
         {
-            if (index + 1 >= arguments.Length || arguments[index] is not ("--case" or "--iterations" or "--workers" or "--output")
+            if (index + 1 >= arguments.Length || arguments[index] is not ("--mode" or "--case" or "--iterations" or "--workers" or "--output")
                 || !options.TryAdd(arguments[index], arguments[index + 1]))
                 return Usage();
         }
+        string mode = options.GetValueOrDefault("--mode", "counts");
+        if (mode is not ("counts" or "cost") || mode == "counts" && options.ContainsKey("--iterations"))
+            return Usage();
         if (!int.TryParse(options.GetValueOrDefault("--iterations", "16"), NumberStyles.None,
             CultureInfo.InvariantCulture, out int iterations) || iterations is < 1 or > 1024)
             return Usage();
@@ -71,7 +75,7 @@ internal static class GovernorRunner
             return Usage();
         string librarySha = Convert.ToHexStringLower(SHA256.HashData(
             await File.ReadAllBytesAsync(typeof(Jq).Assembly.Location, cancellationToken).ConfigureAwait(false)));
-        var rows = new List<GovernorCostRow>();
+        var rows = new List<GovernorRow>();
         await SaveAsync(false).ConfigureAwait(false);
         foreach (GovernorWorkload item in workloads)
         {
@@ -85,23 +89,32 @@ internal static class GovernorRunner
                 var counted = new CountingMemoryBudget(countedRoot);
                 await GroupAsync(command, item, counted, concurrency, 1).ConfigureAwait(false);
                 AssertRefunded(countedRoot);
-                await WarmAsync(null).ConfigureAwait(false);
-                var warm = new BenchmarkMemoryBudget(256L * 1024 * 1024);
-                await WarmAsync(warm).ConfigureAwait(false);
-                AssertRefunded(warm);
                 var batches = new List<GovernorCostBatch>();
-                for (int pair = 0; pair < 3; pair++)
+                if (mode == "cost")
                 {
-                    bool firstGoverned = pair % 2 == 0;
-                    batches.Add(await MeasureAsync(firstGoverned, pair).ConfigureAwait(false));
-                    batches.Add(await MeasureAsync(!firstGoverned, pair).ConfigureAwait(false));
+                    await WarmAsync(null).ConfigureAwait(false);
+                    var warm = new BenchmarkMemoryBudget(256L * 1024 * 1024);
+                    await WarmAsync(warm).ConfigureAwait(false);
+                    AssertRefunded(warm);
+                    for (int pair = 0; pair < 3; pair++)
+                    {
+                        bool firstGoverned = pair % 2 == 0;
+                        batches.Add(await MeasureAsync(firstGoverned, pair).ConfigureAwait(false));
+                        batches.Add(await MeasureAsync(!firstGoverned, pair).ConfigureAwait(false));
+                    }
                 }
                 rows.Add(new(BenchmarkReport.Describe(item.Workload), concurrency, item.Expected, item.ExpectedError,
-                    counted.Counts, countedRoot.PeakBytes, countedRoot.PeakScopes, batches.ToArray()));
+                    counted.Counts, countedRoot.PeakBytes, countedRoot.PeakScopes,
+                    countedRoot.ReservedBytes, countedRoot.ActiveScopes, batches.ToArray()));
                 await SaveAsync(rows.Count == workloads.Length * workers.Count).ConfigureAwait(false);
-                double baseline = batches.Where(batch => !batch.Governed).Select(batch => batch.Milliseconds / batch.Executions).Order().ElementAt(1);
-                double governed = batches.Where(batch => batch.Governed).Select(batch => batch.Milliseconds / batch.Executions).Order().ElementAt(1);
-                Console.WriteLine(FormattableString.Invariant($"{item.Workload.Name}, {concurrency} workers: {counted.Counts.Reservations} reserves/{counted.Counts.Resizes} resizes; {governed / baseline:F3} governed/ungoverned elapsed ratio (unqualified)."));
+                Console.Write($"{item.Workload.Name}, {concurrency} workers: {counted.Counts.Reservations} reserves/{counted.Counts.Resizes} resizes; refunded");
+                if (mode == "cost")
+                {
+                    double baseline = batches.Where(batch => !batch.Governed).Select(batch => batch.Milliseconds / batch.Executions).Order().ElementAt(1);
+                    double governed = batches.Where(batch => batch.Governed).Select(batch => batch.Milliseconds / batch.Executions).Order().ElementAt(1);
+                    Console.Write(FormattableString.Invariant($"; {governed / baseline:F3} governed/ungoverned elapsed ratio (unqualified)"));
+                }
+                Console.WriteLine('.');
 
                 async Task<GovernorCostBatch> MeasureAsync(bool governed, int pair)
                 {
@@ -159,10 +172,11 @@ internal static class GovernorRunner
         async Task SaveAsync(bool complete)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(output) ?? throw new InvalidOperationException("Missing artifact directory."));
-            var report = new GovernorCostReport(RuntimeInformation.FrameworkDescription,
+            var report = new GovernorReport(RuntimeInformation.FrameworkDescription,
                 RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString(),
-                Environment.ProcessorCount, System.Runtime.GCSettings.IsServerGC, librarySha,
-                "Unqualified local diagnostics; shared recursion guard and provider regex settings; public execution hook versus no hook; caller-owned invocation snapshot/inputs and recognition excluded; binding/compilation, SHA-256 consumption and linked 15-second deadline included. Shared lock-based root tracks active owners only. Each lane warms for at least eight executions per worker and one second; counts collected separately; three alternating timing pairs include process-wide GC allocations/scheduling and preserve all samples. Peak bytes are reservation estimates, not process memory. Requested workers do not prove full simultaneous occupancy.",
+                Environment.ProcessorCount, System.Runtime.GCSettings.IsServerGC, librarySha, mode,
+                "One counted execution per worker verifies independent stdout/stderr digests and full refunds. Caller-owned invocation snapshot/inputs and recognition excluded; binding/compilation, SHA-256 consumption and linked 15-second deadline included. Shared lock-based root tracks active owners only. Peak bytes are reservation estimates, not process memory. Requested workers do not prove full simultaneous occupancy."
+                + (mode == "cost" ? " Unqualified local cost diagnostics compare the public execution hook versus no hook; each lane warms for at least eight executions per worker and one second; counts collected separately; three alternating timing pairs include process-wide GC allocations/scheduling and preserve all samples." : " Counts mode collects no warmup, timing or allocation batches."),
                 complete, rows.ToArray());
             string temporary = output + ".tmp";
             await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(report, ComparisonRunner.JsonOptions), cancellationToken).ConfigureAwait(false);
@@ -171,7 +185,7 @@ internal static class GovernorRunner
 
         static int Usage()
         {
-            Console.Error.WriteLine("Usage: --governor [--case NAME] [--iterations 1..1024] [--workers 1,4] [--output artifacts/PATH]");
+            Console.Error.WriteLine("Usage: --governor [--mode counts|cost] [--case NAME] [--workers 1,4] [--output artifacts/PATH] [--iterations 1..1024 (cost only)]");
             return 2;
         }
 
@@ -453,6 +467,9 @@ internal static class GovernorRunner
             string.Concat(Enumerable.Repeat("null\n", 10000)));
         Add("definition-tail-reuse", 10000, ["-nc",
             "def f($n): if $n==0 then null else def local: $n-1; f(local) end; f(10000)"], "", "null\n");
+        Add("combinations-count-stream", 3, ["-nc", "[0]|combinations((1,2))"], "", "[0,0,0]\n");
+        Add("combinations-count-empty", 0, ["-nc", "[0]|combinations(empty)"], "", "[]\n");
+        Add("combinations-empty-row", 65536, ["-nc", "[]|combinations(65536)"], "", "");
         Add("object-empty-workspace-one", 10000, ["-nc", "range(10000) | {a:empty}"], "", "");
         Add("object-empty-workspace-two", 10000, ["-nc", "range(10000) | {a:empty,b:1}"], "", "");
         Add("constant-metadata-wide", 2000, ["-nc",
