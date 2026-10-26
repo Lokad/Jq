@@ -703,11 +703,6 @@ internal sealed class JqInputCursor : IAsyncDisposable
                     _streamEofDone = true;
                     throw;
                 }
-                if (end.ErrorEvent is not null)
-                {
-                    SetPosition(1 + _newlines);
-                    return (true, end.ErrorEvent);
-                }
                 if (end.Event is not null)
                 {
                     SetPosition(1 + _newlines);
@@ -717,16 +712,14 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 return (false, null);
             }
             if (_count == 0) continue;
-            StreamScanOutcome outcome = _scanner.Consume(_buffer.AsSpan(_start, _count), isFinal: false);
+            StreamScanOutcome outcome = _scanner.Consume(_buffer.AsSpan(_start, _count));
             Advance(outcome.Consumed);
             if (outcome.DropRest && _count > 0)
                 Advance(_count);
-            if (outcome.Error is not null)
-                throw outcome.Error;
-            if (outcome.ErrorEvent is not null)
+            if (outcome.Error is { } error)
             {
                 SetPosition(1 + _newlines);
-                return (true, outcome.ErrorEvent);
+                throw error;
             }
             if (outcome.Event is not null)
             {

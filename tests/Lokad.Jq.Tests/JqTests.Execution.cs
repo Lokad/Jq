@@ -202,11 +202,11 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(256);
         using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
         using var scanner = new JqStreamScanner(budget, new JqRuntime(budget), false, false);
-        scanner.Consume("1"u8, false);
+        scanner.Consume("1"u8);
         var failure = Assert.Throws<JqQuotaException>(() =>
         {
             if (finish) scanner.FinishFinal();
-            else scanner.Consume(" "u8, false);
+            else scanner.Consume(" "u8);
         });
         Assert.True(failure.IsMemoryAdmission);
         Assert.Equal("memory budget exceeded", failure.Message);

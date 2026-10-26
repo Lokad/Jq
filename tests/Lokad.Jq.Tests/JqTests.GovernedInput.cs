@@ -179,10 +179,10 @@ public sealed partial class JqTests
         var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
         using (var scanner = new JqStreamScanner(budget, new JqRuntime(budget), false, false))
         {
-            Assert.Null(scanner.Consume(Encoding.UTF8.GetBytes("\"" + new string('x', 300)), false).Event);
+            Assert.Null(scanner.Consume(Encoding.UTF8.GetBytes("\"" + new string('x', 300))).Event);
             Assert.Equal(512, memory.ReservedBytes);
             Assert.Equal(768, memory.PeakBytes);
-            Assert.NotNull(scanner.Consume("\" "u8, false).Event);
+            Assert.NotNull(scanner.Consume("\" "u8).Event);
             Assert.True(memory.ReservedBytes >= 512);
         }
         budget.Dispose();
