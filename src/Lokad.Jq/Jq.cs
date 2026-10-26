@@ -54,5 +54,5 @@ public sealed class Jq
         return JqExecutor.ExecuteAsync(host, _invocation, regexEngine, memoryBudget, cancellationToken);
     }
 
-    private static bool IsJqName(string name) => name is "jq" || name.EndsWith("/jq");
+    private static bool IsJqName(string name) => name is "jq" || name.EndsWith("/jq", StringComparison.Ordinal);
 }
