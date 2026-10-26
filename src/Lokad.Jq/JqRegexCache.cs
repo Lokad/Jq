@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Lokad.Jq.Helpers;
 
 namespace Lokad.Jq;
@@ -88,11 +87,6 @@ internal sealed class JqRegexCache : IDisposable
         try
         {
             return new JqMemoryValue<ReadOnlyMemory<byte>>(memory.Encode(text), memory);
-        }
-        catch (EncoderFallbackException ex)
-        {
-            memory.Reject();
-            throw new JqException($"invalid regex input: {ex.Message}");
         }
         catch
         {

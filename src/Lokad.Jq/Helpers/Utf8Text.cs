@@ -5,6 +5,7 @@ namespace Lokad.Jq.Helpers;
 
 internal static class Utf8Text
 {
+    // Host UTF-16 text encodes with replacement; input bytes decode strictly.
     private static readonly Encoding StrictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     // Count in bounded chunks so a representable UTF-16 string need not fit an
@@ -37,10 +38,10 @@ internal static class Utf8Text
 
     public static ReadOnlyMemory<byte> Encode(string text)
     {
-        return string.IsNullOrEmpty(text) ? ReadOnlyMemory<byte>.Empty : StrictUtf8.GetBytes(text);
+        return string.IsNullOrEmpty(text) ? ReadOnlyMemory<byte>.Empty : Encoding.UTF8.GetBytes(text);
     }
 
     public static int Encode(string text, Span<byte> destination) =>
-        StrictUtf8.GetBytes(text.AsSpan(), destination);
+        Encoding.UTF8.GetBytes(text.AsSpan(), destination);
 
 }
