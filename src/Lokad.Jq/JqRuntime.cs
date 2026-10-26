@@ -13,6 +13,7 @@ namespace Lokad.Jq;
 
 internal sealed partial class JqRuntime(JqBudget budget)
 {
+    private const int DiagnosticPreviewBytes = 30;
     private static readonly JsonSerializerOptions CompactJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private static readonly JsonSerializerOptions AsciiJson = new() { Encoder = JavaScriptEncoder.Default };
 
@@ -123,11 +124,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
             else value.WriteTo(writer, ascii ? AsciiJson : CompactJson);
             return !Full();
 
-            bool Full() => preview && writer.BytesCommitted + writer.BytesPending >= 30;
+            bool Full() => preview && writer.BytesCommitted + writer.BytesPending >= DiagnosticPreviewBytes;
 
             ReadOnlySpan<char> Prefix(string text)
             {
-                int length = preview ? Math.Min(30, text.Length) : text.Length;
+                int length = preview ? Math.Min(DiagnosticPreviewBytes, text.Length) : text.Length;
                 if (length < text.Length && char.IsHighSurrogate(text[length - 1])) length--;
                 return text.AsSpan(0, length);
             }
@@ -581,7 +582,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         using var rendered = SerializeUtf8(node, false, null, false, false, true, false);
         ReadOnlySpan<byte> dumped = rendered.Value.Span;
-        if (dumped.Length <= 29)
+        if (dumped.Length < DiagnosticPreviewBytes)
         {
             budget.ReserveString(Encoding.UTF8.GetCharCount(dumped));
             return Encoding.UTF8.GetString(dumped);
@@ -593,7 +594,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             (byte)'{' => '}',
             _ => '\0',
         };
-        int keep = 30 - (delimiter == '\0' ? 4 : 5);
+        int keep = DiagnosticPreviewBytes - (delimiter == '\0' ? 4 : 5);
         while (keep > 0 && dumped[keep] >= 0x80 && dumped[keep] < 0xC0)
             keep--;
         ReadOnlySpan<byte> prefix = dumped[..keep];
@@ -1692,8 +1693,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             {
                 if (!hasSepText)
                 {
-                    JsonNode accNode = JsonValue.Create(budget.Finish(builder));
-                    throw new JqRuntimeException(TypeName(accNode) + " (" + TruncatedDump(accNode) + ") and " + TypeName(separator) + " (" + TruncatedDump(separator) + ") cannot be added");
+                    throw new JqRuntimeException("string (" + PreviewAccumulator() + ") and " + TypeName(separator) + " (" + TruncatedDump(separator) + ") cannot be added");
                 }
                 budget.Append(builder, sepText);
             }
@@ -1712,13 +1712,21 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
             else
             {
-                JsonNode leftNode = JsonValue.Create(budget.Finish(builder));
-                throw new JqRuntimeException(TypeName(leftNode) + " (" + TruncatedDump(leftNode) + ") and " + TypeName(item) + " (" + TruncatedDump(item) + ") cannot be added");
+                throw new JqRuntimeException("string (" + PreviewAccumulator() + ") and " + TypeName(item) + " (" + TruncatedDump(item) + ") cannot be added");
             }
             budget.Append(builder, elemText);
             first = false;
         }
         return JsonValue.Create(budget.Finish(builder));
+
+        string PreviewAccumulator()
+        {
+            // One extra unit lets the shared renderer apply its surrogate rule.
+            int length = Math.Min(DiagnosticPreviewBytes + 1, builder.Length);
+            budget.ReserveString(length);
+            budget.CheckCancellation();
+            return TruncatedDump(JsonValue.Create(builder.ToString(0, length)));
+        }
     }
 
     // Numbers that are whole and fit in a long keep integral storage like
