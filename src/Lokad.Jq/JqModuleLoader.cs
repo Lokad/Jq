@@ -200,15 +200,18 @@ internal sealed class JqModuleLoader(
         try
         {
             string sourceText = DecodeModuleSource(canonicalPath, content);
-            var programSource = new JqProgramSource("file \"" + canonicalPath + "\"", canonicalPath);
+            var programSource = JqProgramSource.File(canonicalPath, budget);
             // Pre-scan imports before loading dependencies.
             var tokens = Lexer.Tokenize(sourceText, programSource, budget);
             var preParser = new JqParser(tokens, programSource, rootEnvironment, budget);
             (_, IReadOnlyList<JqModuleImport> imports, int bodyIndex) = preParser.ParsePrefix();
-            string childImporterDir = ParentDir(canonicalPath);
             JqEnvironment env = rootEnvironment;
-            foreach (JqModuleImport import in imports)
-                env = await ApplyImportAsync(env, import, childImporterDir, depth + 1, cancellationToken).ConfigureAwait(false);
+            if (imports.Count != 0)
+            {
+                string childImporterDir = JqPathResolution.ParentDirectory(canonicalPath, budget);
+                foreach (JqModuleImport import in imports)
+                    env = await ApplyImportAsync(env, import, childImporterDir, depth + 1, cancellationToken).ConfigureAwait(false);
+            }
             var definitions = new JqParser(tokens, programSource, env, budget).ParseDefinitions(bodyIndex);
             foreach (JqFunctionDefinition definition in definitions)
             {
@@ -246,25 +249,35 @@ internal sealed class JqModuleLoader(
                 cancellationToken.ThrowIfCancellationRequested();
                 long length = dir.Length + (dir == "/" ? 0L : 1L) + rel.Length + suffix.Length
                     + (variant == 1 ? 8L : variant == 2 ? 1L + rel.Length - baseStart : 0L);
-                // Cover path normalization and overlapping strings before any copy.
-                budget.ReserveBytes(128 + 64L * length);
-                string prefix = dir == "/" ? "/" : dir + "/";
-                string candidate = variant switch
+                budget.ReserveString(length);
+                budget.CheckCancellation();
+                string candidate = string.Create((int)length,
+                    (Directory: dir, Relative: rel, Suffix: suffix, BaseStart: baseStart, Variant: variant, Budget: budget),
+                    static (destination, state) =>
                 {
-                    0 => prefix + rel + suffix,
-                    1 => prefix + rel + "/jq/main" + suffix,
-                    _ => prefix + rel + "/" + rel[baseStart..] + suffix,
-                };
-                JqPath path;
-                try
-                {
-                    path = new JqPath(candidate);
-                }
-                catch (ArgumentException)
-                {
-                    continue;
-                }
-                yield return path;
+                    state.Budget.CheckCancellation();
+                    state.Directory.AsSpan().CopyTo(destination);
+                    int offset = state.Directory.Length;
+                    if (state.Directory != "/") destination[offset++] = '/';
+                    state.Relative.AsSpan().CopyTo(destination[offset..]);
+                    offset += state.Relative.Length;
+                    if (state.Variant == 1)
+                    {
+                        "/jq/main".AsSpan().CopyTo(destination[offset..]);
+                        offset += 8;
+                    }
+                    else if (state.Variant == 2)
+                    {
+                        destination[offset++] = '/';
+                        state.Relative.AsSpan(state.BaseStart).CopyTo(destination[offset..]);
+                        offset += state.Relative.Length - state.BaseStart;
+                    }
+                    state.Suffix.AsSpan().CopyTo(destination[offset..]);
+                    state.Budget.CheckCancellation();
+                });
+                if (JqRawPath.TryParse(candidate, budget, out JqRawPath? raw)
+                    && raw.TryToAbsolute(JqPath.Root, budget, out JqPath? path))
+                    yield return path;
             }
         }
 
@@ -335,15 +348,6 @@ internal sealed class JqModuleLoader(
             catch { (content as JqReadResult.Complete)?.Dispose(); throw; }
         }
         return content;
-    }
-
-    private static string ParentDir(string canonicalPath)
-    {
-        ArgumentNullException.ThrowIfNull(canonicalPath);
-        int slash = canonicalPath.LastIndexOf((char)47);
-        if (slash <= 0)
-            return "/";
-        return canonicalPath[..slash];
     }
 
     internal async Task<JsonObject> GetModuleMetadataAsync(string relPath, CancellationToken cancellationToken)

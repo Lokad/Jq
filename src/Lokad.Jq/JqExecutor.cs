@@ -127,8 +127,8 @@ internal static class JqExecutor
             var tokens = Lexer.Tokenize(filterText, programSource, budget);
             var preParser = new JqParser(tokens, programSource, context.RootEnvironment, budget);
             (_, IReadOnlyList<JqModuleImport> mainImports, int bodyIndex) = preParser.ParsePrefix();
-            string mainImporterDir = invocation.FilterFile is { } mainProgramPath
-                ? ParentDir(mainProgramPath.Absolute.Path)
+            string mainImporterDir = mainImports.Count != 0 && invocation.FilterFile is { } mainProgramPath
+                ? JqPathResolution.ParentDirectory(mainProgramPath.Absolute.Path, budget)
                 : invocation.WorkingDirectory.Path;
             var libraryDirs = new List<string>();
             foreach (var lib in invocation.LibraryDirs)
@@ -334,15 +334,6 @@ internal static class JqExecutor
             context.InputLineNumber = cursor.LastLine;
             yield return slurped;
         }
-    }
-
-    private static string ParentDir(string canonicalPath)
-    {
-        ArgumentNullException.ThrowIfNull(canonicalPath);
-        int slash = canonicalPath.LastIndexOf((char)47);
-        if (slash <= 0)
-            return "/";
-        return canonicalPath[..slash];
     }
 
     private static Task<JqAppendResult?> WriteErrorAsync(IJqHost host, JqInvocation invocation,

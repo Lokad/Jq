@@ -45,4 +45,14 @@ public static class JqPathResolution
         return new JqResolvedPath(raw, absolute);
     }
 
+    internal static string ParentDirectory(string canonicalPath, JqBudget budget)
+    {
+        budget.CheckCancellation();
+        int slash = canonicalPath.LastIndexOf('/');
+        if (slash <= 0) return "/";
+        budget.ReserveString(slash);
+        budget.CheckCancellation();
+        return canonicalPath[..slash];
+    }
+
 }
