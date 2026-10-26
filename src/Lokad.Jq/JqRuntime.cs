@@ -1934,7 +1934,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
         void AppendShell(StringBuilder builder, JsonNode? element)
         {
-            if (element is null || TypeName(element) == "boolean" || TypeName(element) == "number")
+            if (element is null || TypeName(element) == "boolean")
+            {
+                budget.Append(builder, ToJqString(element));
+                return;
+            }
+            if (TypeName(element) == "number")
             {
                 budget.Append(builder, Serialize(element, false, null, false));
                 return;
@@ -1961,7 +1966,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 if (index > 0) budget.Append(builder, ",");
                 JsonNode? field = array[index];
                 if (field is null || IsNaNNumber(field)) continue;
-                if (TypeName(field) == "boolean" || TypeName(field) == "number")
+                if (TypeName(field) == "boolean")
+                {
+                    budget.Append(builder, ToJqString(field));
+                }
+                else if (TypeName(field) == "number")
                 {
                     budget.Append(builder, Serialize(field, false, null, false));
                 }
