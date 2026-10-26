@@ -54,6 +54,52 @@ if (args.Length != 0)
 }
 
 int checks = 0;
+foreach (string path in new[] { "./tiny", "dir/./tiny", "dir//tiny" })
+{
+    var host = new SmokeHost();
+    host.AddFile("/modules/tiny.jq", "def value:42;");
+    host.AddFile("/modules/dir/tiny.jq", "def value:43;");
+    Check("normalized module " + path, await Command(["-nc", "-L", "/modules", "import " + JsonSerializer.Serialize(path) + " as m; m::value"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == (path == "./tiny" ? "42\n" : "43\n")
+        && host.Output(JqFileDescriptor.StdErr) == "" && host.ClosedDescriptors.Count == 1);
+}
+{
+    var host = new SmokeHost();
+    host.AddFile("/modules/tiny.jq", "def value:42;");
+    host.AddFile("/modules/dir/tiny.jq", "def value:43;");
+    Check("canonical module aliases and metadata", await Command(["-nc", "-L", "/modules",
+        "import \"./tiny\" as a; import \"tiny\" as b; [a::value,b::value,(\"dir/./tiny\"|modulemeta|.defs)]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[42,42,[\"value/0\"]]\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && host.ClosedDescriptors.Count == 2);
+}
+{
+    string directory = "/" + new string('d', 16384);
+    var host = new SmokeHost();
+    host.AddFile(directory + "/tiny.jq", "def value:42;");
+    var memory = new BenchmarkMemoryBudget(256 * 1024);
+    Check("module actual path admission", await Command(["-nc", "import \"tiny\" as m; m::value"], [new("PWD", directory)])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "42\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && host.ClosedDescriptors.Count == 1 && memory.ReservedBytes == 0);
+}
+foreach (string format in new[] { "base64d", "urid" })
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    string text = (format == "base64d" ? "!" : "%ZZ") + new string('A', 1048576);
+    Check(format + " validates before output admission", await Command(["-nc", "--arg", "text", text, "try ($text|@" + format + ") catch \"caught\""], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "\"caught\"\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    Check("URI decoded capacity", await Command(["-nc", "--arg", "text", string.Concat(Enumerable.Repeat("%61", 32768)), "$text|@urid|length"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "32768\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
 {
     var host = new SmokeHost();
     Check("host text replacement", await Command(["-nr", "--arg", "text", "\uD800", "$text,($text|test(\".\"))"], [])

@@ -24,6 +24,8 @@ default current directory. `JqClock` supplies time and timezone inputs. Hosted
 module search uses the importer directory followed by `-L` directories. Explicit
 `search` metadata replaces those defaults and skips non-string entries. Search
 stops when a file opens; a read failure does not select a later candidate.
+Module names validate before canonical resolution; valid dot segments and repeated
+separators resolve to the same executable cache key.
 
 Standard descriptors are borrowed. Successful `OpenReadAsync` calls transfer an
 owned descriptor to execution; `JqOpenedFile.OpenFailure` transfers none. Execution calls `CloseDescriptorAsync` when exhausted
@@ -64,6 +66,8 @@ the same evaluation. Memory refusal still takes precedence as status 5.
 
 JSON data imports and `--slurpfile` accept one leading UTF-8 BOM; raw file values
 retain it as text.
+Base64 alphabet/quantum and URI percent syntax are checked before admitting
+decoded buffers. Successful decoding refunds scratch after constructing its result.
 
 ## Memory admission
 

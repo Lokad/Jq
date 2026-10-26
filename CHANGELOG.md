@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Resolve module dot segments and repeated separators through canonical hosted
+  paths; admit actual candidates, source labels and needed parent-directory copies.
+- Reject malformed base64/percent syntax before allocating decoded buffers, while
+  preserving terminal refusal for necessary output and exact URI scratch admission.
+
 - Encode host UTF-16 text with replacement consistently across raw output,
   diagnostics and regex subjects, preserving statuses and strict UTF-8 input decoding.
 - Construct ASCII/HTML/URI transforms directly, borrowing unchanged payloads and

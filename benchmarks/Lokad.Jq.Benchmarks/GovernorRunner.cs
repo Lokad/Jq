@@ -495,6 +495,12 @@ internal static class GovernorRunner
         Add("host-text-replacement", records, ["-r", "--arg", "text", "\uD800", "$text"], jsonLines,
             string.Concat(Enumerable.Repeat("\uFFFD\n", records)));
         Add("uri-borrowed-text", 131072, ["-nr", "--arg", "text", new string('0', 131072), "$text|@uri|length"], "", "131072\n");
+        Add("optional-normalized-module", 1, ["-nc", "import \"./missing\" as m {optional:true};1"], "", "1\n");
+        Add("optional-long-module-path", 16384, ["-nc", "-L", "/" + new string('d', 16384), "import \"missing\" as m {optional:true};1"], "", "1\n");
+        foreach (string format in new[] { "base64d", "urid" })
+            Add(format + "-invalid-borrowed-text", 1048576, ["-nr", "--arg", "text",
+                (format == "base64d" ? "!" : "%ZZ") + new string('A', 1048576), "try ($text|@" + format + ") catch \"caught\""], "", "caught\n");
+        Add("uri-decoded-capacity", 32768, ["-nr", "--arg", "text", string.Concat(Enumerable.Repeat("%61", 32768)), "$text|@urid|length"], "", "32768\n");
         Add("uri-escaped-records", records, ["-r", "@uri"],
             string.Concat(Enumerable.Repeat("\"a b\"\n", records)), string.Concat(Enumerable.Repeat("a%20b\n", records)));
         Add("ascii-changed-records", records, ["-r", "ascii_upcase"],

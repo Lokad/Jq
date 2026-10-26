@@ -66,6 +66,7 @@ cannot become targets through equal contents.
   complete values before truncated tails and without waiting for another RS/EOF;
   unterminated top-level numbers retain sequence truncation checks.
 - **Modules:** hosted `import`, `include`, `-L` and `modulemeta` are supported.
+  Valid dot segments and repeated separators normalize before hosted lookup.
   Explicit search metadata replaces default paths; unreadable selected files
   fail loading without falling back to another candidate.
   Unresolved function calls can fail during evaluation rather than compilation.
