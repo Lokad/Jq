@@ -122,11 +122,11 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_GovernedRegexKeepsBoundedSubjectAndRefundsFailedEncoding()
+    public void Jq_GovernedRegexKeepsBoundedSubjectThroughReplacementEncoding()
     {
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var scope = memory.CreateScope();
-        var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
+        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         using var patternLease = regexes.Rent("x", JqRegexCompileOptions.None);
         var pattern = patternLease.Value;
@@ -142,8 +142,12 @@ public sealed partial class JqTests
             Assert.Equal(retained + 70, memory.ReservedBytes);
         }
         Assert.Equal(retained + 70, memory.ReservedBytes);
-        Assert.Throws<JqException>(() => regexes.EncodeSubject("a\ud800", pattern));
-        Assert.Equal(retained, memory.ReservedBytes);
+        using (var replacement = regexes.EncodeSubject("a\ud800", pattern))
+        {
+            Assert.Equal(new byte[] { 0x61, 0xEF, 0xBF, 0xBD }, replacement.Value.ToArray());
+            Assert.Equal(retained + 70, memory.ReservedBytes);
+        }
+        Assert.Equal(retained + 70, memory.ReservedBytes);
         regexes.Dispose();
         patternLease.Dispose();
         Assert.Equal(0, memory.ReservedBytes);
