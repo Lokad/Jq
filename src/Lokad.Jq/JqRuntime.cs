@@ -1843,8 +1843,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
             while (length < source.Length && source[length] != '=')
             {
                 if ((length & 4095) == 0) budget.CheckCancellation();
+                if (Base64Value(source[length]) < 0)
+                    throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") is not valid base64 data");
                 length++;
             }
+            if ((length & 3) == 1)
+                throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") trailing base64 byte found");
             int capacity = JqBudget.BufferCapacity(3L * length / 4, 0);
             using var memory = new JqMemoryReservation(budget.MemoryBudget);
             if (capacity != 0) memory.Resize(capacity);
@@ -1857,8 +1861,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
             {
                 if ((index & 4095) == 0) budget.CheckCancellation();
                 int digit = Base64Value(source[index]);
-                if (digit < 0)
-                    throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") is not valid base64 data");
                 code = (code << 6) | (uint)digit;
                 pending++;
                 if (pending == 4)
@@ -1878,10 +1880,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
             else if (pending == 2)
             {
                 decoded[written++] = (byte)((code >> 4) & 0xFF);
-            }
-            else if (pending == 1)
-            {
-                throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") trailing base64 byte found");
             }
             budget.ReserveString(Encoding.UTF8.GetCharCount(decoded.AsSpan(0, written)));
             // Invalid UTF-8 becomes U+FFFD, matching the reference replacement.
@@ -1903,24 +1901,42 @@ internal sealed partial class JqRuntime(JqBudget budget)
         // Code 37 is percent.
         string UriDecode(string source, JsonNode? original)
         {
-            int capacity = JqBudget.BufferCapacity(Utf8Text.GetByteCount(source, budget.CancellationToken), 0);
+            budget.CheckCancellation();
+            long decodedLength = 0;
+            for (int index = 0, scanned = 0; index < source.Length; index++, scanned++)
+            {
+                if ((scanned & 4095) == 0) budget.CheckCancellation();
+                char ch = source[index];
+                if (ch == '%')
+                {
+                    if (index + 2 >= source.Length || HexValue(source[index + 1]) < 0 || HexValue(source[index + 2]) < 0)
+                        throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") is not a valid uri encoding");
+                    decodedLength++;
+                    index += 2;
+                }
+                else if (ch < 128) decodedLength++;
+                else
+                {
+                    // Invalid host UTF-16 consumes one unit as U+FFFD, like the encoder.
+                    Rune.DecodeFromUtf16(source.AsSpan(index), out Rune rune, out int consumed);
+                    decodedLength += rune.Utf8SequenceLength;
+                    index += consumed - 1;
+                }
+            }
+            int capacity = JqBudget.BufferCapacity(decodedLength, 0);
             using var memory = new JqMemoryReservation(budget.MemoryBudget);
             if (capacity != 0) memory.Resize(capacity);
             budget.CheckCancellation();
             byte[] decoded = capacity == 0 ? [] : new byte[capacity];
             int written = 0;
-            for (int index = 0; index < source.Length; index++)
+            for (int index = 0, scanned = 0; index < source.Length; index++, scanned++)
             {
-                if ((index & 4095) == 0) budget.CheckCancellation();
+                if ((scanned & 4095) == 0) budget.CheckCancellation();
                 char ch = source[index];
                 if (ch == (char)37)
                 {
-                    if (index + 2 >= source.Length)
-                        throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") is not a valid uri encoding");
                     int hi = HexValue(source[index + 1]);
                     int lo = HexValue(source[index + 2]);
-                    if (hi < 0 || lo < 0)
-                        throw new JqException(TypeName(original) + " (" + TruncatedDump(original) + ") is not a valid uri encoding");
                     decoded[written++] = (byte)((hi << 4) | lo);
                     index += 2;
                 }
