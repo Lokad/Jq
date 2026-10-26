@@ -56,6 +56,34 @@ if (args.Length != 0)
 int checks = 0;
 {
     var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("empty combinations count stream", await Command(["-nc", "[0]|[combinations(empty)]"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[[]]\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("combined combinations counts", await Command(["-nc", "[0]|combinations((1,2))"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[0,0,0]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    Check("late combinations count error", await Command(["-nc", "try ([0]|combinations((0,error(\"late\")))) catch ."], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "\"late\"\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("function definition capture and shadowing", await Command(["-nc", "42 as $x|def f:$x;def g:f;def f:99;[g,f]"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[42,99]\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
     Check("shared container equality", await Command(["-nc", "[nan] as $x | [$x==$x,[nan]==[nan]]"], [])
         .ExecuteAsync(host, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "[true,false]\n" && host.Output(JqFileDescriptor.StdErr) == "");

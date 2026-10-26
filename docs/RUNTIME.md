@@ -116,6 +116,8 @@ containers directly. Emitted stream values stay independent of later updates.
 Right-empty container operations and empty-affix trims borrow unchanged results.
 Literal splitting borrows unchanged string payloads in fresh result wrappers
 and uses the shared substring search.
+`combinations(n)` consumes the count filter before producing one product;
+repeated rows borrow the input and retain only a count and odometer state.
 Data imports parse directly into their owning array. Executable function imports
 reuse linked modules while preserving search precedence. `modulemeta` reads current
 library syntax for metadata, dependencies and definition names. Metadata inspection
@@ -124,6 +126,7 @@ bindings and temporary merge metadata admit separately. Interpolation fragments
 borrow visible compiler scopes and keep their declarations private.
 
 User-function arguments and pipeline sources stream once in demand order.
+Each definition environment binds one immutable closure, reused by lookup and exports.
 Direct filter-parameter forwarding reuses the captured argument without adding
 another environment wrapper. Lexical scope batches admit before construction and
 release completed demand. Suspended continuations and captures retain scope

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Collect `combinations(n)` count-filter results before generating one product;
+  preserve empty streams and late failures while borrowing repeated rows.
+- Bind each function closure once at its definition site and reuse it for lookups
+  and exports, with admission at construction.
+- Governor tooling now defaults to count/refund verification. Request `--mode cost`
+  for warmed timing/allocation batches; `--iterations` applies only to that mode.
+
 - Admit retained command setup as constructed, keeping repeated flags, duplicate
   bindings and information tails independent of total supplied argument count.
 - Borrow unchanged literal-split payloads and reuse bounded substring search.
