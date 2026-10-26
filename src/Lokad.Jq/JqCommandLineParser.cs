@@ -23,39 +23,6 @@ internal static class JqCommandLineParser
         return name.Length != 0;
     }
 
-    // Check -1..7 without overflow, including arbitrarily many leading zeros.
-    private static bool IsIndentInRange(string text)
-    {
-        int start = text[0] is '+' or '-' ? 1 : 0;
-        int first = start;
-        while (first < text.Length && text[first] == '0')
-            first++;
-        int significant = text.Length - first;
-        if (significant == 0)
-            return true;
-        if (significant > 1)
-            return false;
-        return text[0] == '-'
-            ? text[first] <= '1'
-            : text[first] <= '7';
-    }
-
-    // Strict `--indent` values: an optional sign followed by ASCII digits.
-    private static bool IsStrictIndentValue(string text)
-    {
-        if (text.Length == 0)
-            return false;
-        int start = text[0] is '+' or '-' ? 1 : 0;
-        if (start == text.Length)
-            return false;
-        for (int i = start; i < text.Length; i++)
-        {
-            if (!char.IsAsciiDigit(text[i]))
-                return false;
-        }
-        return true;
-    }
-
     // Mirrors the reference classifier: only `-X` (single dash plus an
     // ASCII letter) and `--anything` are options. Negative numbers, lone
     // `-`, and other dash-led operands are filters or files.
@@ -86,7 +53,6 @@ internal static class JqCommandLineParser
             var positionalArguments = new JsonArray();
             var operands = new List<string>();
             var libraryPaths = new List<string>();
-            var boundNames = new HashSet<string>(StringComparer.Ordinal);
             string? program = null;
             bool fromFile = false;
             bool optionsDone = false;
@@ -113,7 +79,7 @@ internal static class JqCommandLineParser
                         {
                             try { positionalArguments.Add(runtime.ParseJson(argument)); }
                             catch (JqException exception) when (exception is not JqQuotaException)
-                            { return Error($"jq: invalid JSON argument: {exception.Message}"); }
+                            { return Error("jq: invalid JSON argument: ", exception.Message); }
                         }
                     }
                     continue;
@@ -125,11 +91,11 @@ internal static class JqCommandLineParser
                 }
                 if (argument[1] == '-')
                 {
-                    string option = argument[2..];
-                    if (option is "rawfile" or "slurpfile")
+                    if (argument is "--rawfile" or "--slurpfile")
                     {
+                        string option = argument == "--rawfile" ? "rawfile" : "slurpfile";
                         if (i + 2 >= args.Count)
-                            return Error("jq: --" + option + " takes two parameters (e.g. --" + option + " varname filename)");
+                            return Error("jq: --", option, " takes two parameters (e.g. --", option, " varname filename)");
                         string name = args[++i];
                         string path = args[++i];
                         if (!TryBindName(name)) continue;
@@ -145,12 +111,12 @@ internal static class JqCommandLineParser
                             else variables[name] = runtime.ReadJsonArray(content.Content.Span, 0);
                         }
                         catch (Exception exception) when (JqErrors.IsCatchable(exception) || exception is JqPathException)
-                        { return Error("jq: Bad JSON in --" + option + " " + name + " " + path + ": " + exception.Message); }
+                        { return Error("jq: Bad JSON in --", option, " ", name, " ", path, ": ", exception.Message); }
                     }
                     else
                     {
-                        string? error = ApplyOption(option, null, ref i);
-                        if (error is not null) return Error(error);
+                        JqInvocation? error = ApplyOption(argument, null, ref i);
+                        if (error is not null) return error;
                     }
                 }
                 else
@@ -160,15 +126,15 @@ internal static class JqCommandLineParser
                         budget.CheckCancellation();
                         char flag = argument[position];
                         if (!TryExpandShortOption(flag, out string name))
-                            return Error("jq: Unknown option -" + flag);
+                            return Error("jq: Unknown option -", flag.ToString());
                         string? attached = null;
                         if (flag == 'L' && position + 1 < argument.Length)
                         {
                             budget.ReserveString(argument.Length - position - 1);
                             attached = argument[(position + 1)..];
                         }
-                        string? error = ApplyOption(name, attached, ref i);
-                        if (error is not null) return Error(error);
+                        JqInvocation? error = ApplyOption(name, attached, ref i);
+                        if (error is not null) return error;
                         if (flag == 'L' || parsed.Help || parsed.Version || parsed.BuildConfiguration) break;
                     }
                 }
@@ -256,23 +222,24 @@ internal static class JqCommandLineParser
                 Clock = clock
             };
 
-            string? ApplyOption(string name, string? attached, ref int position)
+            JqInvocation? ApplyOption(string argument, string? attached, ref int position)
             {
+                ReadOnlySpan<char> name = argument.AsSpan(argument.StartsWith("--", StringComparison.Ordinal) ? 2 : 0);
                 switch (name)
                 {
                     case "from-file": fromFile = true; break;
                     case "library-path":
                         if (attached is null && position + 1 >= args.Count)
-                            return "-L takes a parameter: (e.g. -L /search/path or -L/search/path)";
+                            return Error("-L takes a parameter: (e.g. -L /search/path or -L/search/path)");
                         budget.ReserveMetadata(64, 2);
                         libraryPaths.Add(attached ?? args[++position]);
                         break;
                     case "indent":
-                        if (position + 1 >= args.Count) return "jq: --indent takes one parameter";
+                        if (position + 1 >= args.Count) return Error("jq: --indent takes one parameter");
                         string width = args[++position];
-                        if (!IsStrictIndentValue(width) || !IsIndentInRange(width))
-                            return "jq: --indent takes a number between -1 and 7";
-                        parsed.Indent = (width[^1] - '0') * (width[0] == '-' ? -1 : 1);
+                        if (!TryIndent(width, out int indent))
+                            return Error("jq: --indent takes a number between -1 and 7");
+                        parsed.Indent = indent;
                         format = OutputFormat.Spaces;
                         break;
                     case "args": positional = true; jsonArguments = false; break;
@@ -280,17 +247,18 @@ internal static class JqCommandLineParser
                     case "arg":
                     case "argjson":
                         if (position + 2 >= args.Count)
-                            return $"jq: --{name} takes two parameters (e.g. --{name} varname "
-                                + (name == "argjson" ? "text)" : "value)");
+                            return name.SequenceEqual("argjson")
+                                ? Error("jq: --argjson takes two parameters (e.g. --argjson varname text)")
+                                : Error("jq: --arg takes two parameters (e.g. --arg varname value)");
                         string variable = args[++position];
                         string value = args[++position];
                         if (!TryBindName(variable)) break;
-                        if (name == "arg") variables[variable] = JsonValue.Create(value);
+                        if (name.SequenceEqual("arg")) variables[variable] = JsonValue.Create(value);
                         else
                         {
                             try { variables[variable] = runtime.ParseJson(value); }
                             catch (JqException exception) when (exception is not JqQuotaException)
-                            { return $"jq: invalid JSON for --argjson {variable}: {exception.Message}"; }
+                            { return Error("jq: invalid JSON for --argjson ", variable, ": ", exception.Message); }
                         }
                         break;
                     case "compact-output": format = OutputFormat.Compact; break;
@@ -314,27 +282,62 @@ internal static class JqCommandLineParser
                     case "binary":
                     case "monochrome-output":
                     case "unbuffered": break;
-                    default: return "jq: Unknown option --" + name;
+                    default: return Error("jq: Unknown option ", argument);
                 }
                 return null;
             }
 
             bool TryBindName(string name)
             {
-                if (boundNames.Contains(name)) return false;
-                budget.ReserveMetadata(256, 4);
-                boundNames.Add(name);
+                if (variables.ContainsKey(name)) return false;
+                budget.ReserveMetadata(192, 3);
                 return true;
             }
 
+            // One pass over optional sign and ASCII digits, with bounded
+            // arithmetic even for arbitrarily many borrowed leading zeros.
+            bool TryIndent(string text, out int indent)
+            {
+                budget.CheckCancellation();
+                indent = 0;
+                if (text.Length == 0) return false;
+                bool negative = text[0] == '-';
+                int start = text[0] is '+' or '-' ? 1 : 0;
+                if (start == text.Length) return false;
+                int value = 0;
+                for (int index = start; index < text.Length; index++)
+                {
+                    if ((index & 4095) == 0) budget.CheckCancellation();
+                    if (!char.IsAsciiDigit(text[index])) return false;
+                    value = value * 10 + text[index] - '0';
+                    if (value > (negative ? 1 : 7)) return false;
+                }
+                budget.CheckCancellation();
+                indent = negative ? -value : value;
+                return true;
+            }
         }
         catch (Exception ex) when (ex is not JqQuotaException and not JqCloseException
             && ex is JqException or FormatException or JqPathException)
         {
-            return Error($"jq: {ex.Message}");
+            return Error("jq: ", ex.Message);
         }
 
-        JqInvocation Error(string message) => new() { StdIn = stdIn, StdOut = stdOut, StdErr = stdErr, Error = message };
+        JqInvocation Error(params string[] parts)
+        {
+            string message;
+            if (parts.Length == 1) message = parts[0];
+            else
+            {
+                long length = 0;
+                foreach (string part in parts) length += part.Length;
+                budget.ReserveString(length);
+                budget.CheckCancellation();
+                message = string.Concat(parts);
+                budget.CheckCancellation();
+            }
+            return new() { StdIn = stdIn, StdOut = stdOut, StdErr = stdErr, Error = message };
+        }
 
     }
 

@@ -99,7 +99,11 @@ internal static class JqHostExtensions
     {
         var opened = await JqHostExtensions.GuardedOpenAsync(host, path.Absolute, cancellationToken).ConfigureAwait(false);
         if (opened.FileDescriptor is not { } descriptor)
+        {
+            budget.ReserveString(12L + path.Display.Length);
+            budget.CheckCancellation();
             throw new JqException($"cannot open {path.Display}");
+        }
         bool failed = false;
         JqReadResult.Complete? content = null;
         try
