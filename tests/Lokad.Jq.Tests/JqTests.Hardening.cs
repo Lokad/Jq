@@ -31,13 +31,15 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_CombinationsCountBuildIsBudgetBounded()
+    public async Task Jq_CombinationsResultConstructionRequiresSharedAdmission()
     {
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
-        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1 | combinations(1000000) | length")));
+        var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "[0] | combinations(1000000) | length")));
         Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
         Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Theory]

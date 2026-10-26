@@ -313,34 +313,40 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
             // one empty combination instead of iterating.
             if (JqRuntime.Number(context.Runtime.Length(input)) == 0)
             {
-                context.Budget.CheckCancellation();
+                context.Budget.ReserveBytes(64);
                 yield return new JsonArray();
                 yield break;
             }
             if (input is not JsonArray matrix)
                 throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
-            foreach (JsonNode? combo in Combos(matrix, context))
+            foreach (JsonNode? combo in Combos(matrix, null, context))
                 yield return combo;
             yield break;
         }
+        double repetitions = 0;
         await foreach (JsonNode? count in Count.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             if (TypeName(count) != "number")
                 throw new JqException("Range bounds must be numeric");
             double level = Number(count);
-            // Like the reference [range(n)|$dot] prelude, the repetition count
-            // is the number of range outputs: ceiling for positive fractionals.
-            int times = level <= 0 || double.IsNaN(level) ? 0 : Math.Max(0, (int)Math.Ceiling(level));
-            context.Budget.ReserveBytes(24L * times);
-            var matrix = new List<JsonNode?>(times);
-            for (int index = 0; index < times; index++)
-            {
-                context.Budget.CheckCancellation();
-                matrix.Add(input);
-            }
-            foreach (JsonNode? combo in Combos(matrix, context))
-                yield return combo;
+            // [range(n) | $dot] collects all count results before the product.
+            // Retain their total rather than a matrix of identical references.
+            if (level > 0) repetitions += Math.Ceiling(level);
         }
+        context.Budget.CheckCancellation();
+        if (repetitions == 0)
+        {
+            context.Budget.ReserveBytes(64);
+            yield return new JsonArray();
+            yield break;
+        }
+        if (input is not JsonArray row)
+            throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
+        if (row.Count == 0) yield break;
+        if (repetitions > Array.MaxLength)
+            throw new JqQuotaException("array cannot be represented");
+        foreach (JsonNode? combo in Combos(row, (int)repetitions, context))
+            yield return combo;
     }
 
     // Iterative odometer over row positions. Recursion depth here would be input
@@ -349,32 +355,29 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
     // reference recursion. Rows validate lazily left-to-right stopping after the
     // first empty row: an empty leading row yields nothing without touching later
     // rows, matching short-circuiting in the reference definition.
-    private static IEnumerable<JsonNode?> Combos(IList<JsonNode?> matrix, JqContext context)
+    private static IEnumerable<JsonNode?> Combos(JsonArray matrix, int? repetitions, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(matrix);
         ArgumentNullException.ThrowIfNull(context);
-        foreach (JsonNode? row in matrix)
+        if (repetitions is null)
         {
-            context.Budget.CheckCancellation();
-            if (row is not JsonArray cells)
-                throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(row)}");
-            if (cells.Count == 0)
-                yield break;
+            foreach (JsonNode? row in matrix)
+            {
+                context.Budget.CheckCancellation();
+                if (row is not JsonArray cells)
+                    throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(row)}");
+                if (cells.Count == 0)
+                    yield break;
+            }
         }
-        if (matrix.Count == 0)
-        {
-            context.Budget.CheckCancellation();
-            yield return new JsonArray();
-            yield break;
-        }
-        context.Budget.ReserveBytes(4L * matrix.Count);
-        var positions = new int[matrix.Count];
+        int count = repetitions ?? matrix.Count;
+        context.Budget.ReserveBytes(24 + 4L * count);
+        var positions = new int[count];
         while (true)
         {
-            context.Budget.CheckCancellation();
+            context.Budget.ReserveBytes(64);
             var combo = new JsonArray();
-            context.Budget.CheckCancellation();
-            for (int index = 0; index < matrix.Count; index++)
+            for (int index = 0; index < count; index++)
             {
                 context.Budget.CheckCancellation();
                 JsonNode? value = RowAt(index)[positions[index]];
@@ -382,7 +385,7 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
                 combo.Add(context.Budget.CopyValue(value, 1));
             }
             yield return combo;
-            int cursor = matrix.Count - 1;
+            int cursor = count - 1;
             while (cursor >= 0)
             {
                 context.Budget.CheckCancellation();
@@ -395,7 +398,7 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
                 yield break;
         }
 
-        JsonArray RowAt(int index) => matrix[index] as JsonArray
+        JsonArray RowAt(int index) => repetitions.HasValue ? matrix : matrix[index] as JsonArray
             ?? throw new InvalidOperationException("A validated combination row changed.");
     }
 }
