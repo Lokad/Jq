@@ -55,6 +55,48 @@ if (args.Length != 0)
 
 int checks = 0;
 {
+    var host = new SmokeHost();
+    Check("host text replacement", await Command(["-nr", "--arg", "text", "\uD800", "$text,($text|test(\".\"))"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "\uFFFD\ntrue\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    Check("halt text replacement status", await Command(["-n", "--arg", "text", "\uD800", "$text|halt_error(7)"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 7
+        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr) == "\uFFFD");
+}
+{
+    var host = new SmokeHost();
+    host.AddFile("/\uD800", "(");
+    Check("program diagnostic text replacement", await Command(["-n", "-f", "/\uD800"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 3
+        && host.Output(JqFileDescriptor.StdOut) == ""
+        && host.Output(JqFileDescriptor.StdErr) == "jq: unexpected token <end> at line 1 column 2 (file \"/\uFFFD\")\n"
+        && host.ClosedDescriptors.Count == 1);
+}
+foreach (string transform in new[] { "ascii_downcase", "ascii_upcase", "@html", "@uri" })
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check(transform + " borrows unchanged text", await Command(["-nr", "--arg", "text", new string('0', 131072), "$text|" + transform + "|length"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "131072\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(256 * 1024);
+    Check("URI admits changed result", await Command(["-nr", "--arg", "text", new string(' ', 32768), "$text|@uri|length"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "98304\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("first order Bessel boundaries", await Command(["-nc", "[(copysign(0;-1)|j1|copysign(1;.)),(yn(1;0)|isinfinite)]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[-1,true]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
     string path = "/" + new string('p', 16384);
     var host = new SmokeHost();
     host.AddFile(path, "1");

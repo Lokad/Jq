@@ -492,6 +492,17 @@ internal static class GovernorRunner
         Add("canonical-library-path", 16384, ["-nc", "-L", "/" + new string('p', 16384), "1"], "", "1\n");
         Add("tonumber-zero-records", records, ["-c", "tonumber|copysign(1;.)"],
             string.Concat(Enumerable.Repeat("\"-00\"\n", records)), string.Concat(Enumerable.Repeat("-1\n", records)));
+        Add("host-text-replacement", records, ["-r", "--arg", "text", "\uD800", "$text"], jsonLines,
+            string.Concat(Enumerable.Repeat("\uFFFD\n", records)));
+        Add("uri-borrowed-text", 131072, ["-nr", "--arg", "text", new string('0', 131072), "$text|@uri|length"], "", "131072\n");
+        Add("uri-escaped-records", records, ["-r", "@uri"],
+            string.Concat(Enumerable.Repeat("\"a b\"\n", records)), string.Concat(Enumerable.Repeat("a%20b\n", records)));
+        Add("ascii-changed-records", records, ["-r", "ascii_upcase"],
+            string.Concat(Enumerable.Repeat("\"aA\"\n", records)), string.Concat(Enumerable.Repeat("AA\n", records)));
+        Add("html-escaped-records", records, ["-r", "@html"],
+            string.Concat(Enumerable.Repeat("\"<&\"\n", records)), string.Concat(Enumerable.Repeat("&lt;&amp;\n", records)));
+        Add("bessel-first-order-zero", records, ["-c", "[(jn(1;.)|copysign(1;.)),(yn(1;.)|isinfinite)]"],
+            string.Concat(Enumerable.Repeat("-0\n", records)), string.Concat(Enumerable.Repeat("[-1,true]\n", records)));
         foreach (string format in new[] { "sh", "csv" })
             Add(format + "-boolean-records", records, ["-r", "[true,false,null]|@" + format], jsonLines,
                 string.Concat(Enumerable.Repeat(format == "sh" ? "true false null\n" : "true,false,\n", records)));

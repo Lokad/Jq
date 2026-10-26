@@ -13,6 +13,7 @@ overlapping executions independent.
 
 Source identifiers and syntax whitespace use jq's ASCII grammar; quoted data
 retains Unicode. Unicode escapes follow jq surrogate-pair and replacement rules.
+Host UTF-16 strings encode lone surrogates as U+FFFD; input bytes decode strictly.
 
 ## Host I/O
 
@@ -117,6 +118,8 @@ Reads and pass-through results borrow existing values. Writes copy borrowed
 branches; private accumulators such as `add` and `fromstream` update their owned
 containers directly. Emitted stream values stay independent of later updates.
 Right-empty container operations and empty-affix trims borrow unchanged results.
+Unchanged ASCII/HTML/URI transforms borrow payloads in fresh result wrappers;
+changed strings admit their final size before construction.
 `INDEX` borrows existing key strings; generated key text and copied rows retain
 their construction admission.
 Literal splitting borrows unchanged string payloads in fresh result wrappers
@@ -241,6 +244,8 @@ platform. Recorded comparisons of jq 1.8.2 and Lokad.Jq rendered `27 | cbrt` as
 `3` on Windows amd64 and `3.0000000000000004` on Linux amd64.
 `log1p`, `expm1` and `modf` preserve signed zero. The complementary error
 function computes its tail directly; its approximation still limits accuracy.
+`J1` and first-order `jn` preserve zero signs; first-order `yn` returns reflected
+zero poles. Higher-order zero cases can differ from the reference C library.
 
 Bessel orders truncate toward zero with signed 64-bit recurrence indices and
 reflection for negative orders/arguments. Recurrences poll cancellation.

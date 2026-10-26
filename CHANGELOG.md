@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Encode host UTF-16 text with replacement consistently across raw output,
+  diagnostics and regex subjects, preserving statuses and strict UTF-8 input decoding.
+- Construct ASCII/HTML/URI transforms directly, borrowing unchanged payloads and
+  admitting changed output once; remove URI chunk strings and blanket estimates.
+- Preserve first-order Bessel negative zero, order reflection and zero poles.
+
 - Borrow canonical path text and admit actual resolution workspace and source
   labels, keeping long hosted paths independent of normalization estimates.
 - Preserve negative zero in integral `tonumber` text; scan numeric grammar once

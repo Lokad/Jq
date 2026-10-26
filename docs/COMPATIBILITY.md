@@ -39,7 +39,8 @@ cannot become targets through equal contents.
 
 - **Numbers:** double-domain semantics with integral storage. Decimal-literal
   fidelity, large-number comparisons and exponent spelling can differ from
-  decimal-enabled jq builds. Special-function accuracy remains approximate. See
+  decimal-enabled jq builds. Special-function accuracy remains approximate;
+  higher-order Bessel zero behavior can differ from native C libraries. See
   [runtime number semantics](RUNTIME.md#numbers).
 - **Regex:** the managed PCRE2 profile differs from jq's Oniguruma semantics;
   flags `m`/`s`/`p`, longest matching and `\C` differ. Sparse numeric captures
