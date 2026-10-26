@@ -510,6 +510,15 @@ internal static class GovernorRunner
         Add("cli-binding-membership", 512, ["-nc", .. Enumerable.Range(0, 512).SelectMany(index =>
             new[] { "--arg", "v" + index.ToString(CultureInfo.InvariantCulture), "x" }), "$ARGS.named|length"], "", "512\n");
         Add("cli-indent-padding", 262144, ["--indent", new string('0', 262144) + "2", "-n", "[1]"], "", "[\n  1\n]\n");
+        Add("join-error-preview", 32768, ["-nr", "--arg", "text", new string('x', 32768),
+            "try ([$text,{}]|join(\"\")) catch ."], "", "string (\"xxxxxxxxxxxxxxxxxxxxxxxx...\") and object ({}) cannot be added\n");
+        Add("join-separator-preview", 32768, ["-nr", "--arg", "text", new string('x', 32768),
+            "try ([$text,\"y\"]|join(1)) catch ."], "", "string (\"xxxxxxxxxxxxxxxxxxxxxxxx...\") and number (1) cannot be added\n");
+        Add("serialization-large-value", 10000, ["-nc", "[range(10000)]|tojson|length"], "", "48891\n");
+        Add("date-composite-expansion", 500, ["-nr", "--arg", "format", string.Concat(Enumerable.Repeat("%c", 500)),
+            "0|strftime($format)|length"], "", "12000\n");
+        Add("date-directive-dispatch", 10000, ["-nc", "--arg", "text", string.Concat(Enumerable.Repeat("1970", 10000)),
+            "--arg", "format", string.Concat(Enumerable.Repeat("%Y", 10000)), "$text|strptime($format)"], "", "[1970,0,0,0,0,0,8,367]\n");
         Add("uri-escaped-records", records, ["-r", "@uri"],
             string.Concat(Enumerable.Repeat("\"a b\"\n", records)), string.Concat(Enumerable.Repeat("a%20b\n", records)));
         Add("ascii-changed-records", records, ["-r", "ascii_upcase"],

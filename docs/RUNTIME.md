@@ -159,10 +159,12 @@ inventories. Filtered paths materialize only accepted results. String searches
 preserve overlapping scalar indices; `rindex` searches from the end. Recursive consumers still enforce their construction depth.
 
 Comparisons, ordering, serialization and regex subjects reuse admitted scratch
-where its lifetime is known. Replacements cover overlapping old/new capacity.
+where its lifetime is known. Replacements cover overlapping old/new capacity;
+completed serialization replacements retire before result handoff.
 Fresh strings, date remainders and runtime/CLI error text admit before copying;
-long scans observe cancellation. Type errors render bounded operand previews;
-explicit error and halt payloads keep their full contents and existing ownership.
+long scans observe cancellation. Type errors render bounded operand previews,
+including private string accumulators. Explicit error and halt payloads keep
+their full contents and existing ownership.
 
 Already-admitted credit amortizes host calls and stays charged. Cold small charges
 and large payload copies stay exact; repeated small headers can round in 256-byte

@@ -830,6 +830,57 @@ foreach (bool missingFile in new[] { false, true })
         .ExecuteAsync(host, memory, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "[\n  1\n]\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
 }
+foreach (bool separator in new[] { false, true })
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(96 * 1024);
+    string expression = separator ? "[$text,\"y\"]|join(1)" : "[$text,{}]|join(\"\")";
+    Check(separator ? "bounded join separator preview" : "bounded join item preview",
+        await Command(["-nr", "--arg", "text", new string('x', 32768), "try (" + expression + ") catch ."], [])
+            .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "string (\"xxxxxxxxxxxxxxxxxxxxxxxx...\") and "
+            + (separator ? "number (1)" : "object ({})") + " cannot be added\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(96 * 1024);
+    Check("successful join still preflights full output", await Command(["-nr", "--arg", "text", new string('x', 32768),
+        "try ([$text]|join(\"\")) catch \"caught\""], []).ExecuteAsync(host, memory, CancellationToken.None) == 5
+        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr) == "jq: memory budget exceeded\n"
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
+    Check("growing JSON serialization", await Command(["-nc", "[range(10000)]|tojson|length"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "48891\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("composite date construction", await Command(["-nr", "--arg", "format", string.Concat(Enumerable.Repeat("%c", 500)),
+        "0|strftime($format)|length"], []).ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "12000\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("repeated date directive parsing", await Command(["-nc", "--arg", "text", string.Concat(Enumerable.Repeat("1970", 10000)),
+        "--arg", "format", string.Concat(Enumerable.Repeat("%Y", 10000)), "$text|strptime($format)"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[1970,0,0,0,0,0,8,367]\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    string value = "[" + string.Join(',', Enumerable.Range(0, 10000)) + "]";
+    var host = new SmokeHost(); host.SetInput("\u001e" + value + "\n");
+    var memory = new BenchmarkMemoryBudget(2 * 1024 * 1024);
+    Check("growing sequence output framing", await Command(["-c", "--seq", "."], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "\u001e" + value + "\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 

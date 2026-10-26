@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Preview failed join accumulators without constructing a full intermediate string.
+- Admit active serialization replacement overlap and retire completed storage at
+  result handoff, preserving framing and pending host borrows.
+- Expand composite date formats into one builder and parse directives without
+  temporary strings, retaining the managed date profile.
+
 - Preserve streaming sequence progress, error paths and subsequent records across
   recoverable failures; classify malformed literals before resetting tokens.
 - Admit CLI diagnostic text before construction, borrow long-option names, reuse

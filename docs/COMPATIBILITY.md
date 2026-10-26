@@ -84,6 +84,7 @@ cannot become targets through equal contents.
   when the pattern shadows an outer variable used by its key expression.
 - **Other edges:** NaN `range` bounds yield no values. One/two-argument range requires
   numbers; three-argument range follows jq comparison and addition.
+  Date composites use fixed C-locale expansions; native locale spellings can differ.
   Local-time conversion is constrained by .NET's date range. Partial `strptime`
   fields can retain weekday 8 / year-day 367 sentinels; C-library defaults and
   epoch directives can differ across jq builds. A whitespace boundary permits
