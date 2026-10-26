@@ -788,15 +788,17 @@ internal sealed class SqlIndexFilter(JqFilter? Stream, JqFilter IndexExpr) : JqF
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         IAsyncEnumerable<JsonNode?> rows = Stream is null ? IteratorFilter.ReadValues(input, false, context.Budget).ToAsyncEnumerable() : Stream.Evaluate(input, context, environment);
+        context.Budget.ReserveBytes(64);
         var result = new JsonObject();
-        context.Budget.CheckCancellation();
-        await foreach (JsonNode? row in (rows).ConfigureAwait(false))
+        await foreach (JsonNode? row in rows.ConfigureAwait(false))
         {
             await foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment).ConfigureAwait(false))
             {
+                // Finite scalar formatting fits 32 UTF-16 units. Strings are
+                // borrowed; serialized keys already admit their own storage.
+                if (TypeName(key) == "number" && double.IsFinite(Number(key)))
+                    context.Budget.ReserveString(32);
                 string name = context.Runtime.ToJqString(key);
-                context.Budget.CheckCancellation();
-                context.Budget.ReserveString(name.Length);
                 context.Budget.ReserveObjectItem(row);
                 result[name] = context.Budget.CopyValue(row, 1);
             }
