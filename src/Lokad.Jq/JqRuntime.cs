@@ -744,11 +744,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal JsonNode ToJsonNumber(JsonNode? node)
     {
+        budget.CheckCancellation();
         if (node is JsonValue numberValue && TypeName(numberValue) == "number")
             return numberValue;
-        if (TryGetString(node, out string? text) && text is not null && !text.Contains('\0'))
+        if (TryGetString(node, out string? text) && text is not null)
         {
-            if (TryParseStrictNumber(text, out JsonNode? number) && number is not null)
+            if (TryParseNumberText(text, out JsonNode? number) && number is not null)
                 return number;
             if (TryParseNonFiniteNumber(text, out JsonNode? nonFinite) && nonFinite is not null)
                 return nonFinite;
@@ -784,55 +785,70 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return false;
     }
 
-    // Strict JSON-number grammar with an optional leading sign and no
-    // surrounding whitespace. Integral shapes keep integral storage.
-    private static bool TryParseStrictNumber(string text, out JsonNode? number)
+    // jq numeric text permits a leading plus, omitted whole digits and leading
+    // zeros, but no surrounding whitespace. Nonzero integers keep exact storage.
+    private bool TryParseNumberText(string text, out JsonNode? number)
     {
         number = null;
         int position = 0;
         if (position < text.Length && (text[position] == '+' || text[position] == '-'))
             position++;
         int whole = position;
-        while (position < text.Length && char.IsAsciiDigit(text[position]))
-            position++;
+        ScanDigits();
         bool hasWhole = position > whole;
         bool hasFraction = false;
         if (position < text.Length && text[position] == '.')
         {
             position++;
             int fraction = position;
-            while (position < text.Length && char.IsAsciiDigit(text[position]))
-                position++;
+            ScanDigits();
             hasFraction = position > fraction;
             if (!hasFraction)
                 return false;
         }
         if (!hasWhole && !hasFraction)
             return false;
-        if (position < text.Length && (text[position] == 'e' || text[position] == 'E'))
+        bool hasExponent = position < text.Length && (text[position] == 'e' || text[position] == 'E');
+        if (hasExponent)
         {
             position++;
             if (position < text.Length && (text[position] == '+' || text[position] == '-'))
                 position++;
             int exponent = position;
-            while (position < text.Length && char.IsAsciiDigit(text[position]))
-                position++;
+            ScanDigits();
             if (position == exponent)
                 return false;
         }
         if (position != text.Length)
             return false;
-        if (!hasFraction && text.IndexOfAny(new[] { 'e', 'E' }) < 0 && long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long wholeValue))
+        budget.CheckCancellation();
+        if (!hasFraction && !hasExponent)
         {
-            number = JsonValue.Create(wholeValue);
-            return true;
+            bool integral = long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long wholeValue);
+            budget.CheckCancellation();
+            if (integral)
+            {
+                number = wholeValue == 0 && text[0] == '-' ? JsonValue.Create(-0.0) : JsonValue.Create(wholeValue);
+                return true;
+            }
         }
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
+        bool parsed = double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value);
+        budget.CheckCancellation();
+        if (parsed)
         {
             number = JsonValue.Create(value);
             return true;
         }
         return false;
+
+        void ScanDigits()
+        {
+            while (position < text.Length && char.IsAsciiDigit(text[position]))
+            {
+                if ((position & 4095) == 0) budget.CheckCancellation();
+                position++;
+            }
+        }
     }
 
     internal bool ToJsonBoolean(JsonNode? node)
