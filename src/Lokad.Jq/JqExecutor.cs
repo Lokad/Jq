@@ -61,9 +61,7 @@ internal static class JqExecutor
                 return 5;
             }
         }
-        JqProgramSource programSource = invocation.FilterFile is { } programPath
-            ? JqProgramSource.File(programPath.Display)
-            : JqProgramSource.Inline;
+        JqProgramSource programSource = JqProgramSource.Inline;
         // Binding creates an execution-private variable table. File variables
         // and ARGS.named updates stay isolated across reused/concurrent commands.
         using var context = new JqContext(invocation.Variables, budget)
@@ -113,6 +111,8 @@ internal static class JqExecutor
         int stickyError = 0;
         try
         {
+            if (invocation.FilterFile is { } programPath)
+                programSource = JqProgramSource.File(programPath.Display, budget);
             var filterText = invocation.Filter ?? ".";
             if (invocation.FilterFile is { } filterFile)
             {

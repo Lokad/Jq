@@ -8,9 +8,11 @@ internal sealed record JqProgramSource(string Label, string? Path)
 {
     internal static JqProgramSource Inline { get; } = new("filter", null);
 
-    internal static JqProgramSource File(string displayPath)
+    internal static JqProgramSource File(string displayPath, JqBudget budget)
     {
         ArgumentException.ThrowIfNullOrEmpty(displayPath);
+        budget.ReserveString((long)displayPath.Length + 7);
+        budget.ReserveMetadata(32, 1);
         return new("file \"" + displayPath + "\"", displayPath);
     }
 }

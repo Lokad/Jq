@@ -294,13 +294,14 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 return true;
             }
             string operand = _sources[_index];
-            using var pathMemory = new JqMemoryReservation(_budget.MemoryBudget);
-            long length = (long)operand.Length + (operand.StartsWith('/') ? 0 : _workingDirectory.Path.Length + 1L);
-            pathMemory.Resize(128 + 64 * length);
+            using var pathMemory = new JqStorage(_budget.MemoryBudget);
             JqResolvedPath source;
-            try { source = JqPathResolution.ResolveArgument(operand, _workingDirectory); }
-            catch (Exception exception) when (exception is FormatException or JqPathException)
-            { throw new JqInputException(exception.Message, 2); }
+            using (_budget.UseStorage(pathMemory))
+            {
+                try { source = JqPathResolution.ResolveArgument(operand, _workingDirectory, _budget); }
+                catch (Exception exception) when (exception is FormatException or JqPathException)
+                { throw new JqInputException(exception.Message, 2); }
+            }
             JqOpenedFile opened = await JqHostExtensions.GuardedOpenAsync(
                 _host, source.Absolute, _cancellationToken).ConfigureAwait(false);
             if (opened.FileDescriptor is not { } descriptor)

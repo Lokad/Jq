@@ -135,8 +135,7 @@ internal static class JqCommandLineParser
                         if (!TryBindName(name)) continue;
                         try
                         {
-                            ChargePathResolution(path);
-                            var resolved = JqPathResolution.ResolveArgument(path, currentDirectory);
+                            var resolved = JqPathResolution.ResolveArgument(path, currentDirectory, budget);
                             using var content = await host.ReadFileAsync(resolved, budget, budget.CancellationToken).ConfigureAwait(false);
                             if (option == "rawfile")
                             {
@@ -197,16 +196,13 @@ internal static class JqCommandLineParser
 
             var filterFileArgument = fromFile ? program : null;
             var filter = fromFile ? null : program;
-            // Reserve path work before expanding working-directory prefixes.
-            if (filterFileArgument is not null) ChargePathResolution(filterFileArgument);
             var filterFile = filterFileArgument is null ? (JqResolvedPath?)null
-                : JqPathResolution.ResolveArgument(filterFileArgument, currentDirectory);
+                : JqPathResolution.ResolveArgument(filterFileArgument, currentDirectory, budget);
             var libraryDirs = new List<JqResolvedPath>();
             foreach (string library in libraryPaths)
             {
                 if (string.IsNullOrEmpty(library)) continue;
-                ChargePathResolution(library);
-                libraryDirs.Add(JqPathResolution.ResolveArgument(library, currentDirectory));
+                libraryDirs.Add(JqPathResolution.ResolveArgument(library, currentDirectory, budget));
             }
 
             // ARGS owns argument parent links; the variable table borrows them.
@@ -339,14 +335,6 @@ internal static class JqCommandLineParser
         }
 
         JqInvocation Error(string message) => new() { StdIn = stdIn, StdOut = stdOut, StdErr = stdErr, Error = message };
-
-        void ChargePathResolution(string path)
-        {
-            var maximumLength = (long)path.Length + (path.StartsWith('/') ? 0L : currentDirectory.Path.Length + 1L);
-            // Reserve fixed path objects, combined/normalized strings, segment tables and
-            // validation copies, including per-segment allocations for many short segments.
-            budget.ReserveBytes(128 + 64 * maximumLength);
-        }
 
     }
 

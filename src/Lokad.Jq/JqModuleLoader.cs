@@ -302,11 +302,14 @@ internal sealed class JqModuleLoader(
             if (entry == ".") return importerDir;
             if (entry.StartsWith("~/", StringComparison.Ordinal) || entry == "~"
                 || entry.StartsWith("$ORIGIN/", StringComparison.Ordinal) || entry == "$ORIGIN") return null;
-            budget.ReserveBytes(128 + 64L * (entry.Length + (long)importerDir.Length + 1));
-            string combined = entry.StartsWith((char)47) ? entry
-                : importerDir == "/" ? "/" + entry : importerDir + "/" + entry;
-            if (!JqRawPath.TryParse(combined, out JqRawPath? raw)) return null;
-            return raw.TryToAbsolute(JqPath.Root, out JqPath? absolute) ? absolute.Path : null;
+            if (!JqRawPath.TryParse(entry, budget, out JqRawPath? raw)) return null;
+            JqPath directory = JqPath.Root;
+            if (!entry.StartsWith('/') && importerDir != "/")
+            {
+                budget.ReserveMetadata(32, 1);
+                directory = new JqPath(importerDir);
+            }
+            return raw.TryToAbsolute(directory, budget, out JqPath? absolute) ? absolute.Path : null;
         }
     }
 
@@ -358,7 +361,7 @@ internal sealed class JqModuleLoader(
                 throw new JqException("error loading module " + path.Path + ": input read failed");
             using var content = (JqReadResult.Complete)result;
             string source = DecodeModuleSource(path.Path, content.Content);
-            var programSource = JqProgramSource.File(path.Path);
+            var programSource = JqProgramSource.File(path.Path, budget);
             var parser = new JqParser(source, programSource, rootEnvironment, budget);
             var (metadata, imports, definitions) = parser.InspectLibrary();
             return BuildMetadataObject(metadata, imports, definitions);

@@ -7,12 +7,12 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_InputPathsReleaseResolutionWorkBetweenSources()
     {
-        string directory = "/" + new string('x', 512);
-        string[] files = Enumerable.Range(0, 100).Select(i => "file" + i).ToArray();
+        string directory = "/" + new string('x', 2048);
+        string[] files = Enumerable.Range(0, 1000).Select(i => "file" + i).ToArray();
         var host = new MockFileSystem();
         foreach (string file in files) host.AddFile(directory + "/" + file, "42\n");
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", ["-c", ".", .. files], [new("PWD", directory)]);
-        var memory = new BenchmarkMemoryBudget(128 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
         Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, memory, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("42\n", files.Length)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));

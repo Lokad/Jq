@@ -39,9 +39,9 @@ public static class JqPathResolution
         return JqPath.Root;
     }
 
-    internal static JqResolvedPath ResolveArgument(string raw, JqPath currentDirectory)
+    internal static JqResolvedPath ResolveArgument(string raw, JqPath currentDirectory, JqBudget budget)
     {
-        var absolute = JqRawPath.Parse(raw).ToAbsolute(currentDirectory);
+        var absolute = JqRawPath.Parse(raw, budget).ToAbsolute(currentDirectory, budget);
         return new JqResolvedPath(raw, absolute);
     }
 
