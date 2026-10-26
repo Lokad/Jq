@@ -4,10 +4,8 @@ namespace Lokad.Jq;
 
 /// <summary>
 /// An explicit clock and local time zone supplied by the host for a jq command.
-/// The library never reads the machine clock or timezone on its own; date builtins
-/// use these values, so repeated executions with the same clock stay deterministic.
-/// A null clock on the invocation means the capability is absent and time builtins
-/// report an explicit diagnostic instead.
+/// Current-time builtins read the supplied clock on each call; local-time builtins
+/// use the supplied time zone.
 /// </summary>
 public sealed class JqClock
 {

@@ -49,6 +49,7 @@ cannot become targets through equal contents.
   can differ on unterminated tails and explicit EOF. Operand previews in type
   errors follow the bounded native form; explicit error payloads remain complete.
 - **CLI/host identity:** `-V` and `--build-configuration` identify Lokad.Jq.
+  Command recognition matches `jq` or a literal `/jq` suffix case-sensitively.
   `--unbuffered`, `-M` and `-b` are inert; `-C`, internal tool switches and process
   search/origin queries are rejected. ANSI color and native OS filenames are
   outside the hosted API.
@@ -179,7 +180,7 @@ semantic gaps. References are the jq 1.8.2 manual and its parser/builtin registr
 | `to_entries/0`, `from_entries/0`, `with_entries/1` | implemented | JqTests.Collections |
 | `add/0`, `add/1`, `flatten/0..1`, `reverse/0` | implemented | JqTests.Collections |
 | `sort/0`, `sort_by/1`, `group_by/1`, `unique/0`, `unique_by/1`, `min/0`, `max/0`, `min_by/1`, `max_by/1`, `bsearch/1` | implemented | JqTests.Collections, JqTests.ComparisonKeys, JqTests.ComparisonMemory |
-| `range/1..3` | implemented | JqTests |
+| `range/1..3` | implemented | JqTests.RangeArguments, JqTests.NumberConstruction |
 | `transpose/0`, `combinations/0..1` | implemented | JqTests.Collections, JqTests.CombinationsCounts, JqTests.Hardening |
 | `any/0..2`, `all/0..2` | implemented | JqTests.Collections |
 | `first/0..1`, `last/0..1`, `nth/1..2`, `isempty/1`, `limit/2`, `skip/2`, `while/2`, `until/2`, `repeat/1`, `recurse/0..2`, `walk/1`, `rindex/1` | implemented | JqTests.Iteration, JqTests.Collections, JqTests.Inventory, JqTests.Hardening |

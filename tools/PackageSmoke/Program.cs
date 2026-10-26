@@ -57,6 +57,39 @@ int checks = 0;
 {
     var host = new SmokeHost();
     var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("borrowed index key payload", await Command(["-nc", "--arg", "key", new string('k', 131072), "INDEX(0;$key)|length"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "1\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("range and slice zero signs", await Command(["-nc",
+        "[(first(range(copysign(0;-1);1))|copysign(1;.)),([1,2]|path(.[copysign(0;-1):])|.[0].start|copysign(1;.))]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[-1,-1]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    Check("signed zero range path", await Command(["-nc", "copysign(0;-1)|first(path(range(.;1)))"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    Check("range and slice upper bound storage", await Command(["-nc",
+        "[1,2]|pow(2;63) as $x|[((first(range($x;infinite))|tostring)==($x|tostring)),((path(.[0:$x])|.[0].end|tostring)==($x|tostring))]"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[true,true]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    using var valid = JqCommandInvocation.CreateWithStandardDescriptors("tools/jq", [], []);
+    using var distinct = JqCommandInvocation.CreateWithStandardDescriptors("tools/j\u200bq", [], []);
+    Check("ordinal command identity", Jq.TryParse(valid) is not null && Jq.TryParse(distinct) is null);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
     Check("empty combinations count stream", await Command(["-nc", "[0]|[combinations(empty)]"], [])
         .ExecuteAsync(host, memory, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "[[]]\n" && host.Output(JqFileDescriptor.StdErr) == ""

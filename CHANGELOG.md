@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Borrow existing `INDEX` key strings and preserve admission for actual generated
+  keys, dictionaries and row copies.
+- Preserve negative zero and exact signed 64-bit bounds in range values and slice
+  descriptors, including path identity.
+- Match jq command names ordinally, preserving invisible characters as distinct
+  text rather than ignoring them during recognition.
+
 - Collect `combinations(n)` count-filter results before generating one product;
   preserve empty streams and late failures while borrowing repeated rows.
 - Bind each function closure once at its definition site and reuse it for lookups

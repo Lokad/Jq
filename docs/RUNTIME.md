@@ -114,6 +114,8 @@ Reads and pass-through results borrow existing values. Writes copy borrowed
 branches; private accumulators such as `add` and `fromstream` update their owned
 containers directly. Emitted stream values stay independent of later updates.
 Right-empty container operations and empty-affix trims borrow unchanged results.
+`INDEX` borrows existing key strings; generated key text and copied rows retain
+their construction admission.
 Literal splitting borrows unchanged string payloads in fresh result wrappers
 and uses the shared substring search.
 `combinations(n)` consumes the count filter before producing one product;
@@ -215,6 +217,8 @@ Input and `tonumber` accept signed `nan`, `inf` and `infinity`, ignoring ASCII c
 `tonumber` permits no surrounding whitespace.
 Numeric path identity uses this immediate/double profile; decimal-backed jq
 literals can have different identity.
+Range values and slice descriptors preserve signed zero and keep integral
+doubles outside the signed 64-bit interval in double storage.
 
 Division by zero, including negative zero, is a language error. Remainder truncates
 operands toward zero with saturation at signed 64-bit extremes, propagates NaN,

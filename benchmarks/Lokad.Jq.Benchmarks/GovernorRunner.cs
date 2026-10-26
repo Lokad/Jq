@@ -483,6 +483,12 @@ internal static class GovernorRunner
         string argumentArray = "[" + string.Join(',', Enumerable.Repeat("null", 10000)) + "]";
         Add("argument-named-tree", 10000, ["-nc", "--argjson", "data", argumentArray, "$data | length"], "", "10000\n");
         Add("argument-positional-tree", 10000, ["-nc", "$ARGS.positional[0] | length", "--jsonargs", argumentArray], "", "10000\n");
+        Add("index-borrowed-key", records, ["-c", "--arg", "key", new string('k', 131072), "INDEX(.;$key)|length"],
+            string.Concat(Enumerable.Repeat("0\n", records)), string.Concat(Enumerable.Repeat("1\n", records)));
+        Add("index-serialized-key", records, ["-c", "--arg", "key", new string('k', 16384), "INDEX(.;[$key])|length"],
+            string.Concat(Enumerable.Repeat("0\n", records)), string.Concat(Enumerable.Repeat("1\n", records)));
+        Add("range-signed-zero-path", records, ["-c", "first(path(range(.;1)))"],
+            string.Concat(Enumerable.Repeat("-0\n", records)), string.Concat(Enumerable.Repeat("[]\n", records)));
         string emptyObjects = string.Join(',', Enumerable.Repeat("{}", 100));
         string containmentNeedles = string.Join(',', Enumerable.Repeat("{\"x\":{}}", 100));
         Add("contains-empty-containers", 100, ["-c", ". as $d | .haystack | contains($d.needles)"],
