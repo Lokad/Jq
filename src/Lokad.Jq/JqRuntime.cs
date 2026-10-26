@@ -1697,9 +1697,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     // Numbers that are whole and fit in a long keep integral storage like
     // literals and inputs; anything else stays a double.
-    internal static JsonNode? CreateNumber(double value)
+    internal static JsonNode CreateNumber(double value)
     {
-        if (!double.IsNaN(value) && !double.IsInfinity(value) && value == Math.Truncate(value) && value >= long.MinValue && value <= long.MaxValue)
+        // Int64.MaxValue rounds up to 2^63 as a double; that bound is exclusive.
+        // Negative zero needs double storage to retain its sign and path identity.
+        if (double.IsFinite(value) && (value != 0 || !double.IsNegative(value))
+            && value == Math.Truncate(value) && value >= long.MinValue && value < -(double)long.MinValue)
             return JsonValue.Create((long)value);
         return JsonValue.Create(value);
     }
