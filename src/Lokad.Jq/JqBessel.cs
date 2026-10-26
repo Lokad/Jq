@@ -28,6 +28,7 @@ internal static class JqBessel
     {
         if (double.IsNaN(x) || double.IsInfinity(x))
             return double.NaN;
+        if (x == 0.0) return x;
         double ax = Math.Abs(x);
         double value = ax <= 10.0 ? BesselJSeries(ax, 1) : BesselHankel(ax, 1, false);
         return x < 0.0 ? -value : value;
@@ -61,13 +62,13 @@ internal static class JqBessel
             return double.NaN;
         if (double.IsInfinity(order)) return 0.0;
         double magnitude = Math.Truncate(Math.Abs(order));
+        if (magnitude == 1.0) return order < 0.0 ? -J1(x) : J1(x);
         double point = Math.Abs(x);
         bool negative = magnitude % 2.0 != 0.0 && ((order < 0.0) != (x < 0.0));
         if (point == 0.0) return magnitude == 0.0 ? 1.0 : negative ? -0.0 : 0.0;
         if (magnitude >= 2.0 && point < magnitude && Underflows(magnitude, point))
             return negative ? -0.0 : 0.0;
-        // The loop index must actually represent the integer order. No smaller
-        // execution allowance is imposed; unsupported index values are numeric NaN.
+        // The loop index must represent the integer order.
         if (magnitude >= -(double)long.MinValue) return double.NaN;
         long n = (long)magnitude;
         double value = Positive(n, point);
@@ -76,7 +77,6 @@ internal static class JqBessel
         double Positive(long n, double x)
         {
             if (n == 0) return J0(x);
-            if (n == 1) return J1(x);
             if (x < n) return Backward(n, x);
             double previous = J0(x);
             double current = J1(x);
@@ -170,10 +170,11 @@ internal static class JqBessel
             return double.NaN;
         if (double.IsNaN(x) || double.IsInfinity(x) || x < 0.0)
             return double.NaN;
+        double magnitude = Math.Truncate(Math.Abs(order));
+        if (magnitude == 1.0) return order < 0.0 ? -Y1(x) : Y1(x);
         if (x == 0.0)
             return order == 0.0 ? double.NegativeInfinity : double.NaN;
         if (double.IsInfinity(order)) return double.NegativeInfinity;
-        double magnitude = Math.Truncate(Math.Abs(order));
         if (magnitude >= -(double)long.MinValue)
         {
             // For 0 < x <= 1, forward Y recurrence grows in magnitude by at
@@ -189,8 +190,6 @@ internal static class JqBessel
         {
             if (n == 0)
                 return Y0(x);
-            if (n == 1)
-                return Y1(x);
             double previous = Y0(x);
             double current = Y1(x);
             for (long k = 1; k < n; k++)
