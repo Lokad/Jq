@@ -68,12 +68,12 @@ internal sealed class JqBudget : IDisposable
     internal IDisposable OwnSerializationBuffer(JqJsonBuffer buffer)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        // The caller has ended writer/copy borrows before lending this result.
+        buffer.ReleaseReplacedStorage();
         _serializedResults = Math.Min(32, _serializedResults + 1);
         // Cold one-off results retain their existing immediate refund behavior.
         if (_serializedResults < 32) return buffer;
-        // The writer has ended its borrows before handoff. Reconcile only a
-        // reusable buffer; cold and truly oversized results refund on return.
-        if (buffer.Capacity <= MaximumIdleSerializationBytes) buffer.ReleaseReplacedStorage();
+        // Retain at most one small returned buffer after repeated results.
         return new SerializationReturn(this, buffer);
     }
 

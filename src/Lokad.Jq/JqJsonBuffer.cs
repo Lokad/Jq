@@ -96,7 +96,11 @@ internal sealed class JqJsonBuffer(JqBudget budget) : IBufferWriter<byte>, IDisp
             int capacity = JqBudget.BufferCapacity((long)_buffer.WrittenCount + count,
                 (long)_buffer.Capacity + growth);
             budget.CheckCancellation();
-            _memory.Resize(checked(_memory.LastAdmittedBytes + capacity));
+            // A new writer loan replaces the previous one. Earlier backing
+            // arrays have no borrower; only the current array overlaps this
+            // replacement, including a body slice used by record framing.
+            _memory.Resize(checked((long)_buffer.Capacity + capacity));
+            budget.CheckCancellation();
         }
     }
 
