@@ -55,6 +55,32 @@ if (args.Length != 0)
 
 int checks = 0;
 {
+    string path = "/" + new string('p', 16384);
+    var host = new SmokeHost();
+    host.AddFile(path, "1");
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("canonical program path construction", await Command(["-nc", "-f", path], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "1\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && host.ClosedDescriptors.Count == 1 && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("numeric text zero signs", await Command(["-nc", "[\"-0\",\"-00\",\"-0e0\"]|map(tonumber|copysign(1;.))"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[-1,-1,-1]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+foreach (string format in new[] { "sh", "csv" })
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(512 * 1024);
+    Check(format + " boolean row", await Command(["-nr", "--argjson", "row",
+        "[" + string.Join(',', Enumerable.Repeat("true", 2500)) + "]", "$row|@" + format + "|length"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "12499\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
     var host = new SmokeHost();
     var memory = new BenchmarkMemoryBudget(64 * 1024);
     Check("borrowed index key payload", await Command(["-nc", "--arg", "key", new string('k', 131072), "INDEX(0;$key)|length"], [])

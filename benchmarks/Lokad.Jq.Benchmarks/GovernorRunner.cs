@@ -489,6 +489,12 @@ internal static class GovernorRunner
             string.Concat(Enumerable.Repeat("0\n", records)), string.Concat(Enumerable.Repeat("1\n", records)));
         Add("range-signed-zero-path", records, ["-c", "first(path(range(.;1)))"],
             string.Concat(Enumerable.Repeat("-0\n", records)), string.Concat(Enumerable.Repeat("[]\n", records)));
+        Add("canonical-library-path", 16384, ["-nc", "-L", "/" + new string('p', 16384), "1"], "", "1\n");
+        Add("tonumber-zero-records", records, ["-c", "tonumber|copysign(1;.)"],
+            string.Concat(Enumerable.Repeat("\"-00\"\n", records)), string.Concat(Enumerable.Repeat("-1\n", records)));
+        foreach (string format in new[] { "sh", "csv" })
+            Add(format + "-boolean-records", records, ["-r", "[true,false,null]|@" + format], jsonLines,
+                string.Concat(Enumerable.Repeat(format == "sh" ? "true false null\n" : "true,false,\n", records)));
         string emptyObjects = string.Join(',', Enumerable.Repeat("{}", 100));
         string containmentNeedles = string.Join(',', Enumerable.Repeat("{\"x\":{}}", 100));
         Add("contains-empty-containers", 100, ["-c", ". as $d | .haystack | contains($d.needles)"],

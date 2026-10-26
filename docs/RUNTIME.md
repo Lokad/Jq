@@ -101,6 +101,9 @@ whitespace add no proportional storage. Temporary lexer workspace ends after
 lexing.
 Command setup preflights retained bindings, operands, library paths and
 environment entries as constructed.
+Canonical paths borrow their text; relative strings, normalization workspace and
+program source labels admit before construction. Input-path storage remains
+owned through the pending open and ends before advancing to another source.
 
 Coarse owners track executions, records, buffers, results and caches. Object
 construction workspace ends with enumeration; constant metadata builds private
@@ -214,7 +217,9 @@ rendering are culture-invariant. NaN renders `null`; infinities clamp to the fin
 double extremes. Scalar NaN keeps number type and never equals itself. Shared
 arrays and objects compare equal by identity, including when they contain NaN.
 Input and `tonumber` accept signed `nan`, `inf` and `infinity`, ignoring ASCII case;
-`tonumber` permits no surrounding whitespace.
+`tonumber` permits no surrounding whitespace and preserves negative-zero text,
+including `"-00"`. Its manual digit scans poll cancellation; synchronous BCL
+parsing checks cancellation at its boundaries.
 Numeric path identity uses this immediate/double profile; decimal-backed jq
 literals can have different identity.
 Range values and slice descriptors preserve signed zero and keep integral

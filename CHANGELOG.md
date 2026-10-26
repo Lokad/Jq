@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Borrow canonical path text and admit actual resolution workspace and source
+  labels, keeping long hosted paths independent of normalization estimates.
+- Preserve negative zero in integral `tonumber` text; scan numeric grammar once
+  with cancellation polling.
+- Append fixed boolean/null spellings in CSV/shell formatting without per-field
+  serialization, preserving numeric rendering and output admission.
+
 - Borrow existing `INDEX` key strings and preserve admission for actual generated
   keys, dictionaries and row copies.
 - Preserve negative zero and exact signed 64-bit bounds in range values and slice
