@@ -1484,23 +1484,33 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal string AsciiCase(JsonNode? input, bool lower)
     {
+        budget.CheckCancellation();
         // Like the reference explode|map|implode definition, non-strings fail at the explode step.
         if (!TryGetString(input, out string? text) || text is null)
             throw new JqException("explode input must be a string");
-        budget.ReserveBytes(2L * text.Length);
-        var builder = new StringBuilder(text.Length);
-        foreach (char ch in text)
+        int first = 0;
+        while (first < text.Length)
         {
-            if ((builder.Length & 4095) == 0) budget.CheckCancellation();
-            if (lower && ch >= 'A' && ch <= 'Z')
-                builder.Append((char)(ch + 32));
-            else if (!lower && ch >= 'a' && ch <= 'z')
-                builder.Append((char)(ch - 32));
-            else
-                builder.Append(ch);
+            if ((first & 4095) == 0) budget.CheckCancellation();
+            if (Map(text[first], lower) != text[first]) break;
+            first++;
         }
         budget.CheckCancellation();
-        return budget.Finish(builder);
+        if (first == text.Length) return text;
+        budget.ReserveString(text.Length);
+        budget.CheckCancellation();
+        return string.Create(text.Length, (Text: text, Lower: lower, Budget: budget), static (destination, state) =>
+        {
+            for (int index = 0; index < state.Text.Length; index++)
+            {
+                if ((index & 4095) == 0) state.Budget.CheckCancellation();
+                destination[index] = Map(state.Text[index], state.Lower);
+            }
+            state.Budget.CheckCancellation();
+        });
+
+        static char Map(char ch, bool lower) => lower && ch is >= 'A' and <= 'Z' ? (char)(ch + 32)
+            : !lower && ch is >= 'a' and <= 'z' ? (char)(ch - 32) : ch;
     }
 
     internal static bool StartsEndsWith(JsonNode? input, JsonNode? affix, bool fromStart)
@@ -1739,7 +1749,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         {
             case "text": return text;
             case "html": return Html(text);
-            case "uri": return EncodeChunks(Uri.EscapeDataString);
+            case "uri": return UriEncode();
             case "base64":
             {
                 var bytes = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, budget.CancellationToken), 0);
@@ -1751,45 +1761,76 @@ internal sealed partial class JqRuntime(JqBudget budget)
             default: throw new JqException($"unsupported format @{format}");
         }
 
-        string EncodeChunks(Func<string, string> encode)
+        string UriEncode()
         {
-            var builder = new StringBuilder();
-            for (var start = 0; start < text.Length;)
+            budget.CheckCancellation();
+            long length = 0;
+            int scanned = 0;
+            foreach (Rune rune in text.EnumerateRunes())
             {
-                var count = Math.Min(1024, text.Length - start);
-                if (start + count < text.Length && char.IsHighSurrogate(text[start + count - 1])) count--;
-                // Encoders work on bounded chunks; never split a surrogate pair at a chunk boundary.
-                budget.ReserveBytes(24L * count);
-                budget.Append(builder, encode(text.Substring(start, count)));
-                start += count;
+                if ((scanned++ & 4095) == 0) budget.CheckCancellation();
+                length += rune.Value is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '-' or '_' or '.' or '~'
+                    ? 1 : 3L * rune.Utf8SequenceLength;
             }
-            return budget.Finish(builder);
+            budget.CheckCancellation();
+            if (length == text.Length) return text;
+            budget.ReserveString(length);
+            budget.CheckCancellation();
+            return string.Create((int)length, (Text: text, Budget: budget), static (destination, state) =>
+            {
+                int offset = 0;
+                for (int start = 0; start < state.Text.Length;)
+                {
+                    state.Budget.CheckCancellation();
+                    int count = Math.Min(1024, state.Text.Length - start);
+                    if (start + count < state.Text.Length && char.IsHighSurrogate(state.Text[start + count - 1])) count--;
+                    if (!Uri.TryEscapeDataString(state.Text.AsSpan(start, count), destination[offset..], out int written))
+                        throw new InvalidOperationException("URI encoding exceeded its preflight length.");
+                    offset += written;
+                    start += count;
+                }
+                state.Budget.CheckCancellation();
+            });
         }
 
         // Upstream escapes only ampersand, angle brackets, quote and apostrophe,
         // leaving UTF-8 bytes raw. Codes: 38 is &, 60 is <, 62 is >, 39 is apostrophe, 34 is quote.
         string Html(string source)
         {
+            budget.CheckCancellation();
             long length = source.Length;
             for (int index = 0; index < source.Length; index++)
             {
                 if ((index & 4095) == 0) budget.CheckCancellation();
-                length += source[index] switch { '&' => 4, '<' or '>' => 3, '\'' or '"' => 5, _ => 0 };
+                ReadOnlySpan<char> escaped = Escape(source[index]);
+                if (!escaped.IsEmpty) length += escaped.Length - 1;
             }
+            budget.CheckCancellation();
+            if (length == source.Length) return source;
             budget.ReserveString(length);
-            var builder = new StringBuilder((int)length);
-            for (int index = 0; index < source.Length; index++)
+            budget.CheckCancellation();
+            return string.Create((int)length, (Text: source, Budget: budget), static (destination, state) =>
             {
-                if ((index & 4095) == 0) budget.CheckCancellation();
-                char ch = source[index];
-                if (ch == (char)38) builder.Append("&amp;");
-                else if (ch == (char)60) builder.Append("&lt;");
-                else if (ch == (char)62) builder.Append("&gt;");
-                else if (ch == (char)39) builder.Append("&apos;");
-                else if (ch == (char)34) builder.Append("&quot;");
-                else builder.Append(ch);
-            }
-            return budget.Finish(builder);
+                int offset = 0;
+                for (int index = 0; index < state.Text.Length; index++)
+                {
+                    if ((index & 4095) == 0) state.Budget.CheckCancellation();
+                    char ch = state.Text[index];
+                    ReadOnlySpan<char> escaped = Escape(ch);
+                    if (escaped.IsEmpty) destination[offset++] = ch;
+                    else
+                    {
+                        escaped.CopyTo(destination[offset..]);
+                        offset += escaped.Length;
+                    }
+                }
+                state.Budget.CheckCancellation();
+            });
+
+            static ReadOnlySpan<char> Escape(char ch) => ch switch
+            {
+                '&' => "&amp;", '<' => "&lt;", '>' => "&gt;", '\'' => "&apos;", '"' => "&quot;", _ => ""
+            };
         }
 
         // Manual decoder matching the reference: stops at the first padding mark,
