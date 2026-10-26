@@ -14,7 +14,7 @@ namespace Lokad.Jq;
 // hold imported module scopes for qualified `alias::name` lookup. Labels retain
 // lexical identity and an activation node. A function node carries its own
 // definition environment by construction: the node itself extends the
-// captured parent, so lookups forge a correctly scoped closure without
+// captured parent, so its closure captures that node once without
 // mutable cells or statics, and recursion resolves through the same path.
 internal sealed class JqEnvironment
 {
@@ -22,13 +22,10 @@ internal sealed class JqEnvironment
     private readonly JqEnvironment? _parent;
     private readonly string? _name;
     private readonly JsonNode? _value;
-    private readonly int _arity;
-    private readonly JqFunctionDefinition? _definition;
     private readonly JqFilterClosure? _filter;
     private readonly JqUserClosure? _closure;
     private readonly JqEnvironment? _moduleScope;
     private readonly object? _label;
-    private readonly bool _isFunction;
     private readonly bool _isFilter;
     private readonly bool _isModule;
 
@@ -59,17 +56,14 @@ internal sealed class JqEnvironment
         _isFilter = true;
     }
 
-    private JqEnvironment(JqEnvironment parent, string name, int arity, JqFunctionDefinition definition)
+    private JqEnvironment(JqEnvironment parent, JqFunctionDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(parent);
-        ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(definition);
         _root = parent._root;
         _parent = parent;
-        _name = name;
-        _arity = arity;
-        _definition = definition;
-        _isFunction = true;
+        _name = definition.Name;
+        _closure = new JqUserClosure(definition, this);
     }
 
     private JqEnvironment(JqEnvironment parent, string name, JqEnvironment moduleScope)
@@ -117,13 +111,13 @@ internal sealed class JqEnvironment
     internal JqEnvironment ExtendFilter(string name, JqFilterClosure filter) =>
         new(this, name, filter);
 
-    internal JqEnvironment ExtendFunction(string name, int arity, JqFunctionDefinition definition) =>
-        new(this, name, arity, definition);
+    internal JqEnvironment ExtendFunction(JqFunctionDefinition definition) =>
+        new(this, definition);
 
     internal JqEnvironment ExtendModule(string alias, JqEnvironment moduleScope) =>
         new(this, alias, moduleScope);
 
-    private JqEnvironment(JqEnvironment parent, string name, int arity, JqUserClosure closure)
+    private JqEnvironment(JqEnvironment parent, string name, JqUserClosure closure)
     {
         ArgumentNullException.ThrowIfNull(parent);
         ArgumentNullException.ThrowIfNull(name);
@@ -131,20 +125,18 @@ internal sealed class JqEnvironment
         _root = parent._root;
         _parent = parent;
         _name = name;
-        _arity = arity;
         _closure = closure;
-        _isFunction = true;
     }
 
-    internal JqEnvironment ExtendClosure(string name, int arity, JqUserClosure closure) =>
-        new(this, name, arity, closure);
+    internal JqEnvironment ExtendClosure(string name, JqUserClosure closure) =>
+        new(this, name, closure);
 
     internal bool TryGetValue(string name, out JsonNode? value)
     {
         JqEnvironment? scope = this;
         while (scope is not null)
         {
-            if (!scope._isFunction && !scope._isFilter && !scope._isModule && scope._name is not null && string.Equals(scope._name, name, StringComparison.Ordinal))
+            if (scope._closure is null && !scope._isFilter && !scope._isModule && scope._name is not null && string.Equals(scope._name, name, StringComparison.Ordinal))
             {
                 value = scope._value;
                 return true;
@@ -177,20 +169,12 @@ internal sealed class JqEnvironment
         JqEnvironment? scope = this;
         while (scope is not null)
         {
-            if (scope._isFunction
-                && scope._arity == arity
+            if (scope._closure is { } found
+                && found.Definition.Arity == arity
                 && name.SequenceEqual(scope._name.AsSpan()))
             {
-                if (scope._closure is not null)
-                {
-                    closure = scope._closure;
-                    return true;
-                }
-                if (scope._definition is not null)
-                {
-                    closure = new JqUserClosure(scope._definition, scope);
-                    return true;
-                }
+                closure = found;
+                return true;
             }
             scope = scope._parent;
         }
@@ -247,17 +231,13 @@ internal sealed class JqEnvironment
         while (scope is not null)
         {
             budget.CheckCancellation();
-            if (scope._isFunction && scope._name is not null)
+            if (scope._closure is { } closure && scope._name is not null)
             {
-                JqFunctionDefinition? definition = scope._closure?.Definition ?? scope._definition;
-                if (definition is not null)
+                var key = (scope._name, closure.Definition.Arity);
+                if (definitions is null || !definitions.ContainsKey(key))
                 {
-                    var key = (scope._name, scope._arity);
-                    if (definitions is null || !definitions.ContainsKey(key))
-                    {
-                        budget.ReserveMetadata(128, 1);
-                        (definitions ??= new())[key] = definition;
-                    }
+                    budget.ReserveMetadata(128, 1);
+                    (definitions ??= new())[key] = closure.Definition;
                 }
             }
             scope = scope._parent;
@@ -272,16 +252,13 @@ internal sealed class JqEnvironment
         while (scope is not null)
         {
             budget.CheckCancellation();
-            if (scope._isFunction && scope._name is not null)
+            if (scope._closure is { } closure && scope._name is not null)
             {
-                var key = (scope._name, scope._arity);
+                var key = (scope._name, closure.Definition.Arity);
                 if (!closures.ContainsKey(key))
                 {
-                    budget.ReserveMetadata(256, 1);
-                    if (scope._closure is not null)
-                        closures[key] = scope._closure;
-                    else if (scope._definition is not null)
-                        closures[key] = new JqUserClosure(scope._definition, scope);
+                    budget.ReserveMetadata(224, 1);
+                    closures[key] = closure;
                 }
             }
             scope = scope._parent;

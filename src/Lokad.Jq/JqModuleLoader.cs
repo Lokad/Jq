@@ -66,7 +66,7 @@ internal sealed class JqModuleLoader(
             foreach (var entry in included.Exports)
             {
                 budget.ReserveMetadata(128, 1);
-                env = env.ExtendClosure(entry.Key.Name, entry.Key.Arity, entry.Value);
+                env = env.ExtendClosure(entry.Key.Name, entry.Value);
             }
             return env;
         }
@@ -96,7 +96,7 @@ internal sealed class JqModuleLoader(
                 foreach (var entry in merged)
                 {
                     budget.ReserveMetadata(128, 1);
-                    mergedEnv = mergedEnv.ExtendClosure(entry.Key.Name, entry.Key.Arity, entry.Value);
+                    mergedEnv = mergedEnv.ExtendClosure(entry.Key.Name, entry.Value);
                 }
                 budget.ReserveMetadata(128, 1);
                 env = env.ExtendModule(alias, mergedEnv);
@@ -212,8 +212,8 @@ internal sealed class JqModuleLoader(
             var definitions = new JqParser(tokens, programSource, env, budget).ParseDefinitions(bodyIndex);
             foreach (JqFunctionDefinition definition in definitions)
             {
-                budget.ReserveMetadata(128, 1);
-                env = env.ExtendFunction(definition.Name, definition.Arity, definition);
+                budget.ReserveMetadata(160, 2);
+                env = env.ExtendFunction(definition);
             }
             var exports = new Dictionary<(string Name, int Arity), JqUserClosure>();
             env.CollectFunctionClosures(exports, budget);

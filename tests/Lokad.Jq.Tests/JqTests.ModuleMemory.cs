@@ -58,7 +58,7 @@ public sealed partial class JqTests
     {
         var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
         var definition = new JqFunctionDefinition("f", [], new IdentityFilter());
-        for (int i = 0; i < 10000; i++) env = env.ExtendFunction("f", 0, definition);
+        for (int i = 0; i < 10000; i++) env = env.ExtendFunction(definition);
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(cancellation.Token);
         var exports = new Dictionary<(string Name, int Arity), JqUserClosure>();

@@ -461,7 +461,7 @@ internal sealed class AsFilter(
 
 // A `def name[(params)]: body; rest` definition: forges no values itself but
 // extends the environment with the definition before running the rest.
-// Closures forged later capture this extended environment, so each `def`
+// Its closure captures this extended environment once, so each `def`
 // observes exactly the bindings visible at its own site.
 internal sealed class DefFilter(JqFunctionDefinition Definition, JqFilter Continuation) : JqFilter
 {
@@ -507,13 +507,13 @@ internal sealed class DefFilter(JqFunctionDefinition Definition, JqFilter Contin
             context.Budget.CheckCancellation();
             count = checked(count + 1);
         }
-        storage.Reserve(128L * count, count);
+        storage.Reserve(160L * count, (int)Math.Min(32, 2L * count));
         JqFilter current = this;
         while (current is DefFilter definition)
         {
             context.Budget.CheckCancellation();
             var function = definition.FunctionDefinition;
-            environment = environment.ExtendFunction(function.Name, function.Arity, function);
+            environment = environment.ExtendFunction(function);
             current = definition.ContinuationBody;
         }
         return (environment, current);

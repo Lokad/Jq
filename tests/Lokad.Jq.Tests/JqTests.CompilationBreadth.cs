@@ -88,7 +88,7 @@ public sealed partial class JqTests
     {
         var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
         for (int i = 0; i < 100000; i++)
-            env = env.ExtendFunction("f" + i, 0, new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
+            env = env.ExtendFunction(new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
         using var compiler = new JqBudget(CancellationToken.None);
         var tokens = Lexer.Tokenize(".", JqProgramSource.Inline, compiler);
         using var cancellation = new CancellationTokenSource();
@@ -112,9 +112,9 @@ public sealed partial class JqTests
     {
         var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
         for (int i = 0; i < 1000; i++)
-            env = env.ExtendFunction("f" + i, 0, new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
-        env = env.ExtendFunction("f0", 1, new JqFunctionDefinition("f0", [new JqFunctionParameter("x", true)], new VariableFilter("x")));
-        env = env.ExtendFunction("f0", 0, new JqFunctionDefinition("f0", [], new LiteralFilter(JsonValue.Create(42))));
+            env = env.ExtendFunction(new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
+        env = env.ExtendFunction(new JqFunctionDefinition("f0", [new JqFunctionParameter("x", true)], new VariableFilter("x")));
+        env = env.ExtendFunction(new JqFunctionDefinition("f0", [], new LiteralFilter(JsonValue.Create(42))));
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
@@ -132,7 +132,7 @@ public sealed partial class JqTests
     {
         var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
         for (int i = 0; i < 10000; i++)
-            env = env.ExtendFunction("f" + i, 0, new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
+            env = env.ExtendFunction(new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
         var root = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),

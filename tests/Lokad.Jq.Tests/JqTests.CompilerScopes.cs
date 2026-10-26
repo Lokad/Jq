@@ -12,8 +12,7 @@ public sealed partial class JqTests
         using var budget = new JqBudget(CancellationToken.None);
         var environment = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
         for (int i = 0; i < functions; i++)
-            environment = environment.ExtendFunction("f" + i, 0,
-                new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
+            environment = environment.ExtendFunction(new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
         var tokens = Lexer.Tokenize("42", JqProgramSource.Inline, budget);
         for (int i = 0; i < 100; i++) new JqParser(tokens, JqProgramSource.Inline, environment, budget).ParsePrefix();
         long allocated = 0;
