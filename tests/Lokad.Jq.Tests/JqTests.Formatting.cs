@@ -72,7 +72,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("@", 3, "expected Identifier")]
-    [InlineData("@missing", 5, "unsupported format @missing")]
+    [InlineData("@missing", 5, "missing is not a valid format")]
     [InlineData("@tsv |", 3, "unexpected token <end>")]
     public async Task Jq_InvalidFormatsReportToolErrors(string filter, int expectedExit, string error)
     {

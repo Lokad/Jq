@@ -1772,7 +1772,12 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 return Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
             }
             case "base64d": return Base64Decode(ToJqString(value), value);
-            default: throw new JqException($"unsupported format @{format}");
+            default:
+            {
+                const string suffix = " is not a valid format";
+                budget.ReserveString((long)format.Length + suffix.Length);
+                throw new JqException(format + suffix);
+            }
         }
 
         string UriEncode(string text)

@@ -1835,8 +1835,6 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "format":
                     if (!TryGetString(Arg(0), out string? formatName) || formatName is null)
                         throw new JqRuntimeException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a valid format");
-                    if (formatName != "json" && formatName != "text" && formatName != "csv" && formatName != "tsv" && formatName != "html" && formatName != "uri" && formatName != "urid" && formatName != "sh" && formatName != "base64" && formatName != "base64d")
-                        throw new JqRuntimeException(formatName + " is not a valid format");
                     yield return context.Runtime.FormatValue(formatName, input);
                     break;
                 case "contains": yield return JsonValue.Create(context.Runtime.Contains(input, Arg(0))); break;

@@ -13,7 +13,7 @@ public sealed partial class JqTests
         var array = new JsonArray();
         for (int index = 0; index < 10000; index++) array.Add(index);
         JsonNode input = objectInput ? new JsonObject { ["data"] = array } : array;
-        var memory = new BenchmarkMemoryBudget(0);
+        var memory = new BenchmarkMemoryBudget(256);
         var counted = new CountingMemoryBudget(memory);
         using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
         {
@@ -21,10 +21,11 @@ public sealed partial class JqTests
             long before = GC.GetAllocatedBytesForCurrentThread();
             var failure = Assert.Throws<JqException>(() => runtime.Format("missing", input));
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.Equal("unsupported format @missing", failure.Message);
+            Assert.Equal("missing is not a valid format", failure.Message);
             Assert.InRange(allocated, 0, 32 * 1024);
-            Assert.Equal(0, memory.ReservedBytes);
-            Assert.Equal(0, counted.Counts.Reservations);
+            Assert.Equal(58, memory.ReservedBytes);
+            Assert.Equal(58, memory.PeakBytes);
+            Assert.Equal(1, counted.Counts.Reservations);
             Assert.Equal(0, counted.Counts.Resizes);
             Assert.Equal(10000, array.Count);
         }
@@ -62,7 +63,7 @@ public sealed partial class JqTests
     [InlineData("@missing \"literal\"", "literal\n", "")]
     [InlineData("@missing \"before\\(empty)after\"", "", "")]
     [InlineData("try @missing \"\\(error(\"earlier\"))\" catch .", "earlier\n", "")]
-    [InlineData("try @missing \"\\((debug|1),2)\" catch .", "unsupported format @missing\n", "[\"DEBUG:\",null]\n")]
+    [InlineData("try @missing \"\\((debug|1),2)\" catch .", "missing is not a valid format\n", "[\"DEBUG:\",null]\n")]
     [InlineData("\"ready\", (@missing \"\\(halt_error(7))\")", "ready\n", "")]
     public async Task Jq_FormatDispatchPreservesLazyTemplatesAndEarlierEffects(string filter, string output, string error)
     {
