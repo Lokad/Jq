@@ -54,6 +54,32 @@ if (args.Length != 0)
 }
 
 int checks = 0;
+foreach (string filter in new[] { "try @bogus catch .", "try format(\"bogus\") catch ." })
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("shared format diagnostic " + filter, await Command(["-nr", filter], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "bogus is not a valid format\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("optional scalar path", await Command(["-nc", "1|path(.foo?)"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    host.SetInput("\"é item-42\"");
+    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    Check("regex example against package", await Lokad.Jq.Examples.RegexAdapterExample.RunAsync(
+        host, memory, JqUtf8RegexEngine.Instance, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[true,{\"offset\":2,\"length\":7,\"id\":\"42\"},{\"id\":\"42\"}]\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
 foreach (string path in new[] { "./tiny", "dir/./tiny", "dir//tiny" })
 {
     var host = new SmokeHost();

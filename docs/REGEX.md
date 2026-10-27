@@ -5,6 +5,9 @@ Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`; the default
 (transitively `Lokad.Utf8Regex` 0.3.0). The default adapter ships in the runtime
 package. PCRE2-specific types stay behind the adapter.
 
+See the [application example](../examples/README.md) for explicit injection,
+named captures and Unicode offsets.
+
 The adapter receives the active cancellation token and borrowed shared memory
 budget for compilation. Compiled handles receive the token on boolean and detailed
 searches. The host owns the engine; Jq owns
