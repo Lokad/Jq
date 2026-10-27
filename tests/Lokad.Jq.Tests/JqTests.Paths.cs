@@ -81,7 +81,7 @@ public sealed partial class JqTests
     [InlineData("{\"a\": [{\"b\": 0}]}", "try path(.a | (map(select(.b == 0)))) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("{\"a\": [{\"b\": 0}]}", "try path(.a | map(select(.b == 0))?) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("{\"a\": [{\"b\": 0}]}", "try path(if true then .a else . end) catch .", "[\n  \"a\"\n]\n")]
-    [InlineData("{\"a\": [{\"b\": 0}]}", "try path(if true then map(select(.b == 0)) else .a end) catch .", "\"cannot index array with string \\\"b\\\"\"\n")]
+    [InlineData("{\"a\": [{\"b\": 0}]}", "try path(if true then map(select(.b == 0)) else .a end) catch .", "\"Cannot index array with string (\\\"b\\\")\"\n")]
     [InlineData("{\"a\": [{\"b\": 0}]}", "try path(.a | (map(select(.b == 0)) // .b)) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("{\"a\":[{\"b\":0}]}", "def m: map(select(.b == 0)); try path(.a | m) catch .", "\"Invalid path expression with result [{\\\"b\\\":0}]\"\n")]
     [InlineData("\"a\"", "try path(\"a\") catch .", "\"Invalid path expression with result \\\"a\\\"\"\n")]
@@ -578,9 +578,9 @@ public sealed partial class JqTests
     [InlineData("[{\"a\": 0}, {\"a\": 1}]", "try ((reverse | .[].b) = 10) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1},{\\\"a\\\":0}]\"\n")]
     [InlineData("[0, 1, 2]", "try (def x: reverse; x = 10) catch .", "\"Invalid path expression with result [2,1,0]\"\n")]
     [InlineData("null", "try (1 = 2) catch .", "\"Invalid path expression with result 1\"\n")]
-    [InlineData("5", "try (.a = 1) catch .", "\"cannot index number with string \\\"a\\\"\"\n")]
-    [InlineData("\"s\"", "try (.a = 1) catch .", "\"cannot index string with string \\\"a\\\"\"\n")]
-    [InlineData("true", "try (.error = 1) catch .", "\"cannot index boolean with string \\\"error\\\"\"\n")]
+    [InlineData("5", "try (.a = 1) catch .", "\"Cannot index number with string (\\\"a\\\")\"\n")]
+    [InlineData("\"s\"", "try (.a = 1) catch .", "\"Cannot index string with string (\\\"a\\\")\"\n")]
+    [InlineData("true", "try (.error = 1) catch .", "\"Cannot index boolean with string (\\\"error\\\")\"\n")]
     [InlineData("[{\"a\":0},{\"a\":1}]", "try ((map(select(.a == 1))[].a) |= .+1) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1}]\"\n")]
     [InlineData("null", "try (.foo[-2] = 0) catch .", "\"Out of bounds negative array index\"\n")]
     [InlineData("[{\"a\":0},{\"a\":1}]", "try ((map(select(.a == 1))[].b) = 10) catch .", "\"Invalid path expression near attempt to iterate through [{\\\"a\\\":1}]\"\n")]
@@ -689,7 +689,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".a.b = 1")));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("cannot index number", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("Cannot index number", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 }

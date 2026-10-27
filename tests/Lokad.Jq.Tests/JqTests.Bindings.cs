@@ -80,7 +80,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "{} as [$a] | $a")));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("cannot index object", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("Cannot index object", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -145,7 +145,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "(1 | .foo) as $x | $x")));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("cannot index number", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("Cannot index number", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -225,7 +225,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("cannot index array", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("Cannot index array", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 

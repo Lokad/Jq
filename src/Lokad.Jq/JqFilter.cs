@@ -321,7 +321,7 @@ internal sealed class AsFilter(
                 break;
             case ArrayPattern array:
                 await foreach (JqEnvironment bound in (MatchSequence(array.Items.Count, scope, context, storage,
-                    (index, current) => Match(array.Items[index], ElementAt(value, index), current, context, storage, depth + 1))).ConfigureAwait(false))
+                    (index, current) => Match(array.Items[index], JqPathReads.ReadIndex(value, index, false, context), current, context, storage, depth + 1))).ConfigureAwait(false))
                     yield return bound;
                 break;
             case ObjectPattern obj:
@@ -339,7 +339,7 @@ internal sealed class AsFilter(
             {
                 if (!TryGetString(keyValue, out string key))
                     throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.TruncatedDump(keyValue)}) as object key");
-                JsonNode? field = ExtractField(value, key);
+                JsonNode? field = JqPathReads.ReadField(value, key, context.Runtime);
                 await foreach (JqEnvironment bound in Match(property.Value, field, current, context, storage, depth + 1).ConfigureAwait(false))
                     yield return bound;
             }
@@ -393,20 +393,6 @@ internal sealed class AsFilter(
             finally { storage.Release(bytes); }
         }
     }
-
-    private static JsonNode? ElementAt(JsonNode? value, int index) => value switch
-    {
-        JsonArray array => index < array.Count ? array[index] : null,
-        null => null,
-        _ => throw new JqRuntimeException($"cannot index {TypeName(value)} with number {index}"),
-    };
-
-    private static JsonNode? ExtractField(JsonNode? value, string key) => value switch
-    {
-        JsonObject obj => obj.TryGetPropertyValue(key, out JsonNode? child) ? child : null,
-        null => null,
-        _ => throw new JqRuntimeException($"cannot index {TypeName(value)} with string \"{key}\""),
-    };
 
     protected override async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
@@ -1041,17 +1027,8 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
     {
         await foreach (var value in source.Evaluate(input, context, environment).ConfigureAwait(false))
         {
-            if (value is JsonObject obj)
-            {
-                // Reads share the child reference: nothing mutates shared
-                // nodes in place downstream.
-                JsonNode? field = obj.TryGetPropertyValue(name, out var child) ? child : null;
-                yield return field;
-            }
-            else if (value == null)
-                yield return null;
-            else if (!optional)
-                throw new JqRuntimeException($"cannot index {TypeName(value)} with string \"{name}\"");
+            if (optional && value is not null && value is not JsonObject) continue;
+            yield return JqPathReads.ReadField(value, name, context.Runtime);
         }
     }
 
@@ -1060,12 +1037,9 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
         await foreach (JqValuePath source in source.EvaluatePaths(pair, context, environment).ConfigureAwait(false))
         {
             RequireTracked(source, new KeySegment(name), context);
-            if (source.Value is JsonObject obj)
-                yield return new JqValuePath(Extend(source.Segments, new KeySegment(name), context.Budget), obj.TryGetPropertyValue(name, out JsonNode? child) ? child : null, true);
-            else if (source.Value == null)
-                yield return new JqValuePath(Extend(source.Segments, new KeySegment(name), context.Budget), null, true);
-            else
-                throw new JqRuntimeException($"cannot index {TypeName(source.Value)} with string \"{name}\"");
+            if (optional && source.Value is not null && source.Value is not JsonObject) continue;
+            JsonNode? field = JqPathReads.ReadField(source.Value, name, context.Runtime);
+            yield return new JqValuePath(Extend(source.Segments, new KeySegment(name), context.Budget), field, true);
         }
     }
 }
