@@ -263,7 +263,7 @@ public sealed partial class JqTests
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
         Assert.Equal("11\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Contains("cannot index number", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("Cannot index number", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
     [Fact]
