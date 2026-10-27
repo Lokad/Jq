@@ -238,10 +238,12 @@ internal sealed class JqRegexCache : IDisposable
                 int capacity = oldCapacity != 0 && length <= MaximumIdleBytes - 64
                     ? Math.Max(length, Math.Min(MaximumIdleBytes - 64, oldCapacity * 2)) : length;
                 _memory.Resize(64L + oldCapacity + capacity);
+                cache._budget.CheckCancellation();
                 try { _buffer = new byte[capacity]; }
                 catch { _memory.Resize(previous); throw; }
                 if (oldCapacity != 0) _memory.Resize(64L + capacity);
             }
+            cache._budget.CheckCancellation();
             int written = Utf8Text.Encode(text, _buffer);
             return _buffer.AsMemory(0, written);
         }

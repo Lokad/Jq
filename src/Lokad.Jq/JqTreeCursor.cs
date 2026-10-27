@@ -19,9 +19,11 @@ internal sealed class JqTreeCursor(JqBudget budget) : IDisposable
             int capacity = JqBudget.BufferCapacity((long)_frames.Count + 1, Math.Max(4, 2L * _frames.Capacity));
             long previous = _memory.LastAdmittedBytes;
             _memory.Resize(checked(previous + 128L * capacity));
+            budget.CheckCancellation();
             _frames.Capacity = capacity;
             if (previous != 0) _memory.Resize(128L * capacity);
         }
+        budget.CheckCancellation();
         _frames.Add(new Frame(container));
     }
 

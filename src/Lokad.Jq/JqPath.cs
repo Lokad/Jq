@@ -747,6 +747,7 @@ internal static class JqPathDeletes
         using var storage = new JqStorage(context.Budget.MemoryBudget);
         // Sorting workspace and the retained index vector. Paths stay borrowed.
         storage.ReserveBytes(64 + 32L * paths.Count);
+        context.Budget.CheckCancellation();
         using var order = new PathOrder(context, storage);
         int[] sorted = JqComparer.OrderBy(Enumerable.Range(0, paths.Count), index => paths[index], order).ToArray();
         var frames = new List<DeleteFrame>();
@@ -797,10 +798,12 @@ internal static class JqPathDeletes
                     int previous = frames.Capacity;
                     int capacity = JqBudget.BufferCapacity((long)frames.Count + 1, Math.Max(4, 2L * previous));
                     storage.ReserveBytes(8L * capacity, 1);
+                    context.Budget.CheckCancellation();
                     frames.Capacity = capacity;
                     if (previous != 0) storage.DiscardBytes(8L * previous);
                 }
                 storage.ReserveBytes(256, 1);
+                context.Budget.CheckCancellation();
                 frames.Add(new DeleteFrame(context, storage));
             }
             DeleteFrame frame = frames[active++];
@@ -934,12 +937,13 @@ internal static class JqPathDeletes
         internal void Remove(JqValueSegment key)
         {
             context.Budget.CheckCancellation();
-            if (_removals is null) { storage.ReserveBytes(32, 1); _removals = []; }
+            if (_removals is null) { storage.ReserveBytes(32, 1); context.Budget.CheckCancellation(); _removals = []; }
             if (_removals.Count == _removals.Capacity)
             {
                 int previous = _removals.Capacity;
                 int capacity = JqBudget.BufferCapacity((long)_removals.Count + 1, Math.Max(4, 2L * previous));
                 storage.ReserveBytes(8L * capacity, 1);
+                context.Budget.CheckCancellation();
                 _removals.Capacity = capacity;
                 if (previous != 0) storage.DiscardBytes(8L * previous);
             }
@@ -956,6 +960,7 @@ internal static class JqPathDeletes
                     if (_removed.Length < Count)
                     {
                         storage.ReserveBytes(Count, 1);
+                        context.Budget.CheckCancellation();
                         int previous = _removed.Length;
                         _removed = new bool[Count];
                         if (previous != 0) storage.DiscardBytes(previous);
@@ -1040,12 +1045,13 @@ internal static class JqPathDeletes
 
         private void EnsureItems(int required)
         {
-            if (_items is null) { storage.ReserveBytes(32, 1); _items = []; }
+            if (_items is null) { storage.ReserveBytes(32, 1); context.Budget.CheckCancellation(); _items = []; }
             if (required > _items.Capacity)
             {
                 int previous = _items.Capacity;
                 int capacity = JqBudget.BufferCapacity(required, Math.Max(4, 2L * previous));
                 storage.ReserveBytes(8L * capacity, 1);
+                context.Budget.CheckCancellation();
                 _items.Capacity = capacity;
                 if (previous != 0) storage.DiscardBytes(8L * previous);
             }
@@ -1056,12 +1062,13 @@ internal static class JqPathDeletes
 
         private void ChangeObject(string key, Change change)
         {
-            if (_changes is null) { storage.ReserveBytes(64, 1); _changes = new(StringComparer.Ordinal); }
+            if (_changes is null) { storage.ReserveBytes(64, 1); context.Budget.CheckCancellation(); _changes = new(StringComparer.Ordinal); }
             if (_changes.Count == _changeCapacity && !_changes.ContainsKey(key))
             {
                 int requested = JqBudget.BufferCapacity((long)_changes.Count + 1, Math.Max(4, 2L * _changeCapacity));
                 // Dictionary prime rounding is below twice the requested size.
                 storage.ReserveBytes(128L * requested, 1);
+                context.Budget.CheckCancellation();
                 int capacity = _changes.EnsureCapacity(requested);
                 storage.DiscardBytes(128L * requested - 64L * capacity + 64L * _changeCapacity);
                 _changeCapacity = capacity;
@@ -1110,7 +1117,7 @@ internal static class JqPathDeletes
         private JsonNode? Value(JqValueSegment segment, ref JsonObject? synthetic)
         {
             if (segment is not SliceSegment slice) return segment.ToJson();
-            if (synthetic is null) { storage.ReserveBytes(384, 1); synthetic = new JsonObject(); }
+            if (synthetic is null) { storage.ReserveBytes(384, 1); context.Budget.CheckCancellation(); synthetic = new JsonObject(); }
             synthetic["start"] = slice.Start is { } start ? JqRuntime.CreateNumber(start) : null;
             synthetic["end"] = slice.End is { } end ? JqRuntime.CreateNumber(end) : null;
             return synthetic;

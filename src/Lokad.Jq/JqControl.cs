@@ -144,6 +144,7 @@ internal sealed class LabelFilter(object Label, JqFilter Body) : JqFilter
         storage.ReserveBytes(128, 1);
         try
         {
+            context.Budget.CheckCancellation();
             JqEnvironment scope = environment.ExtendLabel(Label, context.NextLabel());
             var results = evaluate(scope).GetAsyncEnumerator();
             await using var resultsLifetime = results.ConfigureAwait(false);

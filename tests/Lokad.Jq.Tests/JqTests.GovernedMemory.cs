@@ -93,10 +93,10 @@ public sealed partial class JqTests
         byte[] buffer = [];
         using (var reservation = new JqMemoryReservation(memory))
         {
-            reservation.ReplaceBuffer(ref buffer, 3);
+            reservation.ReplaceBuffer(ref buffer, 3, CancellationToken.None);
             buffer[0] = 42;
             byte[] previous = buffer;
-            Assert.Throws<JqQuotaException>(() => reservation.ReplaceBuffer(ref buffer, 6));
+            Assert.Throws<JqQuotaException>(() => reservation.ReplaceBuffer(ref buffer, 6, CancellationToken.None));
             Assert.Same(previous, buffer);
             Assert.Equal(42, buffer[0]);
             Assert.Equal(3, reservation.LastAdmittedBytes);

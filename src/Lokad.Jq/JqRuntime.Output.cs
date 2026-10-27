@@ -60,7 +60,7 @@ internal sealed partial class JqRuntime
             if (_rawBuffer.Length < length)
             {
                 int capacity = JqBudget.BufferCapacity(length, 2L * _rawBuffer.Length);
-                _rawMemory.ReplaceBuffer(ref _rawBuffer, capacity);
+                _rawMemory.ReplaceBuffer(ref _rawBuffer, capacity, budget.CancellationToken);
             }
             int written = Utf8Text.Encode(text, _rawBuffer);
             if (terminator is byte ending)

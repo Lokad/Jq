@@ -158,11 +158,43 @@ public sealed partial class JqTests
 
     private sealed class AdmissionCallbackBudget(IMemoryBudget inner, Action onAdmission) : IMemoryBudget
     {
-        public IMemoryScope CreateScope() => inner.CreateScope();
-        public bool TryReserve(long bytes, [NotNullWhen(true)] out IMemoryReservation? reservation)
+        public IMemoryScope CreateScope() => new Scope(inner.CreateScope(), onAdmission);
+
+        public bool TryReserve(long bytes, [NotNullWhen(true)] out IMemoryReservation? reservation) =>
+            Reserve(inner, onAdmission, bytes, out reservation);
+
+        private static bool Reserve(IMemoryBudget budget, Action callback, long bytes,
+            [NotNullWhen(true)] out IMemoryReservation? reservation)
         {
-            onAdmission();
-            return inner.TryReserve(bytes, out reservation);
+            if (!budget.TryReserve(bytes, out var owned))
+            {
+                reservation = null;
+                callback();
+                return false;
+            }
+            reservation = new Reservation(owned, callback);
+            callback();
+            return true;
+        }
+
+        private sealed class Scope(IMemoryScope inner, Action callback) : IMemoryScope
+        {
+            public IMemoryScope CreateScope() => new Scope(inner.CreateScope(), callback);
+            public bool TryReserve(long bytes, [NotNullWhen(true)] out IMemoryReservation? reservation) =>
+                Reserve(inner, callback, bytes, out reservation);
+            public void Dispose() => inner.Dispose();
+        }
+
+        private sealed class Reservation(IMemoryReservation inner, Action callback) : IMemoryReservation
+        {
+            public long Bytes => inner.Bytes;
+            public bool TryResize(long bytes)
+            {
+                bool admitted = inner.TryResize(bytes);
+                callback();
+                return admitted;
+            }
+            public void Dispose() => inner.Dispose();
         }
     }
 }

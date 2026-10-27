@@ -24,6 +24,7 @@ internal sealed class JqScopeStorage : IDisposable
         _budget.CheckCancellation();
         _storage.ReserveBytes(bytes, smallAllocations);
         _bytes = checked(_bytes + bytes);
+        _budget.CheckCancellation();
     }
 
     internal void Release(long bytes)

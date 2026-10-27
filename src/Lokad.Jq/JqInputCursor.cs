@@ -327,7 +327,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     {
         _budget.CheckCancellation();
         if (_readBuffer.Length == 0)
-            _readMemory.ReplaceBuffer(ref _readBuffer, ChunkSize);
+            _readMemory.ReplaceBuffer(ref _readBuffer, ChunkSize, _cancellationToken);
         JqFileDescriptor descriptor = _owned ?? _stdin;
         JqByteReadResult read;
         try
@@ -831,7 +831,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         long needed = (long)_count + additional;
         int capacity = JqBudget.BufferCapacity(needed, _buffer.Length == 0 ? ChunkSize : 2L * _buffer.Length);
         _budget.CheckCancellation();
-        _bufferMemory.ReplaceBuffer(ref _buffer, capacity, _start, _count);
+        _bufferMemory.ReplaceBuffer(ref _buffer, capacity, _start, _count, _cancellationToken);
         _start = 0;
     }
 

@@ -350,6 +350,7 @@ internal static class JqLoop
                             // Slots include suspended iterators and their filter cursors.
                             long previous = memory.LastAdmittedBytes;
                             memory.Resize(checked(previous + 512L * capacity));
+                            context.Budget.CheckCancellation();
                             pending.Capacity = capacity;
                             if (previous != 0) memory.Resize(512L * capacity);
                         }
@@ -453,6 +454,7 @@ internal sealed class WalkFilter(JqFilter Body) : JqFilter
                         int capacity = checked(Math.Max(4, pending.Capacity * 2));
                         long previous = memory.LastAdmittedBytes;
                         memory.Resize(checked(previous + 128L * capacity));
+                        context.Budget.CheckCancellation();
                         pending.Capacity = capacity;
                         if (previous != 0) memory.Resize(128L * capacity);
                     }

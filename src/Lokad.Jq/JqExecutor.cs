@@ -52,6 +52,7 @@ internal static class JqExecutor
                 budget.CheckCancellation();
                 using var informationMemory = new JqMemoryReservation(memoryScope);
                 informationMemory.Resize(Encoding.UTF8.GetByteCount(information));
+                budget.CheckCancellation();
                 return await host.AppendAsync(invocation.StdOut, Utf8Text.Encode(information), cancellationToken).ConfigureAwait(false);
             }
             catch (JqQuotaException exception)

@@ -32,6 +32,7 @@ internal static class JqDiagnosticWriter
             await WriteRefusalAsync(host, descriptor, cancellationToken).ConfigureAwait(false);
             return null;
         }
+        cancellationToken.ThrowIfCancellationRequested();
         var bytes = new byte[(int)length];
         int offset = 0;
         foreach (string part in parts)

@@ -654,7 +654,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                     long bytes = checked(capacity * (1024L + 256L * definition.Arity));
                     context.Budget.CheckCancellation();
                     storage.ReserveBytes(bytes, capacity);
-                    try { pending.Capacity = capacity; }
+                    try { context.Budget.CheckCancellation(); pending.Capacity = capacity; }
                     catch { storage.DiscardBytes(bytes); throw; }
                     storage.DiscardBytes(arenaBytes);
                     arenaBytes = bytes;
@@ -776,6 +776,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                         long bytes = 256L + 192L * definition.Arity;
                         storage.ReserveBytes(bytes, definition.Arity + 1);
                         capturedBytes = checked(capturedBytes + bytes);
+                        context.Budget.CheckCancellation();
                         next.TransferScopes(ref capturedScopes);
                         break;
                     }

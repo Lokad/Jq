@@ -49,9 +49,10 @@ internal static class JqHostExtensions
         {
             const int initialCapacity = 4096;
             outputMemory.Resize(initialCapacity);
+            cancellationToken.ThrowIfCancellationRequested();
             using var output = new MemoryStream(initialCapacity);
             byte[] buffer = [];
-            readMemory.ReplaceBuffer(ref buffer, 8192);
+            readMemory.ReplaceBuffer(ref buffer, 8192, cancellationToken);
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -65,6 +66,7 @@ internal static class JqHostExtensions
                     int previous = output.Capacity;
                     int capacity = JqBudget.BufferCapacity(required, Math.Max(256, 2L * previous));
                     outputMemory.Resize((long)previous + capacity);
+                    cancellationToken.ThrowIfCancellationRequested();
                     try { output.Capacity = capacity; }
                     catch
                     {
@@ -73,6 +75,7 @@ internal static class JqHostExtensions
                     }
                     outputMemory.Resize(capacity);
                 }
+                cancellationToken.ThrowIfCancellationRequested();
                 output.Write(buffer.AsSpan(0, read.BytesRead));
                 if (read.ReachedEoF)
                 {

@@ -598,6 +598,7 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
         }
         using var memory = new JqMemoryReservation(context.Budget.MemoryBudget);
         memory.Resize(128);
+        context.Budget.CheckCancellation();
         var current = new List<JsonNode?>();
         var bestKeys = new List<JsonNode?>();
         JsonNode? best = null;
@@ -615,6 +616,7 @@ internal sealed class MinMaxByFilter(JqFilter Keys, bool TakeMax) : JqFilter
                     int capacity = JqBudget.BufferCapacity((long)current.Count + 1, Math.Max(4, 2L * previous));
                     long retained = memory.LastAdmittedBytes;
                     memory.Resize(checked(retained + 8L * capacity));
+                    context.Budget.CheckCancellation();
                     current.Capacity = capacity;
                     if (previous != 0) memory.Resize(retained + 8L * (capacity - previous));
                 }

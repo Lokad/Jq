@@ -41,13 +41,14 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
         return true;
     }
 
-    internal void ReplaceBuffer(ref byte[] buffer, int capacity) =>
-        ReplaceBuffer(ref buffer, capacity, 0, 0);
+    internal void ReplaceBuffer(ref byte[] buffer, int capacity, CancellationToken cancellationToken) =>
+        ReplaceBuffer(ref buffer, capacity, 0, 0, cancellationToken);
 
-    internal void ReplaceBuffer(ref byte[] buffer, int capacity, int offset, int count)
+    internal void ReplaceBuffer(ref byte[] buffer, int capacity, int offset, int count, CancellationToken cancellationToken)
     {
         long previous = _bytes;
         Resize(checked(previous + capacity));
+        cancellationToken.ThrowIfCancellationRequested();
         try
         {
             var replacement = new byte[capacity];
@@ -60,6 +61,7 @@ internal sealed class JqMemoryReservation(IMemoryBudget? memoryBudget) : IDispos
             throw;
         }
         if (previous != 0) Resize(capacity);
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     public void Dispose()

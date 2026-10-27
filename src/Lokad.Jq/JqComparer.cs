@@ -234,6 +234,7 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
             int capacity = JqBudget.BufferCapacity(count, 2L * buffer.Length);
             long previous = _memory.LastAdmittedBytes;
             _memory.Resize(checked(previous + (long)capacity * IntPtr.Size));
+            budget.CheckCancellation();
             int oldLength = buffer.Length;
             try { buffer = new string[capacity]; }
             catch { _memory.Resize(previous); throw; }
