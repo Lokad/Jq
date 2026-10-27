@@ -881,6 +881,73 @@ foreach (bool separator in new[] { false, true })
         && host.Output(JqFileDescriptor.StdOut) == "\u001e" + value + "\n"
         && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
 }
+{
+    var host = new SmokeHost(); host.SetInput("null" + new string(' ', 65532));
+    var memory = new BenchmarkMemoryBudget(1024 * 1024);
+    Check("repeated fromjson scratch refunds", await Command(["-Rrs",
+        "\"ready\", (. as $t | range(0;32) | $t | fromjson)"], []).ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "ready\n" + string.Concat(Enumerable.Repeat("null\n", 32))
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    Check("fromjson decoded value ownership", await Command(["-nr", "--arg", "text",
+        "{\"x\":\"ok\"}" + new string(' ', 65526), "\"ready\", ($text|fromjson|.x)"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "ready\nok\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    Check("necessary fromjson scratch refusal", await Command(["-nr", "--arg", "text", "null" + new string(' ', 65532),
+        "\"ready\", (try ($text|fromjson) catch \"caught\")"], []).ExecuteAsync(host, memory, CancellationToken.None) == 5
+        && host.Output(JqFileDescriptor.StdOut) == "ready\n" && host.Output(JqFileDescriptor.StdErr) == "jq: memory budget exceeded\n"
+        && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
+{
+    var host = new SmokeHost(); host.SetInput("[" + string.Join(',', Enumerable.Range(0, 10000)) + "]");
+    var memory = new BenchmarkMemoryBudget(1024 * 1024);
+    Check("unsupported format avoids conversion", await Command(["-cr", "\"ready\", (try @missing catch \"caught\")"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "ready\ncaught\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
+foreach (var (filter, output) in new[] { ("@missing \"literal\"", "literal\n"), ("@missing \"\\(empty)\"", "") })
+{
+    var host = new SmokeHost();
+    Check("unused format remains lazy " + filter, await Command(["-nr", filter], []).ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == output && host.Output(JqFileDescriptor.StdErr) == "");
+}
+foreach (string expression in new[] { "\"x\" * 1048576", "$text" })
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(16 * 1024 * 1024);
+    using var cancellation = new CancellationTokenSource();
+    var hooked = new SmokeAdmissionBudget(memory, () => { if (memory.ReservedBytes >= 1024 * 1024) cancellation.Cancel(); });
+    var command = Command(["-nr", "--arg", "text", new string('x', 1024 * 1024), "\"ready\", (" + expression + ")"], []);
+    bool canceled = false;
+    long before = GC.GetAllocatedBytesForCurrentThread();
+    try { await command.ExecuteAsync(host, hooked, cancellation.Token); }
+    catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { canceled = true; }
+    long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+    Check("post-admission cancellation " + expression, canceled && allocated is >= 0 and <= 256 * 1024
+        && host.Output(JqFileDescriptor.StdOut) == "ready\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    using var cancellation = new CancellationTokenSource();
+    bool armed = false;
+    host.BeforeAppend = descriptor => { if (descriptor == JqFileDescriptor.StdOut) armed = true; };
+    var hooked = new SmokeAdmissionBudget(memory, () => { if (armed) cancellation.Cancel(); });
+    Check("refusal takes precedence over cancellation", await Command(["-nr", "\"ready\", (try (\"x\" * 1048576) catch \"caught\")"], [])
+        .ExecuteAsync(host, hooked, cancellation.Token) == 5
+        && cancellation.IsCancellationRequested && host.Output(JqFileDescriptor.StdOut) == "ready\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 
@@ -905,6 +972,48 @@ static bool ValuesMatch(string output, string[] expected)
 sealed class EpochClock : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
+}
+
+// A host admission callback covers both initial reservations and later growth.
+sealed class SmokeAdmissionBudget(IMemoryBudget inner, Action callback) : IMemoryBudget
+{
+    public IMemoryScope CreateScope() => new Scope(inner.CreateScope(), callback);
+    public bool TryReserve(long bytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IMemoryReservation? reservation) =>
+        Reserve(inner, callback, bytes, out reservation);
+
+    private static bool Reserve(IMemoryBudget budget, Action callback, long bytes,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IMemoryReservation? reservation)
+    {
+        if (!budget.TryReserve(bytes, out var owned))
+        {
+            reservation = null;
+            callback();
+            return false;
+        }
+        reservation = new Reservation(owned, callback);
+        callback();
+        return true;
+    }
+
+    private sealed class Scope(IMemoryScope inner, Action callback) : IMemoryScope
+    {
+        public IMemoryScope CreateScope() => new Scope(inner.CreateScope(), callback);
+        public bool TryReserve(long bytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IMemoryReservation? reservation) =>
+            Reserve(inner, callback, bytes, out reservation);
+        public void Dispose() => inner.Dispose();
+    }
+
+    private sealed class Reservation(IMemoryReservation inner, Action callback) : IMemoryReservation
+    {
+        public long Bytes => inner.Bytes;
+        public bool TryResize(long bytes)
+        {
+            bool admitted = inner.TryResize(bytes);
+            callback();
+            return admitted;
+        }
+        public void Dispose() => inner.Dispose();
+    }
 }
 
 sealed class SmokeCooperatingRegex(CancellationTokenSource cancellation) : IJqRegexEngine

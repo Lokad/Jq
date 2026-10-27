@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Refund `fromjson` UTF-8 conversion storage after parsing while retaining decoded values.
+- Reject unsupported formats before serializing their input, preserving lazy templates.
+- Observe cancellation after construction admission, including direct buffer growth,
+  while preserving terminal refusal and earlier output.
+
 - Preview failed join accumulators without constructing a full intermediate string.
 - Admit active serialization replacement overlap and retire completed storage at
   result handoff, preserving framing and pending host borrows.

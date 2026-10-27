@@ -519,6 +519,12 @@ internal static class GovernorRunner
             "0|strftime($format)|length"], "", "12000\n");
         Add("date-directive-dispatch", 10000, ["-nc", "--arg", "text", string.Concat(Enumerable.Repeat("1970", 10000)),
             "--arg", "format", string.Concat(Enumerable.Repeat("%Y", 10000)), "$text|strptime($format)"], "", "[1970,0,0,0,0,0,8,367]\n");
+        Add("fromjson-repeated-null", 32, ["-Rrs", ". as $t | range(0;32) | $t | fromjson"],
+            "null" + new string(' ', 65532), string.Concat(Enumerable.Repeat("null\n", 32)));
+        Add("fromjson-repeated-value", 32, ["-nr", "--arg", "text", "\"ok\"" + new string(' ', 65532),
+            "range(0;32) | $text | fromjson"], "", string.Concat(Enumerable.Repeat("ok\n", 32)));
+        Add("format-unknown-large-input", 10000, ["-cr", "try @missing catch \"caught\""],
+            "[" + string.Join(',', Enumerable.Range(0, 10000)) + "]", "caught\n");
         Add("uri-escaped-records", records, ["-r", "@uri"],
             string.Concat(Enumerable.Repeat("\"a b\"\n", records)), string.Concat(Enumerable.Repeat("a%20b\n", records)));
         Add("ascii-changed-records", records, ["-r", "ascii_upcase"],

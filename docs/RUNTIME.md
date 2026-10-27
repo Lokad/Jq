@@ -70,6 +70,8 @@ JSON data imports and `--slurpfile` accept one leading UTF-8 BOM; raw file value
 retain it as text.
 Base64 alphabet/quantum and URI percent syntax are checked before admitting
 decoded buffers. Successful decoding refunds scratch after constructing its result.
+`fromjson` refunds its UTF-8 conversion buffer after parsing; decoded values keep
+their own admission.
 
 ## Memory admission
 
@@ -162,7 +164,8 @@ Comparisons, ordering, serialization and regex subjects reuse admitted scratch
 where its lifetime is known. Replacements cover overlapping old/new capacity;
 completed serialization replacements retire before result handoff.
 Fresh strings, date remainders and runtime/CLI error text admit before copying;
-long scans observe cancellation. Type errors render bounded operand previews,
+construction observes cancellation after admission, and long scans poll it.
+Type errors render bounded operand previews,
 including private string accumulators. Explicit error and halt payloads keep
 their full contents and existing ownership.
 
