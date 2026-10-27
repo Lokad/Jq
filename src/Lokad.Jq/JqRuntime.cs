@@ -1750,29 +1750,30 @@ internal sealed partial class JqRuntime(JqBudget budget)
 
     internal string Format(string format, JsonNode? value)
     {
-        if (format == "json") return Serialize(value, false, null, false);
-        if (format == "csv") return Csv(value);
-        if (format == "tsv") return Tsv(value);
-        if (format == "sh") return Sh(value);
-        if (format == "urid") return UriDecode(ToJqString(value), value);
-        var text = ToJqString(value);
+        budget.CheckCancellation();
         switch (format)
         {
-            case "text": return text;
-            case "html": return Html(text);
-            case "uri": return UriEncode();
+            case "json": return Serialize(value, false, null, false);
+            case "csv": return Csv(value);
+            case "tsv": return Tsv(value);
+            case "sh": return Sh(value);
+            case "urid": return UriDecode(ToJqString(value), value);
+            case "text": return ToJqString(value);
+            case "html": return Html(ToJqString(value));
+            case "uri": return UriEncode(ToJqString(value));
             case "base64":
             {
+                string text = ToJqString(value);
                 var bytes = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, budget.CancellationToken), 0);
                 budget.ReserveString(4 * ((bytes + 2L) / 3));
                 budget.ReserveBytes(bytes);
                 return Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
             }
-            case "base64d": return Base64Decode(text, value);
+            case "base64d": return Base64Decode(ToJqString(value), value);
             default: throw new JqException($"unsupported format @{format}");
         }
 
-        string UriEncode()
+        string UriEncode(string text)
         {
             budget.CheckCancellation();
             long length = 0;
