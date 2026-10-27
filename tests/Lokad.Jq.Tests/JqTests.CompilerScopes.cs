@@ -9,7 +9,7 @@ public sealed partial class JqTests
     [InlineData(100)]
     public void Jq_EmptyPrefixAvoidsUnusedEnvironmentCollections(int functions)
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var environment = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
         for (int i = 0; i < functions; i++)
             environment = environment.ExtendFunction(new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
@@ -35,7 +35,7 @@ public sealed partial class JqTests
     public void Jq_EmptyPrefixStillObservesCancellation()
     {
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(cancellation.Token);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
         var environment = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
         var parser = new JqParser("42", JqProgramSource.Inline, environment, budget);
         cancellation.Cancel();

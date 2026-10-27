@@ -20,7 +20,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq",
             explicitInput ? "-nc" : "-c", explicitInput ? "input" : ".", "/first", "/later")));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, counted, cancellation.Token));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, counted, cancellation.Token));
         Assert.Equal((explicitInput ? "jq: error (at /first:1): " : "jq: parse error: ")
             + "'!' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 1.\n",
             inner.GetOutput(JqFileDescriptor.StdErr));
@@ -46,7 +46,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".", "/input")));
-        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token);
         await host.PendingRead.Task.WaitAsync(TimeSpan.FromSeconds(3));
         try
         {
@@ -74,7 +74,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "try input catch .", "/input")));
-        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token);
         await host.PendingRead.Task.WaitAsync(TimeSpan.FromSeconds(3));
         cancellation.Cancel();
 

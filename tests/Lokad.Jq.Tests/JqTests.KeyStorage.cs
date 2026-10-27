@@ -15,7 +15,7 @@ public sealed partial class JqTests
         var input = new JsonObject();
         foreach (string name in inserted) input.Add(name, new JsonArray(1));
         var root = new BenchmarkMemoryBudget(4096);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var output = Assert.IsType<JsonArray>(new JqRuntime(budget).Keys(input, sorted));
             Assert.Equal(expected, output.Select(item => item?.GetValue<string>()));
@@ -33,7 +33,7 @@ public sealed partial class JqTests
     {
         var input = WideObject(64);
         var root = new BenchmarkMemoryBudget(64 + 88 * 64);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             if (sorted)
@@ -54,7 +54,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(128 * 1024);
         using var cancellation = new CancellationTokenSource();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
             Assert.ThrowsAny<OperationCanceledException>(() => new JqRuntime(budget).Keys(WideObject(64), sorted));
         Assert.Equal(0, root.ReservedBytes);
     }

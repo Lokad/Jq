@@ -29,7 +29,7 @@ internal sealed class LocalWorkload
     {
         using var host = new BenchmarkHost(_input, false);
         int exit = await (bind ? BenchmarkExecution.Recognize(Arguments) : _command)
-            .ExecuteAsync(host, CancellationToken.None).ConfigureAwait(false);
+            .ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None).ConfigureAwait(false);
         var result = host.Finish(exit);
         BenchmarkExecution.Verify(result, _expected);
         return result.Digest.Length;

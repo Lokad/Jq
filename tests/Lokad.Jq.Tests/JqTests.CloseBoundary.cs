@@ -19,7 +19,7 @@ public sealed partial class JqTests
         var host = new CloseFaultHost(source, overflow);
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/", filter, "/input")));
-        var failure = await Assert.ThrowsAsync<JqHostFailureException>(() => command.ExecuteAsync(host, root, CancellationToken.None));
+        var failure = await Assert.ThrowsAsync<JqHostFailureException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.IsType(overflow ? typeof(OverflowException) : typeof(ArgumentException), failure.InnerException);
         Assert.Equal(output, source.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(source.GetOutput(JqFileDescriptor.StdErr));
@@ -40,10 +40,10 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(cancel ? 64 * 1024 : 8192);
         var host = new CloseFaultHost(source, false);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "/input")));
-        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, root, cancellation.Token));
+        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token));
         else
         {
-            Assert.Equal(5, await command.ExecuteAsync(host, root, cancellation.Token));
+            Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token));
             Assert.Equal("jq: memory budget exceeded\n", source.GetOutput(JqFileDescriptor.StdErr));
         }
         Assert.Empty(source.GetOutput(JqFileDescriptor.StdOut));
@@ -64,7 +64,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         string[] arguments = filter == "." ? [filter, "/input"] : ["-n", filter, "/input"];
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
-        Task<int> pending = command.ExecuteAsync(host, root, CancellationToken.None);
+        Task<int> pending = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None);
         await host.CloseEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False(pending.IsCompleted);
         Assert.True(root.ReservedBytes > 0);
@@ -82,7 +82,7 @@ public sealed partial class JqTests
         var host = new CloseFaultHost(source, false);
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--slurpfile", "v", "/input", "$v")));
-        await Assert.ThrowsAsync<JqHostFailureException>(() => command.ExecuteAsync(host, root, CancellationToken.None));
+        await Assert.ThrowsAsync<JqHostFailureException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(0, source.OpenFileCount);
         Assert.Single(source.ClosedDescriptors);
         Assert.Equal(0, root.ReservedBytes);

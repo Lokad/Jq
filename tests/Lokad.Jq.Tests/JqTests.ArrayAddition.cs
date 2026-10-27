@@ -12,7 +12,7 @@ public sealed partial class JqTests
         for (int index = 0; index < 1024; index++) fragments.Add(new JsonArray(index));
         var root = new BenchmarkMemoryBudget(128 * 1024);
         var counted = new CountingMemoryBudget(root);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
             var result = Assert.IsType<JsonArray>(await new JqRuntime(budget).AddValues(fragments.ToAsyncEnumerable()));
             Assert.Equal(1024, result.Count);
@@ -43,7 +43,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -56,7 +56,7 @@ public sealed partial class JqTests
         var fragment = new JsonArray(1);
         var root = new BenchmarkMemoryBudget(1024);
         using var cancellation = new CancellationTokenSource();
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
             if (cancel) await Assert.ThrowsAsync<OperationCanceledException>(async () => await runtime.AddValues(Generate().ToAsyncEnumerable()));

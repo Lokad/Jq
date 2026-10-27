@@ -15,7 +15,7 @@ public sealed partial class JqTests
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "range(10000) | " + body)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 100);
@@ -31,7 +31,7 @@ public sealed partial class JqTests
         var filter = new ObjectFilter(properties);
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+            new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             context.Budget.BeginRecord();
             var results = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
@@ -63,7 +63,7 @@ public sealed partial class JqTests
             "\"ready\", (try {" + fields + "} catch \"caught\")")));
         try
         {
-            Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+            Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
             Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(Assert.IsAssignableFrom<IMemoryReservation>(pressure).Bytes, root.ReservedBytes);
@@ -83,7 +83,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "\"ready\", (while(true; .) | {a:empty,b:1})", "/input")));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Task.Run(() =>
-            command.ExecuteAsync(host, root, cancellation.Token)).WaitAsync(TimeSpan.FromSeconds(10)));
+            command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token)).WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal("\"ready\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);

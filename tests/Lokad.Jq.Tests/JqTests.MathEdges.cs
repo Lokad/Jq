@@ -27,7 +27,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -38,7 +38,7 @@ public sealed partial class JqTests
     [InlineData("expm1")]
     public void Jq_MathTinyInputsAndZeroSignsDoNotRoundAway(string name)
     {
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(CancellationToken.None));
+        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         foreach (double value in new[] { -0.0, 0.0, double.Epsilon, -double.Epsilon, 1e-20, -1e-20 })
         {
             Assert.True(JqMath.TryEvaluate(context, name, [], JsonValue.Create(value), out JsonNode? result));
@@ -53,7 +53,7 @@ public sealed partial class JqTests
     [InlineData(10.0, 2.088487583762545e-45)]
     public void Jq_MathErfcTailKeepsTheExistingApproximationWithoutSubtractionLoss(double value, double reference)
     {
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(CancellationToken.None));
+        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.True(JqMath.TryEvaluate(context, "erfc", [], JsonValue.Create(value), out JsonNode? result));
         // The existing approximation is deliberately qualified, not libm exact.
         Assert.InRange(JqRuntime.Number(result), reference * 0.9, reference * 1.1);

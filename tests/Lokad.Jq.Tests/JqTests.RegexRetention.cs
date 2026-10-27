@@ -99,7 +99,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-Rc",
             ". as $p | \"x\" | test($p) | empty", "/records")));
         Assert.Equal(0, await command.ExecuteAsync(host,
-            adapted ? engine : JqUtf8RegexEngine.Instance, root, CancellationToken.None));
+            adapted ? engine : Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         if (adapted)

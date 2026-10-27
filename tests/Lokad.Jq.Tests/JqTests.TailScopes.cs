@@ -21,7 +21,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -38,7 +38,7 @@ public sealed partial class JqTests
         host.AddFile("/input", "null\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "\"ready\", (def f($n): if $n==0 then 0 else " + step + " end; try f(5000) catch 42)", "/input")));
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("\"ready\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: filter nesting limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -56,7 +56,7 @@ public sealed partial class JqTests
         host.BeforeByteAppend = () => { if (host.AppendCallCount == 2) cancellation.Cancel(); };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "def spin: .,spin; def f($n): if $n==0 then spin else try f($n-1) catch 42 end; f(3)", "/input")));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, root, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token));
         Assert.Equal("null\nnull\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -80,7 +80,7 @@ public sealed partial class JqTests
         {
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
                 "def f($n): if $n==0 then (\"ready\", \"x\"*10000) else try f($n-1) catch \"caught\" end; f(3)")));
-            Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+            Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
             Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(Assert.IsAssignableFrom<IMemoryReservation>(pressure).Bytes, root.ReservedBytes);
@@ -97,7 +97,7 @@ public sealed partial class JqTests
         host.AddFile("/input", "null\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "def f($n): if $n==0 then . else try f((0,error(\"late\"))) catch 42 end; f(1)", "/input")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("null\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);

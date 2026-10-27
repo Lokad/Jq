@@ -33,7 +33,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(0);
         var memory = new CountingMemoryBudget(root);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token)))
+            new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
         {
             Func<Task> evaluate = paths
                 ? async () => await filter.EvaluatePaths(new JqValuePath([], null, true), context, context.RootEnvironment).SingleAsync()
@@ -57,7 +57,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             body.Contains("10000", StringComparison.Ordinal) ? body : "range(10000) | (" + body + ")")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         string expected = body.Contains("empty", StringComparison.Ordinal) ? ""
             : body.Contains("10000", StringComparison.Ordinal) ? "null\n" : string.Concat(Enumerable.Repeat("null\n", 10000));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
@@ -83,7 +83,7 @@ public sealed partial class JqTests
         try
         {
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "\"ready\", (try (" + body + ") catch \"caught\")")));
-            Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+            Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
             Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(Assert.IsAssignableFrom<IMemoryReservation>(pressure).Bytes, root.ReservedBytes);
@@ -103,7 +103,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(128 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -121,7 +121,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "def f(g;$n): if $n==0 then null as $x | g else def local: 42; f(local;$n-1) end; f(0;3)", "/input")));
-        Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token);
         Assert.Equal("42\n"u8.ToArray(), (await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10))).ToArray());
         long charged = root.ReservedBytes;
         Assert.True(charged > 0);
@@ -146,7 +146,7 @@ public sealed partial class JqTests
         host.AddFile("/input", "null");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "def f(g;$n): if $n==0 then g else def local: $n; f(local;$n-1) end; try f(0;10000) catch 42", "/input")));
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);

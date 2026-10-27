@@ -7,7 +7,7 @@ public sealed partial class JqTests
     private static async Task<(int Exit, string Out, string Err)> RunStreamAsync(IJqHost host, params string[] args)
     {
         var tool = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", args, [])));
-        var exit = await tool.ExecuteAsync(host, CancellationToken.None);
+        var exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
         var inner = host is MockFileSystem direct ? direct : ((ChunkedHost)host).Inner;
         return (exit, inner.GetOutput(JqFileDescriptor.StdOut), inner.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -76,7 +76,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", depth +
             " | [truncate_stream([[0,1,2],\"x\"], [[0,1,2]], null, [], [null,1], [[],1])]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -87,7 +87,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "true | truncate_stream(empty), first(0.5 | truncate_stream(([[0],1], error(\"late\"))))")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("[[0],1]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }

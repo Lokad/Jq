@@ -19,7 +19,7 @@ public sealed partial class JqTests
         var command = LongStreamCommand(mode, false);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(60));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal(records, host.OutputRecords);
         Assert.Equal((long)records * host.InputRecordLength, host.ReadBytes);
         Assert.Equal((long)records * host.OutputRecordLength, host.WrittenBytes);
@@ -55,9 +55,9 @@ public sealed partial class JqTests
         };
 
         if (cancel)
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, memory, cancellation.Token));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         else
-            Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal(8, host.OutputRecords);
         Assert.Equal(1, host.ReadCalls);
         Assert.Equal(1, host.Opens);
@@ -65,7 +65,7 @@ public sealed partial class JqTests
         Assert.Equal(0, memory.ReservedBytes);
         var reuse = new MockFileSystem();
         var next = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "42")));
-        Assert.Equal(0, await next.ExecuteAsync(reuse, memory, CancellationToken.None));
+        Assert.Equal(0, await next.ExecuteAsync(reuse, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("42\n", reuse.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -83,7 +83,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n",
             "null | setpath([range(1000)|0];0) | (" + read + ") | walk(true)")));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        Assert.Equal(0, await command.ExecuteAsync(host, cancellation.Token));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, cancellation.Token));
         Assert.Equal("true\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -98,7 +98,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n",
             "reduce range(" + depth.ToString(CultureInfo.InvariantCulture) + ") as $_ (null; " + wrap + ") | length")));
-        Assert.Equal(status, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         if (status == 0)
         {
             Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
@@ -121,7 +121,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         host.BeforeByteAppend = () => { if (host.AppendCallCount == 8) cancellation.Cancel(); };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, memory, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -133,7 +133,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-c",
             "reduce range(65540;65536;-1) as $i ([]; .[$i]=$i) | .[65536:]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("[null,65537,65538,65539,65540]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -148,7 +148,7 @@ public sealed partial class JqTests
         string expected = "[" + string.Join(',', new[] { final.Year, final.Month - 1, final.Day, 1, 2, 3,
             (int)final.DayOfWeek, final.DayOfYear - 1 }.Select(value => value.ToString(CultureInfo.InvariantCulture))) + "]\n";
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        Assert.Equal(0, await command.ExecuteAsync(host, cancellation.Token));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, cancellation.Token));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }

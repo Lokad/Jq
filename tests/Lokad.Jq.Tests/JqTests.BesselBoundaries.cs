@@ -7,7 +7,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_FirstOrderBesselValuesRetainZeroBitsAndReflectedPoles()
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         foreach (double zero in new[] { 0.0, -0.0 })
         {
             Assert.Equal(BitConverter.DoubleToInt64Bits(zero), BitConverter.DoubleToInt64Bits(JqBessel.J1(zero)));
@@ -35,7 +35,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -52,7 +52,7 @@ public sealed partial class JqTests
         host.AddFile("/input", string.Concat(Enumerable.Repeat("-0\n", records)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "[jn(1;.)|copysign(1;.), (yn(1;.)|isinfinite)]", "/input")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("[-1,true]\n", close ? 1 : records)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);

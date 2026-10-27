@@ -19,7 +19,7 @@ public sealed partial class JqTests
         var memory = new CountingMemoryBudget(root);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "length", "/input")));
 
-        Assert.Equal(0, await command.ExecuteAsync(new ChunkedHost(inner, chunk), memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(new ChunkedHost(inner, chunk), Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("512\n512\n", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.Counts.Refusals);
@@ -70,7 +70,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "length", "/input", "/later")));
-        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token);
         await host.Pending.Task.WaitAsync(TimeSpan.FromSeconds(10));
         long pending = memory.ReservedBytes;
         Assert.InRange(pending, 1, 2 * 1024 * 1024);

@@ -16,7 +16,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new CountingMemoryBudget(root);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ". as $x | range(256) | $x | " + effect + " | empty")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("[\"DEBUG:\"," + input + "]\n", 256))),
             host.GetOutputBytes(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
@@ -33,7 +33,7 @@ public sealed partial class JqTests
         host.SetStandardInput("{\"z\":1,\"a\":\"é\"}");
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-acS", ". as $x | debug | path($x)")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("[\"DEBUG:\",{\"a\":\"\\u00e9\",\"z\":1}]\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal("[]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(0, memory.ReservedBytes);
@@ -49,7 +49,7 @@ public sealed partial class JqTests
         host.SetStandardInput(input);
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "try debug catch \"caught\" | empty")));
-        Assert.Equal(status, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(status == 0 ? "[\"DEBUG:\"," + input + "]\n" : "jq: value nesting limit exceeded\n",
             host.GetOutput(JqFileDescriptor.StdErr));

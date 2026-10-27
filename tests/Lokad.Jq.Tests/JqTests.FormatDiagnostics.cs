@@ -15,7 +15,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -26,7 +26,7 @@ public sealed partial class JqTests
     {
         string name = new('z', 65536);
         var memory = new BenchmarkMemoryBudget(256 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             var failure = Assert.Throws<JqException>(() => runtime.Format(name, new JsonArray()));
@@ -48,7 +48,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "--arg", "name", new string('z', length),
             "\"ready\", (" + operation + ")")));
         long before = GC.GetAllocatedBytesForCurrentThread();
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 256 * 1024);
         Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
@@ -63,7 +63,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(256 * 1024);
         using var cancellation = new CancellationTokenSource();
         var hooked = new AdmissionCallbackBudget(memory, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, hooked, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, hooked, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
@@ -80,7 +80,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(0);
         using var cancellation = new CancellationTokenSource();
         var hooked = new AdmissionCallbackBudget(memory, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, hooked, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, hooked, cancellation.Token))
         {
             var failure = Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).Format("missing", null));
             Assert.True(failure.IsMemoryAdmission);
@@ -97,7 +97,7 @@ public sealed partial class JqTests
         string name = new('z', 65536);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--arg", "name", name,
             "[range(3)|try format($name) catch .] as $errors | $errors|map(length)")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("[65558,65558,65558]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -108,7 +108,7 @@ public sealed partial class JqTests
     {
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var counted = new CountingMemoryBudget(memory);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             for (int record = 0; record < 2500; record++)
@@ -130,7 +130,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem { AppendRemainsOpen = !close };
         host.SetStandardInput(string.Concat(Enumerable.Repeat("bogus\n", 2500)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-Rr", "try format(.) catch length")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("27\n", close ? 1 : 2500)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(close ? 1 : 2500, host.AppendCallCount);
@@ -147,7 +147,7 @@ public sealed partial class JqTests
         host.SetStandardInput(string.Concat(Enumerable.Repeat("bogus\n", 2500)));
         host.BeforeByteAppend = () => { if (host.AppendCallCount == 3) cancellation.Cancel(); };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-Rr", "try format(.) catch length")));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, memory, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal("27\n27\n27\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);

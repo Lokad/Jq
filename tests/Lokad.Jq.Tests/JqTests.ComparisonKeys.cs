@@ -20,7 +20,7 @@ public sealed partial class JqTests
             host.SetStandardInput(input);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-cr",
                 "try " + operation + "(" + key + ") catch .")));
-            Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             bool empty = input == "{}";
             string mapped = empty ? "[]" : key == "empty" ? "[[],[]]" : "[[2],[1]]";
             string suffix = sorting ? "cannot be sorted, as they are not both arrays" : "cannot be iterated over";
@@ -47,7 +47,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "--argjson", "key", key,
             "try " + operation + "($key) catch \"caught\"")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -68,7 +68,7 @@ public sealed partial class JqTests
         string filter = operation + "($key)" + (operation is "min_by" or "max_by" ? "" : " | length");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "--argjson", "key", key, filter)));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -88,7 +88,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("[3,1,2]");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -97,7 +97,7 @@ public sealed partial class JqTests
     public async Task Jq_ComparisonKeysKeepBorrowedValuesAndConstructIndependentOutputs()
     {
         var source = new JsonArray(new JsonArray(2), new JsonArray(1));
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
         var keys = await CollectionKeys.Keyed(source, new IdentityFilter(), context, context.RootEnvironment).ToListAsync();
         Assert.Same(source[0], keys[0].Keys[0]);

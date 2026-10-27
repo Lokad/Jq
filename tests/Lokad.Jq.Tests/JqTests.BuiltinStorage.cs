@@ -19,11 +19,11 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_BuiltinResultsRemainIndependentWithOneAdmissionPerResult()
     {
-        using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(CancellationToken.None));
+        using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         JqFilter filter = new JqParser("builtins", JqProgramSource.Inline, compiler.RootEnvironment, compiler.Budget).Parse();
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var counted = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
         {
             var first = Assert.IsType<JsonArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
             string original = first[0]?.GetValue<string>() ?? throw new InvalidOperationException();
@@ -43,7 +43,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(16 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "try (builtins | length) catch \"caught\"")));
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -54,13 +54,13 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_BuiltinResultsObserveCancellationBeforeAndAfterAdmission(bool duringAdmission)
     {
-        using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(CancellationToken.None));
+        using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         JqFilter filter = new JqParser("builtins", JqProgramSource.Inline, compiler.RootEnvironment, compiler.Budget).Parse();
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource();
         if (!duringAdmission) cancellation.Cancel();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
             await Assert.ThrowsAsync<OperationCanceledException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
         Assert.Equal(0, root.ReservedBytes);
     }

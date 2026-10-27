@@ -16,7 +16,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.AddFile("/input", "[1]");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "\"ready\", ((" + source + ") |= 7)", "/input")));
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("\"ready\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: error (at /input:1): Invalid path expression with result [1]\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);

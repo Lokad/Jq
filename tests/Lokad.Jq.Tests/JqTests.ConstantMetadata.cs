@@ -15,7 +15,7 @@ public sealed partial class JqTests
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("0\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 1000);
@@ -30,7 +30,7 @@ public sealed partial class JqTests
         host.AddFile("/lib/m.jq", "module {a:[1,[2,3],{b:[4]}],dup:1,dup:2}; def f:42;");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/lib",
             "[(\"m\"|modulemeta).a,(\"m\"|modulemeta).dup]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("[[1,[2,3],{\"b\":[4]}],2]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(2, host.ClosedDescriptors.Count);
@@ -47,7 +47,7 @@ public sealed partial class JqTests
         host.AddFile("/lib/m.jq", "module {a:[1,2]}; def f:42;");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/lib",
             "(\"m\"|modulemeta) as $m | [($m.a|.[0]=9),(\"m\"|modulemeta).a,$m.a]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("[[9,2],[1,2],[1,2]]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(2, host.ClosedDescriptors.Count);
@@ -64,7 +64,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var root = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
-        Assert.Equal(3, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(3, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Contains("Module metadata must be constant", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(0, root.ReservedBytes);
@@ -75,12 +75,12 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_ConstantMetadataPreservesRefusalAndCancellation(bool cancel)
     {
-        using var compiler = new JqBudget(CancellationToken.None);
+        using var compiler = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         IReadOnlyList<Token> tokens = Lexer.Tokenize("module {a:[1,[2,3]]};0", JqProgramSource.Inline, compiler);
         using var cancellation = new CancellationTokenSource();
         if (cancel) cancellation.Cancel();
         var root = new BenchmarkMemoryBudget(0);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token))
         {
             var parser = new JqParser(tokens, JqProgramSource.Inline,
                 JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>()), budget);

@@ -28,7 +28,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-nrc", "-L", "/first", "-L", "/second", program)));
 
-        Assert.Equal(status, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(status == 0 ? "1\n" : "", inner.GetOutput(JqFileDescriptor.StdOut));
         string message = "error loading " + (data ? "data file " : "module ") + selected + ": input read failed\n";
         Assert.Equal(status == 0 ? "" : (status == 5 ? "jq: error (at <unknown>): " : "jq: ") + message,
@@ -50,7 +50,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-n", "-L", "/first", "-L", "/second",
             "import \"m\" as m {optional:true}; m::f")));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: error (at <unknown>): undefined function m::f/0\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.DoesNotContain(host.Paths, path => path.StartsWith("/second/", StringComparison.Ordinal));
@@ -89,7 +89,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-n", "-L", "/first", "-L", "/second",
             "import \"m\" as m {optional:" + (optional ? "true" : "false") + "}; 1")));
-        Assert.Equal(optional ? 0 : 3, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(optional ? 0 : 3, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(optional ? "1\n" : "", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(optional ? "" : "jq: error loading module /first/m.jq: input read failed\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.DoesNotContain(host.Paths, path => path.StartsWith("/second/", StringComparison.Ordinal));

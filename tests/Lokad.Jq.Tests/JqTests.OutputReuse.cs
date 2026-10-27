@@ -18,7 +18,7 @@ public sealed partial class JqTests
         host.SetStandardInput((option == "--seq" ? "\u001e" : "") + "[\"é\",7,null]");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", option, ".[]")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(Encoding.UTF8.GetBytes(expected), host.GetOutputBytes(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
         Assert.Equal(3, host.AppendCallCount);
@@ -32,7 +32,7 @@ public sealed partial class JqTests
         host.SetStandardInput("\u001e[\"" + longText + "\",{\"b\":\"é🚀\",\"a\":[null]},0]");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--seq", "--tab", "-S", "-a", ".[]")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("\u001e\"" + longText + "\"\n\u001e{\n\t\"a\": [\n\t\tnull\n\t],\n\t\"b\": \"\\u00e9\\ud83d\\ude80\"\n}\n\u001e0\n",
             host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -45,7 +45,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "range(0;1024)")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host,
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance,
             new BenchmarkMemoryBudget(64 * 1024), CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Range(0, 1024)
             .Select(i => i.ToString(CultureInfo.InvariantCulture) + "\n")), host.GetOutput(JqFileDescriptor.StdOut));
@@ -68,7 +68,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "1, (\"x\" * 1000)")));
         try
         {
-            Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.NotNull(pressure);
@@ -93,7 +93,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", raw ? "-r" : "-c", ".[]", "/data")));
         string first = raw ? text + "\n" : "\"" + text + "\"\n";
 
-        Task<int> execution = command.ExecuteAsync(host, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, cancellation.Token);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.False(execution.IsCompleted);
         Assert.Equal(1, host.AppendCalls);
@@ -127,7 +127,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[\"é🚀\",\"" + longText + "\",\"\",\"z\"]");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", option, ".[]")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(Encoding.UTF8.GetBytes("é🚀" + ending + longText + ending + ending + "z" + ending),
             host.GetOutputBytes(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
@@ -143,7 +143,7 @@ public sealed partial class JqTests
             host.AddFile("/data", "[\"é\",\"too long\"]");
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", ".[]", "/data")));
 
-            Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal(closed ? "é\n" : "é\ntoo long\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Single(host.ClosedDescriptors);

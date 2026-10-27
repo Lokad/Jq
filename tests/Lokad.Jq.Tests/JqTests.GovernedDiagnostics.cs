@@ -15,7 +15,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
             "range(" + count + ") | \"a\" | stderr")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("a\n", count)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(new string('a', count), host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(2 * count, host.AppendCallCount);
@@ -37,7 +37,7 @@ public sealed partial class JqTests
         string large = new('b', 2048);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "--arg", "large", large,
             "(range(32) | \"a\" | stderr | empty), ($large | stderr)")));
-        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal("a"u8.ToArray(), pending.ToArray());
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
@@ -70,7 +70,7 @@ public sealed partial class JqTests
         var inner = new MockFileSystem();
         var host = new MemoryBorrowHost(inner) { DelayedDescriptor = JqFileDescriptor.StdErr };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "(\"\" | stderr), \"later\"")));
-        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.True(pending.IsEmpty);
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
@@ -162,7 +162,7 @@ public sealed partial class JqTests
                 Assert.True(memory.TryReserve(limit - memory.ReservedBytes - 4096, out pressure));
         };
 
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -182,7 +182,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r",
             "--arg", "payload", payload, "\"prefix\", ($payload | halt_error(7))")));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.ClosedDescriptors);
@@ -200,7 +200,7 @@ public sealed partial class JqTests
         inner.AddFile("/input", "\"café 😀\"");
         var host = new MemoryBorrowHost(inner) { DelayedDescriptor = JqFileDescriptor.StdErr };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", operation, "/input")));
-        Task<int> execution = command.ExecuteAsync(host, memory, CancellationToken.None);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(Encoding.UTF8.GetBytes(expected), pending.ToArray());
         Assert.True(memory.ReservedBytes >= pending.Length + 2 * "café 😀".Length);

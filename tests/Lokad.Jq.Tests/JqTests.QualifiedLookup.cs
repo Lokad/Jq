@@ -55,7 +55,7 @@ public sealed partial class JqTests
         var alias = root.ExtendClosure("g", older);
         Assert.True(alias.TryGetFunctionQualified("g", 0, out var imported));
         Assert.Same(older, imported);
-        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, null, CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, null, CancellationToken.None);
         var exports = new Dictionary<(string Name, int Arity), JqUserClosure>();
         second.CollectFunctionClosures(exports, budget);
         Assert.Same(newer, exports[("f", 0)]);

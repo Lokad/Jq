@@ -13,7 +13,7 @@ public sealed partial class JqTests
             fragments.Add(new JsonObject { ["k" + index] = index });
         var root = new BenchmarkMemoryBudget(256 * 1024);
         var counted = new CountingMemoryBudget(root);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
             var result = Assert.IsType<JsonObject>(await new JqRuntime(budget).AddValues(fragments.ToAsyncEnumerable()));
             Assert.Equal(1024, result.Count);
@@ -36,7 +36,7 @@ public sealed partial class JqTests
         JsonNode text = JsonValue.Create("x");
         JsonNode obj = new JsonObject { ["a"] = 1 };
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             Assert.Same(text, await runtime.AddValues((new JsonNode?[] { null, text, null }).ToAsyncEnumerable()));
@@ -59,7 +59,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -74,7 +74,7 @@ public sealed partial class JqTests
         JsonNode fragment = strings ? JsonValue.Create("xxxxxxxxxxxxxxxx") : new JsonObject { ["a"] = 1 };
         var root = new BenchmarkMemoryBudget(1024);
         using var cancellation = new CancellationTokenSource();
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
             if (cancel) await Assert.ThrowsAsync<OperationCanceledException>(async () => await runtime.AddValues(Generate().ToAsyncEnumerable()));
@@ -104,7 +104,7 @@ public sealed partial class JqTests
             : string.Concat(Enumerable.Range(0, 1024).Select(index => "{\"k" + index + "\":" + index + "}\n")));
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "add(inputs) | length")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(strings ? "10000\n" : "1024\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -117,7 +117,7 @@ public sealed partial class JqTests
         for (int depth = 0; depth < 64; depth++) deep = new JsonArray(deep);
         var source = new JsonObject { ["a"] = deep };
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var error = await Assert.ThrowsAsync<JqQuotaException>(async () => await new JqRuntime(budget).AddValues(
 (new JsonNode?[] { new JsonObject(), new JsonObject(), source }).ToAsyncEnumerable()));

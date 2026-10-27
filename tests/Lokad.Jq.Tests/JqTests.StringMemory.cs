@@ -24,7 +24,7 @@ public sealed partial class JqTests
             var host = new MockFileSystem { AppendRemainsOpen = !close };
             host.SetStandardInput(string.Concat(Enumerable.Repeat(input + "\n", records)));
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-Rr", filter)));
-            Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
             Assert.Equal(string.Concat(Enumerable.Repeat(output + "\n", close ? 1 : records)), host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(close ? 1 : records, host.AppendCallCount);
@@ -43,7 +43,7 @@ public sealed partial class JqTests
     [InlineData("base64d", "", "")]
     public void Jq_DecodersPreserveUnicodePaddingAndReplacement(string format, string text, string expected)
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         Assert.Equal(expected, new JqRuntime(budget).Format(format, JsonValue.Create(text)));
     }
 
@@ -55,7 +55,7 @@ public sealed partial class JqTests
         string expected = new('é', 100000);
         string text = format == "urid" ? expected : Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(expected));
         var root = new BenchmarkMemoryBudget(400000);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             Assert.Equal(expected, new JqRuntime(budget).Format(format, JsonValue.Create(text)));
             Assert.Equal(400000, root.PeakBytes);
@@ -73,7 +73,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
         JsonNode input = JsonValue.Create(new string('x', 100000));
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
@@ -103,7 +103,7 @@ public sealed partial class JqTests
         {
             if (pressure is null) Assert.True(root.TryReserve(limit - root.ReservedBytes - 4096, out pressure));
         };
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.NotNull(pressure);
@@ -124,7 +124,7 @@ public sealed partial class JqTests
     public async Task Jq_ScalarSlicesAgreeAcrossReadAndTrackedPaths(double? start, double? end, string expected)
     {
         JsonNode input = JsonValue.Create("a🚀bc");
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
         var filter = new SliceFilter(new IdentityFilter(), new LiteralFilter(start.HasValue ? JsonValue.Create(start.Value) : null),
             new LiteralFilter(end.HasValue ? JsonValue.Create(end.Value) : null), false);
@@ -147,7 +147,7 @@ public sealed partial class JqTests
         JsonNode input = JsonValue.Create(text);
         var root = new BenchmarkMemoryBudget(4096);
         using (var cancellation = new CancellationTokenSource())
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token))
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), budget))
         {
             Assert.Same(text, context.Runtime.SliceString(text, null, null));
@@ -174,7 +174,7 @@ public sealed partial class JqTests
     [InlineData("\u0085\u00a0x\u2028\u202f", "x", "x\u2028\u202f", "\u0085\u00a0x")]
     public void Jq_TrimPreservesWhitespaceAndSupplementaryCharacters(string text, string both, string left, string right)
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         JsonNode input = JsonValue.Create(text);
         Assert.Equal(both, runtime.TrimSides(input, true, true).GetValue<string>());
@@ -188,7 +188,7 @@ public sealed partial class JqTests
         string text = new('x', 100000);
         var root = new BenchmarkMemoryBudget(0);
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token);
         var runtime = new JqRuntime(budget);
         JsonNode input = JsonValue.Create(text);
         Assert.Same(text, runtime.TrimSides(input, true, true).GetValue<string>());
@@ -201,7 +201,7 @@ public sealed partial class JqTests
     public void Jq_TrimAdmitsOnlyTheResultSubstring()
     {
         var root = new BenchmarkMemoryBudget(2);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             Assert.Equal("x", runtime.TrimSides(JsonValue.Create(new string(' ', 100000) + "x"), true, true).GetValue<string>());
@@ -229,7 +229,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput(input);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -246,7 +246,7 @@ public sealed partial class JqTests
         JsonNode input = JsonValue.Create(new string('x', 100000));
         var root = new BenchmarkMemoryBudget(0);
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token);
         var runtime = new JqRuntime(budget);
         JsonNode pattern = JsonValue.Create(needle);
         JsonNode? result = runtime.Index(input, pattern, last);
@@ -265,7 +265,7 @@ public sealed partial class JqTests
         string record = new JsonArray(new string('a', 100000)).ToJsonString();
         host.AddFile("/input", string.Concat(Enumerable.Repeat(record + "\n", 20)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".[0] | rindex(\"a\")", "/input")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("99999\n", 20)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -290,7 +290,7 @@ public sealed partial class JqTests
         {
             if (pressure is null) Assert.True(root.TryReserve(limit - root.ReservedBytes - 4096, out pressure));
         };
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -306,7 +306,7 @@ public sealed partial class JqTests
     {
         JsonNode input = new JsonArray(new string('"', 100000));
         var root = new BenchmarkMemoryBudget(2);
-        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         for (int index = 0; index < 2; index++)
             Assert.True(Assert.Throws<JqQuotaException>(() => runtime.Format("csv", input)).IsMemoryAdmission);
@@ -327,7 +327,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput(input);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "@csv")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }

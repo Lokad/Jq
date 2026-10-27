@@ -31,7 +31,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -49,7 +49,7 @@ public sealed partial class JqTests
         {
             var host = new MockFileSystem();
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-            Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(5, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: error (at <unknown>): x\n", host.GetOutput(JqFileDescriptor.StdErr));
         }
@@ -61,7 +61,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1 < 2 < 3")));
 
-        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(3, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Contains("unexpected token", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -139,7 +139,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -189,7 +189,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -212,7 +212,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -244,7 +244,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -255,7 +255,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "(false, null) // (7, 8)")));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("7\n8\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -289,7 +289,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -305,7 +305,7 @@ public sealed partial class JqTests
             var host = new MockFileSystem();
             host.SetStandardInput("null");
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter)));
-            Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(5, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Contains("cannot iterate over null", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         }
@@ -313,7 +313,7 @@ public sealed partial class JqTests
         var caught = new MockFileSystem();
         caught.SetStandardInput("null");
         var caughtTool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "try .[] catch .")));
-        Assert.Equal(0, await caughtTool.ExecuteAsync(caught, CancellationToken.None));
+        Assert.Equal(0, await caughtTool.ExecuteAsync(caught, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("\"cannot iterate over null\"\n", caught.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -324,7 +324,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "{a:range(0;300000)}? | length")));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -342,7 +342,7 @@ public sealed partial class JqTests
         {
             var host = new MockFileSystem();
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-            Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(5, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: error (at <unknown>): x\n", host.GetOutput(JqFileDescriptor.StdErr));
         }
@@ -355,7 +355,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[[{\"a\":1}]]");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".. | .a?")));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -369,7 +369,7 @@ public sealed partial class JqTests
         host.SetStandardInput(input);
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -388,7 +388,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -402,7 +402,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(3, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expectedError, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -416,7 +416,7 @@ public sealed partial class JqTests
         host.SetStandardInput("{\"foo\":1}");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -432,7 +432,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(3, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(3, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Contains(diagnostic, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Contains("line 1 column", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
@@ -456,7 +456,7 @@ public sealed partial class JqTests
         {
             var host = new MockFileSystem();
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-            Assert.Equal(exit, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(exit, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         }
@@ -469,7 +469,7 @@ public sealed partial class JqTests
         host.SetStandardInput("{\"a\":1,\"b\":2,\"a$2\":4}");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "{\"a\",b,\"a$\\(1+1)\"}")));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("{\n  \"a\": 1,\n  \"b\": 2,\n  \"a$2\": 4\n}\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -481,7 +481,7 @@ public sealed partial class JqTests
         host.SetStandardInput("{\"(\":1}");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "\"a\\(.[\"(\"])b\"")));
 
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("\"a1b\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }

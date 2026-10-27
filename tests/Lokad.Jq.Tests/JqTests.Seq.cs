@@ -8,7 +8,7 @@ public sealed partial class JqTests
     private static async Task<(int Exit, string Out, string Err)> RunSeqAsync(IJqHost host, params string[] args)
     {
         var tool = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", args, [])));
-        var exit = await tool.ExecuteAsync(host, CancellationToken.None);
+        var exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
         var inner = host is MockFileSystem direct ? direct : ((ChunkedHost)host).Inner;
         return (exit, inner.GetOutput(JqFileDescriptor.StdOut), inner.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -299,7 +299,7 @@ public sealed partial class JqTests
             int exit;
             try
             {
-                exit = await tool.ExecuteAsync(host, CancellationToken.None);
+                exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
             }
             catch (Exception ex)
             {

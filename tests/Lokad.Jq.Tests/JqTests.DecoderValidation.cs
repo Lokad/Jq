@@ -18,7 +18,7 @@ public sealed partial class JqTests
     {
         JsonNode input = JsonValue.Create(MalformedDecoderText(format, position));
         var memory = new BenchmarkMemoryBudget(64 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
@@ -46,7 +46,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--arg", "text", MalformedDecoderText(format, position),
             "\"ready\", (try ($text|@" + format + "|length) catch \"caught\")")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("\"ready\"\n\"caught\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -61,7 +61,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--arg", "text", new string('A', 1048576),
             "\"ready\", (try ($text|@" + format + "|length) catch \"caught\")")));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("\"ready\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -74,7 +74,7 @@ public sealed partial class JqTests
         JsonNode input = JsonValue.Create(string.Concat(Enumerable.Repeat("%61", count)));
         string expected = new('a', count);
         var memory = new BenchmarkMemoryBudget(3 * count);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             Assert.Equal(expected, new JqRuntime(budget).Format("urid", input));
             Assert.Equal(3 * count, memory.PeakBytes);
@@ -86,7 +86,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_UriDecoderCountMatchesUnicodeAndHostSurrogateReplacement()
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         Assert.Equal("é🚀+\0", runtime.Format("urid", JsonValue.Create("é%F0%9F%9A%80+%00")));
         Assert.Equal("a\uFFFDbA", runtime.Format("urid", JsonValue.Create("a\uD800b%41")));
@@ -113,8 +113,8 @@ public sealed partial class JqTests
         int writes = 0;
         if (mode == "cancelled") host.BeforeByteAppend = () => { if (++writes == 3) cancellation.Cancel(); };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-Rr", "@" + format, "/input", "/later")));
-        if (mode == "cancelled") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, memory, cancellation.Token));
-        else Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        if (mode == "cancelled") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
+        else Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal(string.Concat(Enumerable.Repeat("a\n", mode == "stream" ? records + 1 : mode == "closed" ? 1 : 2)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(mode == "stream" ? 2 : 1, host.ClosedDescriptors.Count);

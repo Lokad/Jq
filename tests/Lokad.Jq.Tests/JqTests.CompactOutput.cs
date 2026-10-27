@@ -13,7 +13,7 @@ public sealed partial class JqTests
         fileSystem.SetStandardInput("{\n  \"items\": [1, 2]\n}\n{\"text\":\"a\\nb\"}");
 
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", option, ".")));
-        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+        var exitCode = await tool.ExecuteAsync(fileSystem, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         Assert.Equal(0, exitCode);
         Assert.Equal("{\"items\":[1,2]}\n{\"text\":\"a\\nb\"}\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
@@ -32,7 +32,7 @@ public sealed partial class JqTests
         var fileSystem = new MockFileSystem();
 
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", options, filter)));
-        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+        var exitCode = await tool.ExecuteAsync(fileSystem, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         Assert.Equal(0, exitCode);
         Assert.Equal(expected, fileSystem.GetOutput(JqFileDescriptor.StdOut));
@@ -59,7 +59,7 @@ public sealed partial class JqTests
         var fileSystem = new MockFileSystem();
 
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ["-n", .. options, "{a:1}"])));
-        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+        var exitCode = await tool.ExecuteAsync(fileSystem, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         var expected = indentation.Length == 0
             ? "{\"a\":1}\n"
@@ -81,7 +81,7 @@ public sealed partial class JqTests
         fileSystem.AddFile("/c", "{a:1}");
 
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ["--tab", .. arguments])));
-        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+        var exitCode = await tool.ExecuteAsync(fileSystem, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         Assert.Equal(0, exitCode);
         Assert.Equal("{" + "\n" + "\t\"a\": 1" + "\n" + "}\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));
@@ -98,7 +98,7 @@ public sealed partial class JqTests
         var fileSystem = new MockFileSystem();
 
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", option, "-c", "{a:1}")));
-        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+        var exitCode = await tool.ExecuteAsync(fileSystem, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         Assert.Equal(2, exitCode);
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdOut));
@@ -117,7 +117,7 @@ public sealed partial class JqTests
         fileSystem.AddFile("/filter.jq", "{a:1}");
 
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
-        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+        var exitCode = await tool.ExecuteAsync(fileSystem, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         Assert.Equal(2, exitCode);
         Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdOut));
@@ -135,7 +135,7 @@ public sealed partial class JqTests
         fileSystem.AddFile("/filter.jq", "{a:1}");
 
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
-        var exitCode = await tool.ExecuteAsync(fileSystem, CancellationToken.None);
+        var exitCode = await tool.ExecuteAsync(fileSystem, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         Assert.Equal(0, exitCode);
         Assert.Equal("{\"a\":1}\n", fileSystem.GetOutput(JqFileDescriptor.StdOut));

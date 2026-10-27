@@ -21,7 +21,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("[0,1]\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "[combinations(" + counts + ")]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -38,7 +38,7 @@ public sealed partial class JqTests
         host.AddFile("/input", "[0,1]\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "combinations((" + first + "," + last + "))", "/input")));
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: error (at /input:1): " + message + "\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -56,7 +56,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "[]|combinations(" + count + ")")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -73,7 +73,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "try ([0]|combinations(" + count + ")) catch 42")));
-        Assert.Equal(5, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: array cannot be represented\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -84,7 +84,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("[\"é\",{\"x\":1}]\n0\n1\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "[combinations((input,input))]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("[[\"é\"],[{\"x\":1}]]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -99,7 +99,7 @@ public sealed partial class JqTests
         host.BeforeByteAppend = cancellation.Cancel;
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "combinations((0,(1|debug)))", "/input")));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, root, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Single(host.ClosedDescriptors);
         Assert.Equal(0, host.OpenFileCount);
@@ -115,7 +115,7 @@ public sealed partial class JqTests
         host.AddFile("/input", "[0,1]\n");
         host.BeforeByteAppend = () => { if (host.AppendCallCount == 2) cancellation.Cancel(); };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "combinations((1,1))", "/input")));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, root, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token));
         Assert.Equal("[0,0]\n[0,1]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -135,7 +135,7 @@ public sealed partial class JqTests
         host.AddFile("/later", "unused\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "combinations((0,1))", "/input", "/later")));
         if (!close) host.AddFile("/later", "");
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("[0]\n", close ? 1 : records)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(close ? 1 : 2, host.ClosedDescriptors.Count);

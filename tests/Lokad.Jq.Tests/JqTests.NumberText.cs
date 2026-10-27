@@ -17,7 +17,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -37,7 +37,7 @@ public sealed partial class JqTests
     [InlineData("1 ")]
     public void Jq_NumberTextRejectsInvalidGrammarWithoutFallbackAcceptance(string text)
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         Assert.Throws<JqException>(() => new JqRuntime(budget).ToJsonNumber(JsonValue.Create(text)));
     }
 
@@ -48,7 +48,7 @@ public sealed partial class JqTests
         try
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
-            using var budget = new JqBudget(CancellationToken.None);
+            using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
             var runtime = new JqRuntime(budget);
             Assert.Equal(0.5, JqRuntime.Number(runtime.ToJsonNumber(JsonValue.Create("+.5"))));
             Assert.Equal(100, JqRuntime.Number(runtime.ToJsonNumber(JsonValue.Create("001E2"))));
@@ -77,7 +77,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var memory = new BenchmarkMemoryBudget(0);
-        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token);
         Assert.ThrowsAny<OperationCanceledException>(() => new JqRuntime(budget).ToJsonNumber(input));
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -96,8 +96,8 @@ public sealed partial class JqTests
         host.AddFile("/later", "\"1\"\n");
         if (mode == "cancelled") host.BeforeByteAppend = () => { if (host.AppendCallCount == 2) cancellation.Cancel(); };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "tonumber|copysign(1;.)", "/input", "/later")));
-        if (mode == "cancelled") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, memory, cancellation.Token));
-        else Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        if (mode == "cancelled") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
+        else Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal(mode == "stream" ? string.Concat(Enumerable.Repeat("-1\n", records)) + "1\n"
             : mode == "closed" ? "-1\n" : "-1\n-1\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));

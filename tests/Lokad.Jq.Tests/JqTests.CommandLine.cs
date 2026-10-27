@@ -7,7 +7,7 @@ public sealed partial class JqTests
     private static async Task<(int Exit, string Out, string Err)> RunCliAsync(MockFileSystem host, params string[] args)
     {
         var tool = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", args, [])));
-        var exit = await tool.ExecuteAsync(host, CancellationToken.None);
+        var exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
         return (exit, host.GetOutput(JqFileDescriptor.StdOut), host.GetOutput(JqFileDescriptor.StdErr));
     }
 

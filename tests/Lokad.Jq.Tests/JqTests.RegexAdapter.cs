@@ -114,7 +114,7 @@ public sealed partial class JqTests
             CancellationToken cancellationToken, [NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
         {
             observe("compile", memoryBudget, cancellationToken);
-            if (!JqUtf8RegexEngine.Instance.TryCompile(pattern, options, memoryBudget, cancellationToken, out var compiled, out error))
+            if (!Utf8RegexAdapter.Instance.TryCompile(pattern, options, memoryBudget, cancellationToken, out var compiled, out error))
             { regex = null; return false; }
             Created++;
             regex = new ObservedCompiled(compiled, memoryBudget, this, observe, cancellationToken);

@@ -9,6 +9,8 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="All" />
     <Using Include="Xunit" />
+    <Using Include="Lokad.Jq.Examples" />
+    <PackageReference Include="Lokad.Utf8Regex.Pcre2" PrivateAssets="All" />
     <ProjectReference Include="../../src/Lokad.Jq/Lokad.Jq.csproj" />
     <ProjectReference Include="../../benchmarks/Lokad.Jq.Benchmarks/Lokad.Jq.Benchmarks.csproj" />
   </ItemGroup>

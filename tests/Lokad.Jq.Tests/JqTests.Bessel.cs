@@ -13,7 +13,7 @@ public sealed partial class JqTests
     public void Jq_BesselRecurrencesPreserveFiniteValuesAtLargeOrders(double order,
         double point, double expectedJ, double expectedY)
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         Assert.InRange(Math.Abs(JqBessel.Jn(budget, order, point) / expectedJ - 1.0), 0, 2e-8);
         Assert.InRange(Math.Abs(JqBessel.Yn(budget, order, point) / expectedY - 1.0), 0, 2e-8);
     }
@@ -22,7 +22,7 @@ public sealed partial class JqTests
     public void Jq_BesselTinyArgumentsPreserveSubnormalsAndActualOverflow()
     {
         // 100-digit references evaluated at these exact binary input values.
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         Assert.Equal(3 * double.Epsilon, JqBessel.Jn(budget, 2, 1e-161));
         Assert.Equal(double.Epsilon, JqBessel.Jn(budget, 2, 7e-162));
         Assert.InRange(Math.Abs(JqBessel.Jn(budget, 3, 1e-100) / 2.0833333333333334e-302 - 1.0), 0, 1e-12);
@@ -37,7 +37,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_BesselHugeOrdersRequireAnActualUnderflowProof()
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         // High-precision bound exponents are about 212 and 1,574,122 respectively.
         // A large order alone cannot justify returning zero near the transition.
         Assert.True(double.IsNaN(JqBessel.Jn(budget, 1e26, Math.BitDecrement(1e26))));
@@ -51,7 +51,7 @@ public sealed partial class JqTests
     [InlineData(-99999.0, 0.0, true)]
     public void Jq_BesselUnderflowRetainsReflectedZeroSign(double order, double point, bool negative)
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         double value = JqBessel.Jn(budget, order, point);
         Assert.Equal(0.0, value);
         Assert.Equal(negative, BitConverter.DoubleToInt64Bits(value) < 0);
@@ -72,7 +72,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -91,7 +91,7 @@ public sealed partial class JqTests
         host.AddFile("/later", "3\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r",
             "\"prefix\", (try " + expression + " catch \"caught\"), \"after\"", "/first", "/later")));
-        Task<int> execution = Task.Run(() => command.ExecuteAsync(host, memory, cancellation.Token));
+        Task<int> execution = Task.Run(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         try
         {
             await prefix.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -118,7 +118,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem { AppendRemainsOpen = false };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
             "\"prefix\", jn(10000000000; 10000000000)")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(1, host.AppendCallCount);

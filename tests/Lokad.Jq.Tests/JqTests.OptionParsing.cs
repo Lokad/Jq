@@ -23,7 +23,7 @@ public sealed partial class JqTests
             var host = new MockFileSystem();
             var root = new BenchmarkMemoryBudget(64 * 1024);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ["-n", .. options, "-c", "1"])));
-            Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
             Assert.Equal(shortOption == "-j" ? "1" : "1\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(0, root.ReservedBytes);
@@ -42,7 +42,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         string[] args = modeFirst ? ["-n", mode, "-cf", "/filter", argument] : ["-ncf", "/filter", mode, argument];
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", args)));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);

@@ -14,7 +14,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("null\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", source)));
-        Assert.Equal(status, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(error, host.GetOutput(JqFileDescriptor.StdErr));
     }

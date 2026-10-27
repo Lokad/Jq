@@ -34,7 +34,7 @@ public sealed partial class JqTests
             _ => "\"" + new string('x', 24) + "...\""
         };
         var root = new BenchmarkMemoryBudget(4096);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
             Assert.Equal(expected, new JqRuntime(budget).TruncatedDump(value));
         Assert.InRange(root.PeakBytes, 1, 4096);
         Assert.Equal(0, root.ReservedBytes);
@@ -50,7 +50,7 @@ public sealed partial class JqTests
     [InlineData("{}", "{}")]
     public void Jq_OperandPreviewKeepsCompleteShortValues(string json, string expected)
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         Assert.Equal(expected, new JqRuntime(budget).TruncatedDump(JsonNode.Parse(json)));
     }
 
@@ -62,7 +62,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(256 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("\"caught\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -77,7 +77,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
         if (!duringAdmission) cancellation.Cancel();
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
             Assert.Throws<OperationCanceledException>(() => new JqRuntime(budget).TruncatedDump(new JsonArray(1)));
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -86,7 +86,7 @@ public sealed partial class JqTests
     public void Jq_OperandPreviewDoesNotRecoverFromAdmissionRefusal()
     {
         var root = new BenchmarkMemoryBudget(0);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
             Assert.True(Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).TruncatedDump(JsonValue.Create("x"))).IsMemoryAdmission);
         Assert.Equal(0, root.ReservedBytes);
     }

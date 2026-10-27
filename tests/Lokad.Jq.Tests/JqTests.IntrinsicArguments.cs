@@ -11,7 +11,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem();
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", ["-nc", filter], [new("COLOR", "green")]);
-        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -35,7 +35,7 @@ public sealed partial class JqTests
             ["-nc", option, name, file ? "/data" : "42", "[$ENV.COLOR,env.COLOR,$ARGS.named." + name + "]"],
             [new("COLOR", "green")]);
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("[\"green\",\"green\"," + expected + "]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(file ? 1 : 0, host.ClosedDescriptors.Count);
@@ -53,7 +53,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", option, name, "/missing", "42")));
-        Assert.Equal(2, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: Bad JSON in " + option + " " + name + " /missing: cannot open /missing\n",
             host.GetOutput(JqFileDescriptor.StdErr));
@@ -70,7 +70,7 @@ public sealed partial class JqTests
         host.AddFile("/data", "[");
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--slurpfile", name, "/data", "42")));
-        Assert.Equal(2, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Contains("Bad JSON in --slurpfile " + name + " /data", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -89,7 +89,7 @@ public sealed partial class JqTests
         host.AddFile("/data", "42");
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", option, name, "/data", "42")));
-        Assert.Equal(2, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: error closing /data: storage unavailable\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -110,7 +110,7 @@ public sealed partial class JqTests
             ? ["-nc", "--rawfile", name, "/data", "--arg", name, "ignored", "$ARGS.named." + name]
             : ["-nc", "--arg", name, "first", "--rawfile", name, "/missing", "$ARGS.named." + name];
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(fileFirst ? "\"42\"\n" : "\"first\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(fileFirst ? 1 : 0, host.ClosedDescriptors.Count);
@@ -125,7 +125,7 @@ public sealed partial class JqTests
         host.AddFile("/data", new string('x', 256 * 1024));
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--rawfile", name, "/data", "42")));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -150,8 +150,8 @@ public sealed partial class JqTests
         using var invocation = BuildInvocation("jq", "-nc", "--slurpfile", name, "/data", "$ARGS.named." + name + "[0]");
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
         using var cancellation = new CancellationTokenSource();
-        Task<int> firstRun = command.ExecuteAsync(firstHost, memory, cancellation.Token);
-        Task<int> secondRun = command.ExecuteAsync(secondHost, memory, CancellationToken.None);
+        Task<int> firstRun = command.ExecuteAsync(firstHost, Utf8RegexAdapter.Instance, memory, cancellation.Token);
+        Task<int> secondRun = command.ExecuteAsync(secondHost, Utf8RegexAdapter.Instance, memory, CancellationToken.None);
         Assert.Equal("42\n"u8.ToArray(), (await firstHost.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10))).ToArray());
         Assert.Equal("99\n"u8.ToArray(), (await secondHost.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10))).ToArray());
         if (cancel) cancellation.Cancel();

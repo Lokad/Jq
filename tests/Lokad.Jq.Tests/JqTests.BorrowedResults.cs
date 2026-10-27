@@ -20,7 +20,7 @@ public sealed partial class JqTests
             var host = new MockFileSystem();
             host.SetStandardInput(input);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "(" + operation + ") as $x | path($x)")));
-            Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal("[]\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal(operation == "debug" ? "[\"DEBUG:\"," + input + "]\n"
                 : operation == "stderr" ? input == "\"hello\"" ? "hello" : input : "", host.GetOutput(JqFileDescriptor.StdErr));
@@ -40,7 +40,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput(input);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "path(" + operation + ")")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("[]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -60,7 +60,7 @@ public sealed partial class JqTests
             var host = new MockFileSystem();
             host.SetStandardInput("[" + value + "]");
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", operation + " as $x | .[0] | path($x)")));
-            Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal("[]\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         }
@@ -79,8 +79,8 @@ public sealed partial class JqTests
         var input = new JsonArray();
         for (int index = 0; index < 10000; index++) input.Add(index);
         var memory = new BenchmarkMemoryBudget(0);
-        using var lexical = new JqBudget(CancellationToken.None);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
+        using var lexical = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             JqFilter filter = new JqParser(source, JqProgramSource.Inline, context.RootEnvironment, lexical).Parse();
             Assert.Same(input, await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync());
@@ -100,7 +100,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput(input);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }

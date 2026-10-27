@@ -14,7 +14,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
+            new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             var filter = new FromstreamFilter(new IteratorFilter(new IdentityFilter(), false));
             var result = Assert.IsType<JsonArray>(await filter.Evaluate(events, context, context.RootEnvironment).SingleAsync());
@@ -36,7 +36,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var memory = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -49,7 +49,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "fromstream((range(2000)|[[.],null]), [[1999]]) | length")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("2000\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -62,7 +62,7 @@ public sealed partial class JqTests
         host.SetStandardInput(string.Concat(Enumerable.Repeat("[[[0],1],[[1],2],[[1]]]\n", 2000)));
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "fromstream(.[])")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("[1,2]\n", 2000)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);

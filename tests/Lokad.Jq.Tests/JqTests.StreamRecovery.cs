@@ -30,7 +30,7 @@ public sealed partial class JqTests
             var memory = new BenchmarkMemoryBudget(64 * 1024);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ["-c", "--seq",
                 errors ? "--stream-errors" : "--stream", ".", .. (owned ? new[] { "/records" } : [])])));
-            Assert.Equal(0, await command.ExecuteAsync(new ChunkedHost(inner, chunk), memory, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(new ChunkedHost(inner, chunk), Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             string errorEvent = errors && warning.Length != 0 ? "\u001e[" + JsonSerializer.Serialize(warning) + "," + path + "]\n" : "";
             Assert.Equal(prefix + errorEvent + "\u001e[[0],9]\n\u001e[[0]]\n", inner.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal(!errors && warning.Length != 0 ? "jq: ignoring parse error: " + warning + "\n" : "", inner.GetOutput(JqFileDescriptor.StdErr));
@@ -54,7 +54,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ["-c", "--seq", "--stream",
             .. (mode == "slurp" ? new[] { "-s" } : mode == "explicit" ? ["-n"] : []),
             mode == "explicit" ? "(try input catch \"caught\"), inputs" : ".", "/records"])));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(output, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(error, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -73,8 +73,8 @@ public sealed partial class JqTests
         if (cancel) host.BeforeByteAppend = () => { if (host.AppendCallCount == 1) cancellation.Cancel(); };
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "--seq", "--stream", ".", "/records")));
-        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, memory, cancellation.Token));
-        else Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
+        else Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal("\u001e[[0],7]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -90,7 +90,7 @@ public sealed partial class JqTests
         var host = new DelayedOutputHost(inner);
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "--seq", "--stream", ".", "/records")));
-        Task<int> execution = command.ExecuteAsync(host, memory, CancellationToken.None);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None);
         ReadOnlyMemory<byte> warning = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal("jq: ignoring parse error: Invalid literal at line 2, column 0 (need RS to resync)\n"u8.ToArray(), warning.ToArray());
         Assert.False(execution.IsCompleted);
@@ -113,7 +113,7 @@ public sealed partial class JqTests
         host.AddFile("/records", "\u001e[7]\n\u001e\"" + new string('x', 128 * 1024) + "\u001e[9]\n");
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "--seq", mode, "try . catch \"caught\"", "/records")));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("\u001e[[0],7]\n\u001e[[0]]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);

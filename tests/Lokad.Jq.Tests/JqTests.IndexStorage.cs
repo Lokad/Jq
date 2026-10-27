@@ -14,7 +14,7 @@ public sealed partial class JqTests
         string key = new('k', length);
         var row = new JsonObject { ["value"] = 7 };
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var filter = new SqlIndexFilter(new LiteralFilter(row), new LiteralFilter(JsonValue.Create(key)));
             var result = Assert.IsType<JsonObject>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
@@ -38,7 +38,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--arg", "key", new string('k', 131072), expression)));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -59,7 +59,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "INDEX((1,2);" + key + ")")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -73,7 +73,7 @@ public sealed partial class JqTests
         host.AddFile("/input", "null\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "--arg", "key", new string('k', 131072),
             "\"ready\",(try INDEX(0;[$key]) catch 42)", "/input")));
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("\"ready\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -87,7 +87,7 @@ public sealed partial class JqTests
         var row = new JsonArray();
         for (int index = 0; index < 6000; index++) row.Add(index);
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var filter = new SqlIndexFilter(new LiteralFilter(row), new LiteralFilter(JsonValue.Create("key")));
             var failure = await Assert.ThrowsAsync<JqQuotaException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
@@ -107,7 +107,7 @@ public sealed partial class JqTests
         host.AddFile("/input", "null\n");
         host.BeforeByteAppend = () => { if (host.AppendCallCount == 2) cancellation.Cancel(); };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "INDEX(range(10);debug|tostring)", "/input")));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, root, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("[\"DEBUG:\",0]\n[\"DEBUG:\",1]\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -127,7 +127,7 @@ public sealed partial class JqTests
         host.AddFile("/later", "");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "--arg", "key", new string('k', 131072),
             "INDEX(.;$key)|length", "/input", "/later")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("1\n", close ? 1 : records)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(close ? 1 : 2, host.ClosedDescriptors.Count);

@@ -18,7 +18,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("[\"a\",\"b\",\"c\"]\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", operation + "(" + keys + ")")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(error, host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -32,7 +32,7 @@ public sealed partial class JqTests
         var source = new JsonArray();
         for (int index = 0; index < 100000; index++) source.Add((JsonNode?)null);
         var root = new BenchmarkMemoryBudget(6 * 1024 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             JqFilter filter = operation switch
             {
@@ -55,7 +55,7 @@ public sealed partial class JqTests
     public async Task Jq_PrecomputedKeysConstructIndependentOutputs(string operation)
     {
         var source = new JsonArray(new JsonArray(2), new JsonArray(1));
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(CancellationToken.None));
+        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         JqFilter filter = operation switch
         {
             "_sort_by_impl" => new SortByImplFilter(new IdentityFilter()),
@@ -81,7 +81,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         int admissions = 0;
         var memory = new AdmissionCallbackBudget(root, () => { if (++admissions == 2) cancellation.Cancel(); });
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
         {
             JqFilter filter = operation switch
             {

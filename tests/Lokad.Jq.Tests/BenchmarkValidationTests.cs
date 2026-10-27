@@ -17,8 +17,8 @@ public sealed class BenchmarkValidationTests
             var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
             using var host = item.CreateHost();
             int status = governed
-                ? await command.ExecuteAsync(host, root, CancellationToken.None)
-                : await command.ExecuteAsync(host, CancellationToken.None);
+                ? await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None)
+                : await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
             ExecutionResult result = host.Finish(status);
             item.Verify(result);
             var wrongError = item with { ExpectedError = OutputDigest.FromBytes("incorrect"u8.ToArray()) };

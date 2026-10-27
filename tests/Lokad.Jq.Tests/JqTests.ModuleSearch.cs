@@ -31,7 +31,7 @@ public sealed partial class JqTests
                 + (data ? "$m" : "m::f");
             var memory = new BenchmarkMemoryBudget(1024 * 1024);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-nc", "-L", "/lib", program)));
-            Assert.Equal(found ? 0 : 3, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal(found ? 0 : 3, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             Assert.Equal(found ? (data ? "[3]\n" : "3\n") : "", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal(found ? "" : "jq: module not found: m\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(found ? 1 : 0, host.ClosedDescriptors.Count);
@@ -52,7 +52,7 @@ public sealed partial class JqTests
         string filter = "import \"m\" as " + (data ? "$m" : "m")
             + " {search:\"..\",optional:" + (optional ? "true" : "false") + "};42";
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-nc", filter)));
-        Assert.Equal(optional ? 0 : 3, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(optional ? 0 : 3, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(optional ? "42\n" : "", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(optional ? "" : "jq: module not found: m\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.ClosedDescriptors);

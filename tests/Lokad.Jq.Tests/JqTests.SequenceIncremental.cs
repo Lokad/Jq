@@ -19,7 +19,7 @@ public sealed partial class JqTests
             inner.SetStandardInput(input);
             var memory = new BenchmarkMemoryBudget(64 * 1024);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--seq", "-c", ".")));
-            Assert.Equal(0, await command.ExecuteAsync(new ChunkedHost(inner, chunk), memory, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(new ChunkedHost(inner, chunk), Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             Assert.Equal(expected, inner.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: ignoring parse error: " + warning + "\n", inner.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(0, memory.ReservedBytes);
@@ -41,7 +41,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--seq", "-nc", "first(inputs)", "/first", "/later")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.False(host.PendingRead.Task.IsCompleted);
         Assert.Equal("\u001e" + expected + "\n", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdErr));
@@ -61,7 +61,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new CountingMemoryBudget(root);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--seq", "empty", "/input")));
-        Assert.Equal(0, await command.ExecuteAsync(new ChunkedHost(inner, 1024), memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(new ChunkedHost(inner, 1024), Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(malformed ? "jq: ignoring parse error: Truncated value at line 1, column 262146\n" : "",
             inner.GetOutput(JqFileDescriptor.StdErr));
@@ -83,7 +83,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--seq", "-nc", "try input catch .", "/input")));
-        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token);
         await host.PendingRead.Task.WaitAsync(TimeSpan.FromSeconds(5));
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
@@ -101,7 +101,7 @@ public sealed partial class JqTests
         inner.AddFile("/second", "🚀\",1]\n\u001e{\"x\":2}\n");
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--seq", "-nc", "input as $x | input as $y | [$x,$y,$x]", "/first", "/second")));
-        Assert.Equal(0, await command.ExecuteAsync(new ChunkedHost(inner, 1), memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(new ChunkedHost(inner, 1), Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("\u001e[[\"é\\ud83d\\ude80\",1],{\"x\":2},[\"é\\ud83d\\ude80\",1]]\n", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(2, inner.ClosedDescriptors.Count);
@@ -119,7 +119,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--seq", "-c", "length", "/input")));
-        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token);
         await host.Pending.Task.WaitAsync(TimeSpan.FromSeconds(5));
         long pending = memory.ReservedBytes;
         Assert.True(pending > 0);

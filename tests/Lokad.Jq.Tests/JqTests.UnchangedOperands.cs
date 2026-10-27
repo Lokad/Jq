@@ -18,7 +18,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq",
             ["-c", ". as $x | range(128) | $x | " + operation + " | empty"], []);
-        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -35,7 +35,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq",
             ["-c", ". as $x | range(128) | $x | " + operation + "(\"\") | empty"], []);
-        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -48,7 +48,7 @@ public sealed partial class JqTests
         host.SetStandardInput("{\"a\":{\"x\":[1]}}\n");
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq",
             ["-c", ". as $original | . * {a:{}} | .a.x[0]=9 | [.,$original]"], []);
-        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("[{\"a\":{\"x\":[9]}},{\"a\":{\"x\":[1]}}]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -58,7 +58,7 @@ public sealed partial class JqTests
     {
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token);
         var runtime = new JqRuntime(budget);
         var array = new JsonArray(1);
         var obj = new JsonObject { ["a"] = 1 };

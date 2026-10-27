@@ -40,7 +40,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.AddFile("/records", input);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter, "/records")));
-        Assert.Equal(status, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expectedOutput, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(expectedError, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -58,7 +58,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr",
             "\"ready\", (try " + expression + " catch \"caught\")")));
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);

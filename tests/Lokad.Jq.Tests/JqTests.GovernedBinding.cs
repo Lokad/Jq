@@ -20,7 +20,7 @@ public sealed partial class JqTests
                 file ? "/data" : "1", duplicate, "v", duplicate == "--argjson" ? "not-json" : "/missing",
                 "[$v, $ARGS.named.v]")));
 
-            Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             Assert.Equal("[" + expected + "," + expected + "]\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(file ? 1 : 0, host.ReadBytesCallCount);
@@ -37,7 +37,7 @@ public sealed partial class JqTests
         for (int index = 0; index < 5000; index++)
             arguments.AddRange(["--rawfile", "v" + index.ToString(System.Globalization.CultureInfo.InvariantCulture), "/data"]);
         var memory = new BenchmarkMemoryBudget(8 * 1024 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var host = new MockFileSystem();
             host.AddFile("/data", "one");
@@ -63,7 +63,7 @@ public sealed partial class JqTests
             "--argjson", "data", json, "[($data | length), ($ARGS.named.data | length)]")));
         var host = new MockFileSystem();
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("[1000,1000]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -84,7 +84,7 @@ public sealed partial class JqTests
             hosts[1].AddFile("/note", "second");
             var delayed = hosts.Select(host => new MemoryBorrowHost(host)).ToArray();
             Task<int>[] executions = delayed.Select(host =>
-                command.ExecuteAsync(host, memory, CancellationToken.None)).ToArray();
+                command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None)).ToArray();
             try
             {
                 await Task.WhenAll(delayed.Select(host => host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10))));
@@ -122,7 +122,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", option, "data", "/data", "$data")));
 
         var actual = await Assert.ThrowsAsync<OutOfMemoryException>(() =>
-            command.ExecuteAsync(host, memory, CancellationToken.None));
+            command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Same(failure, actual);
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -165,7 +165,7 @@ public sealed partial class JqTests
             Assert.Same(clock, invocation.Clock);
             var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
             var host = new MockFileSystem();
-            Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal(FixedInstant.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n",
                 host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -188,7 +188,7 @@ public sealed partial class JqTests
         Assert.Equal(0, memory.ReservedBytes);
         var host = new MockFileSystem();
 
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(0, host.ReadBytesCallCount);
@@ -235,7 +235,7 @@ public sealed partial class JqTests
             for (int repeat = 0; repeat < 3; repeat++)
             {
                 var host = new MockFileSystem();
-                Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+                Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
                 Assert.Equal("original\n", host.GetOutput(JqFileDescriptor.StdOut));
                 Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
                 Assert.Equal(retained, memory.ReservedBytes);
@@ -245,7 +245,7 @@ public sealed partial class JqTests
             Assert.Throws<ObjectDisposedException>(() => invocation.Environment);
             Assert.Throws<ObjectDisposedException>(() => invocation.CurrentDirectory);
             Assert.Throws<ObjectDisposedException>(() => Jq.TryParse(invocation));
-            await Assert.ThrowsAsync<ObjectDisposedException>(() => command.ExecuteAsync(new MockFileSystem(), CancellationToken.None));
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => command.ExecuteAsync(new MockFileSystem(), Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal(0, memory.ReservedBytes);
             Assert.True(memory.TryReserve(128 * 1024, out IMemoryReservation? reused));
             reused.Dispose();
@@ -265,7 +265,7 @@ public sealed partial class JqTests
             long retained = memory.ReservedBytes;
             var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
             var host = new MockFileSystem();
-            Assert.Equal(2, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.StartsWith("jq: invalid JSON for --argjson data:", host.GetOutput(error), StringComparison.Ordinal);
             Assert.Empty(host.GetOutput(output));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -291,10 +291,10 @@ public sealed partial class JqTests
             secondInner.AddFile("/input", "2\n");
             var first = new MemoryBorrowHost(firstInner) { DelayCleanup = true };
             var second = new MemoryBorrowHost(secondInner) { DelayCleanup = true };
-            Task<int> left = command.ExecuteAsync(first, CancellationToken.None);
+            Task<int> left = command.ExecuteAsync(first, Utf8RegexAdapter.Instance, CancellationToken.None);
             await first.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
             long firstDemand = memory.ReservedBytes;
-            Task<int> right = command.ExecuteAsync(second, CancellationToken.None);
+            Task<int> right = command.ExecuteAsync(second, Utf8RegexAdapter.Instance, CancellationToken.None);
             await second.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(memory.ReservedBytes > firstDemand);
             first.Release.SetResult();

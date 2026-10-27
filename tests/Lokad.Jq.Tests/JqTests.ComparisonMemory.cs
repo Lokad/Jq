@@ -17,7 +17,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput(string.Concat(Enumerable.Repeat(record, count)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".left <= .right")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("true\n", count)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -43,7 +43,7 @@ public sealed partial class JqTests
         {
             if (pressure is null) Assert.True(root.TryReserve(limit - root.ReservedBytes, out pressure));
         };
-        Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("\"ready\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -55,7 +55,7 @@ public sealed partial class JqTests
 
         var later = new MockFileSystem();
         var laterCommand = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "1")));
-        Assert.Equal(0, await laterCommand.ExecuteAsync(later, root, CancellationToken.None));
+        Assert.Equal(0, await laterCommand.ExecuteAsync(later, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("1\n", later.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(later.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -69,7 +69,7 @@ public sealed partial class JqTests
         var right = left.DeepClone();
         var root = new BenchmarkMemoryBudget(32 * 1024);
         var counted = new CountingMemoryBudget(root);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         using (var comparer = new JqComparer(budget))
         {
             Assert.Equal(0, comparer.Compare(left, right));
@@ -99,7 +99,7 @@ public sealed partial class JqTests
             else if (failure == "host") throw new ArgumentException("host contract sentinel");
             else if (failure == "allocation") throw new OutOfMemoryException("allocation sentinel");
         });
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
         using (var comparer = new JqComparer(budget))
         {
             JsonNode?[] source = [WideObject(16), WideObject(16)];
@@ -121,7 +121,7 @@ public sealed partial class JqTests
     {
         var root = new BenchmarkMemoryBudget(4 * 64 * IntPtr.Size);
         var counted = new CountingMemoryBudget(root);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         using (var comparer = new JqComparer(budget))
         {
             Assert.Equal(0, comparer.Compare(WideObject(64), WideObject(64)));
@@ -139,7 +139,7 @@ public sealed partial class JqTests
     public void Jq_ComparisonChecksCancellationForBorrowedArraysStringsAndMinima()
     {
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(cancellation.Token);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
         var runtime = new JqRuntime(budget);
         var array = new JsonArray(1, 2, 3);
         cancellation.Cancel();

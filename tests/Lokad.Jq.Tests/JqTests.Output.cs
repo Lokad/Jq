@@ -7,7 +7,7 @@ public sealed partial class JqTests
     private static async Task<(int Exit, string Out, string Err)> RunOutputAsync(MockFileSystem host, params string[] args)
     {
         var tool = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", args, [])));
-        var exit = await tool.ExecuteAsync(host, CancellationToken.None);
+        var exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
         return (exit, host.GetOutput(JqFileDescriptor.StdOut), host.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -59,7 +59,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("[\"a\",\"b\"]");
         var tool = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", ["--raw-output0", ".[]"], [])));
-        var exit = await tool.ExecuteAsync(host, CancellationToken.None);
+        var exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
         Assert.Equal(0, exit);
         Assert.Equal("a\0b\0"u8.ToArray(), host.GetOutputBytes(JqFileDescriptor.StdOut));
     }
@@ -73,7 +73,7 @@ public sealed partial class JqTests
             var host = new MockFileSystem();
             host.SetStandardInput("[1,\"a\",null,true]");
             var tool = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", ["--raw-output0", ".[]"], [])));
-            var exit = await tool.ExecuteAsync(host, CancellationToken.None);
+            var exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
             Assert.Equal(0, exit);
             Assert.Equal("1\0a\0null\0true\0"u8.ToArray(), host.GetOutputBytes(JqFileDescriptor.StdOut));
         }

@@ -21,9 +21,9 @@ public sealed partial class JqTests
             ["value"] = value,
             ["events"] = new JsonArray(new JsonArray(new JsonArray(), value.DeepClone()))
         };
-        using var lexical = new JqBudget(CancellationToken.None);
+        using var lexical = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var root = new BenchmarkMemoryBudget(100000);
-        using (var context = new JqContext(variables, new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             JqFilter filter = new JqParser(source, JqProgramSource.Inline, context.RootEnvironment, lexical).Parse();
             var result = Assert.IsType<JsonArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
@@ -47,7 +47,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -66,7 +66,7 @@ public sealed partial class JqTests
             host.SetStandardInput(child ? "{\"a\":" + value + "}" : value);
             string filter = child ? "getpath([\"a\"]) as $x | .a | path($x)" : "getpath([]) as $x | path($x)";
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter)));
-            Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal("[]\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         }
@@ -82,7 +82,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput(filter.Contains("start:", StringComparison.Ordinal) ? "[[1],[2]]" : "{\"a\":[1],\"b\":[1]}");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -96,7 +96,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64);
         using var cancellation = new CancellationTokenSource();
         var variables = new Dictionary<string, JsonNode?> { ["path"] = new JsonArray("payload") };
-        using (var context = new JqContext(variables, new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
+        using (var context = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
         {
             var filter = new GetpathBuiltinFilter(new VariableFilter("path"));
             Assert.Same(value, await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync());
@@ -117,7 +117,7 @@ public sealed partial class JqTests
         {
             ["path"] = new JsonArray(new JsonObject { ["start"] = 0, ["end"] = 1 })
         };
-        using var context = new JqContext(variables, new JqBudget(CancellationToken.None));
+        using var context = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         var result = Assert.IsType<JsonArray>(await new GetpathBuiltinFilter(new VariableFilter("path"))
             .Evaluate(input, context, context.RootEnvironment).SingleAsync());
         Assert.Single(result);

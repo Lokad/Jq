@@ -11,7 +11,7 @@ public sealed partial class JqTests
     public void Jq_TruncatedDiagnosticsRetainOnlyTheirShortResult()
     {
         var memory = new BenchmarkMemoryBudget(128 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             string diagnostic = new JqRuntime(budget).TruncatedDump(JsonValue.Create(new string('x', 10000)));
             Assert.Equal("\"" + new string('x', 24) + "...\"", diagnostic);
@@ -23,7 +23,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_TruncatedDiagnosticsKeepUtf8ScalarBoundaries()
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         Assert.Equal("\"" + new string('\u00e9', 12) + "...\"",
             runtime.TruncatedDump(JsonValue.Create(new string('\u00e9', 14))));
@@ -36,7 +36,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_RawPathDiagnosticsBorrowWhileMaterializedPathsRemainIndependent(bool slice)
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var items = new JsonArray(1, 2);
         JsonNode raw = slice ? new JsonObject { ["start"] = items } : items;
         var owner = new JsonObject { ["key"] = raw };
@@ -59,7 +59,7 @@ public sealed partial class JqTests
         var items = new JsonArray(double.NaN, double.PositiveInfinity, double.NegativeInfinity);
         for (int index = 3; index < 1000; index++) items.Add(index);
         var input = new JsonObject { ["z"] = items, ["a"] = "kept" };
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             using var result = new JqRuntime(budget).SerializeUtf8(input, false, null, false, true);
             using var document = JsonDocument.Parse(result.Value);
@@ -92,7 +92,7 @@ public sealed partial class JqTests
             + indentation + "\"items\": [\n" + indentation + indentation + "1\n"
             + indentation + "]\n}\n";
 
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(Encoding.UTF8.GetBytes(expected), host.GetOutputBytes(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
     }
@@ -115,7 +115,7 @@ public sealed partial class JqTests
             host.SetStandardInput(json);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ascii ? "-ac" : "-c", filter)));
 
-            Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal(Encoding.UTF8.GetBytes(expected), host.GetOutputBytes(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
         }
@@ -128,7 +128,7 @@ public sealed partial class JqTests
         host.SetStandardInput("\"\\\\uABCD\\\"\\uABCD\\u001F\\ud83d\\ude80\"");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-ac", ".")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("\"\\\\uABCD\\u0022\\uabcd\\u001f\\ud83d\\ude80\"\n"u8.ToArray(), host.GetOutputBytes(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutputBytes(JqFileDescriptor.StdErr));
     }

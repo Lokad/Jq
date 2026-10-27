@@ -26,7 +26,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -43,7 +43,7 @@ public sealed partial class JqTests
         var memory = new CountingMemoryBudget(root);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "reduce range(100000) as $i (0; " + body + ")")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(body.EndsWith(" .", StringComparison.Ordinal) ? "0\n" : "null\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 100);
@@ -54,12 +54,12 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_CaughtLabelPayloadAdmissionIsTerminal()
     {
-        using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(CancellationToken.None));
+        using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         var filter = new JqParser("label $out | try break $out catch 42", JqProgramSource.Inline,
             compiler.RootEnvironment, compiler.Budget).Parse();
         var root = new BenchmarkMemoryBudget(128);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+            new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var error = await Assert.ThrowsAsync<JqQuotaException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).ToArrayAsync());
             Assert.True(error.IsMemoryAdmission);

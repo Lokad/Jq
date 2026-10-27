@@ -112,7 +112,7 @@ internal static class BenchmarkExecution
     {
         using var host = new BenchmarkHost(input, capture);
         var command = Recognize(arguments);
-        int exit = await command.ExecuteAsync(host, cancellationToken).ConfigureAwait(false);
+        int exit = await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, cancellationToken).ConfigureAwait(false);
         return host.Finish(exit);
     }
 

@@ -37,7 +37,7 @@ public sealed partial class JqTests
         host.SetStandardInput(input);
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
 
-        var status = await tool.ExecuteAsync(host, CancellationToken.None);
+        var status = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         Assert.Equal(0, status);
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
@@ -60,7 +60,7 @@ public sealed partial class JqTests
             """);
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", filter)));
 
-        var status = await tool.ExecuteAsync(host, CancellationToken.None);
+        var status = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         Assert.Equal(0, status);
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
@@ -77,7 +77,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        var status = await tool.ExecuteAsync(host, CancellationToken.None);
+        var status = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         Assert.Equal(0, status);
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
@@ -98,7 +98,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq",
             """[.items[] | if .kind=="book" and .book.language=="French" then . else empty end] | length""")));
 
-        var status = await tool.ExecuteAsync(host, CancellationToken.None);
+        var status = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
 
         Assert.Equal(0, status);
         Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
@@ -128,7 +128,7 @@ public sealed partial class JqTests
         // the rest of the chain, and an empty condition yields nothing.
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-        Assert.Equal(0, await tool.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }

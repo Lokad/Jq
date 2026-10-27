@@ -17,7 +17,7 @@ public sealed partial class JqTests
         var invocation = BuildInvocation("jq", "-nr", "--arg", "text", text,
             "$text, ($text | utf8bytelength)");
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(text + "\n" + (prefix + 6) + "\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -32,7 +32,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("\"" + new string('x', 8388609) + "\"");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", mode, ".[1] | length")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("8388609\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -47,7 +47,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(128 * 1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -64,7 +64,7 @@ public sealed partial class JqTests
             : "\"" + new string('x', 8388603) + "\\u0061é\\n\\\\\\uD83D\\uDE80\"");
         var invocation = raw ? BuildInvocation("jq", "-R", "length") : BuildInvocation("jq", "length");
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(raw ? "8388609\n" : "8388608\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -73,7 +73,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_StringRepresentabilityCheckDoesNotAllocate()
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         Assert.Equal("string result cannot be represented",
             Assert.Throws<JqQuotaException>(() => budget.ReserveString((long)int.MaxValue + 1)).Message);
     }
@@ -82,7 +82,7 @@ public sealed partial class JqTests
     public async Task Jq_CanceledReadsOfBorrowedStringsStillPropagate()
     {
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(cancellation.Token);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
         using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
         var node = JsonValue.Create("borrowed");
         cancellation.Cancel();
@@ -92,7 +92,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_SharedRegexEngineSupportsConcurrentCommands()
     {
-        var regexEngine = JqUtf8RegexEngine.Instance;
+        var regexEngine = Utf8RegexAdapter.Instance;
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "\"x\" | test(\"x\")")));
         await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
         {

@@ -16,7 +16,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq",
             ["-nr", "--arg", "value", text, "$value, ($value|tojson|fromjson), ($value|test(\".\")), ($value|gsub(\".\";\"x\"))"], []);
-        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected + "\n" + expected + "\ntrue\n" + (kind == "low" ? "xxx" : "x") + "\n",
             host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -51,7 +51,7 @@ public sealed partial class JqTests
         int status = scenario == "halt" ? 7 : scenario == "compile-program" ? 3 : 2;
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", arguments, []);
-        Assert.Equal(status, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(status, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(scenario == "halt" ? expected : scenario == "compile-program"
             ? "jq: unexpected token <end> at line 1 column 2 (file \"/" + expected + "\")\n"
@@ -83,8 +83,8 @@ public sealed partial class JqTests
         if (cancelled) host.BeforeByteAppend = () => cancellation.Cancel();
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "--arg", "value", "\uD800", "$value", "/input")));
-        if (cancelled) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, memory, cancellation.Token));
-        else Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        if (cancelled) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
+        else Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal(cancelled ? "" : "\uFFFD\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);

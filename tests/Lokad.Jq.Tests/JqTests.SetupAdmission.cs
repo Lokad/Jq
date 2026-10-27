@@ -47,7 +47,7 @@ public sealed partial class JqTests
                 long snapshot = root.ReservedBytes;
                 var host = new MockFileSystem();
                 var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
-                Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+                Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
                 string expected = kind is "information-tail" or "information-environment" ? JqBuildConfiguration.Text + "\n"
                     : kind == "flags" ? "1\n" : kind == "duplicate-environment" ? "last\n" : "value\n";
                 Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
@@ -86,7 +86,7 @@ public sealed partial class JqTests
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", arguments, environment);
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
         var host = new MockFileSystem();
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         // Full retained storage also refuses diagnostic allocation; the

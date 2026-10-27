@@ -32,7 +32,7 @@ public sealed partial class JqTests
         string expression = "if . == 0 then error(\"first\") else " + (diagnostic ? "debug" : ".") + " end";
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", expression, "/input", "/later")));
         int expected = writeStatus != 0 ? writeStatus : previousError ? 5 : 0;
-        Assert.Equal(expected, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(expected, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(diagnostic ? "" : "1\n", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal((previousError ? "jq: error (at /input:1): first\n" : "")
             + (diagnostic ? "[\"DEBUG:\",1]\n" : ""), inner.GetOutput(JqFileDescriptor.StdErr));
@@ -65,7 +65,7 @@ public sealed partial class JqTests
             : ["-r", "\"before\", error(\"bad\"), \"after\""];
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("before\n", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: error (at " + (owned ? "/first" : "<stdin>") + ":1): bad\n",
             inner.GetOutput(JqFileDescriptor.StdErr));
@@ -92,7 +92,7 @@ public sealed partial class JqTests
         };
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "error(\"bad\")", "/input")));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("jq: error (at /input:1): bad\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(1, host.CloseCalls);
         Assert.Equal(0, memory.ReservedBytes);
@@ -118,7 +118,7 @@ public sealed partial class JqTests
             };
             var memory = new BenchmarkMemoryBudget(64 * 1024);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
-            Assert.Equal(status, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             Assert.Equal([JqFileDescriptor.StdErr], host.Writes);
             Assert.Equal(0, memory.ReservedBytes);
         }
@@ -138,7 +138,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "(\"ready\" | " + effect + " | empty), input")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal(expected, inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal("42\n", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal([JqFileDescriptor.StdErr, JqFileDescriptor.StdOut], host.Writes);
@@ -156,7 +156,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "--seq", ".")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.StartsWith("jq: ignoring parse error:", inner.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(2, inner.ReadBytesCallCount);
@@ -182,7 +182,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r",
             "\"before\", (" + expression + "), \"after\"", "/first", "/later")));
 
-        Assert.Equal(status, await command.ExecuteAsync(host, counted, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, counted, CancellationToken.None));
         Assert.Equal("before\n", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal([JqFileDescriptor.StdOut, JqFileDescriptor.StdErr], host.Writes);
         Assert.Equal(1, inner.ReadBytesCallCount);
@@ -212,10 +212,10 @@ public sealed partial class JqTests
 
         if (status == 0)
         {
-            var failure = await Assert.ThrowsAsync<JqHostFailureException>(() => command.ExecuteAsync(host, memory, CancellationToken.None));
+            var failure = await Assert.ThrowsAsync<JqHostFailureException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             Assert.Same(sentinel, failure.InnerException);
         }
-        else Assert.Equal(status, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        else Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(1, host.CloseCalls);
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("[\"DEBUG:\",42]\n", inner.GetOutput(JqFileDescriptor.StdErr));
@@ -234,7 +234,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n",
             "range(" + count + ") | " + (message.Length == 0 ? "\"\"" : "\"é\"") + " | " + effect + " | empty")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(message, count))), host.GetOutputBytes(JqFileDescriptor.StdErr));
         Assert.Equal(count, host.AppendCallCount);
@@ -249,7 +249,7 @@ public sealed partial class JqTests
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
         var host = new MockFileSystem();
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+            new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
             { Stderr = (host, JqFileDescriptor.StdErr) })
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
@@ -266,7 +266,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         var host = new MockFileSystem();
         using var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token))
+            new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token))
             { Stderr = (host, JqFileDescriptor.StdErr) };
         await context.EmitStderrAsync("");
         await context.EmitStderrAsync(ReadOnlyMemory<byte>.Empty);

@@ -16,7 +16,7 @@ public sealed partial class JqTests
         JsonNode input = JsonValue.Create(text);
         var memory = new BenchmarkMemoryBudget(0);
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token);
         var runtime = new JqRuntime(budget);
         Assert.Same(text, Transform(runtime, operation, input));
         cancellation.Cancel();
@@ -35,7 +35,7 @@ public sealed partial class JqTests
         JsonNode input = JsonValue.Create(text);
         var memory = new BenchmarkMemoryBudget(80 * 1024);
         var counted = new CountingMemoryBudget(memory);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
             Assert.Equal(new string('0', 32767) + ending, Transform(new JqRuntime(budget), operation, input));
             Assert.Equal(2 * (32767 + ending.Length), memory.PeakBytes);
@@ -56,7 +56,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var callback = new AdmissionCallbackBudget(memory, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, callback, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, callback, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
@@ -75,7 +75,7 @@ public sealed partial class JqTests
     {
         JsonNode input = JsonValue.Create(new string(ch, 131072));
         var memory = new BenchmarkMemoryBudget(64 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
@@ -92,7 +92,7 @@ public sealed partial class JqTests
     public void Jq_UriConstructionPreservesPairsAndReplacementAcrossChunks(int prefix)
     {
         string text = new string('x', prefix) + "🚀\uD800\0";
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         Assert.Equal(new string('x', prefix) + "%F0%9F%9A%80%EF%BF%BD%00", new JqRuntime(budget).Format("uri", JsonValue.Create(text)));
     }
 
@@ -106,7 +106,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("\"abc\"\n\"\"\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "try (path(" + operation + ")|true) catch false")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("false\nfalse\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -137,8 +137,8 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r",
             operation.StartsWith("ascii_", StringComparison.Ordinal) ? operation : "@" + operation, "/input", "/later")));
-        if (mode == "cancelled") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, memory, cancellation.Token));
-        else Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        if (mode == "cancelled") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
+        else Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         string line = operation switch
         {
             "ascii_downcase" => "aa<&\"é🚀\n", "ascii_upcase" => "AA<&\"é🚀\n",

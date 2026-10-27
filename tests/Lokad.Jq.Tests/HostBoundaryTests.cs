@@ -31,7 +31,7 @@ public sealed class HostBoundaryTests
             JqFileDescriptor.StdIn, output, error);
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
-        Assert.Equal(expectedExit, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(expectedExit, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expectedOutput, host.GetOutput(output));
         Assert.Equal(expectedError, host.GetOutput(error));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
@@ -48,7 +48,7 @@ public sealed class HostBoundaryTests
             "jq", [".", "./a:b\\c*"], [new JqEnvironmentVariable("PWD", "/work")]);
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("42\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Single(host.ClosedDescriptors);
         Assert.Equal(0, host.OpenFileCount);
@@ -64,7 +64,7 @@ public sealed class HostBoundaryTests
         var command = Assert.IsType<Jq>(Jq.TryParse(
             JqCommandInvocation.CreateWithStandardDescriptors("jq", [".", "/input"], [])));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, cancellation.Token));
         Assert.Single(host.ClosedDescriptors);
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }

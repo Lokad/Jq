@@ -9,15 +9,15 @@ internal static class StressChecks
         // Keep construction and structural checks bounded without turning
         // elapsed time into a test assertion.
         await CheckAsync(["-n", "-c", "range(0;100)"], [],
-            JqUtf8RegexEngine.Instance, 0, string.Concat(Enumerable.Range(0, 100).Select(value => value + "\n"))).ConfigureAwait(false);
+            Utf8RegexAdapter.Instance, 0, string.Concat(Enumerable.Range(0, 100).Select(value => value + "\n"))).ConfigureAwait(false);
         await CheckAsync(["-n", "[range(0;1000)] | length"], [],
-            JqUtf8RegexEngine.Instance, 0, "1000\n").ConfigureAwait(false);
+            Utf8RegexAdapter.Instance, 0, "1000\n").ConfigureAwait(false);
         await CheckAsync(["-n", "-r", "\"x\" * 33"], [],
-            JqUtf8RegexEngine.Instance, 0, new string('x', 33) + "\n").ConfigureAwait(false);
+            Utf8RegexAdapter.Instance, 0, new string('x', 33) + "\n").ConfigureAwait(false);
         string input = new string('[', 32) + "0" + new string(']', 32);
-        await CheckAsync(["-c", "."], Encoding.UTF8.GetBytes(input), JqUtf8RegexEngine.Instance, 0, input + "\n").ConfigureAwait(false);
+        await CheckAsync(["-c", "."], Encoding.UTF8.GetBytes(input), Utf8RegexAdapter.Instance, 0, input + "\n").ConfigureAwait(false);
         string tooDeep = new string('[', 65) + "0" + new string(']', 65);
-        await CheckAsync(["-c", "."], Encoding.UTF8.GetBytes(tooDeep), JqUtf8RegexEngine.Instance, 5, "").ConfigureAwait(false);
+        await CheckAsync(["-c", "."], Encoding.UTF8.GetBytes(tooDeep), Utf8RegexAdapter.Instance, 5, "").ConfigureAwait(false);
 
         async Task CheckAsync(string[] arguments, byte[] bytes, IJqRegexEngine regexEngine, int status, string output)
         {

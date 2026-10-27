@@ -16,7 +16,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.ReadBytesCallCount);
@@ -52,7 +52,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput(input);
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(value + "\n", records))),
             host.GetOutputBytes(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -68,7 +68,7 @@ public sealed partial class JqTests
         host.SetStandardInput(string.Concat(Enumerable.Repeat("\"" + new string('x', 4096) + "\"\n", 100)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-s", "length")));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -84,7 +84,7 @@ public sealed partial class JqTests
         host.SetStandardInput("\"" + value + "\"\n\"" + value + "\"\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", ". as $first | input | $first + .")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(value + value + "\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.True(memory.PeakBytes >= 32 * 1024);
@@ -102,7 +102,7 @@ public sealed partial class JqTests
         var charges = new List<long>();
         host.BeforeByteAppend = () => charges.Add(memory.ReservedBytes);
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("\"value/0\"\n", 100)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(100, charges.Count);
@@ -120,7 +120,7 @@ public sealed partial class JqTests
         host.SetStandardInput(string.Concat(Enumerable.Repeat("\"" + value + "\"\n", 300)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "debug | stderr")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat(value + "\n", 300)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(string.Concat(Enumerable.Repeat("[\"DEBUG:\",\"" + value + "\"]\n" + value, 300)),
             host.GetOutput(JqFileDescriptor.StdErr));
@@ -146,7 +146,7 @@ public sealed partial class JqTests
             Assert.True(memory.ReservedBytes >= 2 * value.Length);
         };
 
-        Assert.Equal(7, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(7, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(value, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);

@@ -18,7 +18,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem { AppendRemainsOpen = !closedError };
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", args)));
-        Assert.Equal(depth == 64 ? 0 : 5, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(depth == 64 ? 0 : 5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(depth == 64 ? "0\n" : "", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(depth == 64 ? "" : "jq: value nesting limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.OpenFileCount);

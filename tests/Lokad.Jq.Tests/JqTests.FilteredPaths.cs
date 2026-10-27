@@ -15,7 +15,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         string source = "null | setpath([range(2000)|0];0) | paths(" + predicate + ") | length";
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -26,7 +26,7 @@ public sealed partial class JqTests
     {
         JsonNode? input = JsonNode.Parse("{\"a\":[0,false],\"b\":null}");
         var root = new BenchmarkMemoryBudget(32 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var predicate = new JqParser("false,true,true", JqProgramSource.Inline, context.RootEnvironment, context.Budget).Parse();
             JsonNode?[] paths = await new PathsFilter(predicate).Evaluate(input, context, context.RootEnvironment).ToArrayAsync();
@@ -46,7 +46,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await new PathsFilter(new LiteralFilter(JsonValue.Create(false))).Evaluate(input, context, context.RootEnvironment).CountAsync());
         Assert.Equal(0, root.ReservedBytes);
     }

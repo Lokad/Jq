@@ -46,7 +46,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/",
             "\"ready\", (" + body + ")", "/input")));
 
-        Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token);
         await host.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         try
         {
@@ -81,7 +81,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/", body, "/input")));
-        Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token);
         await host.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
@@ -105,7 +105,7 @@ public sealed partial class JqTests
             inner.AddFile("/input", "42\n");
             return new EvaluationReadHost(inner);
         }).ToArray();
-        Task<int>[] executions = hosts.Select(host => command.ExecuteAsync(host, root, cancellation.Token)).ToArray();
+        Task<int>[] executions = hosts.Select(host => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token)).ToArray();
         try
         {
             Assert.All(hosts, host => Assert.True(host.Entered.Task.IsCompletedSuccessfully));
@@ -141,7 +141,7 @@ public sealed partial class JqTests
         new Thread(() =>
         {
             SynchronizationContext.SetSynchronizationContext(context);
-            try { returned.SetResult(command.ExecuteAsync(host, root, cancellation.Token)); }
+            try { returned.SetResult(command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token)); }
             catch (Exception exception) { returned.SetException(exception); }
         }) { IsBackground = true }.Start();
         await host.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -171,7 +171,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "[range(10)|.+1]")));
-        Task<int> execution = command.ExecuteAsync(host, CancellationToken.None);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
         Assert.True(execution.IsCompletedSuccessfully);
         Assert.Equal(0, await execution);
         Assert.Equal("[1,2,3,4,5,6,7,8,9,10]\n", host.GetOutput(JqFileDescriptor.StdOut));
@@ -190,7 +190,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             refuse ? "try (input | \"x\" * 1000000) catch \"caught\"" : "inputs", "/input", "/later")));
-        Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token);
         await host.Entered.Task;
         host.Release.SetResult();
         Assert.Equal(refuse ? 5 : 0, await execution);
@@ -214,7 +214,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "input | empty", "/input")));
 
-        int status = await command.ExecuteAsync(host, memory, cancellation.Token);
+        int status = await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token);
         Assert.True(status == 0, inner.GetOutput(JqFileDescriptor.StdErr) + $"records={host.RecordsRead}; peak={root.PeakBytes}");
         Assert.Equal(records, host.RecordsRead);
         Assert.True(host.ReadCalls >= 32);

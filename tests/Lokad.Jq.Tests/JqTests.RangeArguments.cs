@@ -18,7 +18,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -29,7 +29,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "[range(((0,1)|debug); ((2,3)|debug); (1|debug))]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("[0,1,0,1,2,1,1,2]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("[\"DEBUG:\",0]\n[\"DEBUG:\",2]\n[\"DEBUG:\",1]\n[\"DEBUG:\",3]\n[\"DEBUG:\",1]\n"
             + "[\"DEBUG:\",1]\n[\"DEBUG:\",2]\n[\"DEBUG:\",1]\n[\"DEBUG:\",3]\n[\"DEBUG:\",1]\n",
@@ -40,7 +40,7 @@ public sealed partial class JqTests
     public async Task Jq_RangeCancellationStopsAnActiveSequence()
     {
         using var cancellation = new CancellationTokenSource();
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(cancellation.Token));
+        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token));
         var filter = new RangeFilter(new JqFilter[] { new LiteralFilter(JsonValue.Create(1000000)) });
         await using IAsyncEnumerator<JsonNode?> values = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
         Assert.True(await values.MoveNextAsync());

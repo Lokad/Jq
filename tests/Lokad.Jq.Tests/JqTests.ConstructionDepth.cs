@@ -39,7 +39,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "\"prefix\", (try (" + source + " | length) catch \"caught\")")));
-        Assert.Equal(depth == 63 ? 0 : 5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(depth == 63 ? 0 : 5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         string result = (source.Contains("add(.,.)", StringComparison.Ordinal) || source.Contains(". + [0]", StringComparison.Ordinal)) ? "2\n" : "1\n";
         Assert.Equal(depth == 63 ? "\"prefix\"\n" + result : "\"prefix\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(depth == 63 ? "" : "jq: value nesting limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
@@ -55,7 +55,7 @@ public sealed partial class JqTests
         host.SetStandardInput(string.Concat(Enumerable.Repeat(record, count)));
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "to_entries | length")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("1\n", count)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);

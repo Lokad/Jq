@@ -162,8 +162,8 @@ internal static class GovernorRunner
                     deadline.CancelAfter(TimeSpan.FromSeconds(15));
                     using var host = item.CreateHost();
                     int status = memory is null
-                        ? await command.ExecuteAsync(host, deadline.Token).ConfigureAwait(false)
-                        : await command.ExecuteAsync(host, memory, deadline.Token).ConfigureAwait(false);
+                        ? await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, deadline.Token).ConfigureAwait(false)
+                        : await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, deadline.Token).ConfigureAwait(false);
                     item.Verify(host.Finish(status));
                 }
             }

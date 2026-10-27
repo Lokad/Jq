@@ -32,7 +32,7 @@ public sealed partial class JqTests
     private static async Task<(int Exit, string Out, string Err)> RunInputAsync(IJqHost host, params string[] args)
     {
         var tool = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", args, [])));
-        var exit = await tool.ExecuteAsync(host, CancellationToken.None);
+        var exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
         var inner = host is ChunkedHost chunked ? chunked.Inner : (MockFileSystem)host;
         return (exit, inner.GetOutput(JqFileDescriptor.StdOut), inner.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -489,7 +489,7 @@ public sealed partial class JqTests
             var host = new MockFileSystem();
             host.SetStandardInput(stdin);
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", args)));
-            Assert.Equal(exit, await tool.ExecuteAsync(host, CancellationToken.None));
+            Assert.Equal(exit, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
             Assert.Equal(stdout, host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal(stderr, host.GetOutput(JqFileDescriptor.StdErr));
         }

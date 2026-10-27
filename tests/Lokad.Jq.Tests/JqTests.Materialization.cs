@@ -13,7 +13,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "[] | .[1000001] = 1 | .[1000001] = 2 | [length, .[1000001]]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("[1000002,2]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -27,7 +27,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "\"prefix\", (" + expression + "), \"later\"")));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -38,7 +38,7 @@ public sealed partial class JqTests
     {
         const int length = 64 * 1024 * 1024 + 1;
         var memory = new BenchmarkMemoryBudget(256 * 1024 * 1024);
-        using var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None);
         var host = new GeneratedLargeValueHost(length, 0);
         using (var content = Assert.IsType<JqReadResult.Complete>(
             await host.TryReadAllBytesAsync(JqFileDescriptor.StdIn, budget, CancellationToken.None)))
@@ -58,7 +58,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(512 * 1024 * 1024);
         var host = new GeneratedLargeValueHost(length, 0);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", "length")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(1, host.Writes);
         Assert.Equal(8192, host.LargestRead);
         Assert.Equal(0, memory.ReservedBytes);
@@ -71,7 +71,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(512 * 1024 * 1024);
         var host = new GeneratedLargeValueHost(0, nulls);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "\"\\u0000\" * 11184812")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(1, host.Writes);
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -79,7 +79,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_BufferRepresentabilityRefusesBeforeAllocation()
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         using var buffer = new JqJsonBuffer(budget);
         Assert.Equal("byte buffer cannot be represented",
             Assert.Throws<JqQuotaException>(() => buffer.GetMemory(int.MaxValue)).Message);

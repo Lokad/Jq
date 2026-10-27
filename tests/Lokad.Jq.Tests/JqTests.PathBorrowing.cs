@@ -15,7 +15,7 @@ public sealed partial class JqTests
         for (int index = 0; index < 5000; index++) value.Add(index);
         using var cancellation = new CancellationTokenSource();
         using var context = new JqContext(new Dictionary<string, JsonNode?> { ["value"] = value },
-            new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token));
+            new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token));
         var filter = new VariableFilter("value");
         await using var paths = filter.EvaluatePaths(new JqValuePath([], currentValue ? value : null, true),
             context, context.RootEnvironment).GetAsyncEnumerator();
@@ -43,7 +43,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             ".a as $x | try path($x | path($x)) catch .")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("\"Invalid path expression with result []\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }

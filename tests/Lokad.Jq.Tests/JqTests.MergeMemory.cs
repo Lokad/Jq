@@ -15,7 +15,7 @@ public sealed partial class JqTests
         var left = new JsonObject { ["drop"] = discarded, ["keep"] = 1 };
         var right = new JsonObject { ["drop"] = 0 };
         var root = new BenchmarkMemoryBudget(4096);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             var result = Assert.IsType<JsonObject>(recursive ? runtime.Multiply(left, right) : runtime.Add(left, right));
@@ -42,7 +42,7 @@ public sealed partial class JqTests
             right = new JsonObject { ["child"] = right };
         }
         var root = new BenchmarkMemoryBudget(100000);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var result = Assert.IsType<JsonObject>(new JqRuntime(budget).Multiply(left, right));
             JsonObject leaf = result;
@@ -76,7 +76,7 @@ public sealed partial class JqTests
         {
             if (pressure is null) Assert.True(root.TryReserve(limit - root.ReservedBytes - 4096, out pressure));
         };
-        Assert.Equal(retain ? 5 : 0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(retain ? 5 : 0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(retain ? "ready\n" : "ready\n1\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(retain ? "jq: memory budget exceeded\n" : "", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -95,7 +95,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "{z:0,a:1,child:{a:2}} " + operation + " {a:null,child:{b:3},new:4}")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -113,7 +113,7 @@ public sealed partial class JqTests
             right = new JsonObject { ["child"] = right };
         }
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(cancellation.Token);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
         var runtime = new JqRuntime(budget);
         if (depth == 64) Assert.IsType<JsonObject>(runtime.Multiply(left, right));
         else Assert.Equal("value nesting limit exceeded", Assert.Throws<JqQuotaException>(() => runtime.Multiply(left, right)).Message);

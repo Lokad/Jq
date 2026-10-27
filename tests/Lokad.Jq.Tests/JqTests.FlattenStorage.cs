@@ -15,7 +15,7 @@ public sealed partial class JqTests
         JsonNode input = nested ? new JsonArray(values) : values;
         var root = new BenchmarkMemoryBudget(256 * 1024);
         var counted = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
         {
             long before = GC.GetAllocatedBytesForCurrentThread();
             var result = Assert.IsType<JsonArray>(context.Runtime.Flatten(input, JsonValue.Create(-1)));
@@ -36,7 +36,7 @@ public sealed partial class JqTests
         JsonNode input = JsonValue.Create(1);
         for (int depth = 0; depth < 5000; depth++) input = new JsonArray(input);
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
             Assert.Equal("[1]", context.Runtime.Flatten(input, JsonValue.Create(-1)).ToJsonString());
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -49,7 +49,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var budget = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, budget, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, budget, cancellation.Token)))
             Assert.Throws<OperationCanceledException>(() => context.Runtime.Flatten(input, JsonValue.Create(-1)));
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -65,7 +65,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[1,[2,[3]],4]");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "try flatten(" + depth + ") catch .")));
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected + "\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);

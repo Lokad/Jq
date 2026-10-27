@@ -13,7 +13,7 @@ public sealed partial class JqTests
         var input = new JsonArray();
         for (int index = 0; index < 10000; index++) input.Add((JsonNode?)null);
         var root = new BenchmarkMemoryBudget(600 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             var output = Assert.IsType<JsonArray>(unique ? runtime.UniqueArray(input) : runtime.SortArray(input));
@@ -29,7 +29,7 @@ public sealed partial class JqTests
     public void Jq_SortingPreservesStableNumericTiesAndTheirStorage()
     {
         var input = new JsonArray(JsonValue.Create(-0.0), JsonValue.Create(0.0), JsonValue.Create(0L));
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         JsonArray output = runtime.SortArray(input);
         Assert.Equal(BitConverter.DoubleToInt64Bits(-0.0), BitConverter.DoubleToInt64Bits(output[0]?.GetValue<double>() ?? 1));
@@ -44,7 +44,7 @@ public sealed partial class JqTests
     public void Jq_UniqueKeepsEveryNanAndItsEstablishedOrdering()
     {
         var input = new JsonArray(JsonValue.Create(double.NaN), null, JsonValue.Create(double.NaN), JsonValue.Create(false), JsonValue.Create(0));
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var output = Assert.IsType<JsonArray>(new JqRuntime(budget).UniqueArray(input));
         Assert.Equal(5, output.Count);
         Assert.Null(output[0]);

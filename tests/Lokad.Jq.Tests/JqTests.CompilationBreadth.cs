@@ -22,7 +22,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(32 * 1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("5000\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -35,7 +35,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", arguments, [])));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("5000\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -47,7 +47,7 @@ public sealed partial class JqTests
         string filter = "def f(" + string.Join(';', Enumerable.Range(0, 4097).Select(index => "a" + index)) + "): .; 0";
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-        Assert.Equal(3, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(3, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Contains("function has too many parameters", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -58,7 +58,7 @@ public sealed partial class JqTests
         string filter = "def f: " + string.Concat(Enumerable.Range(0, 300).Select(index => "def g" + index + ":0;")) + "f; 0";
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));
-        Assert.Equal(3, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(3, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Contains("filter nesting limit exceeded", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
@@ -74,7 +74,7 @@ public sealed partial class JqTests
         host.AddFile("/program", source);
         var invocation = hosted ? BuildInvocation("jq", "-n", "-f", "/program") : BuildInvocation("jq", "-n", source);
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(hosted ? 1 : 0, host.ClosedDescriptors.Count);
@@ -89,13 +89,13 @@ public sealed partial class JqTests
         var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
         for (int i = 0; i < 100000; i++)
             env = env.ExtendFunction(new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
-        using var compiler = new JqBudget(CancellationToken.None);
+        using var compiler = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var tokens = Lexer.Tokenize(".", JqProgramSource.Inline, compiler);
         using var cancellation = new CancellationTokenSource();
         if (cancel) cancellation.Cancel();
         var root = new BenchmarkMemoryBudget(0);
         var memory = new CountingMemoryBudget(root);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
         {
             var parser = new JqParser(tokens, JqProgramSource.Inline, env, budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
@@ -118,7 +118,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
+            new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             var filter = new JqParser("f0 + f0(1)", JqProgramSource.Inline, env, context.Budget).Parse();
             Assert.Equal(43, JqRuntime.Number(await filter.Evaluate(null, context, env).SingleAsync()));
@@ -136,7 +136,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var memory = new CountingMemoryBudget(root);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
+            new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             string source = "\"" + string.Concat(Enumerable.Repeat("\\(f0)", 20)) + "\"";
             var filter = new JqParser(source, JqProgramSource.Inline, env, context.Budget).Parse();
@@ -156,7 +156,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(128 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -168,7 +168,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(128 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "\"\\(def g:2; g)-\\(g)\"")));
-        Assert.Equal(3, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(3, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Contains("unsupported function g", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(0, root.ReservedBytes);

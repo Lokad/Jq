@@ -13,7 +13,7 @@ public sealed partial class JqTests
     private static async Task<(int Exit, string Out, string Err)> RunModulesAsync(MockFileSystem fs, params string[] args)
     {
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation(args)));
-        var exit = await tool.ExecuteAsync(fs, CancellationToken.None);
+        var exit = await tool.ExecuteAsync(fs, Utf8RegexAdapter.Instance, CancellationToken.None);
         return (exit, fs.GetOutput(JqFileDescriptor.StdOut), fs.GetOutput(JqFileDescriptor.StdErr));
     }
 
@@ -27,7 +27,7 @@ public sealed partial class JqTests
         var memory = new Lokad.Jq.Benchmarking.BenchmarkMemoryBudget(1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-nc", "-L", "/lib",
             "import \"data\" as $d; $d | length")));
-        Assert.Equal(expectedStatus, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(expectedStatus, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expectedStatus == 0 ? "1\n" : "", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(expectedStatus == 0 ? "" : "jq: value nesting limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -43,7 +43,7 @@ public sealed partial class JqTests
         var memory = new Lokad.Jq.Benchmarking.BenchmarkMemoryBudget(1280 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-nc", "-L", "/lib",
             "import \"data\" as $d; [$d[0] | (length, .[0], .[-1])]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("[10000,0,0]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -337,7 +337,7 @@ public sealed partial class JqTests
         fs.AddFile("/proj/main.jq", "import \"lib\" as l; l::x");
         fs.AddFile("/proj/lib.jq", "def x: 42;");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildModuleInvocation("-n", "-f", "/proj/main.jq")));
-        var exit = await tool.ExecuteAsync(fs, CancellationToken.None);
+        var exit = await tool.ExecuteAsync(fs, Utf8RegexAdapter.Instance, CancellationToken.None);
         Assert.True(exit == 0, fs.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal("42\n", fs.GetOutput(JqFileDescriptor.StdOut));
     }

@@ -68,6 +68,7 @@ $template.Replace('__PACKAGE_VERSION__', $version) | Set-Content -LiteralPath $p
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Program.cs') -Destination (Join-Path $verificationRoot 'Program.cs')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Symbols.cs') -Destination (Join-Path $verificationRoot 'Symbols.cs')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../examples/RegexAdapterExample.cs') -Destination (Join-Path $verificationRoot 'RegexAdapterExample.cs')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../examples/Utf8RegexAdapter.cs') -Destination (Join-Path $verificationRoot 'Utf8RegexAdapter.cs')
 # Reuse the development-only host contract; no governor enters the package.
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../benchmarks/Lokad.Jq.Benchmarks/BenchmarkMemoryBudget.cs') -Destination (Join-Path $verificationRoot 'BenchmarkMemoryBudget.cs')
 $feed = [Security.SecurityElement]::Escape([IO.Path]::GetDirectoryName($packageFile))

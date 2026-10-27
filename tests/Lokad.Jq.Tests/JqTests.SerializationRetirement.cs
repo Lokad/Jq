@@ -13,7 +13,7 @@ public sealed partial class JqTests
     {
         var root = new BenchmarkMemoryBudget(96 * 1024);
         var memory = new CountingMemoryBudget(root);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         using (var buffer = new JqJsonBuffer(budget))
         {
             int written = 0;
@@ -43,7 +43,7 @@ public sealed partial class JqTests
     public void Jq_SerializationRetirementKeepsFramingBodyAdmittedThroughItsCopy()
     {
         var root = new BenchmarkMemoryBudget(769);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         using (var buffer = new JqJsonBuffer(budget))
         {
             buffer.GetSpan(256)[..256].Fill((byte)'x');
@@ -70,7 +70,7 @@ public sealed partial class JqTests
     public void Jq_SerializationRetirementKeepsNecessaryReplacementRefusalTerminal(bool memoryLoan)
     {
         var root = new BenchmarkMemoryBudget(768);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         using (var buffer = new JqJsonBuffer(budget))
         {
             buffer.GetSpan(256)[..256].Fill((byte)'x');
@@ -96,7 +96,7 @@ public sealed partial class JqTests
     {
         var root = new BenchmarkMemoryBudget(128 * 1024);
         var memory = new CountingMemoryBudget(root);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             if (warm)
@@ -130,7 +130,7 @@ public sealed partial class JqTests
         var host = new MemoryBorrowHost(inner);
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "--seq", ".", "/records")));
-        Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(Encoding.UTF8.GetBytes(expected), pending.ToArray());
         long charged = root.ReservedBytes;

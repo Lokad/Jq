@@ -18,7 +18,7 @@ public sealed partial class JqTests
         host.SetStandardInput(JsonSerializer.Serialize(new string('x', prefix) + "🚀a🚀a🚀" + new string('x', 65540)));
         var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "[indices(\"🚀a🚀\"),index(\"🚀a🚀\"),rindex(\"🚀a🚀\")]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("[[" + prefix + "," + (prefix + 2) + "]," + prefix + "," + (prefix + 2) + "]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -33,7 +33,7 @@ public sealed partial class JqTests
         string needle = new string('a', length / 2) + "b" + new string('a', length - length / 2 - 1);
         var text = JsonValue.Create("🚀" + needle + "x" + needle + "!");
         var key = JsonValue.Create(needle);
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         var found = Assert.IsType<JsonArray>(runtime.Indices(text, key));
         Assert.Equal(2, found.Count);
@@ -51,7 +51,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_StringSearchMissBorrowsItsInputsWithoutAllocating(bool last)
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         var input = JsonValue.Create(new string('a', 262144));
         var needle = JsonValue.Create(new string('a', 16384) + "b");
@@ -71,7 +71,7 @@ public sealed partial class JqTests
         string fragment = new string('a', length / 4) + "b" + new string('a', length - length / 4 - 1);
         var input = JsonValue.Create(new string('a', size));
         var needle = JsonValue.Create(fragment);
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         Assert.Null(runtime.Index(input, needle, false));
         Assert.Null(runtime.Index(input, needle, true));
@@ -82,7 +82,7 @@ public sealed partial class JqTests
     public void Jq_StringSearchLongNeedlesPreserveOverlapsAndCancellation()
     {
         string fragment = new('a', 65537);
-        using (var budget = new JqBudget(CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             var input = JsonValue.Create(fragment + "aaa");
@@ -93,7 +93,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
             Assert.ThrowsAny<OperationCanceledException>(() => runtime.Indices(
@@ -109,7 +109,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
             Assert.ThrowsAny<OperationCanceledException>(() =>

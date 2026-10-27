@@ -35,7 +35,7 @@ public sealed partial class JqTests
         host.AddFile("/modules/dir/tiny.json", "43\n");
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/modules", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -51,7 +51,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/modules",
             "import \"./tiny\" as a; import \"tiny\" as b; [a::location,b::location]")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("[{\"file\":\"/modules/tiny.jq\",\"line\":1},{\"file\":\"/modules/tiny.jq\",\"line\":1}]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(1, host.ReadBytesCallCount);
@@ -68,7 +68,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.AddFile("/modules/" + candidate, "def value:42;");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/modules", "import \"./bundle\" as m; m::value")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("42\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -96,7 +96,7 @@ public sealed partial class JqTests
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq",
             kind == "program" ? ["-nc", "-f", directory + "/main.jq"] : ["-nc", filter], [new("PWD", directory)]);
         var memory = new BenchmarkMemoryBudget(256 * 1024);
-        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(kind == "data" ? "[42]\n" : kind == "metadata" ? "[\"value/0\"]\n" : kind == "cached" ? "[42,42]\n" : "42\n",
             host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -116,7 +116,7 @@ public sealed partial class JqTests
         host.AddFile(directory + "/tiny.jq", "def value:42;");
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", ["-nc", "import \"tiny\" as m {optional:true}; 42"], [new("PWD", directory)]);
         var memory = new BenchmarkMemoryBudget(allowance);
-        Assert.Equal(5, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(reads, host.ReadBytesCallCount);
@@ -137,7 +137,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/modules",
             "import \"./tiny\" as m; m::value")));
-        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token);
         await host.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         try
         {

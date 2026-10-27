@@ -29,7 +29,7 @@ public sealed partial class JqTests
         host.SetStandardInput(objectInput ? "{\"payload\":" + JsonSerializer.Serialize(text) + "}" : JsonSerializer.Serialize(text));
         var memory = new BenchmarkMemoryBudget(384 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "try (" + expression + ") catch .")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, JsonSerializer.Deserialize<string>(host.GetOutput(JqFileDescriptor.StdOut)));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -46,7 +46,7 @@ public sealed partial class JqTests
         host.SetStandardInput(JsonSerializer.Serialize(new string('x', 65536)));
         var memory = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", expression)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -60,7 +60,7 @@ public sealed partial class JqTests
         host.SetStandardInput("{\"payload\":\"" + text + "\"}");
         var memory = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "halt_error(7)")));
-        Assert.Equal(7, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(7, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("{\"payload\":\"" + text + "\"}\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);

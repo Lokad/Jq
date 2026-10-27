@@ -47,7 +47,7 @@ internal static class JqProbeRunner
             return new JqProbeResult(2, string.Empty, "jq: not a jq command\n");
         }
 
-        int exitCode = await tool.ExecuteAsync(host, cancellationToken).ConfigureAwait(false);
+        int exitCode = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, cancellationToken).ConfigureAwait(false);
         string stdout = host.GetOutput(JqFileDescriptor.StdOut);
         string stderr = host.GetOutput(JqFileDescriptor.StdErr);
         return new JqProbeResult(exitCode, stdout, stderr);

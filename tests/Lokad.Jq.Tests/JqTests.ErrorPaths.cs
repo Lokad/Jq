@@ -21,7 +21,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("{\"a\":1,\"b\":2}\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -39,7 +39,7 @@ public sealed partial class JqTests
         host.SetStandardInput(input);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             ". as $saved | (try error catch .) | path($saved)")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("[]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -52,7 +52,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(0);
         using var cancellation = new CancellationTokenSource();
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
+            new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
         {
             var filter = new TryFilter(new FunctionFilter("error", []), new IdentityFilter());
             Assert.Same(payload, await filter.Evaluate(payload, context, context.RootEnvironment).SingleAsync());
@@ -71,7 +71,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "try error catch (. as $saved | input, (.a[0] = 9), $saved)")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("{\"next\":2}\n{\"a\":[9]}\n{\"a\":[1]}\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -93,7 +93,7 @@ public sealed partial class JqTests
         bool extrema = source is "min_by(.)" or "max_by(.)";
         host.AddFile("/input", string.Concat(Enumerable.Repeat(extrema ? "[1,1]\n" : "{\"a\":1}\n", 2500)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", source, "/input")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("1\n", 2500)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);

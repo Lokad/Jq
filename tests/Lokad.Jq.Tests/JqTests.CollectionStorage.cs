@@ -16,7 +16,7 @@ public sealed partial class JqTests
             input.Add(item);
         }
         var memory = new BenchmarkMemoryBudget(128 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var output = Assert.IsType<JsonArray>(new JqRuntime(budget).UniqueArray(input));
             Assert.Single(output);
@@ -41,7 +41,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("[3,1,2]");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", operation + "(debug)")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("[\"DEBUG:\",3]\n[\"DEBUG:\",1]\n[\"DEBUG:\",2]\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -55,7 +55,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[0,1,2]");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c",
             "try " + operation + "(if . == 2 then error(\"later\") else . end) catch .")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("\"later\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }

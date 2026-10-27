@@ -20,7 +20,7 @@ public sealed partial class JqTests
             inner.AddFile("/records", input);
             var memory = new BenchmarkMemoryBudget(64 * 1024);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", errors ? "--stream-errors" : "--stream", ".", "/records")));
-            Assert.Equal(errors ? 0 : 5, await command.ExecuteAsync(new ChunkedHost(inner, chunk), memory, CancellationToken.None));
+            Assert.Equal(errors ? 0 : 5, await command.ExecuteAsync(new ChunkedHost(inner, chunk), Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             string errorEvent = errors ? "[" + JsonSerializer.Serialize(message) + ",[]]\n" : "";
             Assert.Equal(errorEvent, inner.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal(errors ? "" : "jq: parse error: " + message + "\n", inner.GetOutput(JqFileDescriptor.StdErr));

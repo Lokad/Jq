@@ -24,7 +24,7 @@ public sealed partial class JqTests
         string spelling = value.HasValue ? value.Value ? "true" : "false" : format == "sh" ? "null" : "";
         string original = row.ToJsonString();
         var memory = new BenchmarkMemoryBudget(64 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             Assert.Equal(string.Join(separator, Enumerable.Repeat(spelling, count)), new JqRuntime(budget).Format(format, row));
             Assert.Equal(original, row.ToJsonString());
@@ -40,7 +40,7 @@ public sealed partial class JqTests
         var row = new JsonArray();
         for (int index = 0; index < 8000; index++) row.Add(true);
         var memory = new BenchmarkMemoryBudget(64 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
             Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).Format(format, row));
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -57,7 +57,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -80,8 +80,8 @@ public sealed partial class JqTests
         host.AddFile("/later", "null\n");
         if (mode == "cancelled") host.BeforeByteAppend = () => { if (host.AppendCallCount == 2) cancellation.Cancel(); };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "[true,false,null]|@" + format, "/input", "/later")));
-        if (mode == "cancelled") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, memory, cancellation.Token));
-        else Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+        if (mode == "cancelled") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
+        else Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         string line = format == "sh" ? "true false null\n" : "true,false,\n";
         Assert.Equal(string.Concat(Enumerable.Repeat(line, mode == "stream" ? records + 1 : mode == "closed" ? 1 : 2)),
             host.GetOutput(JqFileDescriptor.StdOut));

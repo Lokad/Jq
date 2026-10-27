@@ -14,7 +14,7 @@ public sealed partial class JqTests
         JsonNode input = JsonValue.Create(text);
         JsonNode separator = JsonValue.Create(longer ? new string('z', text.Length + 1) : "z");
         var root = new BenchmarkMemoryBudget(256);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var result = Assert.IsType<JsonArray>(new JqRuntime(budget).Split(input, separator));
             Assert.Single(result);
@@ -39,7 +39,7 @@ public sealed partial class JqTests
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq",
             ["-nr", "--arg", "text", text, "\"ready\", ($text | (try (" + expression + " | length) catch \"caught\"))"], []);
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
-        Assert.Equal(copies ? 5 : 0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(copies ? 5 : 0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(copies ? "ready\n" : "ready\n1\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(copies ? "jq: memory budget exceeded\n" : "", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -52,7 +52,7 @@ public sealed partial class JqTests
     public void Jq_SplitSharesWindowedSearchAcrossUnicodeBoundaries(int prefix)
     {
         string left = new('x', prefix);
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         var result = runtime.Split(JsonValue.Create(left + "🚀xy🚀xyend"), JsonValue.Create("🚀xy"));
         Assert.Equal(new[] { left, "", "end" }, result.AsArray().Select(part => part?.GetValue<string>()));
@@ -66,12 +66,12 @@ public sealed partial class JqTests
         JsonNode input = JsonValue.Create(text);
         JsonNode delimiter = JsonValue.Create("b" + new string('a', 65536));
         var root = new BenchmarkMemoryBudget(256);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
             Assert.Same(text, new JqRuntime(budget).Split(input, delimiter)[0]?.GetValue<string>());
         Assert.Equal(0, root.ReservedBytes);
         using var cancellation = new CancellationTokenSource();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
             Assert.ThrowsAny<OperationCanceledException>(() => new JqRuntime(budget).Split(input, delimiter));
         Assert.Equal(0, root.ReservedBytes);
         Assert.Null(input.Parent);
@@ -89,7 +89,7 @@ public sealed partial class JqTests
         host.AddFile("/later", "unused\n");
         host.BeforeByteAppend = () => { if (host.AppendCallCount == 32) cancellation.Cancel(); };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-Rc", expression, "/records", "/later")));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, root, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token));
         Assert.Equal(string.Concat(Enumerable.Repeat("[\"a\",\"b\"]\n", 32)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);

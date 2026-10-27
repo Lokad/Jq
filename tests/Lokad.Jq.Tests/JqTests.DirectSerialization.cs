@@ -19,7 +19,7 @@ public sealed partial class JqTests
         if (nonfinite) input[0] = JsonValue.Create(double.NaN);
         byte[] expected = Encoding.UTF8.GetBytes("[" + string.Join(',', Enumerable.Repeat("null", 10000)) + "]");
         var root = new BenchmarkMemoryBudget(192 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             using (var output = runtime.SerializeUtf8(input, false, null, false, sorted))
@@ -38,7 +38,7 @@ public sealed partial class JqTests
         for (int index = 0; index < 10000; index++) input.Add(new JsonObject { ["z"] = 1, ["a"] = 2 });
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var counted = new CountingMemoryBudget(root);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
             using (var output = new JqRuntime(budget).SerializeUtf8(input, false, null, false, true))
             {
@@ -65,7 +65,7 @@ public sealed partial class JqTests
         var counted = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-ncS", "{z:1,a:2} as $x | range(2500) | $x")));
-        Assert.Equal(0, await command.ExecuteAsync(host, counted, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, counted, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat("{\"a\":2,\"z\":1}\n", 2500)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.InRange(counted.Counts.Reservations + counted.Counts.Resizes, 1, 80);
@@ -82,7 +82,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
             Assert.Throws<OperationCanceledException>(() => runtime.SerializeUtf8(input, false, null, false, sorted));
@@ -100,7 +100,7 @@ public sealed partial class JqTests
         for (int depth = 0; depth < 64; depth++) deep = new JsonArray(deep);
         var input = new JsonArray(JsonValue.Create(double.NaN), deep);
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var failure = Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).SerializeUtf8(input, false, null, false, sorted));
             Assert.False(failure.IsMemoryAdmission);

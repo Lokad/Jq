@@ -20,6 +20,15 @@
           "System.Management": "9.0.5"
         }
       },
+      "Lokad.Utf8Regex.Pcre2": {
+        "type": "Direct",
+        "requested": "[0.4.0, )",
+        "resolved": "0.4.0",
+        "contentHash": "hvzVSyfkWSBTLDVvGfFkgKWqaEotrx4ZmtIWQ1ZXh884bNQJto8CAbi8x7OLjyWSv0pLdj1bj+8BEpQR+ftCyg==",
+        "dependencies": {
+          "Lokad.Utf8Regex": "[0.4.0]"
+        }
+      },
       "BenchmarkDotNet.Annotations": {
         "type": "Transitive",
         "resolved": "0.15.8",
@@ -175,15 +184,6 @@
         "type": "Project",
         "dependencies": {
           "Lokad.Utf8Regex.Pcre2": "[0.4.0, )"
-        }
-      },
-      "Lokad.Utf8Regex.Pcre2": {
-        "type": "CentralTransitive",
-        "requested": "[0.4.0, )",
-        "resolved": "0.4.0",
-        "contentHash": "hvzVSyfkWSBTLDVvGfFkgKWqaEotrx4ZmtIWQ1ZXh884bNQJto8CAbi8x7OLjyWSv0pLdj1bj+8BEpQR+ftCyg==",
-        "dependencies": {
-          "Lokad.Utf8Regex": "[0.4.0]"
         }
       }
     }

@@ -22,7 +22,7 @@ public sealed partial class JqTests
             host.AddFile("/input", new string('[', depth) + "0" + new string(']', depth));
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "\"ready\", (try (" + operation + ") catch \"caught\")", "/input")));
             bool refuses = depth == 64 && operation != "map(.) | length";
-            Assert.Equal(refuses ? 5 : 0, await command.ExecuteAsync(host, root, CancellationToken.None));
+            Assert.Equal(refuses ? 5 : 0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
             Assert.Equal(refuses ? "ready\n" : "ready\n1\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal(refuses ? "jq: value nesting limit exceeded\n" : "", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Single(host.ClosedDescriptors);
@@ -56,7 +56,7 @@ public sealed partial class JqTests
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", arguments, []);
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
-        Assert.Equal(status, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(status == 0 ? "" : "jq: value nesting limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -83,7 +83,7 @@ public sealed partial class JqTests
             var host = new MockFileSystem();
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", path + " | " + operation)));
 
-            Assert.Equal(depth == 64 ? 0 : 5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal(depth == 64 ? 0 : 5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             Assert.Equal(depth == 64 ? expected : "", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal(depth == 64 ? "" : "jq: value nesting limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(0, memory.ReservedBytes);
@@ -105,7 +105,7 @@ public sealed partial class JqTests
         }
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-L", "/", "import \"m0\" as m; empty")));
 
-        Assert.Equal(status, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(status == 0 ? "" : "jq: module nesting limit exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(Math.Min(count, 64), host.ClosedDescriptors.Count);
@@ -118,7 +118,7 @@ public sealed partial class JqTests
     [InlineData(65)]
     public async Task Jq_RecursiveEnumerationRestoresDepthAfterCompletionOrFailure(int depth)
     {
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         await using (IAsyncEnumerator<int> values = Enumerate(depth).GetAsyncEnumerator())
         {
             if (depth == 64)
@@ -160,7 +160,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "null as " + pattern + " | $v4999")));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("null\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -183,11 +183,11 @@ public sealed partial class JqTests
 
         if (cancel)
         {
-            var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, memory, cancellation.Token));
+            var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
             Assert.Equal(cancellation.Token, error.CancellationToken);
         }
         else
-            Assert.Equal(0, await command.ExecuteAsync(host, memory, cancellation.Token));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token));
         Assert.Equal("[1,3]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(1, host.AppendCallCount);
@@ -197,7 +197,7 @@ public sealed partial class JqTests
         Assert.Equal(0, memory.ReservedBytes);
         var next = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "42")));
         var reusable = new MockFileSystem();
-        Assert.Equal(0, await next.ExecuteAsync(reusable, memory, CancellationToken.None));
+        Assert.Equal(0, await next.ExecuteAsync(reusable, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("42\n", reusable.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(0, memory.ReservedBytes);
     }

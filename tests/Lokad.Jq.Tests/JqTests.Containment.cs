@@ -20,7 +20,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput(input);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "contains(" + needle + ")")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected ? "true\n" : "false\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -36,7 +36,7 @@ public sealed partial class JqTests
         JsonNode? container = JsonNode.Parse(input);
         JsonNode? contained = JsonNode.Parse(needle);
         using var cancellation = new CancellationTokenSource();
-        using var budget = new JqBudget(cancellation.Token);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
         var runtime = new JqRuntime(budget);
         cancellation.Cancel();
         Assert.ThrowsAny<OperationCanceledException>(() => runtime.Contains(container, contained));
@@ -53,7 +53,7 @@ public sealed partial class JqTests
             needles.Add(new JsonObject { ["x"] = new JsonObject() });
         }
         haystack.Add(new JsonObject { ["x"] = new JsonObject() });
-        using var budget = new JqBudget(CancellationToken.None);
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         Assert.True(runtime.Contains(haystack, needles));
         long before = GC.GetAllocatedBytesForCurrentThread();

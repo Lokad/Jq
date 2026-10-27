@@ -12,7 +12,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--arg", "text", new string('a', 1000), "$text | " + operation)));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -61,7 +61,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem(); host.SetStandardInput(System.Text.Json.JsonSerializer.Serialize(input));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-ac", filter)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -95,7 +95,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc",
             "\"aaa\" | _match_impl((\"pattern\"|debug|\"a\");(\"flags\"|debug|\"g\");(\"mode\"|debug|1)) | length")));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("3\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("[\"DEBUG:\",\"mode\"]\n[\"DEBUG:\",\"flags\"]\n[\"DEBUG:\",\"pattern\"]\n", host.GetOutput(JqFileDescriptor.StdErr));
     }

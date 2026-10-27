@@ -23,7 +23,7 @@ public sealed partial class JqTests
             };
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", "\"xx\",\"longxx\"")));
 
-            Assert.Equal(5, await command.ExecuteAsync(host, caller, CancellationToken.None));
+            Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, caller, CancellationToken.None));
             Assert.Equal("xx\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.NotNull(pressure);
@@ -51,7 +51,7 @@ public sealed partial class JqTests
                 observed ??= memory.ReservedBytes;
                 Assert.Equal(observed.Value, memory.ReservedBytes);
             };
-            Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             Assert.Equal(string.Concat(Enumerable.Repeat("xx\n", 100)), host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(0, memory.ReservedBytes);
@@ -65,7 +65,7 @@ public sealed partial class JqTests
     {
         var memory = new BenchmarkMemoryBudget(1024);
         using var scope = memory.CreateScope();
-        var budget = new JqBudget(JqUtf8RegexEngine.Instance, scope, CancellationToken.None);
+        var budget = new JqBudget(Utf8RegexAdapter.Instance, scope, CancellationToken.None);
         using (var buffer = new JqJsonBuffer(budget))
         {
             "abc"u8.CopyTo(buffer.GetSpan(3));
@@ -123,7 +123,7 @@ public sealed partial class JqTests
         inner.AddFile("/input", "\"xx\"");
         var host = new MemoryBorrowHost(inner) { DelayCleanup = true };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", raw ? "-r" : "-c", ".", "/input")));
-        Task<int> execution = command.ExecuteAsync(host, memory, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, cancellation.Token);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         long charged = memory.ReservedBytes;
         Assert.True(charged >= pending.Length);
@@ -165,9 +165,9 @@ public sealed partial class JqTests
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r", "\"xx\"")));
             var first = new MemoryBorrowHost(new MockFileSystem());
             var second = new MemoryBorrowHost(new MockFileSystem());
-            Task<int> firstCall = command.ExecuteAsync(first, caller, CancellationToken.None);
+            Task<int> firstCall = command.ExecuteAsync(first, Utf8RegexAdapter.Instance, caller, CancellationToken.None);
             await first.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            Task<int> secondCall = command.ExecuteAsync(second, caller, CancellationToken.None);
+            Task<int> secondCall = command.ExecuteAsync(second, Utf8RegexAdapter.Instance, caller, CancellationToken.None);
             await second.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
             long combined = memory.ReservedBytes;
             Assert.True(combined > 7);
@@ -175,7 +175,7 @@ public sealed partial class JqTests
             using (pressure)
             {
                 var refused = new MockFileSystem();
-                Assert.Equal(5, await command.ExecuteAsync(refused, caller, CancellationToken.None));
+                Assert.Equal(5, await command.ExecuteAsync(refused, Utf8RegexAdapter.Instance, caller, CancellationToken.None));
                 Assert.Empty(refused.GetOutput(JqFileDescriptor.StdOut));
                 Assert.Equal("jq: memory budget exceeded\n", refused.GetOutput(JqFileDescriptor.StdErr));
                 Assert.Equal(limit, memory.ReservedBytes);
@@ -199,7 +199,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(1);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", option)));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);

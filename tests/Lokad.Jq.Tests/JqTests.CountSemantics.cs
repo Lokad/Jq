@@ -14,7 +14,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         string filter = "try [" + operation + "(\"2\"; (debug, (42|debug)))] catch .";
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", ["-nc", filter], []);
-        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("\"string (\\\"2\\\") and number (1) cannot be subtracted\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("[\"DEBUG:\",null]\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
@@ -29,7 +29,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq",
             ["-nc", "try " + operation + "([]; (debug|empty)) catch ."], []);
-        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("[\"DEBUG:\",null]\n", host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -47,7 +47,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem();
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", ["-nc", filter], []);
-        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -59,7 +59,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[1]\n");
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq",
             ["-c", "[first(path(range(.;{};[]))),try path(limit(2;range(.;{};[1]))) catch .]"], []);
-        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal("[[],[],\"Invalid path expression with result [1,1]\"]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
     }

@@ -47,7 +47,7 @@ public sealed class HostResultTests
         var command = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors(
             "jq", ["-n", "inputs", "/input"], [])));
 
-        Assert.Equal(readFailure ? 5 : appendStatus, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(readFailure ? 5 : appendStatus, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(readFailure ? "" : "42\n", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(readFailure ? "jq: error (at /input:0): input read failed\n" : "", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(inner.ClosedDescriptors);

@@ -30,7 +30,7 @@ public sealed partial class JqTests
         };
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", [.. options, "/first", "/later"])));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(output, inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: error closing /first: storage unavailable\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(["/first"], host.Opened);
@@ -66,7 +66,7 @@ public sealed partial class JqTests
         };
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
-        Assert.Equal(status, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: error closing " + display + ": storage unavailable\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(inner.ClosedDescriptors);
@@ -88,7 +88,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         string[] arguments = expression == "first(inputs)" ? ["-nec", expression, "/first"] : ["-ec", expression, "/first"];
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
-        Assert.Equal(status, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(output, inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(error, inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(inner.ClosedDescriptors);
@@ -105,7 +105,7 @@ public sealed partial class JqTests
         var host = new TerminalCloseHost(inner, "/first") { OutputStop = writeStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(writeStatus) };
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".", "/first", "/later")));
-        Assert.Equal(writeStatus == 0 ? 5 : writeStatus, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(writeStatus == 0 ? 5 : writeStatus, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("42\n", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(writeStatus == 0 ? "jq: error closing /first: storage unavailable\n" : "", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(["/first"], host.Opened);
@@ -121,7 +121,7 @@ public sealed partial class JqTests
         var host = new TerminalCloseHost(inner, "/m.jq") { FailEveryClose = true };
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "\"m\" | modulemeta", "/first")));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("jq: error closing /m.jq: storage unavailable\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(2, inner.ClosedDescriptors.Count);
         Assert.Equal(0, inner.OpenFileCount);
@@ -135,7 +135,7 @@ public sealed partial class JqTests
         var host = new TerminalCloseHost(inner, "/first") { HoldClose = true };
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".", "/first", "/later")));
-        Task<int> execution = command.ExecuteAsync(host, memory, CancellationToken.None);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None);
         await host.Closing.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False(execution.IsCompleted);
         Assert.True(memory.ReservedBytes > 0);
@@ -158,7 +158,7 @@ public sealed partial class JqTests
         var host = new TerminalCloseHost(inner, "/first") { ReadFailure = readFailure };
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "/first", "/later")));
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(readFailure ? "jq: parse error: input read failed\n"
             : "jq: parse error: '!' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 1.\n",
             inner.GetOutput(JqFileDescriptor.StdErr));
@@ -186,7 +186,7 @@ public sealed partial class JqTests
         string[] arguments = mode == "program" ? ["-n", "-f", "/first"]
             : ["-n", "--" + mode, "d", "/first", "$d"];
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
-        Assert.Equal(2, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("jq: error closing /first: storage unavailable\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.NotNull(pressure);
         Assert.Equal(pressure.Bytes, memory.ReservedBytes);

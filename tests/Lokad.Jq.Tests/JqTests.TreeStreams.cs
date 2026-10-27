@@ -21,7 +21,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.AddFile("/input", string.Concat(Enumerable.Repeat("[null,[null]]\n", 2500)));
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", source, "/input")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(string.Concat(Enumerable.Repeat(expectedRecord, 2500)), host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -57,7 +57,7 @@ public sealed partial class JqTests
         inner.AddFile("/later", "invalid JSON");
         var host = new MemoryBorrowHost(inner);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", source, "/input", "/later")));
-        Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token);
         ReadOnlyMemory<byte> pending = await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         byte[] expectedBytes = Encoding.UTF8.GetBytes(expected);
         long charged = root.ReservedBytes;

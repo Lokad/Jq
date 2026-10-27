@@ -12,7 +12,7 @@ public sealed partial class JqTests
         for (int index = 0; index < 1000; index++) payload.Add(index);
         var input = new JsonObject { ["payload"] = payload };
         var root = new BenchmarkMemoryBudget(200000);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var result = Assert.IsType<JsonObject>(await new WithEntriesFilter(new IdentityFilter()).Evaluate(input, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(1000, Assert.IsType<JsonArray>(result["payload"]).Count);
@@ -37,7 +37,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.SetStandardInput("{\"a\":1,\"b\":2}");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", source)));
-        Assert.Equal(0, await command.ExecuteAsync(host, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(error, host.GetOutput(JqFileDescriptor.StdErr));
     }
@@ -50,7 +50,7 @@ public sealed partial class JqTests
         int visits = 0;
         var body = new WalkVisitFilter(() => { if (++visits == 2) cancellation.Cancel(); });
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
             await Assert.ThrowsAsync<OperationCanceledException>(async () => await new WithEntriesFilter(body).Evaluate(input, context, context.RootEnvironment).SingleAsync());
         Assert.Equal(2, visits);
         Assert.Equal("{\"a\":1,\"b\":2}", input.ToJsonString());

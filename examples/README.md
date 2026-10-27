@@ -1,12 +1,13 @@
 # Regex adapter example
 
-Compile [RegexAdapterExample.cs](RegexAdapterExample.cs) into an application
-referencing the `Lokad.Jq` package. Supply an `IJqHost` and your shared
+Compile [RegexAdapterExample.cs](RegexAdapterExample.cs) and
+[Utf8RegexAdapter.cs](Utf8RegexAdapter.cs) into an application referencing
+`Lokad.Jq` and `Lokad.Utf8Regex.Pcre2` 0.4.0. Supply an `IJqHost` and your shared
 `IMemoryBudget`, then call:
 
 ```csharp
 await RegexAdapterExample.RunAsync(host, memoryBudget,
-    JqUtf8RegexEngine.Instance, cancellationToken);
+    Utf8RegexAdapter.Instance, cancellationToken);
 ```
 
 Feed UTF-8 JSON `"é item-42"` to standard input. Standard output is:
@@ -19,7 +20,7 @@ This exercises the adapter's boolean and detailed searches, named captures and
 Unicode-scalar jq offsets. All I/O stays with the host. The invocation is disposed
 after execution, including pending output and descriptor cleanup.
 
-The package already includes the [UTF-8 adapter](../src/Lokad.Jq/JqUtf8RegexEngine.cs).
+The application compiles and owns the provider adapter.
 Pass another `IJqRegexEngine` in the same call to use your provider. Engines are
 borrowed; Jq disposes compiled handles after their final borrowers finish.
 An adapter forwards the compilation budget and cancellation token to its

@@ -15,7 +15,7 @@ public sealed partial class JqTests
         string[] options = sequence ? [option, "--seq"] : [option];
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ["-Rc", .. options, "."])));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         string prefix = sequence ? "\u001e" : "";
         Assert.Equal(prefix + "\"\\ufeffa\\r\"\n" + prefix + "\"b\"\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -32,7 +32,7 @@ public sealed partial class JqTests
 
         static async Task<long> Measure(bool stream)
         {
-            using var budget = new JqBudget(CancellationToken.None);
+            using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
             using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), budget);
             var invocation = new JqInvocation { RawInput = true, Stream = stream };
             var host = new MockFileSystem();

@@ -15,7 +15,7 @@ public sealed partial class JqTests
         JsonNode input = WideNullContainer(objects);
         var root = new BenchmarkMemoryBudget(4096);
         var counted = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
         {
             var filter = new RecursiveDescentFilter();
             if (paths)
@@ -49,7 +49,7 @@ public sealed partial class JqTests
         JsonNode input = WideNullContainer(objects);
         var root = new BenchmarkMemoryBudget(0);
         var counted = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
         {
             var filter = new RecursiveDescentFilter();
             await using IAsyncEnumerator<object?> values = paths
@@ -72,7 +72,7 @@ public sealed partial class JqTests
         for (int depth = 0; depth < 5000; depth++) input = new JsonArray(input);
         var root = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(JqUtf8RegexEngine.Instance, root, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
         {
             var filter = new RecursiveDescentFilter();
             Assert.Equal(5001, await filter.Evaluate(input, context, context.RootEnvironment).CountAsync());
@@ -103,7 +103,7 @@ public sealed partial class JqTests
         {
             if (pressure is null) Assert.True(root.TryReserve(limit - root.ReservedBytes - 8192, out pressure));
         };
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -132,7 +132,7 @@ public sealed partial class JqTests
             {
                 if (pressure is null) Assert.True(root.TryReserve(limit - root.ReservedBytes - 256, out pressure));
             };
-            Assert.Equal(5, await command.ExecuteAsync(host, root, CancellationToken.None));
+            Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
             Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Single(host.ClosedDescriptors);

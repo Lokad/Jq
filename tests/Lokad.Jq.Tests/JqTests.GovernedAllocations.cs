@@ -35,7 +35,7 @@ public sealed partial class JqTests
                 Assert.True(memory.TryReserve(limit - memory.ReservedBytes - 4096, out pressure));
         };
 
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(input + "\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
@@ -67,7 +67,7 @@ public sealed partial class JqTests
                 Assert.True(memory.TryReserve(limit - memory.ReservedBytes - 4096, out pressure));
         };
 
-        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(value + "\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.NotNull(pressure);
@@ -80,10 +80,10 @@ public sealed partial class JqTests
     public void Jq_GovernedConstantModuleMetadataAdmitsContainerCopies()
     {
         string source = "module {data: [" + string.Join(',', Enumerable.Repeat("1", 100)) + "]}; .";
-        using var lexicalBudget = new JqBudget(CancellationToken.None);
+        using var lexicalBudget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var tokens = Lexer.Tokenize(source, JqProgramSource.Inline, lexicalBudget);
         var memory = new BenchmarkMemoryBudget(8192);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(), budget))
         {
             var parser = new JqParser(tokens, JqProgramSource.Inline, context.RootEnvironment, budget);
@@ -102,7 +102,7 @@ public sealed partial class JqTests
         string source = "module {data: [" + string.Join(',', Enumerable.Repeat("1", 1000))
             + "]}; " + (module ? "def f: .;" : ".");
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var environment = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
             var tokens = Lexer.Tokenize(source, JqProgramSource.Inline, budget);
@@ -131,7 +131,7 @@ public sealed partial class JqTests
         host.SetStandardInput("[3,1,2]\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", filter)));
 
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);

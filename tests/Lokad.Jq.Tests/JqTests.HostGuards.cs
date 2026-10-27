@@ -21,7 +21,7 @@ public sealed partial class JqTests
         var host = new GuardFailureHost(operation, deferred, sentinel);
         string[] arguments = operation == "open" ? ["-f", "/program"] : ["-c", "."];
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
-        Task<int> execution = command.ExecuteAsync(host, CancellationToken.None);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
         await host.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
         if (deferred) Assert.False(execution.IsCompleted);
         host.Release.SetResult();

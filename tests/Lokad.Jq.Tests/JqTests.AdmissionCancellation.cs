@@ -26,7 +26,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var hooked = new AdmissionCallbackBudget(memory, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, hooked, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, hooked, cancellation.Token))
         using (var scope = new JqScopeStorage(budget))
         {
             var runtime = new JqRuntime(budget);
@@ -110,7 +110,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         using var cancellation = new CancellationTokenSource();
         var hooked = new AdmissionCallbackBudget(memory, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, hooked, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, hooked, cancellation.Token))
         using (var regexes = new JqRegexCache(budget))
         {
             long before = GC.GetAllocatedBytesForCurrentThread();
@@ -129,7 +129,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         using var cancellation = new CancellationTokenSource();
         var hooked = new AdmissionCallbackBudget(memory, cancellation.Cancel);
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, hooked, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, hooked, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
@@ -148,7 +148,7 @@ public sealed partial class JqTests
         var hooked = new AdmissionCallbackBudget(memory, cancellation.Cancel);
         var host = new MockFileSystem();
         host.SetStandardInput("input");
-        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, hooked, cancellation.Token))
+        using (var budget = new JqBudget(Utf8RegexAdapter.Instance, hooked, cancellation.Token))
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
                 await ((IJqHost)host).TryReadAllBytesAsync(JqFileDescriptor.StdIn, budget, cancellation.Token));
@@ -191,7 +191,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "--arg", "text", new string('x', 1024 * 1024),
             "\"ready\", (" + expression + ")")));
         long before = GC.GetAllocatedBytesForCurrentThread();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, hooked, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, hooked, cancellation.Token));
         Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 256 * 1024);
         Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
@@ -211,7 +211,7 @@ public sealed partial class JqTests
         var hooked = new AdmissionCallbackBudget(memory, () => { if (armed) cancellation.Cancel(); });
         var host = new MockFileSystem { BeforeByteAppend = () => armed = true };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "\"ready\", (" + operation + ")")));
-        Assert.Equal(5, await command.ExecuteAsync(host, hooked, cancellation.Token));
+        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, hooked, cancellation.Token));
         Assert.True(cancellation.IsCancellationRequested);
         Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));

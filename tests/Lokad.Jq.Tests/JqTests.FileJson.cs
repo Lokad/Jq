@@ -19,7 +19,7 @@ public sealed partial class JqTests
                 : ["-nc", "--slurpfile", "d", "/data.json", "$d"];
             var memory = new BenchmarkMemoryBudget(128 * 1024);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
-            Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Single(host.ClosedDescriptors);
@@ -36,7 +36,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem(); host.AddFile("/data.json", new string('[', depth) + "0" + new string(']', depth));
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--slurpfile", "d", "/data.json", "$d | length")));
-        Assert.Equal(0, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("1\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);

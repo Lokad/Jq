@@ -386,7 +386,7 @@ public sealed partial class JqTests
                 int exit;
                 try
                 {
-                    exit = await tool.ExecuteAsync(host, CancellationToken.None);
+                    exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
@@ -414,7 +414,7 @@ public sealed partial class JqTests
             int exit;
             try
             {
-                exit = await tool.ExecuteAsync(host, CancellationToken.None);
+                exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
             }
             catch (Exception ex)
             {
@@ -477,7 +477,7 @@ public sealed partial class JqTests
             int exit;
             try
             {
-                exit = await tool.ExecuteAsync(host, CancellationToken.None);
+                exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
             }
             catch (Exception ex)
             {
@@ -541,7 +541,7 @@ public sealed partial class JqTests
             int exit;
             try
             {
-                exit = await tool.ExecuteAsync(host, CancellationToken.None);
+                exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
             }
             catch (Exception ex)
             {
@@ -623,7 +623,7 @@ public sealed partial class JqTests
             int exit;
             try
             {
-                exit = await tool.ExecuteAsync(host, CancellationToken.None);
+                exit = await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None);
             }
             catch (Exception ex)
             {

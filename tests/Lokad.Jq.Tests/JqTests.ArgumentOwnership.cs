@@ -18,7 +18,7 @@ public sealed partial class JqTests
         string value = file ? "/data" : option == "--argjson" ? "{\"a\":1}" : "abc";
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", option, "data", value,
             "$ARGS.named.data | path($data)")));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("[]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(file ? 1 : 0, host.ClosedDescriptors.Count);
@@ -37,7 +37,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(384 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(JqCommandInvocation.CreateWithStandardDescriptors("jq", arguments, [])));
-        Assert.Equal(0, await command.ExecuteAsync(host, root, CancellationToken.None));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal("10000\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, root.ReservedBytes);
@@ -55,7 +55,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--slurpfile", "data", "/data",
             "$ARGS.named.data | path($data)")));
-        Task<int> execution = command.ExecuteAsync(host, root, cancellation.Token);
+        Task<int> execution = command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, cancellation.Token);
         Assert.Equal("[]\n"u8.ToArray(), (await host.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10))).ToArray());
         long charged = root.ReservedBytes;
         Assert.True(charged > 0);

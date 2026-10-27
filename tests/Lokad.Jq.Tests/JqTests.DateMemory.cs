@@ -11,12 +11,12 @@ public sealed partial class JqTests
     public async Task Jq_DateCopiesAndCaughtFailuresAdmitBeforeConstruction(bool suffix)
     {
         var variables = new Dictionary<string, JsonNode?>();
-        using var compiler = new JqContext(variables, new JqBudget(CancellationToken.None));
+        using var compiler = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         var filter = new JqParser("try strptime(\"%Y-%m-%d\") catch length", JqProgramSource.Inline,
             compiler.RootEnvironment, compiler.Budget).Parse();
         JsonValue input = JsonValue.Create(suffix ? "2024-01-02" + new string(' ', 100000) : new string('x', 100000));
         var memory = new BenchmarkMemoryBudget(0);
-        using (var context = new JqContext(variables, new JqBudget(JqUtf8RegexEngine.Instance, memory, CancellationToken.None)))
+        using (var context = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             var failure = await Assert.ThrowsAsync<JqQuotaException>(async () => await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync());
             Assert.True(failure.IsMemoryAdmission);
@@ -43,7 +43,7 @@ public sealed partial class JqTests
         };
         try
         {
-            Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+            Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
             Assert.Equal("\"ready\"\n", host.GetOutput(JqFileDescriptor.StdOut));
             Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
             Assert.Equal(pressure?.Bytes, memory.ReservedBytes);
@@ -64,7 +64,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
-            new JqBudget(JqUtf8RegexEngine.Instance, memory, cancellation.Token)))
+            new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
         {
             cancellation.Cancel();
             Assert.Throws<OperationCanceledException>(() => JqTime.Strptime(context, JsonValue.Create(text), JsonValue.Create(format)));
