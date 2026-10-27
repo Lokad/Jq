@@ -179,7 +179,7 @@ internal static class JqMath
         ArgumentNullException.ThrowIfNull(runtime);
         if (TypeName(node) == "number")
             return Number(node);
-        throw new JqRuntimeException(TypeName(node) + " (" + runtime.TruncatedDump(node) + ") number required");
+        throw new JqException(TypeName(node) + " (" + runtime.TruncatedDump(node) + ") number required");
     }
 
     // The reference defines abs as if . < 0 then -. else . end over the total
@@ -195,7 +195,7 @@ internal static class JqMath
         {
             if (TypeName(input) == "number")
                 return JsonValue.Create(-Number(input));
-            throw new JqRuntimeException(context.Runtime.UnaryTypeError(input, "cannot be negated"));
+            throw new JqException(context.Runtime.UnaryTypeError(input, "cannot be negated"));
         }
         if (TypeName(input) == "number" && Number(input) == 0.0 && double.IsNegative(Number(input)))
             return JsonValue.Create(0.0);

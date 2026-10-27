@@ -207,7 +207,7 @@ public sealed partial class JqTests
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "1 | .foo")));
 
         Assert.Equal(5, await tool.ExecuteAsync(host, CancellationToken.None));
-        Assert.Contains("cannot index number", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Contains("Cannot index number", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
     }
 
@@ -465,8 +465,8 @@ public sealed partial class JqTests
         using var context = new JqContext(variables, budget);
         JqFilter filter = new JqParser("1 | .foo", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
 
-        JqRuntimeException error = await Assert.ThrowsAsync<JqRuntimeException>(async () => { await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync(); });
-        Assert.Contains("cannot index number", error.Message);
+        JqException error = await Assert.ThrowsAnyAsync<JqException>(async () => { await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync(); });
+        Assert.Equal("Cannot index number with string (\"foo\")", error.Message);
     }
 
     private sealed class OversizedReadHost : IJqHost

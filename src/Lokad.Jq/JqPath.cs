@@ -440,7 +440,7 @@ internal static class JqPathUpdates
                 // other scalar fails first in the nested probe read with the
                 // container and key kinds (objects included: the jv_set
                 // fallthrough below is unreachable through jq programs).
-                throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.TruncatedDump(slice.ToJson()) + ")");
+                throw new JqException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.TruncatedDump(slice.ToJson()) + ")");
             case SliceObjectSegment raw:
                 if (current is null)
                 {
@@ -467,7 +467,7 @@ internal static class JqPathUpdates
                         throw new JqException("Array/string slice indices must be integers");
                     throw new JqException("Cannot update string slices");
                 }
-                throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.TruncatedDump(raw.Raw) + ")");
+                throw new JqException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.TruncatedDump(raw.Raw) + ")");
             default:
                 throw SegmentTypeError(current, segment, context);
         }
@@ -568,7 +568,7 @@ internal static class JqPathReads
     {
         if (value is null) return null;
         if (value is not JsonArray array)
-            throw new JqRuntimeException("Cannot index " + TypeName(value) + " with number ("
+            throw new JqException("Cannot index " + TypeName(value) + " with number ("
                 + (isNaN ? "null" : index.ToString(System.Globalization.CultureInfo.InvariantCulture)) + ")");
         if (isNaN) return null;
         long resolved = index < 0 ? array.Count + index : index;
@@ -604,8 +604,8 @@ internal static class JqPathReads
         {
             if (optional) return false;
             if (key is JsonObject objectKey && value is not null)
-                throw new JqRuntimeException("Cannot index " + TypeName(value) + " with object (" + context.Runtime.TruncatedDump(objectKey) + ")");
-            throw new JqRuntimeException("cannot index " + TypeName(value));
+                throw new JqException("Cannot index " + TypeName(value) + " with object (" + context.Runtime.TruncatedDump(objectKey) + ")");
+            throw new JqException("cannot index " + TypeName(value));
         }
         return true;
     }
@@ -627,7 +627,7 @@ internal static class JqPathReads
             return true;
         }
         if (optional) return false;
-        throw new JqRuntimeException("Cannot index " + TypeName(value) + " with object ("
+        throw new JqException("Cannot index " + TypeName(value) + " with object ("
             + context.Runtime.TruncatedDump(SliceKey(lower, upper, context)) + ")");
     }
 
@@ -670,7 +670,7 @@ internal static class JqPathReads
         }
         if (TryGetString(value, out string text)) return JsonValue.Create(context.Runtime.SliceString(text, lower, upper));
         if (value is null) return null;
-        throw new JqRuntimeException("Cannot index " + TypeName(value) + " with object ("
+        throw new JqException("Cannot index " + TypeName(value) + " with object ("
             + context.Runtime.TruncatedDump(SliceKey(lower.HasValue ? CreateNumber(lower.Value) : null,
                 upper.HasValue ? CreateNumber(upper.Value) : null, context)) + ")");
     }
@@ -679,7 +679,7 @@ internal static class JqPathReads
     {
         JsonObject obj => obj.TryGetPropertyValue(key, out JsonNode? child) ? child : null,
         null => null,
-        _ => throw new JqRuntimeException("Cannot index " + JqRuntime.TypeName(value) + " with string ("
+        _ => throw new JqException("Cannot index " + JqRuntime.TypeName(value) + " with string ("
             + runtime.TruncatedDump(JsonValue.Create(key)) + ")")
     };
 

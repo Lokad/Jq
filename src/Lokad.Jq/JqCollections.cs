@@ -70,7 +70,7 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
             yield return result;
             yield break;
         }
-        throw new JqRuntimeException($"cannot iterate over {TypeName(input)}");
+        throw new JqException($"cannot iterate over {TypeName(input)}");
     }
 }
 
@@ -188,7 +188,7 @@ internal sealed class TransposeFilter : JqFilter
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         int height = input is JsonArray array ? array.Count : input is JsonObject fields ? fields.Count
-            : throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
+            : throw new JqException($"cannot iterate over {JqRuntime.TypeName(input)}");
         double width = double.NaN;
         JsonNode? invalidRow = null;
         foreach (JsonNode? row in Rows())
@@ -318,7 +318,7 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
                 yield break;
             }
             if (input is not JsonArray matrix)
-                throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
+                throw new JqException($"cannot iterate over {JqRuntime.TypeName(input)}");
             foreach (JsonNode? combo in Combos(matrix, null, context))
                 yield return combo;
             yield break;
@@ -341,7 +341,7 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
             yield break;
         }
         if (input is not JsonArray row)
-            throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(input)}");
+            throw new JqException($"cannot iterate over {JqRuntime.TypeName(input)}");
         if (row.Count == 0) yield break;
         if (repetitions > Array.MaxLength)
             throw new JqQuotaException("array cannot be represented");
@@ -365,7 +365,7 @@ internal sealed class CombinationsFilter(JqFilter? Count) : JqFilter
             {
                 context.Budget.CheckCancellation();
                 if (row is not JsonArray cells)
-                    throw new JqRuntimeException($"cannot iterate over {JqRuntime.TypeName(row)}");
+                    throw new JqException($"cannot iterate over {JqRuntime.TypeName(row)}");
                 if (cells.Count == 0)
                     yield break;
             }
@@ -449,7 +449,7 @@ internal static class CollectionKeys
         // effects and failures; only this invalid-input path needs JSON keys.
         JsonNode? mapped = await new MapFilter(new ArrayFilter(keys)).Evaluate(input, context, environment).SingleAsync().ConfigureAwait(false);
         string operation = sorting ? "cannot be sorted, as they are not both arrays" : "cannot be iterated over";
-        throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input)
+        throw new JqException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input)
             + ") and array (" + context.Runtime.TruncatedDump(mapped) + ") " + operation);
     }
 
@@ -473,7 +473,7 @@ internal static class CollectionKeys
     internal static IEnumerable<(JsonNode? Element, JsonNode? Key)> OrderPrecomputed(JsonNode? input, JsonNode? keysValue, JqContext context)
     {
         if (input is not JsonArray elements || keysValue is not JsonArray keys || elements.Count != keys.Count)
-            throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") and "
+            throw new JqException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") and "
                 + TypeName(keysValue) + " (" + context.Runtime.TruncatedDump(keysValue) + ") cannot be sorted, as they are not both arrays");
         context.Budget.ReserveBytes(32L * elements.Count);
         return Ordered();
@@ -737,9 +737,9 @@ internal sealed class MinMaxByImplFilter(JqFilter Keys, bool TakeMax) : JqFilter
         await foreach (JsonNode? keysValue in Keys.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             if (input is not JsonArray elements || keysValue is not JsonArray keys)
-                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") and " + TypeName(keysValue) + " (" + context.Runtime.TruncatedDump(keysValue) + ") cannot be iterated over");
+                throw new JqException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") and " + TypeName(keysValue) + " (" + context.Runtime.TruncatedDump(keysValue) + ") cannot be iterated over");
             if (elements.Count != keys.Count)
-                throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") and " + TypeName(keysValue) + " (" + context.Runtime.TruncatedDump(keysValue) + ") have wrong length");
+                throw new JqException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") and " + TypeName(keysValue) + " (" + context.Runtime.TruncatedDump(keysValue) + ") have wrong length");
             if (elements.Count == 0)
             {
                 yield return null;

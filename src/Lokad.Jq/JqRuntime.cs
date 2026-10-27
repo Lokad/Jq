@@ -631,7 +631,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         }
         if (l is JsonObject lo && r is JsonObject ro)
             return MergeObjects(lo, ro, false, 0);
-        throw new JqRuntimeException(TypeError(l, r, "cannot be added"));
+        throw new JqException(TypeError(l, r, "cannot be added"));
     }
 
     internal JsonNode? Subtract(JsonNode? l, JsonNode? r)
@@ -660,7 +660,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
             return result;
         }
-        throw new JqRuntimeException(TypeError(l, r, "cannot be subtracted"));
+        throw new JqException(TypeError(l, r, "cannot be subtracted"));
     }
 
     internal JsonNode? Multiply(JsonNode? l, JsonNode? r)
@@ -673,7 +673,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             return Repeat(rightText, Number(l));
         if (l is JsonObject lo && r is JsonObject ro)
             return MergeObjects(lo, ro, true, 0);
-        throw new JqRuntimeException(TypeError(l, r, "cannot be multiplied"));
+        throw new JqException(TypeError(l, r, "cannot be multiplied"));
     }
 
     private JsonNode? Repeat(string value, double count)
@@ -743,7 +743,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
         if (node is JsonValue i && i.TryGetValue<int>(out var intValue)) return intValue;
         if (node is JsonValue l && l.TryGetValue<long>(out var longValue)) return longValue;
         if (node is JsonValue m && m.TryGetValue<decimal>(out var decimalValue)) return (double)decimalValue;
-        throw new JqRuntimeException($"expected number, got {TypeName(node)}");
+        throw new JqException($"expected number, got {TypeName(node)}");
     }
 
     internal JsonNode ToJsonNumber(JsonNode? node)
@@ -881,7 +881,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal static string String(JsonNode? node)
     {
         if (TryGetString(node, out var s)) return s;
-        throw new JqRuntimeException($"expected string, got {TypeName(node)}");
+        throw new JqException($"expected string, got {TypeName(node)}");
     }
 
     internal string ToJqString(JsonNode? node)
@@ -1227,7 +1227,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     {
         budget.CheckCancellation();
         if (input is not JsonArray && input is not JsonObject)
-            throw new JqRuntimeException($"cannot iterate over {TypeName(input)}");
+            throw new JqException($"cannot iterate over {TypeName(input)}");
         budget.ReserveBytes(64);
         var result = new JsonArray();
         if (input is JsonArray { Count: 0 } or JsonObject { Count: 0 }) return result;
@@ -1321,7 +1321,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             budget.CheckCancellation();
             return new JsonArray();
         }
-        throw new JqRuntimeException($"cannot reverse {TypeName(input)}");
+        throw new JqException($"cannot reverse {TypeName(input)}");
     }
 
     internal bool Contains(JsonNode? container, JsonNode? contained)
@@ -1483,7 +1483,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
                 }
             yield break;
         }
-        throw new JqRuntimeException($"cannot search {TypeName(input)}");
+        throw new JqException($"cannot search {TypeName(input)}");
     }
 
     internal string AsciiCase(JsonNode? input, bool lower)
@@ -1680,7 +1680,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JsonNode Join(JsonNode? input, JsonNode? separator)
     {
         if (input is not (JsonArray or JsonObject))
-            throw new JqRuntimeException("Cannot iterate over " + TypeName(input) + " (" + TruncatedDump(input) + ")");
+            throw new JqException("Cannot iterate over " + TypeName(input) + " (" + TruncatedDump(input) + ")");
         bool hasSepText = separator is null;
         string sepText = string.Empty;
         if (separator is not null && TryGetString(separator, out string? sepCandidate) && sepCandidate is not null)
@@ -1696,7 +1696,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             {
                 if (!hasSepText)
                 {
-                    throw new JqRuntimeException("string (" + PreviewAccumulator() + ") and " + TypeName(separator) + " (" + TruncatedDump(separator) + ") cannot be added");
+                    throw new JqException("string (" + PreviewAccumulator() + ") and " + TypeName(separator) + " (" + TruncatedDump(separator) + ") cannot be added");
                 }
                 budget.Append(builder, sepText);
             }
@@ -1715,7 +1715,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
             }
             else
             {
-                throw new JqRuntimeException("string (" + PreviewAccumulator() + ") and " + TypeName(item) + " (" + TruncatedDump(item) + ") cannot be added");
+                throw new JqException("string (" + PreviewAccumulator() + ") and " + TypeName(item) + " (" + TruncatedDump(item) + ") cannot be added");
             }
             budget.Append(builder, elemText);
             first = false;

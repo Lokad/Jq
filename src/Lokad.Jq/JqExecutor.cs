@@ -231,8 +231,8 @@ internal static class JqExecutor
         }
         catch (JqInputException ex)
         {
-            // Malformed inputs report status 5 and missing input operands
-            // report status 2, matching the reference command.
+            // Preserve the input failure's status; an earlier failed open
+            // retains system status 2 outside jq handlers.
             return await WriteErrorAsync(host, invocation, ["jq: ", ex.Message], memoryScope,
                 cancellationToken).ConfigureAwait(false) is not null
                 ? context.InputCursor?.HasOpenFailures == true ? 2 : ex.ExitCode : 5;

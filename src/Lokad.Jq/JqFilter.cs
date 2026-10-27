@@ -338,7 +338,7 @@ internal sealed class AsFilter(
             await foreach (JsonNode? keyValue in property.Key.Evaluate(value, context, current).ConfigureAwait(false))
             {
                 if (!TryGetString(keyValue, out string key))
-                    throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.TruncatedDump(keyValue)}) as object key");
+                    throw new JqException($"Cannot use {TypeName(keyValue)} ({context.Runtime.TruncatedDump(keyValue)}) as object key");
                 JsonNode? field = JqPathReads.ReadField(value, key, context.Runtime);
                 await foreach (JqEnvironment bound in Match(property.Value, field, current, context, storage, depth + 1).ConfigureAwait(false))
                     yield return bound;
@@ -1136,7 +1136,7 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
             }
         }
         else if (!optional)
-            throw new JqRuntimeException($"cannot iterate over {TypeName(value)}");
+            throw new JqException($"cannot iterate over {TypeName(value)}");
     }
 
     protected override async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
@@ -1164,7 +1164,7 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
         {
             if (!pair.Tracked)
                 throw new JqException(InvalidIterate(pair.Value, context));
-            throw new JqRuntimeException($"cannot iterate over {TypeName(pair.Value)}");
+            throw new JqException($"cannot iterate over {TypeName(pair.Value)}");
         }
     }
 }
@@ -1290,7 +1290,7 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
                 await foreach (var keyValue in Values(keyFilter).ConfigureAwait(false))
                 {
                     if (!TryGetString(keyValue, out string keyName))
-                        throw new JqRuntimeException($"Cannot use {TypeName(keyValue)} ({context.Runtime.TruncatedDump(keyValue)}) as object key");
+                        throw new JqException($"Cannot use {TypeName(keyValue)} ({context.Runtime.TruncatedDump(keyValue)}) as object key");
                     await foreach (var value in Values(property.Value).ConfigureAwait(false)) yield return (keyName, value);
                 }
             }
@@ -1391,12 +1391,12 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
             {
                 double divisor = Number(r);
                 if (divisor == 0.0)
-                    throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided because the divisor is zero"));
+                    throw new JqException(context.Runtime.TypeError(l, r, "cannot be divided because the divisor is zero"));
                 return JsonValue.Create(Number(l) / divisor);
             }
             if (TryGetString(l, out _) && TryGetString(r, out _))
                 return context.Runtime.Split(l, r);
-            throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided"));
+            throw new JqException(context.Runtime.TypeError(l, r, "cannot be divided"));
         }
 
         // Integer remainder matching the reference: operands truncate
@@ -1404,14 +1404,14 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
         JsonNode? Modulo(JsonNode? l, JsonNode? r)
         {
             if (TypeName(l) != "number" || TypeName(r) != "number")
-                throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided (remainder)"));
+                throw new JqException(context.Runtime.TypeError(l, r, "cannot be divided (remainder)"));
             double left = Number(l);
             double right = Number(r);
             if (double.IsNaN(left) || double.IsNaN(right))
                 return JsonValue.Create(double.NaN);
             long divisor = Truncate(right);
             if (divisor == 0)
-                throw new JqRuntimeException(context.Runtime.TypeError(l, r, "cannot be divided (remainder) because the divisor is zero"));
+                throw new JqException(context.Runtime.TypeError(l, r, "cannot be divided (remainder) because the divisor is zero"));
             if (divisor == -1)
                 return JsonValue.Create(0L);
             return JsonValue.Create(Truncate(left) % divisor);
@@ -1533,7 +1533,7 @@ internal sealed class UnaryFilter(string op, JqFilter inner) : JqFilter
             if (op == "-")
             {
                 if (TypeName(value) != "number")
-                    throw new JqRuntimeException(context.Runtime.UnaryTypeError(value, "cannot be negated"));
+                    throw new JqException(context.Runtime.UnaryTypeError(value, "cannot be negated"));
                 yield return JsonValue.Create(-Number(value));
             }
             else if (op == "not")
@@ -1798,17 +1798,17 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "scalars": if (TypeName(input) is not ("array" or "object")) yield return input; break;
                 case "finites": if (JqMath.Classify("isfinite", input)) yield return input; break;
                 case "normals": if (JqMath.Classify("isnormal", input)) yield return input; break;
-                case "_negate": if (TypeName(input) != "number") throw new JqRuntimeException(context.Runtime.UnaryTypeError(input, "cannot be negated")); yield return JsonValue.Create(-Number(input)); break;
+                case "_negate": if (TypeName(input) != "number") throw new JqException(context.Runtime.UnaryTypeError(input, "cannot be negated")); yield return JsonValue.Create(-Number(input)); break;
                 case "_strindices":
                     if (!TryGetString(input, out string? strHaystack) || strHaystack is null)
-                        throw new JqRuntimeException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") cannot be searched, as it is not a string");
+                        throw new JqException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") cannot be searched, as it is not a string");
                     if (!TryGetString(Arg(0), out string? strNeedle) || strNeedle is null)
-                        throw new JqRuntimeException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a string");
+                        throw new JqException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a string");
                     yield return context.Runtime.Indices(input, Arg(0));
                     break;
                 case "format":
                     if (!TryGetString(Arg(0), out string? formatName) || formatName is null)
-                        throw new JqRuntimeException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a valid format");
+                        throw new JqException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a valid format");
                     yield return context.Runtime.FormatValue(formatName, input);
                     break;
                 case "contains": yield return JsonValue.Create(context.Runtime.Contains(input, Arg(0))); break;
