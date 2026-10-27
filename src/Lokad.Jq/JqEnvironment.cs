@@ -26,8 +26,6 @@ internal sealed class JqEnvironment
     private readonly JqUserClosure? _closure;
     private readonly JqEnvironment? _moduleScope;
     private readonly object? _label;
-    private readonly bool _isFilter;
-    private readonly bool _isModule;
 
     private JqEnvironment(IReadOnlyDictionary<string, JsonNode?> root)
     {
@@ -53,7 +51,6 @@ internal sealed class JqEnvironment
         _parent = parent;
         _name = name;
         _filter = filter;
-        _isFilter = true;
     }
 
     private JqEnvironment(JqEnvironment parent, JqFunctionDefinition definition)
@@ -75,7 +72,6 @@ internal sealed class JqEnvironment
         _parent = parent;
         _name = name;
         _moduleScope = moduleScope;
-        _isModule = true;
     }
 
     internal static JqEnvironment CreateRoot(IReadOnlyDictionary<string, JsonNode?> variables) =>
@@ -136,7 +132,8 @@ internal sealed class JqEnvironment
         JqEnvironment? scope = this;
         while (scope is not null)
         {
-            if (scope._closure is null && !scope._isFilter && !scope._isModule && scope._name is not null && string.Equals(scope._name, name, StringComparison.Ordinal))
+            if (scope._closure is null && scope._filter is null && scope._moduleScope is null
+                && scope._name is not null && string.Equals(scope._name, name, StringComparison.Ordinal))
             {
                 value = scope._value;
                 return true;
@@ -152,9 +149,9 @@ internal sealed class JqEnvironment
         JqEnvironment? scope = this;
         while (scope is not null)
         {
-            if (scope._isFilter && string.Equals(scope._name, name, StringComparison.Ordinal))
+            if (scope._filter is { } found && string.Equals(scope._name, name, StringComparison.Ordinal))
             {
-                filter = scope._filter;
+                filter = found;
                 return true;
             }
             scope = scope._parent;
@@ -188,9 +185,9 @@ internal sealed class JqEnvironment
         JqEnvironment? scope = this;
         while (scope is not null)
         {
-            if (scope._isModule && alias.SequenceEqual(scope._name.AsSpan()))
+            if (scope._moduleScope is { } found && alias.SequenceEqual(scope._name.AsSpan()))
             {
-                moduleScope = scope._moduleScope;
+                moduleScope = found;
                 return true;
             }
             scope = scope._parent;
