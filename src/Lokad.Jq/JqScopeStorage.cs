@@ -1,6 +1,6 @@
 namespace Lokad.Jq;
 
-// Scope heads use the current coarse owner. Tail-call argument cursors can
+// Temporary demand uses the current coarse owner. Tail-call argument cursors can
 // take this lifetime over; genuinely captured scopes stay with the call driver.
 internal sealed class JqScopeStorage : IDisposable
 {
@@ -37,8 +37,8 @@ internal sealed class JqScopeStorage : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        try { _storage.DiscardBytes(_bytes); }
-        finally { if (_ownsStorage) _storage.Dispose(); }
+        if (_ownsStorage) _storage.Dispose();
+        else _storage.DiscardBytes(_bytes);
     }
 
     internal static void DisposeAll(JqScopeStorage? scope)

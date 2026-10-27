@@ -7,6 +7,30 @@ namespace Lokad.Jq.Tests;
 public sealed partial class JqTests
 {
     [Theory]
+    [InlineData(1)]
+    [InlineData(16)]
+    public void Jq_Base64ScratchReusesRecordCreditForRepeatedSmallEncodes(int length)
+    {
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        var counted = new CountingMemoryBudget(memory);
+        JsonNode input = JsonValue.Create(new string('x', length));
+        using (var budget = new JqBudget(JqUtf8RegexEngine.Instance, counted, CancellationToken.None))
+        {
+            var runtime = new JqRuntime(budget);
+            for (int record = 0; record < 2500; record++)
+            {
+                budget.BeginRecord();
+                Assert.Equal(4 * ((length + 2) / 3), runtime.Format("base64", input).Length);
+            }
+            Assert.InRange(counted.Counts.Reservations + counted.Counts.Resizes, 1, 8);
+            Assert.InRange(memory.PeakBytes, 1, 256);
+        }
+        Assert.Equal(0, memory.ReservedBytes);
+        Assert.Equal(counted.Counts.Reservations, counted.Counts.ReservationDisposals);
+        Assert.Equal(0, counted.Counts.Refusals);
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
