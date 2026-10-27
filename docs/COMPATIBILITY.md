@@ -20,7 +20,8 @@ Loops preserve depth-first condition multiplicity, effects and lazy termination.
 `combinations(n)` collects all count-filter results before generating one product,
 including empty count streams and late failures.
 Path-mode `label`/`break`, `try` and `?` preserve earlier outputs and payload
-identity. Labels retain lexical binding across shadowing and captured calls;
+identity. Optional fields suppress mistyped reads while retaining invalid-path errors.
+Labels retain lexical binding across shadowing and captured calls;
 intervening catch/optional scopes can intercept breaks. Keyed collections require arrays after evaluating key effects; `min_by`
 keeps the first minimum and `max_by` the last maximum. Slice deletion preserves
 slice-relative indices and mixed path forms. Computed index/slice paths and

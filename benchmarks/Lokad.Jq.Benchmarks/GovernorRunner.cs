@@ -525,6 +525,12 @@ internal static class GovernorRunner
             "range(0;32) | $text | fromjson"], "", string.Concat(Enumerable.Repeat("ok\n", 32)));
         Add("format-unknown-large-input", 10000, ["-cr", "try @missing catch \"caught\""],
             "[" + string.Join(',', Enumerable.Range(0, 10000)) + "]", "caught\n");
+        Add("format-error-records", records, ["-Rr", "try format(\"bogus\") catch length"],
+            rawLines, string.Concat(Enumerable.Repeat("27\n", records)));
+        Add("field-error-long-key", 1048576, ["-nr", "--arg", "key", new string('z', 1048576),
+            "try (1 as {($key):$x}|$x) catch length"], "", "63\n");
+        Add("optional-field-path-records", records, ["-c", "[path(.foo?)]"],
+            string.Concat(Enumerable.Repeat("1\n", records)), string.Concat(Enumerable.Repeat("[]\n", records)));
         Add("formatted-literal", 64, ["-nr", "range(64)|@html \"" + new string('x', 8192) + "\"|length"],
             "", string.Concat(Enumerable.Repeat("8192\n", 64)));
         Add("formatted-metadata", 1, ["-nc", "module {doc:@missing \"literal\"};1"], "", "1\n");

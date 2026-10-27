@@ -78,6 +78,7 @@ its supported PCRE2 profile; see [regex behavior](docs/REGEX.md).
 
 - [Compatibility](docs/COMPATIBILITY.md): feature inventory, tests, supported scope and differences.
 - [Regex behavior](docs/REGEX.md): engine syntax, flags, captures and cancellation boundaries.
+- [Regex adapter example](examples/README.md): application source compiled against the public API.
 - [Runtime behavior](docs/RUNTIME.md): host I/O, ownership, memory admission, safeguards and numbers.
 - [Benchmarks](docs/BENCHMARKS.md): workloads, governor cost diagnostics and opt-in upstream comparisons.
 - [Changelog](CHANGELOG.md): changes and validation history.

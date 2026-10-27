@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Admit complete unknown-format diagnostics before construction and share format
+  dispatch; use bounded native field errors for destructuring and static reads.
+- Honor optional scalar fields in paths and add a compiled regex adapter example.
+
 - Reuse interpolation-free formatted strings as constants, including valid module
   and import metadata, while preserving literal text and escape decoding.
 - Retire Base64 encoding scratch after conversion while retaining output admission
