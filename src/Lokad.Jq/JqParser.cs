@@ -659,7 +659,7 @@ internal sealed class JqParser(
             var keyToken = Next();
             if (keyToken.Kind != TokenKind.String && keyToken.Kind != TokenKind.Identifier)
                 throw Error("expected object key", keyToken.Span);
-            key = KeyFilterFor(keyToken);
+            key = StringFilterFor(keyToken, null);
         }
         Expect(":");
         return new ObjectPatternProperty(key, ParsePattern());
@@ -870,8 +870,7 @@ internal sealed class JqParser(
             var format = Expect(TokenKind.Identifier).Text;
             if (Peek().Kind != TokenKind.String)
                 return new FormatFilter(format);
-            Token template = Next();
-            return new InterpolatedStringFilter(template.Text, format, template.Span, _programSource, ParseInterpolationPiece, _budget);
+            return StringFilterFor(Next(), format);
         }
         if (Match("."))
         {
@@ -983,9 +982,7 @@ internal sealed class JqParser(
             return new LiteralFilter(JsonValue.Create(value));
         }
         if (token.Kind == TokenKind.String)
-            return Lexer.ContainsInterpolation(token.Text)
-                ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource, ParseInterpolationPiece, _budget)
-                : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text, _budget)));
+            return StringFilterFor(token, null);
         if (token.Kind == TokenKind.Identifier)
         {
             if (token.Text == "null") return new LiteralFilter(null);
@@ -1046,7 +1043,7 @@ internal sealed class JqParser(
                     // keys stay static.
                     bool isDynamic = KeyFilterForIsDynamic(keyToken);
                     properties.Add(isDynamic
-                        ? new ObjectProperty(null, KeyFilterFor(keyToken), ParseDictValue())
+                        ? new ObjectProperty(null, StringFilterFor(keyToken, null), ParseDictValue())
                         : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text, _budget), null, ParseDictValue()));
                 }
                 else if (keyToken.Kind == TokenKind.String)
@@ -1055,7 +1052,7 @@ internal sealed class JqParser(
                     // read through the evaluated key instead.
                     bool interpolated = KeyFilterForIsDynamic(keyToken);
                     properties.Add(interpolated
-                        ? new ObjectProperty(null, KeyFilterFor(keyToken), new IndexFilter(new IdentityFilter(), KeyFilterFor(keyToken), false))
+                        ? new ObjectProperty(null, StringFilterFor(keyToken, null), new IndexFilter(new IdentityFilter(), StringFilterFor(keyToken, null), false))
                         : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text, _budget), null, new FieldFilter(new IdentityFilter(), Lexer.DecodeLiterals(keyToken.Text, _budget), true)));
                 }
                 else
@@ -1068,8 +1065,8 @@ internal sealed class JqParser(
         return new ObjectFilter(properties);
     }
 
-    private JqFilter KeyFilterFor(Token token) => Lexer.ContainsInterpolation(token.Text)
-        ? new InterpolatedStringFilter(token.Text, null, token.Span, _programSource, ParseInterpolationPiece, _budget)
+    private JqFilter StringFilterFor(Token token, string? format) => Lexer.ContainsInterpolation(token.Text)
+        ? new InterpolatedStringFilter(token.Text, format, token.Span, _programSource, ParseInterpolationPiece, _budget)
         : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text, _budget)));
 
     private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && Lexer.ContainsInterpolation(token.Text);
