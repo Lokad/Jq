@@ -948,6 +948,93 @@ foreach (string expression in new[] { "\"x\" * 1048576", "$text" })
         && cancellation.IsCancellationRequested && host.Output(JqFileDescriptor.StdOut) == "ready\n"
         && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
 }
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(256 * 1024);
+    Check("formatted literal reuse", await Command(["-nr", "range(64)|@html \"" + new string('x', 8192) + "\"|length"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == string.Concat(Enumerable.Repeat("8192\n", 64))
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
+foreach (string format in new[] { "text", "html", "missing" })
+{
+    var host = new SmokeHost();
+    Check("constant formatted metadata " + format,
+        await Command(["-nc", "module {doc:@" + format + " \"literal\"};1"], []).ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "1\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost(); host.AddFile("/lib/tiny.jq", "module {doc:@missing \"<&>\"}; def value:42;");
+    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    Check("formatted import and module metadata", await Command(["-nc", "-L", "/lib",
+        "import \"tiny\" as m {doc:@html \"literal\"}; [(\"tiny\"|modulemeta).doc,m::value]"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[\"<&>\",42]\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && host.ClosedDescriptors.Count == 2 && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
+{
+    var host = new SmokeHost();
+    Check("formatted constant path identity", await Command(["-nc", "def f:@missing \"x\";f as $x|$x|path(f)"], [])
+        .ExecuteAsync(host, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[]\n" && host.Output(JqFileDescriptor.StdErr) == "");
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(512 * 1024);
+    Check("base64 roundtrip active allowance", await Command(["-nr", "\"ready\", ((\"x\"*65536)|@base64|@base64d|length)"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "ready\n65536\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
+{
+    var counts = new List<int>();
+    foreach (bool encode in new[] { false, true })
+    {
+        int calls = 0;
+        var host = new SmokeHost(); host.SetInput(string.Concat(Enumerable.Repeat("x\n", 2500)));
+        var memory = new BenchmarkMemoryBudget(128 * 1024);
+        var hooked = new SmokeAdmissionBudget(memory, () => calls++);
+        Check("small encode stream " + encode, await Command(["-Rr", encode ? "@base64" : "."], [])
+            .ExecuteAsync(host, hooked, CancellationToken.None) == 0
+            && host.Output(JqFileDescriptor.StdOut) == string.Concat(Enumerable.Repeat(encode ? "eA==\n" : "x\n", 2500))
+            && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+        counts.Add(calls);
+    }
+    Check("small encodes retain admission amortization", counts[1] <= counts[0] + 64);
+}
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(512 * 1024);
+    using var cancellation = new CancellationTokenSource();
+    var hooked = new SmokeAdmissionBudget(memory, () => { if (memory.ReservedBytes >= 200000) cancellation.Cancel(); });
+    var command = Command(["-nr", "--arg", "text", new string('x', 65536), "\"ready\", ($text|@base64)"], []);
+    bool canceled = false;
+    long before = GC.GetAllocatedBytesForCurrentThread();
+    try { await command.ExecuteAsync(host, hooked, cancellation.Token); }
+    catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { canceled = true; }
+    Check("encoding scratch admission cancellation", canceled && GC.GetAllocatedBytesForCurrentThread() - before is >= 0 and <= 256 * 1024
+        && host.Output(JqFileDescriptor.StdOut) == "ready\n" && host.Output(JqFileDescriptor.StdErr) == ""
+        && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
+{
+    const long limit = 512 * 1024;
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(limit);
+    IMemoryReservation? pressure = null;
+    host.BeforeAppend = descriptor =>
+    {
+        if (descriptor == JqFileDescriptor.StdOut && pressure is null
+            && !memory.TryReserve(limit - memory.ReservedBytes - 200000, out pressure))
+            throw new InvalidOperationException("Expected pressure admission.");
+    };
+    int status = await Command(["-nr", "--arg", "text", new string('x', 65536), "\"ready\", (try ($text|@base64) catch \"caught\")"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None);
+    bool retained = pressure is not null && memory.ReservedBytes == pressure.Bytes;
+    pressure?.Dispose();
+    Check("encoding overlap refusal stays terminal", status == 5 && retained
+        && host.Output(JqFileDescriptor.StdOut) == "ready\n" && host.Output(JqFileDescriptor.StdErr) == "jq: memory budget exceeded\n"
+        && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
+}
 Console.WriteLine($"Package smoke: {checks} checks pass.");
 return 0;
 

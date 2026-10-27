@@ -72,6 +72,8 @@ Base64 alphabet/quantum and URI percent syntax are checked before admitting
 decoded buffers. Successful decoding refunds scratch after constructing its result.
 `fromjson` refunds its UTF-8 conversion buffer after parsing; decoded values keep
 their own admission.
+`@base64` retires encoding scratch after conversion, reusing bounded record credit;
+encoded text keeps its admission.
 
 ## Memory admission
 
@@ -108,6 +110,8 @@ argument setup remain status 5.
 Compiler tokens and literal copies admit as constructed; borrowed comments and
 whitespace add no proportional storage. Temporary lexer workspace ends after
 lexing.
+Formatted strings without interpolation reuse decoded constants like ordinary
+string literals.
 Command setup preflights retained bindings, operands, library paths and
 environment entries as constructed.
 Canonical paths borrow their text; relative strings, normalization workspace and

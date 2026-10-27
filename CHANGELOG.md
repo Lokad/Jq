@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Reuse interpolation-free formatted strings as constants, including valid module
+  and import metadata, while preserving literal text and escape decoding.
+- Retire Base64 encoding scratch after conversion while retaining output admission
+  and reusing bounded record credit for repeated small encodes.
+
 - Refund `fromjson` UTF-8 conversion storage after parsing while retaining decoded values.
 - Reject unsupported formats before serializing their input, preserving lazy templates.
 - Observe cancellation after construction admission, including direct buffer growth,

@@ -74,6 +74,7 @@ cannot become targets through equal contents.
   Unresolved function calls can fail during evaluation rather than compilation.
   `modulemeta` inspects fresh library syntax independently of dependency resolution
   and executable import caching.
+  Constant metadata accepts interpolation-free formatted literals.
   Automatic `~/.jq`, home expansion and `$ORIGIN` lookup are excluded. Main-file
   `$__loc__` reports the file path; qualified calls use hierarchical scopes.
 - **Recursion:** direct tails and proven single-valued control paths flatten.

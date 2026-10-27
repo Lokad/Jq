@@ -525,6 +525,13 @@ internal static class GovernorRunner
             "range(0;32) | $text | fromjson"], "", string.Concat(Enumerable.Repeat("ok\n", 32)));
         Add("format-unknown-large-input", 10000, ["-cr", "try @missing catch \"caught\""],
             "[" + string.Join(',', Enumerable.Range(0, 10000)) + "]", "caught\n");
+        Add("formatted-literal", 64, ["-nr", "range(64)|@html \"" + new string('x', 8192) + "\"|length"],
+            "", string.Concat(Enumerable.Repeat("8192\n", 64)));
+        Add("formatted-metadata", 1, ["-nc", "module {doc:@missing \"literal\"};1"], "", "1\n");
+        Add("base64-encode-small", records, ["-Rr", "@base64"], rawLines, string.Concat(Enumerable.Repeat("eA==\n", records)));
+        Add("base64-encode-roundtrip", 65536, ["-nr", "(\"x\"*65536)|@base64|@base64d|length"], "", "65536\n");
+        Add("base64-encode-large-records", 32, ["-Rr", "@base64|length"],
+            string.Concat(Enumerable.Repeat(new string('x', 65536) + "\n", 32)), string.Concat(Enumerable.Repeat("87384\n", 32)));
         Add("uri-escaped-records", records, ["-r", "@uri"],
             string.Concat(Enumerable.Repeat("\"a b\"\n", records)), string.Concat(Enumerable.Repeat("a%20b\n", records)));
         Add("ascii-changed-records", records, ["-r", "ascii_upcase"],
