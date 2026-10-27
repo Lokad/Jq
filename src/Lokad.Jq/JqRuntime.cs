@@ -539,7 +539,10 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal JsonNode? ParseJson(string text)
     {
         budget.CheckCancellation();
-        budget.ReserveBytes(JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, budget.CancellationToken), 0));
+        int capacity = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, budget.CancellationToken), 0);
+        using var memory = new JqMemoryReservation(budget.MemoryBudget);
+        if (capacity != 0) memory.Resize(capacity);
+        budget.CheckCancellation();
         var bytes = Encoding.UTF8.GetBytes(text);
         int prefix = HasBomPrefix(bytes) ? 3 : 0;
         int consumed;
