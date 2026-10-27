@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — Unreleased
 
 - Upgrade `Lokad.Utf8Regex.Pcre2` and its core dependency to 0.4.0; forward
   cancellation into provider compilation and both search APIs.

@@ -254,7 +254,7 @@
         "type": "Project",
         "dependencies": {
           "BenchmarkDotNet": "[0.15.8, )",
-          "Lokad.Jq": "[0.1.0, )"
+          "Lokad.Jq": "[0.2.0, )"
         }
       },
       "BenchmarkDotNet": {

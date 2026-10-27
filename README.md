@@ -65,7 +65,7 @@ Release packages and symbols go to `artifacts/nuget/`. Verify package contents,
 dependencies and public API behavior in an isolated consumer:
 
 ```powershell
-./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.1.0.nupkg
+./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.2.0.nupkg
 ```
 
 The script also supports symbol, hosted-source and caller-supplied corpus checks.
