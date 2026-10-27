@@ -1765,8 +1765,11 @@ internal sealed partial class JqRuntime(JqBudget budget)
             {
                 string text = ToJqString(value);
                 var bytes = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, budget.CancellationToken), 0);
+                if (bytes == 0) return string.Empty;
                 budget.ReserveString(4 * ((bytes + 2L) / 3));
-                budget.ReserveBytes(bytes);
+                using var memory = new JqMemoryReservation(budget.MemoryBudget);
+                memory.Resize(bytes);
+                budget.CheckCancellation();
                 return Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
             }
             case "base64d": return Base64Decode(ToJqString(value), value);
