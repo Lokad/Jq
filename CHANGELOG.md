@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Upgrade `Lokad.Utf8Regex.Pcre2` and its core dependency to 0.4.0; forward
+  cancellation into provider compilation and both search APIs.
+- Numeric-only regex capture names are now rejected by the provider's PCRE2 grammar.
+
 - Admit complete unknown-format diagnostics before construction and share format
   dispatch; use bounded native field errors for destructuring and static reads.
 - Honor optional scalar fields in paths and add a compiled regex adapter example.
@@ -244,8 +248,8 @@
   remove `CaptureSlotCapacity`. Providers own syntax validation, execution bounds
   and compiled/workspace/capture storage. Jq admits its cache keys, UTF-8 subjects
   and JSON results, retains borrowers through cleanup, and treats provider resource
-  refusal as terminal. Utf8Regex 0.3.0 has no shared-budget or cooperative
-  cancellation API; an active synchronous search must finish before cancellation.
+  refusal as terminal. Provider storage remains outside shared accounting when
+  its API does not accept the host memory budget.
 - Breaking: remove unused path conveniences (`FileName`, `Parent`, `IsRoot`,
   `Tmp`, `IsParentOf`, `IsEqualToOrParentOf`, `TryChild`, `JqPathSegment`),
   descriptor `DevNullPath`/`IsDevNull`, and error `MessageWithoutTerminator`.

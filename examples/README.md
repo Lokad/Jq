@@ -28,7 +28,7 @@ capture ownership through `JqRegexMatch`. Syntax errors return `false` from
 `TryCompile`; refused admission throws `JqRegexResourceException` with
 `IsMemoryAdmission = true`. Cancellation propagates.
 
-The shipped Utf8Regex 0.3.0 provider cannot accept the shared budget or interrupt
-an active search. See [regex behavior](../docs/REGEX.md) for these limitations and
-the capture contract. Tests and the isolated package check compile and execute
-this exact example source.
+The shipped Utf8Regex 0.4.0 provider observes cancellation during compilation and
+matching. Its internal storage remains outside the host's shared memory budget.
+See [regex behavior](../docs/REGEX.md) for the capture contract and limitations.
+Tests and the isolated package check compile and execute this exact example source.

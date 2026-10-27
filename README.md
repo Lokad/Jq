@@ -45,8 +45,8 @@ remains; cleanup refunds relinquished storage. Use host cancellation to stop
 long-running commands.
 
 Pass an `IJqRegexEngine` to `ExecuteAsync(host, regexEngine, cancellationToken)`
-to select a borrowed regex engine. The default adapter checks cancellation around
-synchronous matching; an active search must finish first. See
+to select a borrowed regex engine. The default adapter forwards cancellation into
+compilation and matching. See
 [runtime behavior](docs/RUNTIME.md) for host I/O, memory admission and safeguards.
 
 ## Develop

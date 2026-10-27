@@ -1,8 +1,8 @@
 # Regex behavior
 
 Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`; the default
-`JqUtf8RegexEngine.Instance` adapts managed `Lokad.Utf8Regex.Pcre2` 0.3.0
-(transitively `Lokad.Utf8Regex` 0.3.0). The default adapter ships in the runtime
+`JqUtf8RegexEngine.Instance` adapts managed `Lokad.Utf8Regex.Pcre2` 0.4.0
+(transitively `Lokad.Utf8Regex` 0.4.0). The default adapter ships in the runtime
 package. PCRE2-specific types stay behind the adapter.
 
 See the [application example](../examples/README.md) for explicit injection,
@@ -36,10 +36,7 @@ Unicode properties are enabled, newline convention is LF, and duplicate capture
 names are accepted. The byte-splitting `\C` escape is forbidden to keep offsets
 and extracted strings on Unicode boundaries. Neither jq's literal interpretation
 of that escape nor its longest-match behavior is emulated. In particular, jq's
-`m`/`s`/`p` meanings differ from the mapping above. Numeric capture definitions such as
-`(?<1>a)` have no name-table entry in 0.3.0, so `capture` returns `{}`. Sparse
-numeric definitions such as `(?<100>a)` are accepted but missing from detailed
-results in that engine version.
+`m`/`s`/`p` meanings differ from the mapping above.
 Invalid syntax and unsupported constructs remain catchable jq language errors.
 
 ## Results and replacement filters
@@ -75,9 +72,8 @@ Reuse and structural ceilings are described in
 [runtime memory rules](RUNTIME.md#memory-admission).
 
 Provider resource exhaustion reports status 5 outside `try`/`?`. Syntax errors stay
-catchable; cancellation propagates as `OperationCanceledException`. Utf8Regex
-0.3.0 exposes neither shared-budget nor cancellation-token APIs. Its internal
-storage is outside shared accounting, and the default adapter checks cancellation
-before and after calls. It cannot interrupt a search in progress and may delay
-cancellation arbitrarily on a pathological pattern. A cooperating provider can
-admit its storage and observe cancellation during work.
+catchable; cancellation propagates as `OperationCanceledException`. The default
+adapter forwards the active token into eager compilation, boolean searches and
+detailed matching. Utf8Regex 0.4.0 observes cancellation during its controlled
+work. It exposes no shared-budget API, so provider storage remains outside the
+host's shared accounting.

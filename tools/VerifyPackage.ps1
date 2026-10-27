@@ -95,8 +95,8 @@ if (($runtimePackages -join ',') -ne 'Lokad.Jq,Lokad.Utf8Regex,Lokad.Utf8Regex.P
 }
 foreach ($regexId in @('Lokad.Utf8Regex', 'Lokad.Utf8Regex.Pcre2')) {
     $regexPackage = $lock.dependencies.'net10.0'.$regexId
-    if ($regexPackage.resolved -ne '0.3.0') { throw "Unexpected regex version: $regexId" }
-    $archivePath = Join-Path $packages ($regexId.ToLowerInvariant() + '/0.3.0/' + $regexId.ToLowerInvariant() + '.0.3.0.nupkg')
+    if ($regexPackage.resolved -ne '0.4.0') { throw "Unexpected regex version: $regexId" }
+    $archivePath = Join-Path $packages ($regexId.ToLowerInvariant() + '/0.4.0/' + $regexId.ToLowerInvariant() + '.0.4.0.nupkg')
     $regexArchive = [IO.Compression.ZipFile]::OpenRead($archivePath)
     try {
         if (@($regexArchive.Entries | Where-Object { $_.FullName -match '(^|/)(runtimes|native)(/|$)|\.(so|dylib|exe)$' }).Count -ne 0) {
@@ -104,7 +104,7 @@ foreach ($regexId in @('Lokad.Utf8Regex', 'Lokad.Utf8Regex.Pcre2')) {
         }
     } finally { $regexArchive.Dispose() }
 }
-Write-Host 'Runtime graph: Lokad.Jq -> Lokad.Utf8Regex.Pcre2 0.3.0 -> Lokad.Utf8Regex 0.3.0; no native assets.'
+Write-Host 'Runtime graph: Lokad.Jq -> Lokad.Utf8Regex.Pcre2 0.4.0 -> Lokad.Utf8Regex 0.4.0; no native assets.'
 Invoke-DotNet (@('restore', $project, '--locked-mode', '--configfile', $configuration) + $isolation)
 Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-restore') + $isolation)
 if ($SymbolPackagePath) {

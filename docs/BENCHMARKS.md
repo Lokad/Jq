@@ -166,7 +166,7 @@ checkpoints. Requested workers do not prove simultaneous occupancy.
 at least eight calls and one second, then collects three alternating pairs.
 `--iterations` controls those batches and requires cost mode. These local samples
 do not qualify general speedups or another host's contention costs.
-Provider storage is not estimated by Jq; Utf8Regex 0.3.0 has no shared-budget hook.
+Provider storage is not estimated by Jq; Utf8Regex 0.4.0 has no shared-budget hook.
 See [runtime memory rules](RUNTIME.md#memory-admission) for ownership and credit bounds.
 
 ## Recorded artifact checksums

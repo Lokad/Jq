@@ -54,6 +54,28 @@ if (args.Length != 0)
 }
 
 int checks = 0;
+{
+    var host = new SmokeHost();
+    var memory = new BenchmarkMemoryBudget(256 * 1024);
+    Check("regex scalar matching and backreferences", await Command(["-nac",
+        "[ (\"🚀🚀x\"|match(\"(?<pair>.)\\\\k<pair>\")|[.offset,.length,.string]), (\"🚀\"|test(\"^[^x]$\")) ]"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "[[0,2,\"\\ud83d\\ude80\\ud83d\\ude80\"],true]\n"
+        && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
+}
+{
+    var host = new SmokeHost();
+    host.AddFile("/first", "\"x\"\n");
+    host.AddFile("/later", "\"later\"\n");
+    var memory = new BenchmarkMemoryBudget(1024 * 1024);
+    string pattern = new string('(', 300) + "x" + new string(')', 300);
+    Check("provider construction failure stays terminal", await Command(["-r", "--arg", "pattern", pattern,
+        "\"prefix\", (try test($pattern) catch \"caught\")?, \"after\"", "/first", "/later"], [])
+        .ExecuteAsync(host, memory, CancellationToken.None) == 5
+        && host.Output(JqFileDescriptor.StdOut) == "prefix\n"
+        && host.Output(JqFileDescriptor.StdErr).StartsWith("jq: regex compilation failed: ", StringComparison.Ordinal)
+        && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
+}
 foreach (string filter in new[] { "try @bogus catch .", "try format(\"bogus\") catch ." })
 {
     var host = new SmokeHost();

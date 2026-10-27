@@ -213,10 +213,10 @@ clock and regex callback faults escape jq handlers as host failures.
 
 Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`. The default is
 `JqUtf8RegexEngine.Instance`. The selected adapter receives the active token and
-owns cooperation within its engine. The default Utf8Regex 0.3.0 adapter checks
-only around synchronous calls and cannot interrupt an active search. Regex syntax,
-resource bounds and internal storage admission belong to the provider. Utf8Regex
-0.3.0 exposes no shared-budget hook; its internal storage is outside accounting.
+owns cooperation within its engine. The default Utf8Regex 0.4.0 adapter forwards
+the token into compilation and matching. Regex syntax, resource bounds and internal
+storage admission belong to the provider. Utf8Regex exposes no shared-budget hook;
+its internal storage is outside the host's shared accounting.
 See [regex behavior](REGEX.md) for engine details.
 
 ## Numbers
