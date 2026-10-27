@@ -3,6 +3,27 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Fact]
+    public async Task Jq_ProviderConstructionRefusalStaysTerminalAndUnwindsOwnedInputs()
+    {
+        var memory = new BenchmarkMemoryBudget(1024 * 1024);
+        var host = new MockFileSystem();
+        host.AddFile("/first", "\"x\"\n");
+        host.AddFile("/later", "\"later\"\n");
+        string pattern = new string('(', 300) + "x" + new string(')', 300);
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "--arg", "pattern", pattern,
+            "\"prefix\", (try test($pattern) catch \"caught\")?, \"after\"", "/first", "/later")));
+
+        Assert.Equal(5, await command.ExecuteAsync(host, memory, CancellationToken.None));
+        Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.StartsWith("jq: regex compilation failed: ", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(1, host.ReadBytesCallCount);
+        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(0, host.OpenFileCount);
+        Assert.Equal(0, memory.ReservedBytes);
+        Assert.Equal(0, memory.ActiveScopes);
+    }
+
     [Theory]
     [InlineData("test(\"x\" * 17000)", "false\n")]
     [InlineData("match(\"x\" * 17000)", "")]

@@ -42,8 +42,6 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("\"ab\" | capture(\"(?<1>a)\")", "{}\n")]
-    [InlineData("\"ab\" | match(\"(?<1>a)\") | [.captures[] | [.name, .string]]", "[\n  [\n    null,\n    \"a\"\n  ]\n]\n")]
     [InlineData("\"x\" | gsub(\"(\" * 65 + \"x\" + \")\" * 65; \"y\")", "y\n")]
     public async Task Jq_RegexEngineAdmissionVectors(string filter, string expected)
     {
@@ -56,6 +54,9 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("\"x\" | match(\"[\")", "invalid regex")]
+    [InlineData("\"ab\" | capture(\"(?<1>a)\")", "invalid regex")]
+    [InlineData("\"ab\" | match(\"(?<1>a)\")", "invalid regex")]
+    [InlineData("\"ab\" | capture(\"(?<100>a)\")", "invalid regex")]
     [InlineData("\"aaa\" | match(\"a+\"; \"l\")", "unsupported regex flag")]
     [InlineData("\"aaa\" | test(\"a\"; \"l\")", "unsupported regex flag")]
     [InlineData("\"aaa\" | sub(\"a\"; \"X\"; \"l\")", "unsupported regex flag")]
@@ -75,7 +76,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" | split(\"x\"; 1)", "number (1) is not a string")]
     [InlineData("\"x\" | capture(\"x\"; 1)", "number (1) is not a string")]
     [InlineData("\"x\" | test(\"x\"; \"q\")", "q is not a valid modifier string")]
-    public async Task Jq_RegexFlagLimits(string filter, string diagnostic)
+    public async Task Jq_RegexRejectsInvalidSyntaxAndFlags(string filter, string diagnostic)
     {
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", filter)));

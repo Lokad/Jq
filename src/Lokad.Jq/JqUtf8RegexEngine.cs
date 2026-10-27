@@ -1,13 +1,14 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.RegularExpressions;
+using Lokad.Utf8Regex;
 using Lokad.Utf8Regex.Pcre2;
 
 namespace Lokad.Jq;
 
 /// <summary>The default managed PCRE2 regex adapter.</summary>
 /// <remarks>
-/// Checks cancellation around synchronous Utf8Regex 0.3.0 calls;
-/// an active search must finish before cancellation is observed.
-/// This provider version exposes no shared memory-budget hook.
+/// Forwards cancellation into Utf8Regex compilation and matching.
+/// The provider exposes no shared memory-budget hook.
 /// </remarks>
 public sealed class JqUtf8RegexEngine : IJqRegexEngine
 {
@@ -26,14 +27,14 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
             if ((options & JqRegexCompileOptions.Multiline) != 0) flags |= Pcre2CompileOptions.Multiline;
             if ((options & JqRegexCompileOptions.DotAll) != 0) flags |= Pcre2CompileOptions.DotAll;
             if ((options & JqRegexCompileOptions.Extended) != 0) flags |= Pcre2CompileOptions.Extended;
-            var compiled = new Utf8Pcre2Regex(pattern, flags,
+            var compiled = Utf8Pcre2Regex.Compile(pattern, flags,
                 new Utf8Pcre2CompileSettings
                 {
                     Newline = Pcre2NewlineConvention.Lf,
                     AllowDuplicateNames = true,
                     BackslashC = Pcre2BackslashCPolicy.Forbid,
                 },
-                default, Utf8Pcre2Regex.DefaultMatchTimeout);
+                Utf8Pcre2Regex.DefaultMatchTimeout, default, default, Timeout.InfiniteTimeSpan, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             var entries = new Pcre2NameEntry[compiled.NameEntryCount];
             compiled.CopyNameEntries(entries, out _);
@@ -48,6 +49,14 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
             return true;
         }
         catch (Pcre2CompileException exception) when (IsResourceFailure(exception.ErrorKind))
+        {
+            throw new JqRegexResourceException("regex compilation failed: " + exception.Message, false);
+        }
+        catch (Utf8ResourceLimitExceededException exception)
+        {
+            throw new JqRegexResourceException("regex compilation failed: " + exception.Message, false);
+        }
+        catch (RegexMatchTimeoutException exception)
         {
             throw new JqRegexResourceException("regex compilation failed: " + exception.Message, false);
         }
@@ -66,7 +75,7 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
     }
 
     private static bool IsResourceFailure(Pcre2ErrorKind kind) => kind is
-        Pcre2ErrorKind.Timeout or Pcre2ErrorKind.MatchLimit or Pcre2ErrorKind.DepthLimit or Pcre2ErrorKind.HeapLimit;
+        Pcre2ErrorKind.Timeout or Pcre2ErrorKind.MatchLimit or Pcre2ErrorKind.DepthLimit or Pcre2ErrorKind.HeapLimit or Pcre2ErrorKind.ResultLimit;
 
     private sealed class Compiled(Utf8Pcre2Regex regex, IReadOnlyDictionary<int, string> names) : IJqCompiledRegex
     {
@@ -77,7 +86,7 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             cancellationToken.ThrowIfCancellationRequested();
-            try { return regex.IsMatch(input, 0, ConvertOptions(options)); }
+            try { return regex.IsMatch(input, 0, ConvertOptions(options), cancellationToken); }
             catch (Pcre2MatchException exception) { throw Failure(exception); }
             finally { cancellationToken.ThrowIfCancellationRequested(); }
         }
@@ -89,7 +98,7 @@ public sealed class JqUtf8RegexEngine : IJqRegexEngine
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                var match = regex.MatchDetailed(input, start, ConvertOptions(options));
+                var match = regex.MatchDetailed(input, start, ConvertOptions(options), cancellationToken);
                 if (!match.Success) return default;
                 var captures = new JqRegexCapture[match.CaptureSlotCount];
                 for (int index = 0; index < match.CaptureSlotCount; index++)

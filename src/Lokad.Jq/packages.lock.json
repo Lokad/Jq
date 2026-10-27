@@ -4,11 +4,11 @@
     "net10.0": {
       "Lokad.Utf8Regex.Pcre2": {
         "type": "Direct",
-        "requested": "[0.3.0, )",
-        "resolved": "0.3.0",
-        "contentHash": "DmRXa7Rkb9PTwRrfSVuMQ4vXgFKR9wbFjARGSn6XR/P/waElfJFzTSybRw7tdVmG9TFTnMlz9XhMKFEND0evMg==",
+        "requested": "[0.4.0, )",
+        "resolved": "0.4.0",
+        "contentHash": "hvzVSyfkWSBTLDVvGfFkgKWqaEotrx4ZmtIWQ1ZXh884bNQJto8CAbi8x7OLjyWSv0pLdj1bj+8BEpQR+ftCyg==",
         "dependencies": {
-          "Lokad.Utf8Regex": "0.3.0"
+          "Lokad.Utf8Regex": "[0.4.0]"
         }
       },
       "Microsoft.SourceLink.GitHub": {
@@ -24,8 +24,8 @@
       },
       "Lokad.Utf8Regex": {
         "type": "Transitive",
-        "resolved": "0.3.0",
-        "contentHash": "qu+dtgH4zwtqUTCRL0/m5IvrxKWQxNB4EJNMjywPtVhaC8Okq+yLr/grsS2lWrMjpXBAw+ESejpQ/+00NltAmw=="
+        "resolved": "0.4.0",
+        "contentHash": "SpEYyYGmHyY7Udh3/Koe8Iopy5SUdDnrP4RNf1dT2rWICvfWOKAFDUo7OqZgkjQzlD/1BLlF56aqUMEAN6+hMg=="
       },
       "Microsoft.Build.Tasks.Git": {
         "type": "Transitive",
