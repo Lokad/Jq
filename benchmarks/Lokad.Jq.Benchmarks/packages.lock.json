@@ -181,10 +181,7 @@
         "contentHash": "VybpaOQQhqE6siHppMktjfGBw1GCwvCqiufqmP8F1nj7fTUNtW35LOEt3UZTEsECfo+ELAl/9o9nJx3U91i7vA=="
       },
       "lokad.jq": {
-        "type": "Project",
-        "dependencies": {
-          "Lokad.Utf8Regex.Pcre2": "[0.4.0, )"
-        }
+        "type": "Project"
       }
     }
   }

@@ -43,7 +43,8 @@ cannot become targets through equal contents.
   decimal-enabled jq builds. Special-function accuracy remains approximate;
   higher-order Bessel zero behavior can differ from native C libraries. See
   [runtime number semantics](RUNTIME.md#numbers).
-- **Regex:** the managed PCRE2 profile differs from jq's Oniguruma semantics;
+- **Regex:** the application supplies the provider. The optional PCRE2 example
+  differs from jq's Oniguruma semantics;
   flags `m`/`s`/`p`, longest matching and `\C` differ. See [regex behavior](REGEX.md).
 - **Diagnostics and Unicode:** JSON reader wording, UTF-16 source columns and
   strict JSON-input unpaired-surrogate rejection are deliberate policies. Input line numbers

@@ -211,13 +211,12 @@ constructing. Cancellation propagates as `OperationCanceledException`; host
 contract failures and actual `OutOfMemoryException` remain distinct. Unexpected
 clock and regex callback faults escape jq handlers as host failures.
 
-Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`. The default is
-`JqUtf8RegexEngine.Instance`. The selected adapter receives the active token and
-owns cooperation within its engine. The default Utf8Regex 0.4.0 adapter forwards
-the token into compilation and matching. Regex syntax, resource bounds and internal
-storage admission belong to the provider. Utf8Regex exposes no shared-budget hook;
-its internal storage is outside the host's shared accounting.
-See [regex behavior](REGEX.md) for engine details.
+Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync` for regex operations.
+The application owns the adapter and its provider dependencies. Calls without an
+adapter run ordinary filters; an executed regex operation reports the catchable
+error `regex engine is not configured`. Providers own syntax, resource bounds,
+internal storage admission and cooperation within compilation/matching. See
+[regex behavior](REGEX.md) and the [source adapter example](../examples/README.md).
 
 ## Numbers
 

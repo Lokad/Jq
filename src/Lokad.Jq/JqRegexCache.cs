@@ -24,6 +24,8 @@ internal sealed class JqRegexCache : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _budget.CheckCancellation();
+        IJqRegexEngine regexEngine = _budget.RegexEngine
+            ?? throw new JqException("regex engine is not configured");
         if (_patterns.TryGetValue((pattern, options), out Pattern? cached))
         {
             var lease = new JqMemoryValue<Pattern>(cached, cached);
@@ -50,7 +52,7 @@ internal sealed class JqRegexCache : IDisposable
             string ownedPattern = new(pattern.AsSpan());
             try
             {
-                if (!_budget.RegexEngine.TryCompile(ownedPattern, options, _budget.MemoryBudget,
+                if (!regexEngine.TryCompile(ownedPattern, options, _budget.MemoryBudget,
                     _budget.CancellationToken, out compiled, out string? error))
                     throw new JqException(error ?? "unsupported regex");
             }

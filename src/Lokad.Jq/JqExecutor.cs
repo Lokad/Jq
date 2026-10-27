@@ -13,7 +13,7 @@ namespace Lokad.Jq;
 internal static class JqExecutor
 {
     public static async Task<int> ExecuteAsync(IJqHost host, JqCommandInvocation commandInvocation,
-        IJqRegexEngine regexEngine, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
+        IJqRegexEngine? regexEngine, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var memoryScope = memoryBudget?.CreateScope();

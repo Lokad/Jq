@@ -26,8 +26,13 @@ public sealed class Jq
     }
 
     /// <summary>Executes with host-mediated IO; cancellation propagates to the caller.</summary>
-    public Task<int> ExecuteAsync(IJqHost host, CancellationToken cancellationToken) =>
-        ExecuteAsync(host, JqUtf8RegexEngine.Instance, cancellationToken);
+    /// <remarks>Regex operations require an overload accepting an IJqRegexEngine.</remarks>
+    public Task<int> ExecuteAsync(IJqHost host, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        _invocation.CheckLive();
+        return JqExecutor.ExecuteAsync(host, _invocation, null, _invocation.MemoryBudget, cancellationToken);
+    }
 
     /// <summary>Executes using a borrowed regex engine.</summary>
     public Task<int> ExecuteAsync(IJqHost host, IJqRegexEngine regexEngine, CancellationToken cancellationToken)
@@ -38,9 +43,14 @@ public sealed class Jq
         return JqExecutor.ExecuteAsync(host, _invocation, regexEngine, _invocation.MemoryBudget, cancellationToken);
     }
 
-    /// <summary>Executes using a borrowed host memory allowance and the default regex engine.</summary>
-    public Task<int> ExecuteAsync(IJqHost host, IMemoryBudget memoryBudget, CancellationToken cancellationToken) =>
-        ExecuteAsync(host, JqUtf8RegexEngine.Instance, memoryBudget, cancellationToken);
+    /// <summary>Executes using a borrowed host memory allowance without a regex provider.</summary>
+    public Task<int> ExecuteAsync(IJqHost host, IMemoryBudget memoryBudget, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(memoryBudget);
+        _invocation.CheckLive();
+        return JqExecutor.ExecuteAsync(host, _invocation, null, memoryBudget, cancellationToken);
+    }
 
     /// <summary>Executes using a borrowed shared memory allowance and a borrowed regex engine.</summary>
     /// <remarks>The execution owns a child scope until all evaluation, writes and descriptor cleanup finish.</remarks>

@@ -332,7 +332,8 @@ public sealed partial class JqTests
         var (exitC, outC, errC) = await RunOutputAsync(config, "--build-configuration");
         Assert.Equal(0, exitC);
         Assert.Contains("Lokad jq", outC);
-        Assert.Contains("managed Utf8Regex PCRE2", outC);
+        Assert.Contains("hosted IO", outC);
+        Assert.DoesNotContain("Utf8Regex", outC);
         Assert.Equal("", errC);
         Assert.Equal(0, config.ReadBytesCallCount);
     }

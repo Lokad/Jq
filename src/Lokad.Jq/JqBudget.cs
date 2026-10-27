@@ -25,12 +25,12 @@ internal sealed class JqBudget : IDisposable
     private bool _disposed;
 
     internal JqBudget(CancellationToken cancellationToken)
-        : this(JqUtf8RegexEngine.Instance, cancellationToken) { }
+        : this(null, null, cancellationToken) { }
 
     internal JqBudget(IJqRegexEngine regexEngine, CancellationToken cancellationToken)
         : this(regexEngine, null, cancellationToken) { }
 
-    internal JqBudget(IJqRegexEngine regexEngine, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
+    internal JqBudget(IJqRegexEngine? regexEngine, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
     {
         RegexEngine = regexEngine;
         MemoryBudget = memoryBudget;
@@ -39,7 +39,7 @@ internal sealed class JqBudget : IDisposable
         _cancellationToken = cancellationToken;
     }
 
-    internal IJqRegexEngine RegexEngine { get; }
+    internal IJqRegexEngine? RegexEngine { get; }
 
     internal IMemoryBudget? MemoryBudget { get; }
 

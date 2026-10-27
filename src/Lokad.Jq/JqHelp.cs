@@ -72,7 +72,7 @@ internal static class JqHelp
 }
 
 // Truthful local build configuration assembled from the running assembly:
-// identity, framework, regex engine, and embedding constraints. This never
+// identity, framework, and embedding constraints. This never
 // claims the upstream `jq-1.8.2` identity or C build flags.
 internal static class JqBuildConfiguration
 {
@@ -83,7 +83,7 @@ internal static class JqBuildConfiguration
             string version = typeof(Jq).Assembly
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
                 ?.InformationalVersion ?? "0.0.0";
-            return $"Lokad jq {version} ({RuntimeInformation.FrameworkDescription}; managed Utf8Regex PCRE2; hosted IO)";
+            return $"Lokad jq {version} ({RuntimeInformation.FrameworkDescription}; hosted IO)";
         }
     }
 }

@@ -2,7 +2,11 @@
 
 ## 0.2.0 — Unreleased
 
-- Upgrade `Lokad.Utf8Regex.Pcre2` and its core dependency to 0.4.0; forward
+- Breaking: remove the bundled `JqUtf8RegexEngine` and all provider dependencies
+  from the core package. Compile `examples/Utf8RegexAdapter.cs` in the application
+  and inject it through `IJqRegexEngine`. Ordinary filters run without an adapter;
+  executed regex operations report `regex engine is not configured`.
+- Update the optional application adapter to `Lokad.Utf8Regex.Pcre2` 0.4.0; forward
   cancellation into provider compilation and both search APIs.
 - Numeric-only regex capture names are now rejected by the provider's PCRE2 grammar.
 

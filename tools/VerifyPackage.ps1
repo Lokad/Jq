@@ -46,12 +46,12 @@ try {
     foreach ($requiredEntry in @('lib/net10.0/Lokad.Jq.dll', 'lib/net10.0/Lokad.Jq.xml', 'README.md', 'CHANGELOG.md', 'LICENSE.txt', 'icon.png')) {
         if ($requiredEntry -notin $entries) { throw "Missing package entry: $requiredEntry" }
     }
-    if (@($entries | Where-Object { $_ -match '(^|/)(PLAN\.md|external|tmp|tests|benchmarks|tools)(/|$)' }).Count -ne 0) {
+    if (@($entries | Where-Object { $_ -match '(^|/)(PLAN\.md|external|tmp|tests|benchmarks|tools|examples)(/|$)' }).Count -ne 0) {
         throw 'Unexpected development files in the package.'
     }
-    $dependencies = @($manifest.package.metadata.dependencies.group.dependency | ForEach-Object { [string]$_.id })
-    if ((($dependencies | Sort-Object) -join ',') -ne 'Lokad.Utf8Regex.Pcre2') {
-        throw 'Unexpected production dependencies or leaked build tooling.'
+    $dependencies = @($manifest.SelectNodes("//*[local-name()='dependency']"))
+    if ($dependencies.Count -ne 0) {
+        throw 'The core package must have no runtime package dependencies.'
     }
 } finally {
     $archive.Dispose()
@@ -85,6 +85,28 @@ $hashAlgorithm = [Security.Cryptography.SHA512]::Create()
 $packageStream = [IO.File]::OpenRead($packageFile)
 try { $contentHash = [Convert]::ToBase64String($hashAlgorithm.ComputeHash($packageStream)) }
 finally { $packageStream.Dispose(); $hashAlgorithm.Dispose() }
+
+# A separate application proves that the core restores and runs without a provider.
+$coreRoot = $verificationRoot + '-core'
+$null = New-Item -ItemType Directory -Path $coreRoot
+$coreProject = Join-Path $coreRoot 'PackageCoreSmoke.csproj'
+$coreTemplate = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'PackageCoreSmoke/PackageCoreSmoke.csproj.template') -Raw
+$coreTemplate.Replace('__PACKAGE_VERSION__', $version) | Set-Content -LiteralPath $coreProject -Encoding utf8
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageCoreSmoke/Program.cs') -Destination (Join-Path $coreRoot 'Program.cs')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../benchmarks/Lokad.Jq.Benchmarks/BenchmarkMemoryBudget.cs') -Destination (Join-Path $coreRoot 'BenchmarkMemoryBudget.cs')
+$coreIsolation = @('-p:ImportDirectoryBuildProps=false', '-p:ImportDirectoryBuildTargets=false', '-p:ManagePackageVersionsCentrally=false', ('-p:RestorePackagesPath=' + (Join-Path $coreRoot 'packages')))
+Invoke-DotNet (@('restore', $coreProject, '--configfile', $configuration) + $coreIsolation)
+$coreLock = Get-Content -LiteralPath (Join-Path $coreRoot 'packages.lock.json') -Raw | ConvertFrom-Json
+$corePackages = @($coreLock.dependencies.'net10.0'.PSObject.Properties.Name)
+if ($corePackages.Count -ne 1 -or $corePackages[0] -ne 'Lokad.Jq' -or
+    $coreLock.dependencies.'net10.0'.'Lokad.Jq'.resolved -ne $version -or
+    $coreLock.dependencies.'net10.0'.'Lokad.Jq'.contentHash -ne $contentHash) {
+    throw 'The core-only consumer must resolve only the packed Lokad.Jq artifact.'
+}
+Write-Host 'Core-only runtime graph: Lokad.Jq; no provider or other runtime package dependencies.'
+Invoke-DotNet (@('restore', $coreProject, '--locked-mode', '--configfile', $configuration) + $coreIsolation)
+Invoke-DotNet (@('run', '--project', $coreProject, '-c', 'Release', '--no-restore') + $coreIsolation)
+
 $lock = Get-Content -LiteralPath (Join-Path $verificationRoot 'packages.lock.json') -Raw | ConvertFrom-Json
 $lockedPackage = $lock.dependencies.'net10.0'.'Lokad.Jq'
 if ($lockedPackage.resolved -ne $version -or $lockedPackage.contentHash -ne $contentHash) {
@@ -105,7 +127,7 @@ foreach ($regexId in @('Lokad.Utf8Regex', 'Lokad.Utf8Regex.Pcre2')) {
         }
     } finally { $regexArchive.Dispose() }
 }
-Write-Host 'Runtime graph: Lokad.Jq -> Lokad.Utf8Regex.Pcre2 0.4.0 -> Lokad.Utf8Regex 0.4.0; no native assets.'
+Write-Host 'Adapted consumer: application -> Lokad.Jq + Lokad.Utf8Regex.Pcre2 0.4.0 -> Lokad.Utf8Regex 0.4.0; no native assets.'
 Invoke-DotNet (@('restore', $project, '--locked-mode', '--configfile', $configuration) + $isolation)
 Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-restore') + $isolation)
 if ($SymbolPackagePath) {

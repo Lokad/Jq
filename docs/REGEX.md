@@ -1,9 +1,12 @@
 # Regex behavior
 
-Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`; the default
-`JqUtf8RegexEngine.Instance` adapts managed `Lokad.Utf8Regex.Pcre2` 0.4.0
-(transitively `Lokad.Utf8Regex` 0.4.0). The default adapter ships in the runtime
-package. PCRE2-specific types stay behind the adapter.
+Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`. The core package
+contains the provider-neutral contracts and jq result handling. The application
+owns the provider implementation and its dependencies.
+
+Without an adapter, ordinary filters work and an executed regex operation reports
+the catchable error `regex engine is not configured`. Unused regex branches stay
+lazy. There is no implicit provider.
 
 See the [application example](../examples/README.md) for explicit injection,
 named captures and Unicode offsets.
@@ -15,11 +18,13 @@ compiled handles until all subject/result borrowers finish. Implementations must
 cooperate inside their own operations, admit substantial internal storage before
 allocation, and surface refusal as terminal `JqRegexResourceException`.
 
-Default patterns go directly to the managed PCRE2 standard matcher; supported
-syntax follows that engine. Custom adapters choose their syntax while preserving
+The optional [Utf8RegexAdapter](../examples/Utf8RegexAdapter.cs) source uses managed
+`Lokad.Utf8Regex.Pcre2` 0.4.0 and its matching core package. It compiles into the
+application, alongside explicit provider references. Other adapters choose their
+syntax while preserving
 complete-subject context, absolute offsets and the capture contract.
 
-## Flags and syntax
+## Example adapter flags and syntax
 
 | Flag | Behavior |
 | --- | --- |
@@ -58,7 +63,7 @@ their result streams.
 
 ## Limits and cancellation
 
-The provider owns regex resource bounds. The default adapter uses Utf8Regex's
+The provider owns regex resource bounds. The example adapter uses Utf8Regex's
 execution settings and default match timeout.
 
 Providers own syntax validation and admission for compiled patterns, workspace
@@ -72,7 +77,7 @@ Reuse and structural ceilings are described in
 [runtime memory rules](RUNTIME.md#memory-admission).
 
 Provider resource exhaustion reports status 5 outside `try`/`?`. Syntax errors stay
-catchable; cancellation propagates as `OperationCanceledException`. The default
+catchable; cancellation propagates as `OperationCanceledException`. The example
 adapter forwards the active token into eager compilation, boolean searches and
 detailed matching. Utf8Regex 0.4.0 observes cancellation during its controlled
 work. It exposes no shared-budget API, so provider storage remains outside the

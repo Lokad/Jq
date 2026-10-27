@@ -254,10 +254,7 @@
         }
       },
       "lokad.jq": {
-        "type": "Project",
-        "dependencies": {
-          "Lokad.Utf8Regex.Pcre2": "[0.4.0, )"
-        }
+        "type": "Project"
       },
       "lokad.jq.benchmarks": {
         "type": "Project",

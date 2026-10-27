@@ -2,15 +2,6 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
-      "Lokad.Utf8Regex.Pcre2": {
-        "type": "Direct",
-        "requested": "[0.4.0, )",
-        "resolved": "0.4.0",
-        "contentHash": "hvzVSyfkWSBTLDVvGfFkgKWqaEotrx4ZmtIWQ1ZXh884bNQJto8CAbi8x7OLjyWSv0pLdj1bj+8BEpQR+ftCyg==",
-        "dependencies": {
-          "Lokad.Utf8Regex": "[0.4.0]"
-        }
-      },
       "Microsoft.SourceLink.GitHub": {
         "type": "Direct",
         "requested": "[10.0.401, )",
@@ -21,11 +12,6 @@
           "Microsoft.SourceLink.Common": "10.0.401",
           "System.IO.Hashing": "10.0.12"
         }
-      },
-      "Lokad.Utf8Regex": {
-        "type": "Transitive",
-        "resolved": "0.4.0",
-        "contentHash": "SpEYyYGmHyY7Udh3/Koe8Iopy5SUdDnrP4RNf1dT2rWICvfWOKAFDUo7OqZgkjQzlD/1BLlF56aqUMEAN6+hMg=="
       },
       "Microsoft.Build.Tasks.Git": {
         "type": "Transitive",

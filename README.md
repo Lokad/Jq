@@ -44,9 +44,10 @@ Every refused memory admission fails the command with status 5. Earlier output
 remains; cleanup refunds relinquished storage. Use host cancellation to stop
 long-running commands.
 
-Pass an `IJqRegexEngine` to `ExecuteAsync(host, regexEngine, cancellationToken)`
-to select a borrowed regex engine. The default adapter forwards cancellation into
-compilation and matching. See
+Supply a borrowed `IJqRegexEngine` through
+`ExecuteAsync(host, regexEngine, cancellationToken)` for regex operations.
+The core package has no runtime package dependencies. The application chooses
+its provider; see the [source adapter example](examples/README.md) and
 [runtime behavior](docs/RUNTIME.md) for host I/O, memory admission and safeguards.
 
 ## Develop
@@ -62,7 +63,7 @@ dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --filter '*'
 The SDK version is pinned in [global.json](global.json). Benchmarks are opt-in.
 
 Release packages and symbols go to `artifacts/nuget/`. Verify package contents,
-dependencies and public API behavior in an isolated consumer:
+dependencies and public API behavior in isolated core-only and adapter consumers:
 
 ```powershell
 ./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.2.0.nupkg
@@ -73,8 +74,8 @@ The script also supports symbol, hosted-source and caller-supplied corpus checks
 ## Documentation
 
 Compatibility with upstream jq is incomplete; Lokad.Jq is not yet a drop-in
-replacement. Regex uses the managed `Lokad.Utf8Regex.Pcre2` package and follows
-its supported PCRE2 profile; see [regex behavior](docs/REGEX.md).
+replacement. Regex syntax follows the application's selected provider; the
+optional example adapts `Lokad.Utf8Regex.Pcre2`. See [regex behavior](docs/REGEX.md).
 
 - [Compatibility](docs/COMPATIBILITY.md): feature inventory, tests, supported scope and differences.
 - [Regex behavior](docs/REGEX.md): engine syntax, flags, captures and cancellation boundaries.
