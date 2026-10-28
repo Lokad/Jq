@@ -17,11 +17,14 @@ internal static class TimingQualification
         deadline.CancelAfter(TimeSpan.FromSeconds(120));
         try
         {
-            libraryWarmup = await WarmAsync(true).ConfigureAwait(false);
-            referenceWarmup = await WarmAsync(false).ConfigureAwait(false);
-            // Let .NET 11 tiered JIT settle before choosing iteration counts;
-            // calibration must describe the code used by the measured pairs.
-            await Task.Delay(TimeSpan.FromSeconds(2), deadline.Token).ConfigureAwait(false);
+            // .NET 11 can publish instrumented code before its final optimized
+            // version. Exercise each published tier before calibrating batches.
+            for (int pass = 0; pass < 3; pass++)
+            {
+                libraryWarmup += await WarmAsync(true).ConfigureAwait(false);
+                referenceWarmup += await WarmAsync(false).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(2), deadline.Token).ConfigureAwait(false);
+            }
             int libraryIterations = await CalibrateAsync(true).ConfigureAwait(false);
             int referenceIterations = await CalibrateAsync(false).ConfigureAwait(false);
             for (int i = 0; i < pairs; i++)
