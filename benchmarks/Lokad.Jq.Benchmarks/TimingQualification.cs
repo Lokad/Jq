@@ -19,11 +19,11 @@ internal static class TimingQualification
         {
             libraryWarmup = await WarmAsync(true).ConfigureAwait(false);
             referenceWarmup = await WarmAsync(false).ConfigureAwait(false);
+            // Let .NET 11 tiered JIT settle before choosing iteration counts;
+            // calibration must describe the code used by the measured pairs.
+            await Task.Delay(TimeSpan.FromSeconds(2), deadline.Token).ConfigureAwait(false);
             int libraryIterations = await CalibrateAsync(true).ConfigureAwait(false);
             int referenceIterations = await CalibrateAsync(false).ConfigureAwait(false);
-            // .NET 11 tiered JIT can continue after calibration completes.
-            // Let that work settle before the first idle window is checked.
-            await Task.Delay(TimeSpan.FromSeconds(2), deadline.Token).ConfigureAwait(false);
             for (int i = 0; i < pairs; i++)
             {
                 // Allow tiered compilation/GC to settle. A one-second window
