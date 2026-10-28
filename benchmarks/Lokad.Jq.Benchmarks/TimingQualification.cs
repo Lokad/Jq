@@ -80,7 +80,8 @@ internal static class TimingQualification
             int calls = 0;
             while (calls < 32 || watch.ElapsedMilliseconds < 1000)
             {
-                await ExecuteAsync(library).ConfigureAwait(false);
+                // Warm the batch wrapper as well as the invocation it measures.
+                await TimeAsync(library, 1).ConfigureAwait(false);
                 calls++;
             }
             return calls;
