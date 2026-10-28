@@ -7,6 +7,9 @@
   Use BenchmarkDotNet 0.16.0-preview.2 for .NET 11 toolchain support.
 - Report one mean `Lokad.Jq / jq` timing ratio, sorted descending. Remove stale
   measurements and before/after allocation claims from the benchmark documentation.
+- Add realistic compound benchmarks for API shaping, incident logs, indexed
+  enrichment, operational summaries, configuration updates, snapshot differences,
+  nested TSV extraction and application-adapted regex cleanup.
 
 ## 0.2.0 — 2026-10-27
 

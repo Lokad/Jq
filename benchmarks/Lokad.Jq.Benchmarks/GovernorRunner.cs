@@ -609,6 +609,7 @@ internal static class GovernorRunner
         AddDiagnostic("with-entries-error-order", 2,
             ["-nc", "try ({a:1,b:2} | with_entries(if .key == \"a\" then null else stderr end)) catch ."],
             "", "\"Cannot use null (null) as object key\"\n", "{\"key\":\"b\",\"value\":2}");
+        workloads.AddRange(AgentWorkloads.Create().Where(item => item.Workload.Scale == "medium"));
         return workloads;
 
         void Add(string name, int size, string[] arguments, string input, string expected) =>

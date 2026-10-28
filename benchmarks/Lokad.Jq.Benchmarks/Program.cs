@@ -117,7 +117,11 @@ if (args is ["--smoke"])
     await benchmarks.DescentPaths();
     await benchmarks.Utf8InputTransform();
     await benchmarks.Utf8UnicodeTransform();
-    Console.WriteLine("12 non-regex benchmark checks passed; no timings collected.");
+    var scenarios = AgentWorkloads.Create();
+    foreach (var scenario in scenarios)
+        scenario.Verify(await BenchmarkExecution.RunAsync(scenario.Workload.Arguments,
+            scenario.Workload.Input, false, CancellationToken.None));
+    Console.WriteLine($"12 local and {scenarios.Count} compound benchmark checks passed; no timings collected.");
     return;
 }
 

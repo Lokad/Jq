@@ -57,6 +57,7 @@ internal static class WorkloadCatalog
                 cases.Add(new(name, scale, size, arguments.ToArray(), input, comparison));
             }
         }
+        cases.AddRange(AgentWorkloads.Create().Select(item => item.Workload));
         // Separate launch/compilation controls; never subtract these timings.
         cases.Add(new("startup-empty", "control", 0, ["-b", "-M", "-n", "empty"], [], ComparisonKind.Bytes));
         cases.Add(new("small-request", "control", 1, ["-b", "-M", "-c", ".id"], "{\"id\":7}"u8.ToArray(), ComparisonKind.Bytes));

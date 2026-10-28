@@ -23,10 +23,16 @@ allocation, not peak heap, admitted storage or native jq process memory.
 
 ## Coverage
 
-The comparison catalog has twelve families at three sizes, plus startup and
-single-request controls: compact/pretty identity, NDJSON projection/selection,
+The comparison catalog has twenty families at three sizes, plus startup and
+single-request controls. Basic cases cover compact/pretty identity, NDJSON projection/selection,
 object construction, reduction, foreach, sorting/grouping, entry updates, tree
 walking/paths, Unicode strings and JSON round trips.
+
+Compound cases cover paged API shaping, NDJSON incident summaries, indexed
+inventory enrichment, grouped operational reports, layered configuration updates,
+snapshot differences, nested TSV extraction and adapted regex log cleanup. Their
+fixtures include missing fields, duplicate IDs, skewed groups and Unicode. Inputs
+and independently constructed expectations are prepared outside measurement.
 
 Local BenchmarkDotNet cases also cover command recognition and reused commands.
 Allocation diagnostics add wide objects, raw strings, sorted ASCII, scalar

@@ -34,7 +34,7 @@ public sealed class BenchmarkComparisonTests
     {
         var first = WorkloadCatalog.Create();
         var second = WorkloadCatalog.Create();
-        Assert.Equal(38, first.Count);
+        Assert.Equal(62, first.Count);
         for (int i = 0; i < first.Count; i++)
         {
             Assert.Equal(first[i].Arguments, second[i].Arguments);
