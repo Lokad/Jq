@@ -74,18 +74,33 @@ internal static class BenchmarkReport
         bool claim = report.Mode == "qualify" && report.MachineGate.IsQuiet && report.Host.CleanCheckout
             && report.Complete && report.Cases.Length == report.RequestedCases;
         var text = new StringBuilder();
-        text.AppendLine(BeginMarker).AppendLine("## Recorded comparison").AppendLine();
-        text.AppendLine("| Case / scale | Size | Status | Lokad.Jq ms | jq ms | Ratio / 95% CI | Interpretation |");
-        text.AppendLine("| --- | ---: | --- | ---: | ---: | --- | --- |");
-        foreach (var row in report.Cases)
+        text.AppendLine(BeginMarker).AppendLine("## Timing").AppendLine();
+        text.AppendLine("| Case / scale | Size | Status | Lokad.Jq ms | jq ms | Lokad.Jq / jq |");
+        text.AppendLine("| --- | ---: | --- | ---: | ---: | ---: |");
+        var rows = report.Cases.Select(row =>
         {
             var timing = row.Timing.Summary;
             bool qualified = claim && row.Verification.Status == "Equivalent" && timing.Status == "Qualified";
+            double libraryMs = qualified ? row.Timing.Samples.Average(sample => sample.LibraryMs) : 0;
+            double referenceMs = qualified ? row.Timing.Samples.Average(sample => sample.ReferenceMs) : 0;
+            return (Row: row, Qualified: qualified, LibraryMs: libraryMs, ReferenceMs: referenceMs,
+                Ratio: qualified ? libraryMs / referenceMs : 0);
+        }).OrderByDescending(item => item.Qualified).ThenByDescending(item => item.Ratio)
+            .ThenBy(item => item.Row.Workload.Name, StringComparer.Ordinal)
+            .ThenBy(item => item.Row.Workload.Scale, StringComparer.Ordinal);
+        var notes = new List<string>();
+        foreach (var item in rows)
+        {
+            var row = item.Row;
+            var timing = row.Timing.Summary;
             string status = row.Verification.Status != "Equivalent" ? row.Verification.Status : timing.Status;
-            string times = qualified ? FormattableString.Invariant($"{timing.LibraryMedianMs:F3} | {timing.ReferenceMedianMs:F3} | {timing.Ratio:F2} [{timing.RatioLow:F2}, {timing.RatioHigh:F2}]") : "— | — | —";
-            text.AppendLine($"| {Escape(row.Workload.Name)}/{Escape(row.Workload.Scale)} | {row.Workload.Size} | {Escape(status)} | {times} | " +
-                $"{Escape(qualified ? timing.Interpretation : row.Verification.Reason.Length > 0 ? row.Verification.Reason : timing.Reason)} |");
+            string times = item.Qualified ? FormattableString.Invariant($"{item.LibraryMs:F3} | {item.ReferenceMs:F3} | {item.Ratio:F3}") : "— | — | —";
+            string name = $"{Escape(row.Workload.Name)}/{Escape(row.Workload.Scale)}";
+            text.AppendLine($"| {name} | {row.Workload.Size} | {Escape(status)} | {times} |");
+            string reason = row.Verification.Reason.Length > 0 ? row.Verification.Reason : timing.Reason;
+            if (!item.Qualified && reason.Length > 0) notes.Add($"- {name}: {Escape(reason)}");
         }
+        if (notes.Count > 0) text.AppendLine().AppendJoin(Environment.NewLine, notes).AppendLine();
         if (!claim) text.AppendLine().AppendLine("No qualified performance claim: this artifact is verification-only, paused, incomplete, or lacks a clean quiet-machine qualification.").AppendLine();
         return text.AppendLine().AppendLine(EndMarker).ToString();
     }
@@ -100,7 +115,7 @@ internal static class BenchmarkReport
         text.AppendLine($"{Escape(report.Host.Runtime)}; SDK {Escape(report.Host.Sdk)}; {Escape(report.Host.OperatingSystem)}; " +
             $"{Escape(report.Host.Cpu)}; {report.Host.LogicalProcessors} logical processors.").AppendLine();
         text.AppendLine(Contract).AppendLine();
-        text.AppendLine("Ratio is jq time divided by Lokad.Jq time; above 1 favors Lokad.Jq. CI is a paired-bootstrap 95% interval.").AppendLine();
+        text.AppendLine("Times are arithmetic mean milliseconds per invocation. Lokad.Jq / jq divides those means; lower is better, with 1 at parity. Rows descend by this ratio; unqualified rows follow.").AppendLine();
         return text.AppendLine(ProvenanceEndMarker).ToString();
     }
 

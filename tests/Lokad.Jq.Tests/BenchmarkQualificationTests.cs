@@ -94,7 +94,7 @@ public sealed class BenchmarkQualificationTests
         var restored = Assert.IsType<ComparisonReport>(JsonSerializer.Deserialize<ComparisonReport>(
             JsonSerializer.Serialize(report, ComparisonRunner.JsonOptions), ComparisonRunner.JsonOptions));
         Assert.Equal(BenchmarkReport.Render(report), BenchmarkReport.Render(restored));
-        Assert.Contains("2.00 [2.00, 2.00]", BenchmarkReport.Render(report), StringComparison.Ordinal);
+        Assert.Contains("| 40.000 | 80.000 | 0.500 |", BenchmarkReport.Render(report), StringComparison.Ordinal);
         string document = "# Benchmarks\n\n" + BenchmarkReport.BeginMarker + "\nold table\n"
             + BenchmarkReport.EndMarker + "\n\n## Managed allocations\n\n| Allocations |\n| 123 |\n\n"
             + BenchmarkReport.ProvenanceBeginMarker + "\nold provenance\n" + BenchmarkReport.ProvenanceEndMarker;
@@ -106,11 +106,48 @@ public sealed class BenchmarkQualificationTests
         Assert.Contains("| 123 |", rendered, StringComparison.Ordinal);
         Assert.Equal(rendered, BenchmarkReport.RenderDocument(rendered, report));
         Assert.DoesNotContain("old provenance", rendered, StringComparison.Ordinal);
-        Assert.DoesNotContain("2.00 [", BenchmarkReport.Render(report with { Mode = "verify" }), StringComparison.Ordinal);
-        Assert.DoesNotContain("2.00 [", BenchmarkReport.Render(report with { Mode = "paused" }), StringComparison.Ordinal);
-        Assert.DoesNotContain("2.00 [", BenchmarkReport.Render(report with { Complete = false }), StringComparison.Ordinal);
-        Assert.DoesNotContain("2.00 [", BenchmarkReport.Render(report with { Cases = [row with { Verification = verified with { Status = "Mismatch" } }] }), StringComparison.Ordinal);
-        Assert.DoesNotContain("2.00 [", BenchmarkReport.Render(report with { Cases = [row with { Timing = timing with { Summary = timing.Summary with { Status = "Unqualified" } } }] }), StringComparison.Ordinal);
+        Assert.DoesNotContain("0.500", BenchmarkReport.Render(report with { Mode = "verify" }), StringComparison.Ordinal);
+        Assert.DoesNotContain("0.500", BenchmarkReport.Render(report with { Mode = "paused" }), StringComparison.Ordinal);
+        Assert.DoesNotContain("0.500", BenchmarkReport.Render(report with { Complete = false }), StringComparison.Ordinal);
+        Assert.DoesNotContain("0.500", BenchmarkReport.Render(report with { Cases = [row with { Verification = verified with { Status = "Mismatch" } }] }), StringComparison.Ordinal);
+        Assert.DoesNotContain("0.500", BenchmarkReport.Render(report with { Cases = [row with { Timing = timing with { Summary = timing.Summary with { Status = "Unqualified" } } }] }), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReportsUseMeanInvocationTimesAndSortDescendingBeforeRounding()
+    {
+        var workload = WorkloadCatalog.Create()[0];
+        var empty = OutputDigest.FromBytes([]);
+        var verified = new CaseVerification(workload.Name, workload.Scale, workload.Size, "Equivalent", "", empty, empty);
+        var samples = Enumerable.Range(0, 11)
+            .Select(i => new PairedSample(i % 2 == 0, 2, 4, i == 10 ? 96 : 80, 320)).ToArray();
+        var summary = PairedStatistics.Summarize(samples);
+        Assert.Equal("Qualified", summary.Status);
+        var row = new ComparisonRow(BenchmarkReport.Describe(workload) with { Name = "mean" }, verified,
+            new QualificationResult(summary, samples, [], 32, 32));
+        var first = row with { Workload = row.Workload with { Name = "z-first" },
+            Timing = row.Timing with { Samples = Pairs(11, 40.032, 80) } };
+        var second = row with { Workload = row.Workload with { Name = "a-second" },
+            Timing = row.Timing with { Samples = Pairs(11, 40.024, 80) } };
+        var unqualified = row with { Workload = row.Workload with { Name = "unqualified" },
+            Timing = row.Timing with { Samples = [], Summary = summary with { Status = "Unqualified", Reason = "Too short." } } };
+        var host = new HostProvenance(new string('a', 40), true, "10.0", ".NET 10", "test OS", "X64", "test CPU", 4, "build", "build", "digest");
+        var report = BenchmarkReport.Create("qualify", host, new("jq-1.8.2", "digest", "test configuration"),
+            QuietCheck.Evaluate([1, 1]), 11, 4, true, [second, unqualified, row, first]);
+
+        string rendered = BenchmarkReport.Render(report);
+        string[] lines = rendered.Split('\n').Where(line => line.Contains("| Qualified |", StringComparison.Ordinal)
+            || line.Contains("| Unqualified |", StringComparison.Ordinal)).ToArray();
+        Assert.Collection(lines,
+            line => Assert.StartsWith("| mean/", line),
+            line => Assert.StartsWith("| z-first/", line),
+            line => Assert.StartsWith("| a-second/", line),
+            line => Assert.StartsWith("| unqualified/", line));
+        Assert.Contains("| 40.727 | 80.000 | 0.509 |", rendered, StringComparison.Ordinal);
+        Assert.Contains("| — | — | — |", lines[3], StringComparison.Ordinal);
+        Assert.Contains("Too short.", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("Interpretation", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("95% CI", rendered, StringComparison.Ordinal);
     }
 
     [Fact]
