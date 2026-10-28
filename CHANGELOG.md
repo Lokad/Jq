@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.2.0 — Unreleased
+## 0.2.0 — 2026-10-27
+
+Available on [NuGet.org](https://www.nuget.org/packages/Lokad.Jq/0.2.0).
 
 - Breaking: remove the bundled `JqUtf8RegexEngine` and all provider dependencies
   from the core package. Compile `examples/Utf8RegexAdapter.cs` in the application
