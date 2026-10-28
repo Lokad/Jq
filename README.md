@@ -1,6 +1,6 @@
 # Lokad.Jq
 
-Lokad.Jq is an embeddable jq runtime for .NET 10. It executes JSON filters through
+Lokad.Jq is an embeddable jq runtime for .NET 10 and .NET 11. It executes JSON filters through
 a caller-supplied `IJqHost`, which supplies input, output and file access.
 
 ## Use
@@ -60,13 +60,15 @@ dotnet pack src/Lokad.Jq/Lokad.Jq.csproj -c Release --no-build --no-restore
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --filter '*'
 ```
 
-The SDK version is pinned in [global.json](global.json). Benchmarks are opt-in.
+The SDK version is pinned in [global.json](global.json), currently .NET 11 RC3.
+Install the .NET 10 runtime as well to run both runtime test targets. Benchmarks
+and their tooling tests run on .NET 11; timing measurements are opt-in.
 
 Release packages and symbols go to `artifacts/nuget/`. Verify package contents,
 dependencies and public API behavior in isolated core-only and adapter consumers:
 
 ```powershell
-./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.2.0.nupkg
+./tools/VerifyPackage.ps1 -PackagePath ./artifacts/nuget/Lokad.Jq.0.3.0.nupkg
 ```
 
 The script also supports symbol, hosted-source and caller-supplied corpus checks.

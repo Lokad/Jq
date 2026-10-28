@@ -46,7 +46,8 @@ lock-file diff, then repeat locked restore. CI must work without `external/`.
 
 ## C# and tests
 
-- Target net10.0 with nullable reference types. No default parameter values or
+- Target net10.0 and net11.0 for the library/runtime tests, and net11.0 for
+  benchmarks and their tooling tests. Use nullable reference types. No default parameter values or
   null-forgiving operators in new code. Prefer explicit result types and
   non-nullable contracts; genuine JSON null remains part of the value model.
 - Expected failure paths use Try-style APIs; single-caller helpers should be

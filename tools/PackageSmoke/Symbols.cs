@@ -12,7 +12,13 @@ internal static class PackageSymbols
     internal static async Task VerifyAsync(string symbolPackage, string sourceRoot, string commit, bool verifyHostedSources)
     {
         using var archive = ZipFile.OpenRead(symbolPackage);
-        var entry = archive.GetEntry("lib/net10.0/Lokad.Jq.pdb")
+        string framework = AppContext.TargetFrameworkName switch
+        {
+            ".NETCoreApp,Version=v10.0" => "net10.0",
+            ".NETCoreApp,Version=v11.0" => "net11.0",
+            _ => throw new InvalidOperationException("Unexpected consumer target framework.")
+        };
+        var entry = archive.GetEntry($"lib/{framework}/Lokad.Jq.pdb")
             ?? throw new InvalidOperationException("Missing packaged portable PDB.");
         using var pdbStream = new MemoryStream();
         using (var packedStream = entry.Open()) packedStream.CopyTo(pdbStream);

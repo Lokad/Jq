@@ -4,6 +4,18 @@ using Lokad.Jq;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.Json;
+using System.Reflection;
+using System.Runtime.Versioning;
+
+#if NET11_0
+const int expectedMajor = 11;
+#else
+const int expectedMajor = 10;
+#endif
+if (Environment.Version.Major != expectedMajor ||
+    typeof(Jq).Assembly.GetCustomAttribute<TargetFrameworkAttribute>()?.FrameworkName != $".NETCoreApp,Version=v{expectedMajor}.0")
+    throw new InvalidOperationException("Consumer must run on its target runtime and load the matching library asset.");
+Console.WriteLine($"Verified actual .NET {expectedMajor} runtime and matching library asset.");
 
 if (args.Length != 0)
 {

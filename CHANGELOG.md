@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — Unreleased
+
+- Add .NET 11 library assets while retaining .NET 10 support and runtime tests.
+- Move all benchmark tooling to .NET 11 and separate its tests from runtime tests.
+  Use BenchmarkDotNet 0.16.0-preview.2 for .NET 11 toolchain support.
+- Report one mean `Lokad.Jq / jq` timing ratio, sorted descending. Remove stale
+  measurements and before/after allocation claims from the benchmark documentation.
+
 ## 0.2.0 — 2026-10-27
 
 Available on [NuGet.org](https://www.nuget.org/packages/Lokad.Jq/0.2.0).

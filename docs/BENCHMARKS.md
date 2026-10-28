@@ -2,8 +2,8 @@
 
 Benchmarks measure hosted jq execution: argument binding and compilation, UTF-8
 input parsing, evaluation, rendering and complete output consumption.
-The benchmark executable currently targets .NET 10; .NET 11 becomes the baseline
-for 0.3.0.
+The benchmark executable and every measurement mode run on .NET 11. The pinned
+SDK currently uses RC3; measurements identify that prerelease runtime explicitly.
 
 <!-- BEGIN GENERATED COMPARISON -->
 ## Timing

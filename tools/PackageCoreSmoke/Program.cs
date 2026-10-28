@@ -1,9 +1,19 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
+using System.Runtime.Versioning;
 using System.Text;
 using Lokad.Jq;
 using Lokad.Jq.Benchmarking;
 
 int checks = 0;
+#if NET11_0
+const int expectedMajor = 11;
+#else
+const int expectedMajor = 10;
+#endif
+Check("actual runtime target", Environment.Version.Major == expectedMajor);
+Check("matching library asset", typeof(Jq).Assembly.GetCustomAttribute<TargetFrameworkAttribute>()?.FrameworkName
+    == $".NETCoreApp,Version=v{expectedMajor}.0");
 Check("no provider assembly references", !typeof(Jq).Assembly.GetReferencedAssemblies().Any(name =>
     name.Name is { } text && (text.StartsWith("Lokad.Utf8Regex", StringComparison.Ordinal)
         || text == "System.Text.RegularExpressions")));

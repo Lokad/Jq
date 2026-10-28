@@ -5,11 +5,13 @@ param(
     [string]$SymbolPackagePath,
     [string]$SourceRoot,
     [string]$ExpectedCommit,
-    [switch]$VerifyHostedSources
+    [switch]$VerifyHostedSources,
+    [ValidateSet('net10.0', 'net11.0')][string[]]$TargetFramework
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if (!$TargetFramework) { $TargetFramework = @('net10.0', 'net11.0') }
 if ($VectorPath -and ($null -eq $ExpectedMisses -or $VectorPath.Count -ne $ExpectedMisses.Count)) {
     throw 'Supply an expected miss count for each corpus.'
 }
@@ -43,7 +45,8 @@ try {
     $version = [string]$manifest.package.metadata.version
     if ($version -notmatch '^[0-9A-Za-z.+-]+$') { throw 'Invalid package version.' }
     $entries = @($archive.Entries | ForEach-Object { $_.FullName })
-    foreach ($requiredEntry in @('lib/net10.0/Lokad.Jq.dll', 'lib/net10.0/Lokad.Jq.xml', 'README.md', 'CHANGELOG.md', 'LICENSE.txt', 'icon.png')) {
+    foreach ($requiredEntry in @('README.md', 'CHANGELOG.md', 'LICENSE.txt', 'icon.png') +
+        @($TargetFramework | ForEach-Object { "lib/$_/Lokad.Jq.dll"; "lib/$_/Lokad.Jq.xml" })) {
         if ($requiredEntry -notin $entries) { throw "Missing package entry: $requiredEntry" }
     }
     if (@($entries | Where-Object { $_ -match '(^|/)(PLAN\.md|external|tmp|tests|benchmarks|tools|examples)(/|$)' }).Count -ne 0) {
@@ -58,88 +61,90 @@ try {
 }
 
 # Preserve this isolated workspace for inspection; never reuse the global package cache.
-$verificationRoot = Join-Path ([IO.Path]::GetTempPath()) ('lokad-jq-package-' + [Guid]::NewGuid().ToString('N'))
-$null = New-Item -ItemType Directory -Path $verificationRoot
-$project = Join-Path $verificationRoot 'PackageSmoke.csproj'
-$packages = Join-Path $verificationRoot 'packages'
-$configuration = Join-Path $verificationRoot 'NuGet.Config'
-$template = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/PackageSmoke.csproj.template') -Raw
-$template.Replace('__PACKAGE_VERSION__', $version) | Set-Content -LiteralPath $project -Encoding utf8
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Program.cs') -Destination (Join-Path $verificationRoot 'Program.cs')
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Symbols.cs') -Destination (Join-Path $verificationRoot 'Symbols.cs')
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../examples/RegexAdapterExample.cs') -Destination (Join-Path $verificationRoot 'RegexAdapterExample.cs')
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../examples/Utf8RegexAdapter.cs') -Destination (Join-Path $verificationRoot 'Utf8RegexAdapter.cs')
-# Reuse the development-only host contract; no governor enters the package.
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../benchmarks/Lokad.Jq.Benchmarks/BenchmarkMemoryBudget.cs') -Destination (Join-Path $verificationRoot 'BenchmarkMemoryBudget.cs')
-$feed = [Security.SecurityElement]::Escape([IO.Path]::GetDirectoryName($packageFile))
-@"
+$verificationBase = Join-Path ([IO.Path]::GetTempPath()) ('lokad-jq-package-' + [Guid]::NewGuid().ToString('N'))
+foreach ($framework in $TargetFramework) {
+    $verificationRoot = $verificationBase + '-' + $framework
+    Write-Host "Verifying $framework package assets and actual runtime."
+    $null = New-Item -ItemType Directory -Path $verificationRoot
+    $project = Join-Path $verificationRoot 'PackageSmoke.csproj'
+    $packages = Join-Path $verificationRoot 'packages'
+    $configuration = Join-Path $verificationRoot 'NuGet.Config'
+    $template = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/PackageSmoke.csproj.template') -Raw
+    $template.Replace('__PACKAGE_VERSION__', $version).Replace('__TARGET_FRAMEWORK__', $framework) | Set-Content -LiteralPath $project -Encoding utf8
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Program.cs') -Destination (Join-Path $verificationRoot 'Program.cs')
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Symbols.cs') -Destination (Join-Path $verificationRoot 'Symbols.cs')
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../examples/RegexAdapterExample.cs') -Destination (Join-Path $verificationRoot 'RegexAdapterExample.cs')
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../examples/Utf8RegexAdapter.cs') -Destination (Join-Path $verificationRoot 'Utf8RegexAdapter.cs')
+    # Reuse the development-only host contract; no governor enters the package.
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../benchmarks/Lokad.Jq.Benchmarks/BenchmarkMemoryBudget.cs') -Destination (Join-Path $verificationRoot 'BenchmarkMemoryBudget.cs')
+    $feed = [Security.SecurityElement]::Escape([IO.Path]::GetDirectoryName($packageFile))
+    @"
 <configuration><packageSources><clear />
 <add key="package-under-test" value="$feed" />
 <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
 </packageSources></configuration>
 "@ | Set-Content -LiteralPath $configuration -Encoding utf8
-$isolation = @('-p:ImportDirectoryBuildProps=false', '-p:ImportDirectoryBuildTargets=false', '-p:ManagePackageVersionsCentrally=false', "-p:RestorePackagesPath=$packages")
-Invoke-DotNet (@('restore', $project, '--configfile', $configuration) + $isolation)
+    $isolation = @('-p:ImportDirectoryBuildProps=false', '-p:ImportDirectoryBuildTargets=false', '-p:ManagePackageVersionsCentrally=false', "-p:RestorePackagesPath=$packages")
+    Invoke-DotNet (@('restore', $project, '--configfile', $configuration) + $isolation)
 
-$hashAlgorithm = [Security.Cryptography.SHA512]::Create()
-$packageStream = [IO.File]::OpenRead($packageFile)
-try { $contentHash = [Convert]::ToBase64String($hashAlgorithm.ComputeHash($packageStream)) }
-finally { $packageStream.Dispose(); $hashAlgorithm.Dispose() }
+    $archiveHash = (Get-FileHash -LiteralPath $packageFile -Algorithm SHA512).Hash
 
-# A separate application proves that the core restores and runs without a provider.
-$coreRoot = $verificationRoot + '-core'
-$null = New-Item -ItemType Directory -Path $coreRoot
-$coreProject = Join-Path $coreRoot 'PackageCoreSmoke.csproj'
-$coreTemplate = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'PackageCoreSmoke/PackageCoreSmoke.csproj.template') -Raw
-$coreTemplate.Replace('__PACKAGE_VERSION__', $version) | Set-Content -LiteralPath $coreProject -Encoding utf8
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageCoreSmoke/Program.cs') -Destination (Join-Path $coreRoot 'Program.cs')
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../benchmarks/Lokad.Jq.Benchmarks/BenchmarkMemoryBudget.cs') -Destination (Join-Path $coreRoot 'BenchmarkMemoryBudget.cs')
-$coreIsolation = @('-p:ImportDirectoryBuildProps=false', '-p:ImportDirectoryBuildTargets=false', '-p:ManagePackageVersionsCentrally=false', ('-p:RestorePackagesPath=' + (Join-Path $coreRoot 'packages')))
-Invoke-DotNet (@('restore', $coreProject, '--configfile', $configuration) + $coreIsolation)
-$coreLock = Get-Content -LiteralPath (Join-Path $coreRoot 'packages.lock.json') -Raw | ConvertFrom-Json
-$corePackages = @($coreLock.dependencies.'net10.0'.PSObject.Properties.Name)
-if ($corePackages.Count -ne 1 -or $corePackages[0] -ne 'Lokad.Jq' -or
-    $coreLock.dependencies.'net10.0'.'Lokad.Jq'.resolved -ne $version -or
-    $coreLock.dependencies.'net10.0'.'Lokad.Jq'.contentHash -ne $contentHash) {
-    throw 'The core-only consumer must resolve only the packed Lokad.Jq artifact.'
-}
-Write-Host 'Core-only runtime graph: Lokad.Jq; no provider or other runtime package dependencies.'
-Invoke-DotNet (@('restore', $coreProject, '--locked-mode', '--configfile', $configuration) + $coreIsolation)
-Invoke-DotNet (@('run', '--project', $coreProject, '-c', 'Release', '--no-restore') + $coreIsolation)
-
-$lock = Get-Content -LiteralPath (Join-Path $verificationRoot 'packages.lock.json') -Raw | ConvertFrom-Json
-$lockedPackage = $lock.dependencies.'net10.0'.'Lokad.Jq'
-if ($lockedPackage.resolved -ne $version -or $lockedPackage.contentHash -ne $contentHash) {
-    throw 'The consumer lock does not identify the packed artifact.'
-}
-$runtimePackages = @($lock.dependencies.'net10.0'.PSObject.Properties.Name | Sort-Object)
-if (($runtimePackages -join ',') -ne 'Lokad.Jq,Lokad.Utf8Regex,Lokad.Utf8Regex.Pcre2') {
-    throw 'Unexpected transitive runtime packages.'
-}
-foreach ($regexId in @('Lokad.Utf8Regex', 'Lokad.Utf8Regex.Pcre2')) {
-    $regexPackage = $lock.dependencies.'net10.0'.$regexId
-    if ($regexPackage.resolved -ne '0.4.0') { throw "Unexpected regex version: $regexId" }
-    $archivePath = Join-Path $packages ($regexId.ToLowerInvariant() + '/0.4.0/' + $regexId.ToLowerInvariant() + '.0.4.0.nupkg')
-    $regexArchive = [IO.Compression.ZipFile]::OpenRead($archivePath)
-    try {
-        if (@($regexArchive.Entries | Where-Object { $_.FullName -match '(^|/)(runtimes|native)(/|$)|\.(so|dylib|exe)$' }).Count -ne 0) {
-            throw "Unexpected native assets: $regexId"
-        }
-    } finally { $regexArchive.Dispose() }
-}
-Write-Host 'Adapted consumer: application -> Lokad.Jq + Lokad.Utf8Regex.Pcre2 0.4.0 -> Lokad.Utf8Regex 0.4.0; no native assets.'
-Invoke-DotNet (@('restore', $project, '--locked-mode', '--configfile', $configuration) + $isolation)
-Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-restore') + $isolation)
-if ($SymbolPackagePath) {
-    $symbols = (Resolve-Path -LiteralPath $SymbolPackagePath).Path
-    $sources = (Resolve-Path -LiteralPath $SourceRoot).Path
-    $symbolMode = if ($VerifyHostedSources) { '--symbols-hosted' } else { '--symbols' }
-    Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-build', '--no-restore') + $isolation + @('--', $symbolMode, $symbols, $sources, $ExpectedCommit.ToLowerInvariant()))
-}
-if ($VectorPath) {
-    for ($index = 0; $index -lt $VectorPath.Count; $index++) {
-        $vectors = (Resolve-Path -LiteralPath $VectorPath[$index]).Path
-        Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-build', '--no-restore') + $isolation + @('--', '--vectors', $vectors, [string]$ExpectedMisses[$index]))
+    # A separate application proves that the core restores and runs without a provider.
+    $coreRoot = $verificationRoot + '-core'
+    $null = New-Item -ItemType Directory -Path $coreRoot
+    $coreProject = Join-Path $coreRoot 'PackageCoreSmoke.csproj'
+    $coreTemplate = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'PackageCoreSmoke/PackageCoreSmoke.csproj.template') -Raw
+    $coreTemplate.Replace('__PACKAGE_VERSION__', $version).Replace('__TARGET_FRAMEWORK__', $framework) | Set-Content -LiteralPath $coreProject -Encoding utf8
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageCoreSmoke/Program.cs') -Destination (Join-Path $coreRoot 'Program.cs')
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../benchmarks/Lokad.Jq.Benchmarks/BenchmarkMemoryBudget.cs') -Destination (Join-Path $coreRoot 'BenchmarkMemoryBudget.cs')
+    $coreIsolation = @('-p:ImportDirectoryBuildProps=false', '-p:ImportDirectoryBuildTargets=false', '-p:ManagePackageVersionsCentrally=false', ('-p:RestorePackagesPath=' + (Join-Path $coreRoot 'packages')))
+    Invoke-DotNet (@('restore', $coreProject, '--configfile', $configuration) + $coreIsolation)
+    $coreLock = Get-Content -LiteralPath (Join-Path $coreRoot 'packages.lock.json') -Raw | ConvertFrom-Json
+    $corePackages = @($coreLock.dependencies.$framework.PSObject.Properties.Name)
+    if ($corePackages.Count -ne 1 -or $corePackages[0] -ne 'Lokad.Jq' -or
+        $coreLock.dependencies.$framework.'Lokad.Jq'.resolved -ne $version -or
+        (Get-FileHash -LiteralPath (Join-Path $coreRoot "packages/lokad.jq/$version/lokad.jq.$version.nupkg") -Algorithm SHA512).Hash -ne $archiveHash) {
+        throw 'The core-only consumer must resolve only the packed Lokad.Jq artifact.'
     }
+    Write-Host 'Core-only runtime graph: Lokad.Jq; no provider or other runtime package dependencies.'
+    Invoke-DotNet (@('restore', $coreProject, '--locked-mode', '--configfile', $configuration) + $coreIsolation)
+    Invoke-DotNet (@('run', '--project', $coreProject, '-c', 'Release', '--no-restore') + $coreIsolation)
+
+    $lock = Get-Content -LiteralPath (Join-Path $verificationRoot 'packages.lock.json') -Raw | ConvertFrom-Json
+    $lockedPackage = $lock.dependencies.$framework.'Lokad.Jq'
+    if ($lockedPackage.resolved -ne $version -or
+        (Get-FileHash -LiteralPath (Join-Path $packages "lokad.jq/$version/lokad.jq.$version.nupkg") -Algorithm SHA512).Hash -ne $archiveHash) {
+        throw 'The consumer lock does not identify the packed artifact.'
+    }
+    $runtimePackages = @($lock.dependencies.$framework.PSObject.Properties.Name | Sort-Object)
+    if (($runtimePackages -join ',') -ne 'Lokad.Jq,Lokad.Utf8Regex,Lokad.Utf8Regex.Pcre2') {
+        throw 'Unexpected transitive runtime packages.'
+    }
+    foreach ($regexId in @('Lokad.Utf8Regex', 'Lokad.Utf8Regex.Pcre2')) {
+        $regexPackage = $lock.dependencies.$framework.$regexId
+        if ($regexPackage.resolved -ne '0.4.0') { throw "Unexpected regex version: $regexId" }
+        $archivePath = Join-Path $packages ($regexId.ToLowerInvariant() + '/0.4.0/' + $regexId.ToLowerInvariant() + '.0.4.0.nupkg')
+        $regexArchive = [IO.Compression.ZipFile]::OpenRead($archivePath)
+        try {
+            if (@($regexArchive.Entries | Where-Object { $_.FullName -match '(^|/)(runtimes|native)(/|$)|\.(so|dylib|exe)$' }).Count -ne 0) {
+                throw "Unexpected native assets: $regexId"
+            }
+        } finally { $regexArchive.Dispose() }
+    }
+    Write-Host 'Adapted consumer: application -> Lokad.Jq + Lokad.Utf8Regex.Pcre2 0.4.0 -> Lokad.Utf8Regex 0.4.0; no native assets.'
+    Invoke-DotNet (@('restore', $project, '--locked-mode', '--configfile', $configuration) + $isolation)
+    Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-restore') + $isolation)
+    if ($SymbolPackagePath) {
+        $symbols = (Resolve-Path -LiteralPath $SymbolPackagePath).Path
+        $sources = (Resolve-Path -LiteralPath $SourceRoot).Path
+        $symbolMode = if ($VerifyHostedSources) { '--symbols-hosted' } else { '--symbols' }
+        Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-build', '--no-restore') + $isolation + @('--', $symbolMode, $symbols, $sources, $ExpectedCommit.ToLowerInvariant()))
+    }
+    if ($VectorPath) {
+        for ($index = 0; $index -lt $VectorPath.Count; $index++) {
+            $vectors = (Resolve-Path -LiteralPath $VectorPath[$index]).Path
+            Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-build', '--no-restore') + $isolation + @('--', '--vectors', $vectors, [string]$ExpectedMisses[$index]))
+        }
+    }
+    Write-Host "Verified Lokad.Jq $version from its packed artifact; isolated workspace: $verificationRoot"
 }
-Write-Host "Verified Lokad.Jq $version from its packed artifact; isolated workspace: $verificationRoot"
