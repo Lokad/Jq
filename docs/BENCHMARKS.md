@@ -12,11 +12,14 @@ Qualified timing results for the current implementation are not yet published.
 
 <!-- END GENERATED COMPARISON -->
 
+<!-- BEGIN GENERATED ALLOCATIONS -->
 ## Managed allocations
 
 Allocation results for the current implementation are not yet published.
 Report absolute managed bytes per execution and GC counts. These measure total
 allocation, not peak heap, admitted storage or native jq process memory.
+
+<!-- END GENERATED ALLOCATIONS -->
 
 <!-- BEGIN GENERATED COMPARISON PROVENANCE -->
 <!-- END GENERATED COMPARISON PROVENANCE -->
@@ -76,6 +79,7 @@ dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --render-repor
 
 # Absolute managed allocations and governor diagnostics
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --allocations
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --render-allocations artifacts/benchmarks/allocations.json
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --governor --workers 1,4
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --governor --mode cost --iterations 128 --workers 1,4
 ```

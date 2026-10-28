@@ -87,7 +87,7 @@ public sealed class BenchmarkQualificationTests
         var empty = OutputDigest.FromBytes([]);
         var verified = new CaseVerification(workload.Name, workload.Scale, workload.Size, "Equivalent", "", empty, empty);
         var timing = new QualificationResult(PairedStatistics.Summarize(Pairs(11, 40, 80)), Pairs(11, 40, 80), [], 32, 32);
-        var host = new HostProvenance(new string('a', 40), true, "10.0", ".NET 10", "test OS", "X64", "test CPU", 4, "build", "build", "digest");
+        var host = new HostProvenance(new string('a', 40), true, "11.0", ".NET 11", "test OS", "X64", "test CPU", 4, "build", "build", "digest", "test provider");
         var reference = new ReferenceIdentity("jq-1.8.2", "digest", "test configuration");
         var row = new ComparisonRow(BenchmarkReport.Describe(workload), verified, timing);
         var report = BenchmarkReport.Create("qualify", host, reference, QuietCheck.Evaluate([1, 1]), 11, 1, true, [row]);
@@ -131,7 +131,7 @@ public sealed class BenchmarkQualificationTests
             Timing = row.Timing with { Samples = Pairs(11, 40.024, 80) } };
         var unqualified = row with { Workload = row.Workload with { Name = "unqualified" },
             Timing = row.Timing with { Samples = [], Summary = summary with { Status = "Unqualified", Reason = "Too short." } } };
-        var host = new HostProvenance(new string('a', 40), true, "10.0", ".NET 10", "test OS", "X64", "test CPU", 4, "build", "build", "digest");
+        var host = new HostProvenance(new string('a', 40), true, "11.0", ".NET 11", "test OS", "X64", "test CPU", 4, "build", "build", "digest", "test provider");
         var report = BenchmarkReport.Create("qualify", host, new("jq-1.8.2", "digest", "test configuration"),
             QuietCheck.Evaluate([1, 1]), 11, 4, true, [second, unqualified, row, first]);
 
@@ -152,6 +152,33 @@ public sealed class BenchmarkQualificationTests
 
     [Fact]
     public Task BoundedStressChecksHonorQuotasAndCompleteOutputPrefixes() => StressChecks.RunAsync(CancellationToken.None);
+
+    [Fact]
+    public void AllocationReportsPublishAbsoluteMeasurementsAndRejectIncompleteEvidence()
+    {
+        string commit = new('a', 40);
+        var host = new HostProvenance(commit, true, "11.0", ".NET 11", "test OS", "X64", "test CPU", 4,
+            "0.3.0+" + commit, "0.3.0+" + commit, "digest", "test provider");
+        var workload = WorkloadCatalog.Create().Single(item => item.Name == "identity-compact" && item.Scale == "large");
+        var row = new AllocationRow(BenchmarkReport.Describe(workload), OutputDigest.FromBytes([]),
+            [new(100, 1, 0, 0), new(200, 0, 1, 0), new(1000, 0, 0, 1)]);
+        var report = new AllocationReport(host, "digest", false, "test contract", true, [row]);
+        string rendered = BenchmarkReport.RenderAllocations(report);
+        Assert.Contains("| identity-compact/large | 200 | 1 / 1 / 1 |", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("Before", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("After", rendered, StringComparison.Ordinal);
+        string document = "# Benchmarks\n\nTiming stays here.\n\n" + BenchmarkReport.AllocationBeginMarker
+            + "\nold allocations\n" + BenchmarkReport.AllocationEndMarker;
+        string updated = BenchmarkReport.RenderAllocationDocument(document, report);
+        Assert.Contains("Timing stays here.", updated, StringComparison.Ordinal);
+        Assert.DoesNotContain("old allocations", updated, StringComparison.Ordinal);
+        Assert.Equal(updated, BenchmarkReport.RenderAllocationDocument(updated, report));
+        Assert.Throws<InvalidOperationException>(() => BenchmarkReport.RenderAllocations(report with { Complete = false }));
+        Assert.Throws<InvalidOperationException>(() => BenchmarkReport.RenderAllocations(report with { Host = host with { CleanCheckout = false } }));
+        Assert.Throws<InvalidOperationException>(() => BenchmarkReport.RenderAllocations(report with { Host = host with { LibraryBuild = "stale" } }));
+        Assert.Throws<InvalidOperationException>(() => BenchmarkReport.RenderAllocations(report with
+            { Cases = [row with { Batches = [new(double.NaN, 0, 0, 0), new(1, 0, 0, 0), new(1, 0, 0, 0)] }] }));
+    }
 
     [Theory]
     [InlineData("--jq", false)]

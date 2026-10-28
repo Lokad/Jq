@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
+using System.Text.Json;
 using Lokad.Jq;
 using Lokad.Jq.Benchmarking;
 
@@ -35,6 +36,15 @@ if (args.Length > 0 && args[0] == "--allocations")
 if (args is ["--render-report", var artifact])
 {
     await BenchmarkReport.RenderFileAsync(artifact, CancellationToken.None);
+    return;
+}
+if (args is ["--render-allocations", var allocationArtifact])
+{
+    var report = JsonSerializer.Deserialize<AllocationReport>(await File.ReadAllTextAsync(allocationArtifact), ComparisonRunner.JsonOptions)
+        ?? throw new InvalidOperationException("Missing allocation artifact.");
+    const string path = "docs/BENCHMARKS.md";
+    string content = await File.ReadAllTextAsync(path);
+    await File.WriteAllTextAsync(path, BenchmarkReport.RenderAllocationDocument(content, report));
     return;
 }
 if (args.Length > 0 && args[0] == "--compare")

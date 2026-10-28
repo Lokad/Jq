@@ -3,12 +3,13 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Lokad.Utf8Regex.Pcre2;
 
 namespace Lokad.Jq.Benchmarking;
 
 internal sealed record HostProvenance(string Commit, bool CleanCheckout, string Sdk, string Runtime,
     string OperatingSystem, string Architecture, string Cpu, int LogicalProcessors,
-    string BenchmarkBuild, string LibraryBuild, string BenchmarkAssemblySha256);
+    string BenchmarkBuild, string LibraryBuild, string BenchmarkAssemblySha256, string RegexProvider);
 internal sealed record PolicyProvenance(int JsonDepth);
 internal sealed record ComparisonRow(ComparisonWorkloadInfo Workload, CaseVerification Verification, QualificationResult Timing);
 internal sealed record ComparisonWorkloadInfo(string Name, string Scale, int Size, string[] Arguments,
@@ -19,12 +20,14 @@ internal sealed record ComparisonReport(int SchemaVersion, string Mode, DateTime
 
 internal static class BenchmarkReport
 {
-    public const int SchemaVersion = 5;
+    public const int SchemaVersion = 6;
     public const string Contract = "Warm embedded Lokad.Jq versus jq CLI; includes binding/compilation, parsing, evaluation, rendering and SHA-256 consumption; jq includes launch and pipes. No startup subtraction.";
     public const string BeginMarker = "<!-- BEGIN GENERATED COMPARISON -->";
     public const string EndMarker = "<!-- END GENERATED COMPARISON -->";
     public const string ProvenanceBeginMarker = "<!-- BEGIN GENERATED COMPARISON PROVENANCE -->";
     public const string ProvenanceEndMarker = "<!-- END GENERATED COMPARISON PROVENANCE -->";
+    public const string AllocationBeginMarker = "<!-- BEGIN GENERATED ALLOCATIONS -->";
+    public const string AllocationEndMarker = "<!-- END GENERATED ALLOCATIONS -->";
 
     public static ComparisonWorkloadInfo Describe(ComparisonWorkload workload) => new(workload.Name, workload.Scale,
         workload.Size, workload.Arguments, workload.Comparison, OutputDigest.FromBytes(workload.Input),
@@ -40,11 +43,16 @@ internal static class BenchmarkReport
             : "Unavailable";
         string benchmarkBuild = typeof(BenchmarkReport).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unavailable";
         string libraryBuild = typeof(Jq).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unavailable";
+        var provider = typeof(Utf8Pcre2Regex).Assembly;
+        string providerVersion = provider.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unavailable";
+        await using var providerStream = File.OpenRead(provider.Location);
+        string providerHash = Convert.ToHexStringLower(await SHA256.HashDataAsync(providerStream, cancellationToken).ConfigureAwait(false));
+        string providerIdentity = $"{provider.GetName().Name} {providerVersion}; SHA-256 {providerHash}";
         await using var assembly = File.OpenRead(typeof(BenchmarkReport).Assembly.Location);
         string digest = Convert.ToHexStringLower(await SHA256.HashDataAsync(assembly, cancellationToken).ConfigureAwait(false));
         return new(commit, commit != "Unavailable" && status.Length == 0, sdk, RuntimeInformation.FrameworkDescription,
             RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString(), cpu, Environment.ProcessorCount,
-            benchmarkBuild, libraryBuild, digest);
+            benchmarkBuild, libraryBuild, digest, providerIdentity);
 
         async Task<string> QueryAsync(string executable, string[] arguments)
         {
@@ -115,6 +123,7 @@ internal static class BenchmarkReport
         text.AppendLine($"{Escape(report.Host.Runtime)}; SDK {Escape(report.Host.Sdk)}; {Escape(report.Host.OperatingSystem)}; " +
             $"{Escape(report.Host.Cpu)}; {report.Host.LogicalProcessors} logical processors.").AppendLine();
         text.AppendLine(Contract).AppendLine();
+        text.AppendLine($"Regex provider: {Escape(report.Host.RegexProvider)}.").AppendLine();
         text.AppendLine("Times are arithmetic mean milliseconds per invocation. Lokad.Jq / jq divides those means; lower is better, with 1 at parity. Rows descend by this ratio; unqualified rows follow.").AppendLine();
         return text.AppendLine(ProvenanceEndMarker).ToString();
     }
@@ -135,14 +144,43 @@ internal static class BenchmarkReport
     {
         content = ReplaceSection(content, BeginMarker, EndMarker, Render(report));
         return ReplaceSection(content, ProvenanceBeginMarker, ProvenanceEndMarker, RenderProvenance(report));
+    }
 
-        static string ReplaceSection(string content, string beginMarker, string endMarker, string replacement)
+    internal static string RenderAllocationDocument(string content, AllocationReport report) =>
+        ReplaceSection(content, AllocationBeginMarker, AllocationEndMarker, RenderAllocations(report));
+
+    internal static string RenderAllocations(AllocationReport report)
+    {
+        if (!report.Complete || !report.Host.CleanCheckout || report.Cases.Length == 0 ||
+            !report.Host.LibraryBuild.Contains(report.Host.Commit, StringComparison.Ordinal) ||
+            !report.Host.BenchmarkBuild.Contains(report.Host.Commit, StringComparison.Ordinal) ||
+            report.Cases.Any(row => row.Batches.Length != 3 || row.Batches.Any(batch =>
+                !double.IsFinite(batch.BytesPerExecution) || batch.BytesPerExecution < 0)))
+            throw new InvalidOperationException("Allocation publication requires a complete, clean-checkout report with valid batches.");
+        var text = new StringBuilder();
+        text.AppendLine(AllocationBeginMarker).AppendLine("## Managed allocations").AppendLine();
+        text.AppendLine("| Case / scale | Bytes / execution | Gen0 / Gen1 / Gen2 |");
+        text.AppendLine("| --- | ---: | --- |");
+        foreach (var row in report.Cases.Where(row => row.Workload.Scale is "large" or "diagnostic")
+            .OrderByDescending(row => PairedStatistics.Median(row.Batches.Select(batch => batch.BytesPerExecution)))
+            .ThenBy(row => row.Workload.Name, StringComparer.Ordinal))
         {
-            int begin = content.IndexOf(beginMarker, StringComparison.Ordinal);
-            if (begin < 0) return content.TrimEnd() + "\n\n" + replacement;
-            int end = content.IndexOf(endMarker, begin, StringComparison.Ordinal);
-            if (end < 0) throw new InvalidOperationException("Missing report end marker.");
-            return content[..begin] + replacement + "\n" + content[(end + endMarker.Length)..].TrimStart('\r', '\n');
+            string name = $"{Escape(row.Workload.Name)}/{Escape(row.Workload.Scale)}";
+            double bytes = PairedStatistics.Median(row.Batches.Select(batch => batch.BytesPerExecution));
+            text.AppendLine(FormattableString.Invariant($"| {name} | {bytes:F0} | {row.Batches.Sum(batch => batch.Gen0)} / {row.Batches.Sum(batch => batch.Gen1)} / {row.Batches.Sum(batch => batch.Gen2)} |"));
         }
+        text.AppendLine().AppendLine("Large and diagnostic cases. Bytes are the median of three warmed batches of eight executions; GC columns total those 24 executions. These are total managed allocations, not peak heap or native jq memory.").AppendLine();
+        text.AppendLine($"Measured revision `{Escape(report.Host.Commit)}`; {Escape(report.Host.Runtime)}; SDK {Escape(report.Host.Sdk)}. " +
+            $"All {report.Cases.Length} cases completed. Library SHA-256 `{Escape(report.LibrarySha256)}`.").AppendLine();
+        return text.AppendLine(AllocationEndMarker).ToString();
+    }
+
+    private static string ReplaceSection(string content, string beginMarker, string endMarker, string replacement)
+    {
+        int begin = content.IndexOf(beginMarker, StringComparison.Ordinal);
+        if (begin < 0) return content.TrimEnd() + "\n\n" + replacement;
+        int end = content.IndexOf(endMarker, begin, StringComparison.Ordinal);
+        if (end < 0) throw new InvalidOperationException("Missing report end marker.");
+        return content[..begin] + replacement + "\n" + content[(end + endMarker.Length)..].TrimStart('\r', '\n');
     }
 }

@@ -105,7 +105,8 @@ internal static class AgentWorkloads
         {
             var rows = Enumerable.Range(0, count).Select(i => new
             {
-                owner = "team-" + Number(i % 7), status = new[] { "open", "waiting", "closed" }[i % 3], duration = i * 17 % 101
+                owner = i % 4 == 0 ? "team-" + Number(i % 7) : "team-bulk",
+                status = new[] { "open", "waiting", "closed" }[i % 3], duration = i * 17 % 101
             }).ToArray();
             var expected = rows.GroupBy(row => (row.owner, row.status)).Select(group => new
             {
@@ -142,7 +143,8 @@ internal static class AgentWorkloads
         void Difference(string scale, int count)
         {
             var before = Enumerable.Range(0, count).Select(i => new { id = Number(i), state = "ready", revision = i }).ToArray();
-            var after = Enumerable.Range(count / 8, count).Select(i => new { id = Number(i), state = "ready", revision = i + (i % 3 == 0 ? 1 : 0) }).ToArray();
+            var after = Enumerable.Range(count / 8, count).Select(i => new { id = Number(i),
+                state = i % 5 == 0 ? "paused" : "ready", revision = i + (i % 3 == 0 ? 1 : 0) }).ToArray();
             var left = before.ToDictionary(row => row.id);
             var right = after.ToDictionary(row => row.id);
             var expected = left.Keys.Union(right.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).Select(id =>
@@ -150,7 +152,7 @@ internal static class AgentWorkloads
                 left.TryGetValue(id, out var oldValue);
                 right.TryGetValue(id, out var newValue);
                 return new { id, kind = oldValue is null ? "added" : newValue is null ? "removed" : "changed", before = oldValue, after = newValue };
-            }).Where(row => row.before?.revision != row.after?.revision);
+            }).Where(row => row.before?.revision != row.after?.revision || row.before?.state != row.after?.state);
             Add("snapshot-differences", scale, count, ["-b", "-Mc"],
                 "(.before | INDEX(.id)) as $b | (.after | INDEX(.id)) as $a | " +
                 "[(($b|keys)+($a|keys)|unique)[] as $id | select($b[$id] != $a[$id]) | " +

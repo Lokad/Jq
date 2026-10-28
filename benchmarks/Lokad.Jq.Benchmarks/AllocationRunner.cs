@@ -102,7 +102,7 @@ internal static class AllocationRunner
         {
             Directory.CreateDirectory(Path.GetDirectoryName(output) ?? throw new InvalidOperationException("Missing artifact directory."));
             var report = new AllocationReport(host, librarySha, System.Runtime.GCSettings.IsServerGC,
-                "Managed GC bytes; default regex engine; warm binding/execution/SHA-256 consumption and linked 15-second deadline; three batches of eight; no timing/native-memory claim.", complete, rows.ToArray());
+                "Managed GC bytes; application-adapted regex provider; warm binding/execution/SHA-256 consumption and linked 15-second deadline; three batches of eight; no timing/native-memory claim.", complete, rows.ToArray());
             string temporary = output + ".tmp";
             await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(report, ComparisonRunner.JsonOptions), cancellationToken).ConfigureAwait(false);
             File.Move(temporary, output, overwrite: true);
