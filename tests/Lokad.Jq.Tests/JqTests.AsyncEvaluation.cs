@@ -159,6 +159,15 @@ public sealed partial class JqTests
             context.Pump();
         }
         Task<int> execution = await returned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        // A resumed host can post follow-up work after the first queue drain.
+        // Keep acting as its message loop until execution and cleanup finish.
+        using var pumpDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!execution.IsCompleted)
+        {
+            context.Pump();
+            await Task.WhenAny(execution, Task.Delay(1, pumpDeadline.Token));
+            pumpDeadline.Token.ThrowIfCancellationRequested();
+        }
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
         Assert.True(returnedBeforeRelease);
         Assert.Single(inner.ClosedDescriptors);
