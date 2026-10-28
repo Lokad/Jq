@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Lokad.Jq.Tests/MockFileSystem.cs" Link="Fixtures/MockFileSystem.cs" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="All" />
+    <Using Include="Xunit" />
+    <Using Include="Lokad.Jq.Examples" />
+    <ProjectReference Include="../../benchmarks/Lokad.Jq.Benchmarks/Lokad.Jq.Benchmarks.csproj" />
+  </ItemGroup>
+</Project>

@@ -3,6 +3,7 @@
     <Project Path="src/Lokad.Jq/Lokad.Jq.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Lokad.Jq.Benchmarks.Tests/Lokad.Jq.Benchmarks.Tests.csproj" />
     <Project Path="tests/Lokad.Jq.Tests/Lokad.Jq.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
