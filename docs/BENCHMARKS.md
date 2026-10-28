@@ -15,9 +15,38 @@ Qualified timing results for the current implementation are not yet published.
 <!-- BEGIN GENERATED ALLOCATIONS -->
 ## Managed allocations
 
-Allocation results for the current implementation are not yet published.
-Report absolute managed bytes per execution and GC counts. These measure total
-allocation, not peak heap, admitted storage or native jq process memory.
+| Case / scale | Bytes / execution | Gen0 / Gen1 / Gen2 |
+| --- | ---: | --- |
+| nested-extraction/large | 142583569 | 203 / 12 / 4 |
+| incident-logs/large | 73982040 | 103 / 10 / 0 |
+| regex-log-cleanup/large | 30898240 | 43 / 0 / 0 |
+| configuration-updates/large | 19429616 | 28 / 23 / 1 |
+| ndjson-project/large | 18029304 | 25 / 2 / 0 |
+| snapshot-differences/large | 17319744 | 24 / 19 / 1 |
+| api-shaping/large | 14040656 | 19 / 17 / 0 |
+| ndjson-select/large | 13741268 | 19 / 2 / 0 |
+| inventory-enrichment/large | 9546808 | 14 / 6 / 0 |
+| scalar-pipeline/diagnostic | 7020316 | 9 / 8 / 0 |
+| walk-paths/large | 6813076 | 9 / 3 / 0 |
+| foreach/large | 6760404 | 10 / 3 / 0 |
+| reduce/large | 6399124 | 9 / 5 / 0 |
+| unicode-strings/large | 6114516 | 9 / 0 / 0 |
+| entries-update/large | 5675892 | 8 / 3 / 0 |
+| operational-summary/large | 5035624 | 7 / 4 / 0 |
+| wide-object/diagnostic | 4047992 | 6 / 0 / 0 |
+| identity-pretty/large | 3246910 | 6 / 6 / 2 |
+| identity-compact/large | 3246165 | 7 / 7 / 3 |
+| map-construct/large | 2509556 | 4 / 2 / 0 |
+| json-roundtrip/large | 2193788 | 3 / 0 / 0 |
+| sort-group/large | 1658124 | 2 / 1 / 0 |
+| buffered-scalars/diagnostic | 1479796 | 2 / 1 / 0 |
+| raw-strings/diagnostic | 1182500 | 1 / 1 / 0 |
+| sorted-ascii/diagnostic | 255936 | 0 / 0 / 0 |
+| small-filter/diagnostic | 41216 | 0 / 0 / 0 |
+
+Large and diagnostic cases. Bytes are the median of three warmed batches of eight executions; GC columns total those 24 executions. These are total managed allocations, not peak heap or native jq memory.
+
+Measured revision `3956e982a033f6c6bb7883badb39b5d89d9dff48`; .NET 11.0.0-rc.3.26522.148; SDK 11.0.100-rc.3.26522.148. All 68 cases completed. Library SHA-256 `d09838200d3dc4fd4edff69fd85c67c73500f1a3075a4f050d23ce2fc4e10a3a`.
 
 <!-- END GENERATED ALLOCATIONS -->
 
