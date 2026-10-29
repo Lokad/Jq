@@ -229,12 +229,28 @@ internal sealed class JqBudget : IDisposable
 
     // Count nested advancement, including a suspended host operation. Yielded
     // results keep their storage owners without keeping an active stack frame.
-    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
-    internal async ValueTask<bool> MoveNextAsync<T>(IAsyncEnumerator<T> iterator)
+    internal ValueTask<bool> MoveNextAsync<T>(IAsyncEnumerator<T> iterator)
     {
         EnterRecursion();
-        try { return await iterator.MoveNextAsync().ConfigureAwait(false); }
-        finally { LeaveRecursion(); }
+        try
+        {
+            ValueTask<bool> moved = iterator.MoveNextAsync();
+            if (moved.IsCompletedSuccessfully)
+            {
+                bool result = moved.Result;
+                LeaveRecursion();
+                return ValueTask.FromResult(result);
+            }
+            return AwaitMoveNextAsync(moved, this);
+        }
+        catch { LeaveRecursion(); throw; }
+
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+        static async ValueTask<bool> AwaitMoveNextAsync(ValueTask<bool> moved, JqBudget budget)
+        {
+            try { return await moved.ConfigureAwait(false); }
+            finally { budget.LeaveRecursion(); }
+        }
     }
 
     internal void EnterRecursion()

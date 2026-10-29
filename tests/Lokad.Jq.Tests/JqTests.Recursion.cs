@@ -114,9 +114,11 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData(64)]
-    [InlineData(65)]
-    public async Task Jq_RecursiveEnumerationRestoresDepthAfterCompletionOrFailure(int depth)
+    [InlineData(64, false)]
+    [InlineData(65, false)]
+    [InlineData(64, true)]
+    [InlineData(65, true)]
+    public async Task Jq_RecursiveEnumerationRestoresDepthAfterCompletionOrFailure(int depth, bool suspend)
     {
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         await using (IAsyncEnumerator<int> values = Enumerate(depth).GetAsyncEnumerator())
@@ -139,6 +141,7 @@ public sealed partial class JqTests
         {
             if (remaining == 1)
             {
+                if (suspend) await Task.Yield();
                 yield return 1;
                 yield break;
             }
