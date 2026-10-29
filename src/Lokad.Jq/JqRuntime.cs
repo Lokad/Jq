@@ -908,7 +908,7 @@ internal sealed partial class JqRuntime(JqBudget budget)
     internal static bool TryGetString(JsonNode? node, out string value)
     {
         value = string.Empty;
-        if (node is JsonValue v && v.GetValueKind() == JsonValueKind.String && v.TryGetValue<string>(out var s))
+        if (node is JsonValue v && v.TryGetValue<string>(out var s))
         {
             value = s;
             return true;

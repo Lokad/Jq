@@ -71,8 +71,7 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
         JqRecursion.CheckValueDepth(right, depth);
         // String ordering needs only the payloads. Avoid classifying them and
         // then probing the same scalar values again during every comparison.
-        if (left is JsonValue firstValue && firstValue.TryGetValue<string>(out string? first)
-            && right is JsonValue secondValue && secondValue.TryGetValue<string>(out string? second))
+        if (JqRuntime.TryGetString(left, out string first) && JqRuntime.TryGetString(right, out string second))
             return CompareStrings(first, second, budget.CancellationToken);
         int leftRank = Rank(left, out double leftNumber);
         int rightRank = Rank(right, out double rightNumber);
