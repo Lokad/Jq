@@ -1367,6 +1367,10 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
 
 internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : JqFilter
 {
+    internal static JqFilter Create(JqFilter left, string op, JqFilter right) =>
+        left is SingleValueFilter first && right is SingleValueFilter second
+            ? new ValueFilter(first, op, second) : new BinaryFilter(left, op, right);
+
     internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
         depth < JqRecursion.MaximumDepth && left.IsSingleValued(environment, depth + 1)
         && right.IsSingleValued(environment, depth + 1);
@@ -1410,6 +1414,23 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
             await foreach (var r in right.Evaluate(input, context, environment).ConfigureAwait(false))
                 await foreach (var l in left.Evaluate(input, context, environment).ConfigureAwait(false))
                     yield return Apply(context, op, l, r);
+        }
+    }
+
+    private sealed class ValueFilter(SingleValueFilter left, string op, SingleValueFilter right) : SingleValueFilter
+    {
+        protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
+        {
+            if (op is "and" or "or")
+            {
+                bool first = Truthy(left.ReadValue(input, context, environment));
+                return JsonValue.Create(op == "and"
+                    ? first && Truthy(right.ReadValue(input, context, environment))
+                    : first || Truthy(right.ReadValue(input, context, environment)));
+            }
+            // Ordinary operators retain jq's right-before-left operand order.
+            JsonNode? second = right.ReadValue(input, context, environment);
+            return Apply(context, op, left.ReadValue(input, context, environment), second);
         }
     }
 

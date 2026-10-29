@@ -721,7 +721,7 @@ internal sealed class JqParser(
     {
         var left = ParseAnd();
         while (MatchIdentifier("or"))
-            left = new BinaryFilter(left, "or", ParseAnd());
+            left = BinaryFilter.Create(left, "or", ParseAnd());
         return left;
     }
 
@@ -729,7 +729,7 @@ internal sealed class JqParser(
     {
         var left = ParseComparison();
         while (MatchIdentifier("and"))
-            left = new BinaryFilter(left, "and", ParseComparison());
+            left = BinaryFilter.Create(left, "and", ParseComparison());
         return left;
     }
 
@@ -740,7 +740,7 @@ internal sealed class JqParser(
         if (Peek().Text is "==" or "!=" or "<" or "<=" or ">" or ">=")
         {
             var op = Next().Text;
-            left = new BinaryFilter(left, op, ParseAdditive());
+            left = BinaryFilter.Create(left, op, ParseAdditive());
             if (Peek().Text is "==" or "!=" or "<" or "<=" or ">" or ">=")
                 throw Error($"unexpected token {Peek().Text}", Peek().Span);
         }
@@ -753,7 +753,7 @@ internal sealed class JqParser(
         while (Peek().Text is "+" or "-")
         {
             var op = Next().Text;
-            left = new BinaryFilter(left, op, ParseMultiplicative());
+            left = BinaryFilter.Create(left, op, ParseMultiplicative());
         }
         return left;
     }
@@ -764,7 +764,7 @@ internal sealed class JqParser(
         while (Peek().Text is "*" or "/" or "%")
         {
             var op = Next().Text;
-            left = new BinaryFilter(left, op, ParseUnary());
+            left = BinaryFilter.Create(left, op, ParseUnary());
         }
         return left;
     }
@@ -1481,12 +1481,12 @@ internal sealed class JqParser(
 
         if (name == "IN" && args.Count == 1)
         {
-            return new AnyFilter(new BinaryFilter(args[0], "==", new IdentityFilter()), new IdentityFilter());
+            return new AnyFilter(BinaryFilter.Create(args[0], "==", new IdentityFilter()), new IdentityFilter());
         }
 
         if (name == "IN")
         {
-            return new AnyFilter(new BinaryFilter(args[0], "==", args[1]), new IdentityFilter());
+            return new AnyFilter(BinaryFilter.Create(args[0], "==", args[1]), new IdentityFilter());
         }
 
         if (name == "INDEX" && args.Count == 1)
@@ -1526,57 +1526,57 @@ internal sealed class JqParser(
         // the input threaded into both arguments like the reference prelude.
         if (name == "_plus")
         {
-            return new BinaryFilter(args[0], "+", args[1]);
+            return BinaryFilter.Create(args[0], "+", args[1]);
         }
 
         if (name == "_minus")
         {
-            return new BinaryFilter(args[0], "-", args[1]);
+            return BinaryFilter.Create(args[0], "-", args[1]);
         }
 
         if (name == "_multiply")
         {
-            return new BinaryFilter(args[0], "*", args[1]);
+            return BinaryFilter.Create(args[0], "*", args[1]);
         }
 
         if (name == "_divide")
         {
-            return new BinaryFilter(args[0], "/", args[1]);
+            return BinaryFilter.Create(args[0], "/", args[1]);
         }
 
         if (name == "_mod")
         {
-            return new BinaryFilter(args[0], "%", args[1]);
+            return BinaryFilter.Create(args[0], "%", args[1]);
         }
 
         if (name == "_equal")
         {
-            return new BinaryFilter(args[0], "==", args[1]);
+            return BinaryFilter.Create(args[0], "==", args[1]);
         }
 
         if (name == "_notequal")
         {
-            return new BinaryFilter(args[0], "!=", args[1]);
+            return BinaryFilter.Create(args[0], "!=", args[1]);
         }
 
         if (name == "_less")
         {
-            return new BinaryFilter(args[0], "<", args[1]);
+            return BinaryFilter.Create(args[0], "<", args[1]);
         }
 
         if (name == "_lesseq")
         {
-            return new BinaryFilter(args[0], "<=", args[1]);
+            return BinaryFilter.Create(args[0], "<=", args[1]);
         }
 
         if (name == "_greater")
         {
-            return new BinaryFilter(args[0], ">", args[1]);
+            return BinaryFilter.Create(args[0], ">", args[1]);
         }
 
         if (name == "_greatereq")
         {
-            return new BinaryFilter(args[0], ">=", args[1]);
+            return BinaryFilter.Create(args[0], ">=", args[1]);
         }
 
         // Parser-support assignment helpers: _assign folds setpath over the
