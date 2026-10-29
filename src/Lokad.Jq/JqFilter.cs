@@ -1371,9 +1371,9 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
         {
             // Scalar leaves need no suspended evaluator frame while later
             // properties run. Complete their single-value iterator first.
-            if (filter is SingleValueFilter)
+            if (filter is SingleValueFilter single)
             {
-                JsonNode? value = await filter.Evaluate(input, context, environment).SingleAsync().ConfigureAwait(false);
+                JsonNode? value = single.ReadValue(input, context, environment);
                 yield return value;
                 yield break;
             }

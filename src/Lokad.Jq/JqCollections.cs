@@ -794,18 +794,26 @@ internal sealed class SqlIndexFilter(JqFilter? Stream, JqFilter IndexExpr) : JqF
         var result = new JsonObject();
         await foreach (JsonNode? row in rows.ConfigureAwait(false))
         {
-            await foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment).ConfigureAwait(false))
+            if (IndexExpr is SingleValueFilter single)
+                Add(row, single.ReadValue(row, context, environment));
+            else
             {
-                // Finite scalar formatting fits 32 UTF-16 units. Strings are
-                // borrowed; serialized keys already admit their own storage.
-                if (TypeName(key) == "number" && double.IsFinite(Number(key)))
-                    context.Budget.ReserveString(32);
-                string name = context.Runtime.ToJqString(key);
-                context.Budget.ReserveObjectItem(row);
-                result[name] = context.Budget.CopyValue(row, 1);
+                await foreach (JsonNode? key in IndexExpr.Evaluate(row, context, environment).ConfigureAwait(false))
+                    Add(row, key);
             }
         }
         yield return result;
+
+        void Add(JsonNode? row, JsonNode? key)
+        {
+            // Finite scalar formatting fits 32 UTF-16 units. Strings are
+            // borrowed; serialized keys already admit their own storage.
+            if (TypeName(key) == "number" && double.IsFinite(Number(key)))
+                context.Budget.ReserveString(32);
+            string name = context.Runtime.ToJqString(key);
+            context.Budget.ReserveObjectItem(row);
+            result[name] = context.Budget.CopyValue(row, 1);
+        }
     }
 }
 
