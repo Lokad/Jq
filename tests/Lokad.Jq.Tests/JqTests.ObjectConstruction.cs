@@ -16,6 +16,10 @@ public sealed partial class JqTests
     [InlineData("limit(1; {a:(1,2),b:(3,error(\"must not run\"))})", "{\"a\":1,\"b\":3}\n")]
     [InlineData("try {a:(1,2),b:(3,error(\"boom\"))} catch .", "{\"a\":1,\"b\":3}\n\"boom\"\n")]
     [InlineData("{a:empty,b:error(\"must not run\")}", "")]
+    [InlineData("{a:(1,2),b:3,a:4,c:(5,6)}",
+        "{\"a\":4,\"b\":3,\"c\":5}\n{\"a\":4,\"b\":3,\"c\":6}\n{\"a\":4,\"b\":3,\"c\":5}\n{\"a\":4,\"b\":3,\"c\":6}\n")]
+    [InlineData("{a:1,a:(2,3),b:4}", "{\"a\":2,\"b\":4}\n{\"a\":3,\"b\":4}\n")]
+    [InlineData("limit(1;{a:1,b:(2,error(\"must not run\")),c:3})", "{\"a\":1,\"b\":2,\"c\":3}\n")]
     public async Task Jq_ObjectConstructionPreservesBranchesAndLazyFailures(string filter, string expected)
     {
         var host = new MockFileSystem();

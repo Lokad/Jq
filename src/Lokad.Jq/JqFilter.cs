@@ -1308,7 +1308,7 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
         }
         using var workspace = new JqScopeStorage(context.Budget);
         workspace.Reserve(128L * properties.Count, properties.Count);
-        var fields = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+        var fields = new Dictionary<string, JsonNode?>(properties.Count, StringComparer.Ordinal);
         var iterators = new IAsyncEnumerator<(string Key, JsonNode? Value)>?[properties.Count];
         var keys = new string?[properties.Count];
         var previous = new (bool Exists, JsonNode? Value)[properties.Count];
@@ -1318,20 +1318,34 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
             while (index >= 0)
             {
                 context.Budget.CheckCancellation();
+                ObjectProperty property = properties[index];
                 if (keys[index] is { } oldKey)
                 {
                     RestoreField(oldKey, previous[index]);
                     keys[index] = null;
+                    // A static scalar field has no second choice. Restoring
+                    // its previous binding completes this product level.
+                    if (property is { StaticKey: not null, KeyFilter: null, Value: SingleValueFilter })
+                    {
+                        index--;
+                        continue;
+                    }
                 }
-                var iterator = iterators[index] ??= Choices(properties[index]).GetAsyncEnumerator();
-                if (!await iterator.MoveNextAsync().ConfigureAwait(false))
+                (string Key, JsonNode? Value) choice;
+                if (property is { StaticKey: string key, KeyFilter: null, Value: SingleValueFilter single })
+                    choice = (key, single.ReadValue(input, context, environment));
+                else
                 {
-                    await iterator.DisposeAsync().ConfigureAwait(false);
-                    iterators[index] = null;
-                    index--;
-                    continue;
+                    var iterator = iterators[index] ??= Choices(property).GetAsyncEnumerator();
+                    if (!await iterator.MoveNextAsync().ConfigureAwait(false))
+                    {
+                        await iterator.DisposeAsync().ConfigureAwait(false);
+                        iterators[index] = null;
+                        index--;
+                        continue;
+                    }
+                    choice = iterator.Current;
                 }
-                var choice = iterator.Current;
                 previous[index] = (fields.TryGetValue(choice.Key, out var oldValue), oldValue);
                 fields[choice.Key] = choice.Value;
                 keys[index] = choice.Key;
