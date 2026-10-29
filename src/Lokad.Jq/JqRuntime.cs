@@ -98,16 +98,14 @@ internal sealed partial class JqRuntime(JqBudget budget)
             {
                 writer.WriteStartObject();
                 if (Full()) return false;
-                IEnumerable<KeyValuePair<string, JsonNode?>> properties = keyOrder is not null && obj.Count > 1
-                    ? keyOrder.OrderProperties(obj, depth) : obj;
-                foreach (var property in properties)
+                if (keyOrder is not null && obj.Count > 1)
                 {
-                    budget.CheckCancellation();
-                    ReadOnlySpan<char> key = Prefix(property.Key);
-                    writer.WritePropertyName(key);
-                    if (key.Length != property.Key.Length || Full()) return false;
-                    if (!WriteValue(property.Value, depth + 1, budget, ascii, writer, keyOrder, preview)) return false;
+                    foreach (string key in keyOrder.OrderKeys(obj, depth))
+                        if (!WriteProperty(key, obj[key])) return false;
                 }
+                else
+                    foreach (var property in obj)
+                        if (!WriteProperty(property.Key, property.Value)) return false;
                 writer.WriteEndObject();
             }
             else if (value is null)
@@ -125,6 +123,15 @@ internal sealed partial class JqRuntime(JqBudget budget)
             return !Full();
 
             bool Full() => preview && writer.BytesCommitted + writer.BytesPending >= DiagnosticPreviewBytes;
+
+            bool WriteProperty(string name, JsonNode? child)
+            {
+                budget.CheckCancellation();
+                ReadOnlySpan<char> key = Prefix(name);
+                writer.WritePropertyName(key);
+                if (key.Length != name.Length || Full()) return false;
+                return WriteValue(child, depth + 1, budget, ascii, writer, keyOrder, preview);
+            }
 
             ReadOnlySpan<char> Prefix(string text)
             {
@@ -1069,14 +1076,22 @@ internal sealed partial class JqRuntime(JqBudget budget)
         if (input is JsonObject obj)
         {
             budget.ReserveBytes(64 + 88L * obj.Count);
-            using var comparer = sorted ? new JqComparer(budget) : null;
-            IEnumerable<KeyValuePair<string, JsonNode?>> properties = comparer is null ? obj : comparer.OrderProperties(obj, 0);
             var keys = new JsonArray();
-            foreach (var property in properties)
+            if (sorted)
             {
-                budget.CheckCancellation();
-                keys.Add(JsonValue.Create(property.Key));
+                using var comparer = new JqComparer(budget);
+                foreach (string key in comparer.OrderKeys(obj, 0))
+                {
+                    budget.CheckCancellation();
+                    keys.Add(JsonValue.Create(key));
+                }
             }
+            else
+                foreach (var property in obj)
+                {
+                    budget.CheckCancellation();
+                    keys.Add(JsonValue.Create(property.Key));
+                }
             return keys;
         }
         if (input is JsonArray arr)

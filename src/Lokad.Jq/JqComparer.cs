@@ -33,7 +33,7 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
         return left.Count.CompareTo(right.Count);
     }
 
-    internal IEnumerable<KeyValuePair<string, JsonNode?>> OrderProperties(JsonObject obj, int depth)
+    internal IEnumerable<string> OrderKeys(JsonObject obj, int depth)
     {
         _keys ??= new KeyStorage(budget);
         KeyBuffers buffers = _keys.Get(depth, obj.Count, 0);
@@ -50,7 +50,7 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
             {
                 budget.CheckCancellation();
                 string key = buffers.Left[index];
-                yield return new KeyValuePair<string, JsonNode?>(key, obj[key]);
+                yield return key;
             }
         }
         finally { Array.Clear(buffers.Left, 0, obj.Count); }
@@ -125,8 +125,14 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
                 Array.Clear(buffers.Right, 0, rightObject.Count);
             }
         }
-        return leftRank == 4
-            ? CompareStrings(JqRuntime.String(left), JqRuntime.String(right), budget.CancellationToken) : 0;
+        if (leftRank != 4) return 0;
+        // Rank has already established string kind. Avoid probing it again
+        // when extracting ordinary scalar payloads; retain the general fallback.
+        string? first = left is JsonValue firstValue && firstValue.TryGetValue<string>(out string? firstText)
+            ? firstText : JqRuntime.String(left);
+        string? second = right is JsonValue secondValue && secondValue.TryGetValue<string>(out string? secondText)
+            ? secondText : JqRuntime.String(right);
+        return CompareStrings(first, second, budget.CancellationToken);
     }
 
     private static int Rank(JsonNode? node, out double number)
