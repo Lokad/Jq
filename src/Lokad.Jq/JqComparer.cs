@@ -149,11 +149,23 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
     internal static int CompareStrings(string? left, string? right, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (ReferenceEquals(left, right)) return 0;
         if (left is null || right is null) return left is null ? right is null ? 0 : -1 : 1;
         ReadOnlySpan<char> first = left.AsSpan(), second = right.AsSpan();
         while (!first.IsEmpty && !second.IsEmpty)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            int length = Math.Min(4096, Math.Min(first.Length, second.Length));
+            int common = first[..length].CommonPrefixLength(second[..length]);
+            // A common UTF-16 prefix can end inside a surrogate pair. Leave its
+            // high surrogate for scalar decoding, including malformed text.
+            if (common != 0 && char.IsHighSurrogate(first[common - 1])) common--;
+            first = first[common..];
+            second = second[common..];
+            if (first.IsEmpty || second.IsEmpty) break;
+            if (common == length) continue;
+            if (!char.IsSurrogate(first[0]) && !char.IsSurrogate(second[0]))
+                return first[0].CompareTo(second[0]);
             Rune.DecodeFromUtf16(first, out Rune leftRune, out int leftLength);
             Rune.DecodeFromUtf16(second, out Rune rightRune, out int rightLength);
             if (leftRune.Value != rightRune.Value) return leftRune.Value.CompareTo(rightRune.Value);
