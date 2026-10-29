@@ -1070,6 +1070,10 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
 
 internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional) : JqFilter
 {
+    internal static JqFilter Create(JqFilter source, JqFilter index, bool optional) =>
+        !optional && source is SingleValueFilter value && index is SingleValueFilter key
+            ? new ValueFilter(value, key) : new IndexFilter(source, index, optional);
+
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         await foreach (JsonNode? key in index.Evaluate(input, context, environment).ConfigureAwait(false))
@@ -1078,7 +1082,11 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
                     yield return result;
     }
 
-    protected override async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
+    protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment) =>
+        ReadPaths(source, index, optional, outer, context, environment);
+
+    private static async IAsyncEnumerable<JqValuePath> ReadPaths(JqFilter source, JqFilter index, bool optional,
+        JqValuePath outer, JqContext context, JqEnvironment environment)
     {
         // Keys are subexpressions of the enclosing input, before the source.
         // Optional access suppresses read failures, never key/source effects.
@@ -1097,6 +1105,21 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
         if (JqPaths.TryGetFractional(key, out double fractional)) return new FractionalSegment(fractional);
         if (TryGetIndex(key, out long index, out bool isNaN)) return new IndexSegment(index, isNaN);
         return new InvalidSegment(context.Budget.CopyValue(key, 0));
+    }
+
+    private sealed class ValueFilter(SingleValueFilter source, SingleValueFilter index) : SingleValueFilter
+    {
+        protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
+        {
+            JsonNode? key = index.ReadValue(input, context, environment);
+            JsonNode? value = source.ReadValue(input, context, environment);
+            // Required indexing returns one value (including null) or throws.
+            _ = JqPathReads.TryIndex(value, key, false, context, out JsonNode? result);
+            return result;
+        }
+
+        protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment) =>
+            ReadPaths(source, index, false, outer, context, environment);
     }
 }
 

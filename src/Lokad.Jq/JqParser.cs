@@ -844,7 +844,7 @@ internal sealed class JqParser(
             {
                 Expect("]");
                 var opt = Match("?");
-                return new IndexFilter(source, index, opt);
+                return IndexFilter.Create(source, index, opt);
             }
         }
 
@@ -1052,7 +1052,7 @@ internal sealed class JqParser(
                     // read through the evaluated key instead.
                     bool interpolated = KeyFilterForIsDynamic(keyToken);
                     properties.Add(interpolated
-                        ? new ObjectProperty(null, StringFilterFor(keyToken, null), new IndexFilter(new IdentityFilter(), StringFilterFor(keyToken, null), false))
+                        ? new ObjectProperty(null, StringFilterFor(keyToken, null), IndexFilter.Create(new IdentityFilter(), StringFilterFor(keyToken, null), false))
                         : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text, _budget), null, FieldFilter.Create(new IdentityFilter(), Lexer.DecodeLiterals(keyToken.Text, _budget), true)));
                 }
                 else
@@ -1259,7 +1259,7 @@ internal sealed class JqParser(
 
         if (name == "first" && args.Count == 0)
         {
-            return new IndexFilter(new IdentityFilter(), new LiteralFilter(JsonValue.Create(0)), false);
+            return IndexFilter.Create(new IdentityFilter(), new LiteralFilter(JsonValue.Create(0)), false);
         }
 
         if (name == "first")
@@ -1269,7 +1269,7 @@ internal sealed class JqParser(
 
         if (name == "last" && args.Count == 0)
         {
-            return new IndexFilter(new IdentityFilter(), new LiteralFilter(JsonValue.Create(-1)), false);
+            return IndexFilter.Create(new IdentityFilter(), new LiteralFilter(JsonValue.Create(-1)), false);
         }
 
         if (name == "last")
@@ -1279,7 +1279,7 @@ internal sealed class JqParser(
 
         if (name == "nth" && args.Count == 1)
         {
-            return new IndexFilter(new IdentityFilter(), args[0], false);
+            return IndexFilter.Create(new IdentityFilter(), args[0], false);
         }
 
         if (name == "nth")
