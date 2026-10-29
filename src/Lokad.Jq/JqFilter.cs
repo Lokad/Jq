@@ -80,6 +80,18 @@ internal abstract class SingleValueFilter : JqFilter
     public sealed override IAsyncEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment) =>
         new ValueCursor(this, input, context, environment);
 
+    internal JsonNode? ReadValue(JsonNode? input, JqContext context, JqEnvironment environment)
+    {
+        context.Budget.EnterRecursion();
+        try
+        {
+            JsonNode? value = EvaluateValue(input, context, environment);
+            context.Budget.CheckCancellation();
+            return value;
+        }
+        finally { context.Budget.LeaveRecursion(); }
+    }
+
     private sealed class ValueCursor(SingleValueFilter filter, JsonNode? input, JqContext context, JqEnvironment environment)
         : IAsyncEnumerable<JsonNode?>, IAsyncEnumerator<JsonNode?>
     {
@@ -97,14 +109,8 @@ internal abstract class SingleValueFilter : JqFilter
         {
             if (_started) { Current = null; return ValueTask.FromResult(false); }
             _started = true;
-            context.Budget.EnterRecursion();
-            try
-            {
-                Current = filter.EvaluateValue(input, context, environment);
-                context.Budget.CheckCancellation();
-                return ValueTask.FromResult(true);
-            }
-            finally { context.Budget.LeaveRecursion(); }
+            Current = filter.ReadValue(input, context, environment);
+            return ValueTask.FromResult(true);
         }
 
         public ValueTask DisposeAsync()
@@ -1023,6 +1029,9 @@ internal sealed class CommaFilter(JqFilter left, JqFilter right) : JqFilter
 
 internal sealed class FieldFilter(JqFilter source, string name, bool optional) : JqFilter
 {
+    internal static JqFilter Create(JqFilter source, string name, bool optional) =>
+        !optional && source is SingleValueFilter scalar ? new ValueFilter(scalar, name) : new FieldFilter(source, name, optional);
+
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         await foreach (var value in source.Evaluate(input, context, environment).ConfigureAwait(false))
@@ -1032,15 +1041,30 @@ internal sealed class FieldFilter(JqFilter source, string name, bool optional) :
         }
     }
 
-    protected override async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
+    protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+        ReadPaths(source, name, optional, pair, context, environment);
+
+    private static async IAsyncEnumerable<JqValuePath> ReadPaths(JqFilter filter, string name, bool optional,
+        JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        await foreach (JqValuePath source in source.EvaluatePaths(pair, context, environment).ConfigureAwait(false))
+        await foreach (JqValuePath source in filter.EvaluatePaths(pair, context, environment).ConfigureAwait(false))
         {
             RequireTracked(source, new KeySegment(name), context);
             if (optional && source.Value is not null && source.Value is not JsonObject) continue;
             JsonNode? field = JqPathReads.ReadField(source.Value, name, context.Runtime);
             yield return new JqValuePath(Extend(source.Segments, new KeySegment(name), context.Budget), field, true);
         }
+    }
+
+    // A required field of a single-result source returns one value or fails.
+    // Reuse the scalar cursor instead of suspending a streaming source iterator.
+    private sealed class ValueFilter(SingleValueFilter source, string name) : SingleValueFilter
+    {
+        protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment) =>
+            JqPathReads.ReadField(source.ReadValue(input, context, environment), name, context.Runtime);
+
+        protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
+            ReadPaths(source, name, false, pair, context, environment);
     }
 }
 

@@ -796,13 +796,13 @@ internal sealed class JqParser(
                 {
                     var name = Next().Text;
                     var optional = Match("?");
-                    filter = new FieldFilter(filter, name, optional);
+                    filter = FieldFilter.Create(filter, name, optional);
                 }
                 else if (Peek().Kind == TokenKind.String)
                 {
                     var name = Lexer.DecodeLiterals(Next().Text, _budget);
                     var optional = Match("?");
-                    filter = new FieldFilter(filter, name, optional);
+                    filter = FieldFilter.Create(filter, name, optional);
                 }
                 else if (Match("["))
                 {
@@ -878,9 +878,9 @@ internal sealed class JqParser(
                 return new RecursiveDescentFilter();
             var identity = new IdentityFilter();
             if (Peek().Kind == TokenKind.FieldName)
-            return new FieldFilter(identity, Lexer.DecodeLiterals(Next().Text, _budget), Match("?"));
+            return FieldFilter.Create(identity, Lexer.DecodeLiterals(Next().Text, _budget), Match("?"));
             if (Peek().Kind == TokenKind.String)
-                return new FieldFilter(identity, Lexer.DecodeLiterals(Next().Text, _budget), Match("?"));
+                return FieldFilter.Create(identity, Lexer.DecodeLiterals(Next().Text, _budget), Match("?"));
             if (Match("["))
                 return ParseBracket(identity);
             return identity;
@@ -1053,11 +1053,11 @@ internal sealed class JqParser(
                     bool interpolated = KeyFilterForIsDynamic(keyToken);
                     properties.Add(interpolated
                         ? new ObjectProperty(null, StringFilterFor(keyToken, null), new IndexFilter(new IdentityFilter(), StringFilterFor(keyToken, null), false))
-                        : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text, _budget), null, new FieldFilter(new IdentityFilter(), Lexer.DecodeLiterals(keyToken.Text, _budget), true)));
+                        : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text, _budget), null, FieldFilter.Create(new IdentityFilter(), Lexer.DecodeLiterals(keyToken.Text, _budget), true)));
                 }
                 else
                 {
-                    properties.Add(new ObjectProperty(keyToken.Text, null, new FieldFilter(new IdentityFilter(), keyToken.Text, true)));
+                    properties.Add(new ObjectProperty(keyToken.Text, null, FieldFilter.Create(new IdentityFilter(), keyToken.Text, true)));
                 }
             }
         } while (Match(","));
