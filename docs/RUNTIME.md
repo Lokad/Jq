@@ -128,7 +128,9 @@ set.
 
 Reads and pass-through results borrow existing values. Writes copy borrowed
 branches; private accumulators such as `add` and `fromstream` update their owned
-containers directly. Emitted stream values stay independent of later updates.
+containers directly. Array collectors adopt newly constructed private containers
+and copy borrowed or uncertain values, checking destination depth before attachment.
+Emitted stream values stay independent of later updates.
 Right-empty container operations and empty-affix trims borrow unchanged results.
 Unchanged ASCII/HTML/URI transforms borrow payloads in fresh result wrappers;
 changed strings admit their final size before construction.

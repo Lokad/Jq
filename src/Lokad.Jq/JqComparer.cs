@@ -69,6 +69,11 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
         budget.CheckCancellation();
         JqRecursion.CheckValueDepth(left, depth);
         JqRecursion.CheckValueDepth(right, depth);
+        // String ordering needs only the payloads. Avoid classifying them and
+        // then probing the same scalar values again during every comparison.
+        if (left is JsonValue firstValue && firstValue.TryGetValue<string>(out string? first)
+            && right is JsonValue secondValue && secondValue.TryGetValue<string>(out string? second))
+            return CompareStrings(first, second, budget.CancellationToken);
         int leftRank = Rank(left, out double leftNumber);
         int rightRank = Rank(right, out double rightNumber);
         if (leftRank != rightRank) return leftRank.CompareTo(rightRank);
@@ -126,13 +131,7 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
             }
         }
         if (leftRank != 4) return 0;
-        // Rank has already established string kind. Avoid probing it again
-        // when extracting ordinary scalar payloads; retain the general fallback.
-        string? first = left is JsonValue firstValue && firstValue.TryGetValue<string>(out string? firstText)
-            ? firstText : JqRuntime.String(left);
-        string? second = right is JsonValue secondValue && secondValue.TryGetValue<string>(out string? secondText)
-            ? secondText : JqRuntime.String(right);
-        return CompareStrings(first, second, budget.CancellationToken);
+        return CompareStrings(JqRuntime.String(left), JqRuntime.String(right), budget.CancellationToken);
     }
 
     private static int Rank(JsonNode? node, out double number)

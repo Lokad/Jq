@@ -10,6 +10,10 @@
 - Add realistic compound benchmarks for API shaping, incident logs, indexed
   enrichment, operational summaries, configuration updates, snapshot differences,
   nested TSV extraction and application-adapted regex cleanup.
+- Reduce iterator overhead for single-result field, index and operator reads;
+  avoid async machinery when iterator advancement completes synchronously.
+- Compare string payloads directly and reuse proven private containers during
+  collection construction, preserving Unicode ordering, ownership and depth checks.
 
 ## 0.2.0 — 2026-10-27
 
