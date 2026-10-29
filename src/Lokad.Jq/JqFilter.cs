@@ -46,6 +46,10 @@ internal abstract class JqFilter
     // without probing ahead into deferred errors or side effects.
     internal virtual bool IsSingleValued(JqEnvironment environment, int depth) => false;
 
+    // Each yielded container is constructed here and has not escaped through
+    // bindings or another result. Collectors may take it without another copy.
+    internal virtual bool ConstructsFreshContainer => false;
+
     internal static JqValuePath TrackResult(JqValuePath pair, JsonNode? value)
     {
         JqValuePath? origin = pair.Tracked ? pair : pair.Origin;
@@ -209,6 +213,7 @@ internal sealed class AsFilter(
     IReadOnlyList<BindingPattern> alternatives,
     JqFilter body) : JqFilter
 {
+    internal override bool ConstructsFreshContainer => body.ConstructsFreshContainer;
     private readonly HashSet<string> _allNames = CollectAll(alternatives);
 
     internal static HashSet<string> CollectAll(IReadOnlyList<BindingPattern> alternatives)
@@ -960,6 +965,7 @@ internal sealed class TailSelfCallFilter(JqFunctionDefinition Definition, IReadO
 
 internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
 {
+    internal override bool ConstructsFreshContainer => right.ConstructsFreshContainer;
     internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
         depth < JqRecursion.MaximumDepth && left.IsSingleValued(environment, depth + 1)
         && right.IsSingleValued(environment, depth + 1);
@@ -1254,17 +1260,34 @@ internal sealed class RecursiveDescentFilter : JqFilter
 internal sealed class ArrayFilter(JqFilter item) : JqFilter
 {
     internal JqFilter Item => item;
+    internal override bool ConstructsFreshContainer => true;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
         context.Budget.ReserveBytes(64);
         var array = new JsonArray();
+        bool fresh = item.ConstructsFreshContainer;
         await foreach (var value in item.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             context.Budget.ReserveBytes(value is JsonValue ? 88 : 24);
-            array.Add(context.Runtime.Clone(value, 1));
+            if (fresh && value is JsonArray or JsonObject)
+            {
+                CheckDepth(value, 1, context.Budget);
+                array.Add(value);
+            }
+            else array.Add(context.Runtime.Clone(value, 1));
         }
         yield return array;
+
+        static void CheckDepth(JsonNode? value, int depth, JqBudget budget)
+        {
+            budget.CheckCancellation();
+            JqRecursion.CheckValueDepth(value, depth);
+            if (value is JsonArray elements)
+                foreach (JsonNode? element in elements) CheckDepth(element, depth + 1, budget);
+            else if (value is JsonObject properties)
+                foreach (var property in properties) CheckDepth(property.Value, depth + 1, budget);
+        }
     }
 }
 
@@ -1273,6 +1296,7 @@ internal sealed record ObjectProperty(string? StaticKey, JqFilter? KeyFilter, Jq
 internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : JqFilter
 {
     internal IReadOnlyList<ObjectProperty> Properties => properties;
+    internal override bool ConstructsFreshContainer => true;
 
     protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
     {
