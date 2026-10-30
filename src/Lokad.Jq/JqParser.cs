@@ -402,10 +402,7 @@ internal sealed class JqParser(
                     else
                         DeclareFilterParam(parameter.Name);
                 }
-                if (++_depth > JqRecursion.MaximumDepth)
-                    throw Error("filter nesting limit exceeded", Peek().Span);
-                try { body = ParseQuery(topLevel: false); }
-                finally { _depth--; }
+                body = ParseContinuation();
             }
             finally
             {
@@ -429,6 +426,16 @@ internal sealed class JqParser(
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(body);
         return new JqFunctionDefinition(definition.Name, definition.Parameters, body);
+    }
+
+    // These continuations recurse after ParseUnary has returned. Keep their
+    // frames in the same depth count as nested expressions and function bodies.
+    private JqFilter ParseContinuation()
+    {
+        if (++_depth > JqRecursion.MaximumDepth)
+            throw Error("filter nesting limit exceeded", Peek().Span);
+        try { return ParseQuery(); }
+        finally { _depth--; }
     }
 
     private JqFunctionDefinition ParseFuncDefHead()
@@ -526,7 +533,7 @@ internal sealed class JqParser(
             // takes the whole rest of the query as its body, matching the
             // reference `Query , Query` rule where the right query may open
             // with a definition.
-            left = new CommaFilter(left, PeekIsDef() ? ParseQuery() : ParseAs());
+            left = new CommaFilter(left, PeekIsDef() ? ParseContinuation() : ParseAs());
         }
         return left;
     }
@@ -538,7 +545,7 @@ internal sealed class JqParser(
         {
             // A right-hand side starting with `def` takes the whole rest of
             // the query as its body, matching `query: funcdef query`.
-            JqFilter right = PeekIsDef() ? ParseQuery() : ParseComma();
+            JqFilter right = PeekIsDef() ? ParseContinuation() : ParseComma();
             left = new PipeFilter(left, right);
         }
         return left;
@@ -557,7 +564,7 @@ internal sealed class JqParser(
         try
         {
             DeclarePatterns(alternatives);
-            return new AsFilter(left, alternatives, ParseQuery());
+            return new AsFilter(left, alternatives, ParseContinuation());
         }
         finally
         {

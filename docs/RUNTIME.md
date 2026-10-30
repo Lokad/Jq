@@ -206,7 +206,8 @@ tree. Recursive collection copies include their destination containers in that
 depth. Iterative paths and `walk` can process deeper runtime trees within shared
 admission; a later recursive consumer still applies its own guard.
 
-Structural/regex exhaustion is terminal status 5, including under `--seq`,
+Parser depth errors report compile status 3. Runtime structural/regex exhaustion
+is terminal status 5, including under `--seq`,
 `--stream-errors` and `-e`. Reference path-length errors and invalid regex syntax
 remain catchable language errors. Copies check cancellation and depth while
 constructing. Cancellation propagates as `OperationCanceledException`; host

@@ -94,7 +94,8 @@ cannot become targets through equal contents.
   tests record accepted coercions, ordering, empty-stream behavior and error shapes.
 
 Resource safeguards are separate from jq language errors: shared memory refusal
-and structural/regex exhaustion terminate with status 5 outside `try`/`?`.
+and runtime structural/regex exhaustion terminate with status 5 outside `try`/`?`.
+Parser depth failures report compile status 3.
 Cancellation and host failures propagate separately.
 See [runtime safeguards](RUNTIME.md#safeguards-and-cancellation) for
 construction limits, ownership and cleanup.
