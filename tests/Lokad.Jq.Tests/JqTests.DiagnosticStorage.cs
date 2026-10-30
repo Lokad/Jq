@@ -312,7 +312,7 @@ public sealed partial class JqTests
             return descriptor == JqFileDescriptor.StdOut && StdoutResult is { } stdout ? stdout : result;
         }
 
-        public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) => inner.OpenReadAsync(path, cancellationToken);
+        public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken) => inner.OpenReadAsync(path, cancellationToken);
         public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)
         {
             CloseCalls++;

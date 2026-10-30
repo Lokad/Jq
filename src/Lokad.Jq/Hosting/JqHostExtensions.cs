@@ -14,7 +14,7 @@ internal static class JqHostExtensions
     }
 
     internal static async ValueTask<JqOpenedFile> GuardedOpenAsync(
-        IJqHost host, JqPath path, CancellationToken cancellationToken)
+        IJqHost host, JqPathRequest path, CancellationToken cancellationToken)
     {
         try
         {
@@ -106,7 +106,7 @@ internal static class JqHostExtensions
     internal static async Task<JqReadResult.Complete> ReadFileAsync(
         this IJqHost host, JqResolvedPath path, JqBudget budget, CancellationToken cancellationToken)
     {
-        var opened = await JqHostExtensions.GuardedOpenAsync(host, path.Absolute, cancellationToken).ConfigureAwait(false);
+        var opened = await JqHostExtensions.GuardedOpenAsync(host, path.Request, cancellationToken).ConfigureAwait(false);
         if (opened.FileDescriptor is not { } descriptor)
         {
             throw new JqOperationException("opening", path.Display,

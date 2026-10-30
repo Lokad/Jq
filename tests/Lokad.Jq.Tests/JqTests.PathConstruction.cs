@@ -10,7 +10,7 @@ public sealed partial class JqTests
     [InlineData("rawfile")]
     [InlineData("program")]
     [InlineData("library")]
-    public async Task Jq_CanonicalPathsAdmitConstructionRatherThanBorrowedCharacters(string kind)
+    public async Task Jq_AbsolutePathsBorrowExistingCharacters(string kind)
     {
         string path = kind == "deep-input" ? "/" + string.Join('/', Enumerable.Repeat("p", 8192))
             : "/" + new string('p', 16384);
@@ -39,26 +39,26 @@ public sealed partial class JqTests
     [InlineData("/", "/", "/")]
     [InlineData("/a/b", "/work", "/a/b")]
     [InlineData("a/b", "/work", "/work/a/b")]
-    [InlineData("./a//b/../c/", "/work", "/work/a/c")]
-    [InlineData("/a/b/../../", "/work", "/")]
-    [InlineData("../c", "/work", "/c")]
-    public void Jq_PathConstructionKeepsDisplayAndCanonicalPolicy(string raw, string directory, string expected)
+    [InlineData("./a//b/../c/", "/work", "/work/./a//b/../c/")]
+    [InlineData("/a/b/../../", "/work", "/a/b/../../")]
+    [InlineData("../c", "/work", "/work/../c")]
+    public void Jq_PathRequestsRetainTraversalSpelling(string raw, string directory, string expected)
     {
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var result = JqPathResolution.ResolveArgument(raw, new JqPath(directory), budget);
             Assert.Same(raw, result.Display);
-            Assert.Equal(expected, result.Absolute.Path);
-            if (raw == expected && raw != "/") Assert.Same(raw, result.Absolute.Path);
-            if (raw == "/") Assert.Same(JqPath.Root, result.Absolute);
+            Assert.Equal(expected, result.Location(budget));
+            if (raw == expected && raw != "/") Assert.Same(raw, result.Location(budget));
+            Assert.Equal(directory, result.Request.CurrentDirectory.Path);
+            Assert.Same(raw, result.Request.Path);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Theory]
     [InlineData("relative")]
-    [InlineData("segments")]
     [InlineData("label")]
     [InlineData("attached-library")]
     public async Task Jq_ActualPathConstructionRefusalIsTerminalBeforeOpening(string kind)
@@ -68,7 +68,7 @@ public sealed partial class JqTests
             : "/" + new string('p', 40000);
         string[] arguments = kind switch
         {
-            "relative" => ["-c", ".", "file"],
+            "relative" => ["-nc", "-L", "file", "1"],
             "label" => ["-nc", "-f", path],
             "attached-library" => ["-nc", "-L" + path, "1"],
             _ => ["-c", ".", path]

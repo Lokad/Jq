@@ -134,12 +134,12 @@ internal static class JqExecutor
             var preParser = new JqParser(tokens, programSource, context.RootEnvironment, budget);
             (_, IReadOnlyList<JqModuleImport> mainImports, int bodyIndex) = preParser.ParsePrefix();
             string mainImporterDir = mainImports.Count != 0 && invocation.FilterFile is { } mainProgramPath
-                ? JqPathResolution.ParentDirectory(mainProgramPath.Absolute.Path, budget)
+                ? JqPathResolution.ParentDirectory(mainProgramPath.Location(budget), budget)
                 : invocation.WorkingDirectory.Path;
             var libraryDirs = new List<string>();
             foreach (var lib in invocation.LibraryDirs)
-                libraryDirs.Add(lib.Absolute.Path);
-            var loader = new JqModuleLoader(host, budget, context.Runtime, context.RootEnvironment, libraryDirs, invocation.WorkingDirectory.Path);
+                libraryDirs.Add(lib.Location(budget));
+            var loader = new JqModuleLoader(host, budget, context.Runtime, context.RootEnvironment, libraryDirs, invocation.WorkingDirectory);
             context.ModuleLoader = loader;
             JqEnvironment moduleEnv = await loader.LoadMainImportsAsync(mainImports, mainImporterDir, cancellationToken).ConfigureAwait(false);
             // Resume after the validated prefix with dependencies in scope.

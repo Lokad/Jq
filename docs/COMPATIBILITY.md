@@ -69,7 +69,8 @@ cannot become targets through equal contents.
   Streaming sequence recovery retains error paths and following records; it can
   omit secondary syntax-error events before the next RS in malformed input.
 - **Modules:** hosted `import`, `include`, `-L` and `modulemeta` are supported.
-  Valid dot segments and repeated separators normalize before hosted lookup.
+  Dot segments, repeated separators and trailing slashes reach the host intact.
+  Module caching follows lookup spelling rather than assuming filesystem identity.
   Explicit search metadata replaces default paths; unreadable selected files
   fail loading without falling back to another candidate.
   Unresolved function calls can fail during evaluation rather than compilation.

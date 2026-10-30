@@ -299,12 +299,10 @@ internal sealed class JqInputCursor : IAsyncDisposable
             JqResolvedPath source;
             using (_budget.UseStorage(pathMemory))
             {
-                try { source = JqPathResolution.ResolveArgument(operand, _workingDirectory, _budget); }
-                catch (Exception exception) when (exception is FormatException or JqPathException)
-                { throw new JqInputException(exception.Message, 2); }
+                source = JqPathResolution.ResolveArgument(operand, _workingDirectory, _budget);
             }
             JqOpenedFile opened = await JqHostExtensions.GuardedOpenAsync(
-                _host, source.Absolute, _cancellationToken).ConfigureAwait(false);
+                _host, source.Request, _cancellationToken).ConfigureAwait(false);
             if (opened.FileDescriptor is not { } descriptor)
             {
                 HasOpenFailures = true;

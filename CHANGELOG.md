@@ -2,6 +2,11 @@
 
 ## 0.3.0 — Unreleased
 
+- Breaking: `IJqHost.OpenReadAsync` receives `JqPathRequest(Path, CurrentDirectory)`.
+  Resolve traversal and confinement in the host; preserve links, dot segments and
+  trailing-slash intent. `JqPath` now describes caller current directories.
+  Remove `JqPathException`; lookup failures use typed host results. Module cache
+  entries and source attribution retain distinct lookup spellings.
 - Breaking: host open/read/append failures carry `JqOperationError(Kind, Message)`;
   use `JqOpenedFile.Failure(error)`, `JqByteReadResult.Failure(bytesRead, error)`
   and `JqAppendResult.Failure(error)`. Hosts no longer select append exit codes.

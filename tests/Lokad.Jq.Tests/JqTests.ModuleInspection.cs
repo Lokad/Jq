@@ -122,7 +122,7 @@ public sealed partial class JqTests
             AfterAppend?.Invoke();
             return result;
         }
-        public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken token)
+        public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken token)
         {
             Opened.Add(path.Path);
             return inner.OpenReadAsync(path, token);

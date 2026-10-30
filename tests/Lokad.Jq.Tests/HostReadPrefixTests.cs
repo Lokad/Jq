@@ -77,7 +77,7 @@ public sealed class HostReadPrefixTests
 
         public Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken token) =>
             inner.AppendWhileOpenAsync(descriptor, content, token);
-        public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken token) => inner.OpenReadAsync(path, token);
+        public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken token) => inner.OpenReadAsync(path, token);
         public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken token) => inner.CloseDescriptorAsync(descriptor, token);
     }
 }

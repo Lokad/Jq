@@ -110,7 +110,7 @@ internal static class JqCommandLineParser
                             }
                             else variables[name] = runtime.ReadJsonArray(content.Content.Span, 0);
                         }
-                        catch (Exception exception) when (JqErrors.IsCatchable(exception) || exception is JqPathException)
+                        catch (Exception exception) when (JqErrors.IsCatchable(exception))
                         { return Error("jq: Bad JSON in --", option, " ", name, " ", path, ": ", exception.Message); }
                     }
                     else
@@ -318,7 +318,7 @@ internal static class JqCommandLineParser
             }
         }
         catch (Exception ex) when (ex is not JqQuotaException and not JqCloseException
-            && ex is JqException or FormatException or JqPathException)
+            && ex is JqException or FormatException)
         {
             return Error("jq: ", ex.Message);
         }

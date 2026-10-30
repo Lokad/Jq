@@ -209,10 +209,14 @@ public sealed partial class JqTests
         internal TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ValueTask<JqByteReadResult> ReadBytesAsync(JqFileDescriptor descriptor, Memory<byte> buffer, CancellationToken token) =>
             ReadFailure ? ValueTask.FromResult(JqByteReadResult.Failure(0, new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable"))) : inner.ReadBytesAsync(descriptor, buffer, token);
-        public async Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken token)
+        public async Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken token)
         {
             var opened = await inner.OpenReadAsync(path, token).ConfigureAwait(false);
-            if (opened.FileDescriptor is { } descriptor) { _paths[descriptor] = path.Path; Opened.Add(path.Path); }
+            if (opened.FileDescriptor is { } descriptor)
+            {
+                _paths[descriptor] = MockFileSystem.Lookup(path) ?? throw new InvalidOperationException("Opened missing path.");
+                Opened.Add(path.Path);
+            }
             return opened;
         }
         public async Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> bytes, CancellationToken token)

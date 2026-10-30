@@ -3,18 +3,18 @@ using System.Collections.Generic;
 
 namespace Lokad.Jq;
 
-internal readonly struct JqResolvedPath(string display, JqPath absolute)
+internal readonly struct JqResolvedPath(JqPathRequest request)
 {
-    public string Display => display ??
-        throw new InvalidOperationException("The default resolved path has no display text.");
+    public JqPathRequest Request => request ??
+        throw new InvalidOperationException("The default path has no request.");
 
-    public JqPath Absolute => absolute ??
-        throw new InvalidOperationException("The default resolved path has no absolute path.");
+    public string Display => Request.Path;
 
-    public override string ToString() => Absolute.Path;
+    internal string Location(JqBudget budget) =>
+        JqPathResolution.Combine(Request.CurrentDirectory.Path, Request.Path, budget);
 }
 
-/// <summary>Provides canonical path resolution at the jq host boundary.</summary>
+/// <summary>Selects the caller's explicit current directory.</summary>
 public static class JqPathResolution
 {
     /// <summary>Uses the first exported <c>PWD</c> if canonical; otherwise returns root.</summary>
@@ -41,18 +41,31 @@ public static class JqPathResolution
 
     internal static JqResolvedPath ResolveArgument(string raw, JqPath currentDirectory, JqBudget budget)
     {
-        var absolute = JqRawPath.Parse(raw, budget).ToAbsolute(currentDirectory, budget);
-        return new JqResolvedPath(raw, absolute);
+        budget.CheckCancellation();
+        budget.ReserveMetadata(32, 1);
+        budget.CheckCancellation();
+        return new JqResolvedPath(new JqPathRequest(raw, currentDirectory));
     }
 
-    internal static string ParentDirectory(string canonicalPath, JqBudget budget)
+    // This joins spelling only. Lookup and traversal always belong to the host.
+    internal static string Combine(string directory, string path, JqBudget budget)
     {
         budget.CheckCancellation();
-        int slash = canonicalPath.LastIndexOf('/');
+        if (path.StartsWith('/')) return path;
+        bool separator = !directory.EndsWith('/');
+        budget.ReserveString((long)directory.Length + path.Length + (separator ? 1 : 0));
+        budget.CheckCancellation();
+        return separator ? directory + "/" + path : directory + path;
+    }
+
+    internal static string ParentDirectory(string path, JqBudget budget)
+    {
+        budget.CheckCancellation();
+        int slash = path.LastIndexOf('/');
         if (slash <= 0) return "/";
         budget.ReserveString(slash);
         budget.CheckCancellation();
-        return canonicalPath[..slash];
+        return path[..slash];
     }
 
 }

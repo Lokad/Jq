@@ -3,7 +3,7 @@ using System;
 namespace Lokad.Jq;
 
 /// <summary>
-/// Canonical absolute path used by Lokad.Jq hosts.
+/// Canonical absolute current directory supplied by the caller.
 /// </summary>
 public sealed class JqPath
 {
@@ -84,8 +84,3 @@ public sealed class JqPath
     /// <inheritdoc />
     public override int GetHashCode() => Path.GetHashCode(StringComparison.Ordinal);
 }
-
-/// <summary>Represents a failure to resolve a well-formed jq path.</summary>
-/// <param name="message">The jq-shaped resolution error.</param>
-public sealed class JqPathException(string message) :
-    InvalidOperationException(message ?? throw new ArgumentNullException(nameof(message)));

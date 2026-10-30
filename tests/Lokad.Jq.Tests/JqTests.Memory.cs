@@ -469,10 +469,9 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Jq_BoundsPathResolutionBeforeExpandingWorkingDirectory(bool filterFile)
+    public async Task Jq_PathRequestsBorrowLargeWorkingDirectories(bool filterFile)
     {
-        // Keep probes bounded even without the guard: about 8 MiB of retained paths.
-        var directory = "/" + new string('x', filterFile ? 4 * 1024 * 1024 : 65536);
+        var directory = "/" + new string('x', 65536);
         var args = filterFile
             ? new[] { "-n", "-f", "filter" }
             : new[] { "-n", "inputs | empty" }.Concat(Enumerable.Repeat("file", 64)).ToArray();
@@ -481,9 +480,11 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
-        Assert.Equal(5, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
-        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(2, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
+        Assert.DoesNotContain("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.True(memory.PeakBytes < 8192);
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Theory]

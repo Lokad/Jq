@@ -1242,7 +1242,7 @@ sealed class SmokeHost : IJqHost
         return Task.FromResult(descriptor == JqFileDescriptor.StdErr && StderrResult is { } result ? result : JqAppendResult.Open);
     }
 
-    public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken)
+    public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!_files.TryGetValue(path.Path, out var bytes))
@@ -1284,7 +1284,7 @@ sealed class SmokeBorrowHost(SmokeHost inner) : IJqHost
         return await inner.AppendWhileOpenAsync(descriptor, content, cancellationToken).ConfigureAwait(false);
     }
 
-    public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) =>
+    public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken) =>
         inner.OpenReadAsync(path, cancellationToken);
 
     public async Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)

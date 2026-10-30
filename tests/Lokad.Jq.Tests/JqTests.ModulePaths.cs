@@ -18,7 +18,7 @@ public sealed partial class JqTests
     [InlineData("dir//tiny", "include", "43\n")]
     [InlineData("dir//tiny", "data", "[43]\n")]
     [InlineData("dir//tiny", "metadata", "[\"value/0\"]\n")]
-    public async Task Jq_ModulePathsNormalizeValidRelativeSpellings(string path, string kind, string expected)
+    public async Task Jq_ModulePathsDelegateValidRelativeSpellings(string path, string kind, string expected)
     {
         string quoted = JsonSerializer.Serialize(path);
         string filter = kind switch
@@ -44,7 +44,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_ModulePathsShareCanonicalCacheKeysAndSourceAttribution()
+    public async Task Jq_ModulePathsKeepDistinctLookupSpellingsAndSourceAttribution()
     {
         var host = new MockFileSystem();
         host.AddFile("/modules/tiny.jq", "def location:$__loc__;");
@@ -52,10 +52,10 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "-L", "/modules",
             "import \"./tiny\" as a; import \"tiny\" as b; [a::location,b::location]")));
         Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
-        Assert.Equal("[{\"file\":\"/modules/tiny.jq\",\"line\":1},{\"file\":\"/modules/tiny.jq\",\"line\":1}]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal("[{\"file\":\"/modules/./tiny.jq\",\"line\":1},{\"file\":\"/modules/tiny.jq\",\"line\":1}]\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Equal(1, host.ReadBytesCallCount);
-        Assert.Single(host.ClosedDescriptors);
+        Assert.Equal(2, host.ReadBytesCallCount);
+        Assert.Equal(2, host.ClosedDescriptors.Count);
         Assert.Equal(0, memory.ReservedBytes);
     }
 
@@ -100,8 +100,8 @@ public sealed partial class JqTests
         Assert.Equal(kind == "data" ? "[42]\n" : kind == "metadata" ? "[\"value/0\"]\n" : kind == "cached" ? "[42,42]\n" : "42\n",
             host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.Equal(kind == "program" ? 2 : 1, host.ReadBytesCallCount);
-        Assert.Equal(kind == "program" ? 2 : 1, host.ClosedDescriptors.Count);
+        Assert.Equal(kind is "program" or "cached" ? 2 : 1, host.ReadBytesCallCount);
+        Assert.Equal(kind is "program" or "cached" ? 2 : 1, host.ClosedDescriptors.Count);
         Assert.Equal(0, host.OpenFileCount);
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -165,9 +165,9 @@ public sealed partial class JqTests
         public ValueTask<JqByteReadResult> ReadBytesAsync(JqFileDescriptor descriptor, Memory<byte> buffer, CancellationToken cancellationToken) => inner.ReadBytesAsync(descriptor, buffer, cancellationToken);
         public Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken) => inner.AppendWhileOpenAsync(descriptor, content, cancellationToken);
         public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) => inner.CloseDescriptorAsync(descriptor, cancellationToken);
-        public async Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken)
+        public async Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken)
         {
-            if (path.Path == "/modules/tiny.jq")
+            if (path.Path == "/modules/./tiny.jq")
             {
                 Entered.TrySetResult();
                 await Release.Task.ConfigureAwait(false);

@@ -89,9 +89,9 @@ public sealed partial class JqTests
     }
 
     [Theory]
-    [InlineData("", "jq: '' is not a valid jq path.\n")]
-    [InlineData("/../data", "jq: Cannot resolve '/../data': '..' goes above the root.\n")]
-    public async Task Jq_InputPathsReportDemandedResolutionFailure(string operand, string expected)
+    [InlineData("", "jq: cannot open : path not found\n")]
+    [InlineData("/../data", "jq: cannot open /../data: path not found\n")]
+    public async Task Jq_InputPathsDelegateDemandedLookupFailure(string operand, string expected)
     {
         var host = new MockFileSystem();
         var memory = new BenchmarkMemoryBudget(64 * 1024);

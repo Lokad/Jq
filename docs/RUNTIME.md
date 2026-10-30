@@ -18,14 +18,17 @@ Host UTF-16 strings encode lone surrogates as U+FFFD; input bytes decode strictl
 ## Host I/O
 
 The embedding application supplies byte I/O, files and modules through `IJqHost`.
-Paths use Unix-style separators and resolve against the invocation's current
-directory. Its environment snapshot supplies `$ENV` and `env`; `PWD` selects the
+`JqPathRequest` supplies the original path spelling and invocation's current
+directory. The host owns traversal, links, intermediate-directory checks,
+permissions and confinement; dot segments and trailing slashes reach it intact.
+Its environment snapshot supplies `$ENV` and `env`; `PWD` selects the
 default current directory. `JqClock` supplies time and timezone inputs. Hosted
 module search uses the importer directory followed by `-L` directories. Explicit
 `search` metadata replaces those defaults and skips non-string entries. Search
 stops when a file opens; a read failure does not select a later candidate.
-Module names validate before canonical resolution; valid dot segments and repeated
-separators resolve to the same executable cache key.
+Module names validate before lookup. Executable modules are cached by lookup
+spelling; different spellings retain distinct source attribution and are not
+assumed to identify the same host file.
 
 Standard descriptors are borrowed. Successful `OpenReadAsync` calls transfer an
 owned descriptor to execution; `JqOpenedFile.Failure(error)` transfers none. Execution calls `CloseDescriptorAsync` when exhausted

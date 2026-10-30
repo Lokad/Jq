@@ -67,7 +67,7 @@ public sealed class HostResultTests
                 : appendStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed"));
         }
 
-        public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) => inner.OpenReadAsync(path, cancellationToken);
+        public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken) => inner.OpenReadAsync(path, cancellationToken);
         public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) => inner.CloseDescriptorAsync(descriptor, cancellationToken);
     }
 
@@ -97,7 +97,7 @@ public sealed class HostResultTests
             throw new InvalidOperationException("A failed open must not be read.");
         public Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken token) =>
             inner.AppendWhileOpenAsync(descriptor, content, token);
-        public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken token) => Task.FromResult(JqOpenedFile.Failure(error));
+        public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken token) => Task.FromResult(JqOpenedFile.Failure(error));
         public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken token) =>
             throw new InvalidOperationException("A failed open transfers no descriptor.");
     }

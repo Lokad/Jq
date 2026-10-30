@@ -87,7 +87,7 @@ sealed class CoreHost : IJqHost
         return ValueTask.FromResult(JqByteReadResult.Success(count, _position == _input.Length));
     }
 
-    public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) =>
+    public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken) =>
         Task.FromResult(JqOpenedFile.Failure(new JqOperationError(JqOperationErrorKind.NotFound, "path not found")));
 
     public Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)

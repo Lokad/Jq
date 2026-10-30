@@ -18,7 +18,7 @@ public interface IJqHost
         JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken);
 
     /// <summary>Opens a file for reading. Successful descriptors belong to this execution until closed.</summary>
-    Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken);
+    Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken);
 
     /// <summary>
     /// Retires an owned descriptor and reports successful release or a terminal cleanup failure.

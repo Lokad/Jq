@@ -208,7 +208,7 @@ public sealed partial class JqTests
             ReadOnlyMemory<byte> content, CancellationToken cancellationToken) =>
             inner.AppendWhileOpenAsync(descriptor, content, cancellationToken);
 
-        public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) =>
+        public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken) =>
             inner.OpenReadAsync(path, cancellationToken);
 
         public async Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)

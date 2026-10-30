@@ -72,7 +72,7 @@ public sealed partial class JqTests
         public Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken) =>
             operation == "append" ? Fail<JqAppendResult>() : Task.FromResult(JqAppendResult.Open);
 
-        public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) => Fail<JqOpenedFile>();
+        public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken) => Fail<JqOpenedFile>();
 
         public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("No descriptor was transferred.");

@@ -105,7 +105,7 @@ public sealed partial class JqTests
         internal int Reads { get; private set; }
         internal Exception? CloseFailure { get; init; }
 
-        public async Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken)
+        public async Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken)
         {
             Paths.Add(path.Path);
             var opened = await inner.OpenReadAsync(path, cancellationToken).ConfigureAwait(false);

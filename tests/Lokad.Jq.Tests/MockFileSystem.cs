@@ -53,14 +53,34 @@ internal sealed class MockFileSystem : IJqHost
         return Task.FromResult(AppendRemainsOpen ? JqAppendResult.Open : JqAppendResult.Closed);
     }
 
-    public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken)
+    public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_files.TryGetValue(path.Path, out var content))
+        if (Lookup(path) is not { } location || !_files.TryGetValue(location, out var content))
             return Task.FromResult(JqOpenedFile.Failure(new JqOperationError(JqOperationErrorKind.NotFound, "path not found")));
         var descriptor = new JqFileDescriptor(_nextDescriptor++);
         _inputs[descriptor] = content;
         return Task.FromResult(JqOpenedFile.Success(descriptor));
+    }
+
+    // This fake namespace has no links. Traversal policy belongs here, in the
+    // host; dedicated traversal tests supply a namespace with link semantics.
+    internal static string? Lookup(JqPathRequest request)
+    {
+        if (JqPath.IsValid(request.Path)) return request.Path;
+        var components = new List<string>();
+        string path = request.Path.StartsWith('/') ? request.Path : request.CurrentDirectory.Path + "/" + request.Path;
+        foreach (string component in path.Split('/'))
+        {
+            if (component is "" or ".") continue;
+            if (component == "..")
+            {
+                if (components.Count == 0) return null;
+                components.RemoveAt(components.Count - 1);
+            }
+            else components.Add(component);
+        }
+        return "/" + string.Join('/', components);
     }
 
     public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)

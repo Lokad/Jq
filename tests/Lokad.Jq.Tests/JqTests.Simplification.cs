@@ -227,7 +227,7 @@ public sealed partial class JqTests
             return Task.FromResult(_closedOutput ? JqAppendResult.Closed : JqAppendResult.Open);
         }
 
-        public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken)
+        public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Assert.Equal("/input", path.Path);

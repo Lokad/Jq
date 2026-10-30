@@ -15,7 +15,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
             var import = new JqModuleImport("m", null, false, null);
             _ = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
             Assert.True(memory.TryReserve(allowance - memory.ReservedBytes - 65536, out var pressure));
@@ -40,7 +40,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
             var env = await loader.LoadMainImportsAsync(Enumerable.Repeat(new JqModuleImport("m", null, false, null), 5).ToArray(),
                 "/", CancellationToken.None);
             var result = await new UserCallFilter("f999", 0, []).Evaluate(null, context, env).SingleAsync();
@@ -76,7 +76,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], JqPath.Root);
             var env = await loader.LoadMainImportsAsync([new JqModuleImport("m", null, false, metadata)], "/", CancellationToken.None);
             Assert.Equal(42, JqRuntime.Number(await new UserCallFilter("f", 0, []).Evaluate(null, context, env).SingleAsync()));
             Assert.Single(host.ClosedDescriptors);
@@ -97,7 +97,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
             var import = new JqModuleImport("missing", null, false, metadata);
             long before = GC.GetAllocatedBytesForCurrentThread();
             Assert.Same(context.RootEnvironment,
@@ -127,7 +127,7 @@ public sealed partial class JqTests
             new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
         {
             var host = new MockFileSystem();
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], JqPath.Root);
             long before = GC.GetAllocatedBytesForCurrentThread();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 loader.LoadMainImportsAsync([import], "/", cancellation.Token));
@@ -150,7 +150,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], JqPath.Root);
             long before = GC.GetAllocatedBytesForCurrentThread();
             var error = await Assert.ThrowsAsync<JqQuotaException>(() =>
                 loader.LoadMainImportsAsync([import], "/", CancellationToken.None));
@@ -172,7 +172,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
             var import = new JqModuleImport("m", null, false, null);
             _ = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
             int reads = host.ReadBytesCallCount;
@@ -202,7 +202,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], JqPath.Root);
             var first = new JqModuleImport("m", null, false, new JsonObject { ["search"] = "/second" });
             _ = await loader.LoadMainImportsAsync([first], "/", CancellationToken.None);
             host.AddFile("/first/m.jq", "def f:1;");
@@ -224,7 +224,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
             var import = new JqModuleImport("m", "data", true, null);
             var first = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
             host.AddFile("/lib/m.json", "2");
@@ -248,7 +248,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
             var import = new JqModuleImport("m", null, false, null);
             _ = await loader.LoadMainImportsAsync([import], "/", CancellationToken.None);
             using var cancellation = new CancellationTokenSource();
@@ -269,7 +269,7 @@ public sealed partial class JqTests
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], "/");
+            var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
             var error = await Assert.ThrowsAsync<JqCloseException>(() =>
                 loader.LoadMainImportsAsync([new JqModuleImport("m", null, false, null)], "/", CancellationToken.None));
             Assert.Equal("/lib/m.jq", error.Path);

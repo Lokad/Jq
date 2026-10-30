@@ -15,7 +15,7 @@ internal sealed class JqModuleLoader(
     JqRuntime runtime,
     JqEnvironment rootEnvironment,
     IReadOnlyList<string> libraryDirs,
-    string workingDirectory)
+    JqPath workingDirectory)
 {
     private sealed record LoadedModule(JqEnvironment ModuleEnv,
         IReadOnlyDictionary<(string Name, int Arity), JqUserClosure> Exports);
@@ -116,7 +116,7 @@ internal sealed class JqModuleLoader(
         int depth,
         CancellationToken cancellationToken)
     {
-        foreach (JqPath path in ModulePaths(import, importerDir, ".jq", cancellationToken))
+        foreach (JqPathRequest path in ModulePaths(import, importerDir, ".jq", cancellationToken))
         {
             if (_cache.TryGetValue(path.Path, out LoadedModule? cached)) return cached;
             var result = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
@@ -139,8 +139,8 @@ internal sealed class JqModuleLoader(
         CancellationToken cancellationToken)
     {
         JqReadResult.Complete? loaded = null;
-        string canonical = string.Empty;
-        foreach (JqPath path in ModulePaths(import, importerDir, ".json", cancellationToken))
+        string location = string.Empty;
+        foreach (JqPathRequest path in ModulePaths(import, importerDir, ".json", cancellationToken))
         {
             var result = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
             if (result is null) continue;
@@ -150,7 +150,7 @@ internal sealed class JqModuleLoader(
                 throw new JqOperationException("reading", path.Path, failure.Error);
             }
             loaded = (JqReadResult.Complete)result;
-            canonical = path.Path;
+            location = path.Path;
             break;
         }
         if (loaded is null)
@@ -172,7 +172,7 @@ internal sealed class JqModuleLoader(
             {
                 if (import.IsOptional)
                     return null;
-                throw new JqException("error loading data file " + canonical + ": " + ex.Message);
+                throw new JqException("error loading data file " + location + ": " + ex.Message);
             }
             return JsonValue.Create(rawText);
         }
@@ -184,23 +184,23 @@ internal sealed class JqModuleLoader(
         {
             if (import.IsOptional)
                 return null;
-            throw new JqException("error loading data file " + canonical + ": " + ex.Message);
+            throw new JqException("error loading data file " + location + ": " + ex.Message);
         }
     }
 
     private async Task<LoadedModule> LoadFuncModuleAtPathAsync(
-        string canonicalPath,
+        string location,
         ReadOnlyMemory<byte> content,
         int depth,
         CancellationToken cancellationToken)
     {
         using var storage = budget.UseExecutionStorage();
-        if (!_loading.Add(canonicalPath))
-            throw new JqException("circular import of " + canonicalPath);
+        if (!_loading.Add(location))
+            throw new JqException("circular import of " + location);
         try
         {
-            string sourceText = DecodeModuleSource(canonicalPath, content);
-            var programSource = JqProgramSource.File(canonicalPath, budget);
+            string sourceText = DecodeModuleSource(location, content);
+            var programSource = JqProgramSource.File(location, budget);
             // Pre-scan imports before loading dependencies.
             var tokens = Lexer.Tokenize(sourceText, programSource, budget);
             var preParser = new JqParser(tokens, programSource, rootEnvironment, budget);
@@ -208,7 +208,7 @@ internal sealed class JqModuleLoader(
             JqEnvironment env = rootEnvironment;
             if (imports.Count != 0)
             {
-                string childImporterDir = JqPathResolution.ParentDirectory(canonicalPath, budget);
+                string childImporterDir = JqPathResolution.ParentDirectory(location, budget);
                 foreach (JqModuleImport import in imports)
                     env = await ApplyImportAsync(env, import, childImporterDir, depth + 1, cancellationToken).ConfigureAwait(false);
             }
@@ -221,16 +221,16 @@ internal sealed class JqModuleLoader(
             var exports = new Dictionary<(string Name, int Arity), JqUserClosure>();
             env.CollectFunctionClosures(exports, budget);
             var loaded = new LoadedModule(env, exports);
-            _cache[canonicalPath] = loaded;
+            _cache[location] = loaded;
             return loaded;
         }
         finally
         {
-            _loading.Remove(canonicalPath);
+            _loading.Remove(location);
         }
     }
 
-    private IEnumerable<JqPath> ModulePaths(
+    private IEnumerable<JqPathRequest> ModulePaths(
         JqModuleImport import,
         string importerDir,
         string suffix,
@@ -275,9 +275,9 @@ internal sealed class JqModuleLoader(
                     state.Suffix.AsSpan().CopyTo(destination[offset..]);
                     state.Budget.CheckCancellation();
                 });
-                if (JqRawPath.TryParse(candidate, budget, out JqRawPath? raw)
-                    && raw.TryToAbsolute(JqPath.Root, budget, out JqPath? path))
-                    yield return path;
+                budget.ReserveMetadata(32, 1);
+                budget.CheckCancellation();
+                yield return new JqPathRequest(candidate, workingDirectory);
             }
         }
 
@@ -312,21 +312,13 @@ internal sealed class JqModuleLoader(
             cancellationToken.ThrowIfCancellationRequested();
             if (node is not JsonValue scalar || !scalar.TryGetValue<string>(out string? entry)
                 || entry.Length == 0) return null;
-            if (entry == ".") return importerDir;
             if (entry.StartsWith("~/", StringComparison.Ordinal) || entry == "~"
                 || entry.StartsWith("$ORIGIN/", StringComparison.Ordinal) || entry == "$ORIGIN") return null;
-            if (!JqRawPath.TryParse(entry, budget, out JqRawPath? raw)) return null;
-            JqPath directory = JqPath.Root;
-            if (!entry.StartsWith('/') && importerDir != "/")
-            {
-                budget.ReserveMetadata(32, 1);
-                directory = new JqPath(importerDir);
-            }
-            return raw.TryToAbsolute(directory, budget, out JqPath? absolute) ? absolute.Path : null;
+            return JqPathResolution.Combine(importerDir, entry, budget);
         }
     }
 
-    private async Task<JqReadResult?> TryReadModuleFileAsync(JqPath path, CancellationToken cancellationToken)
+    private async Task<JqReadResult?> TryReadModuleFileAsync(JqPathRequest path, CancellationToken cancellationToken)
     {
         var opened = await JqHostExtensions.GuardedOpenAsync(host, path, cancellationToken).ConfigureAwait(false);
         if (opened.FileDescriptor is not { } descriptor)
@@ -362,7 +354,7 @@ internal sealed class JqModuleLoader(
         if (validation is not null)
             throw new JqException(validation);
         var probe = new JqModuleImport(relPath, null, false, null);
-        foreach (JqPath path in ModulePaths(probe, workingDirectory, ".jq", cancellationToken))
+        foreach (JqPathRequest path in ModulePaths(probe, workingDirectory.Path, ".jq", cancellationToken))
         {
             var result = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
             if (result is null) continue;

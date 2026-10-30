@@ -123,7 +123,7 @@ public sealed partial class JqTests
             return Task.FromResult(JqAppendResult.Open);
         }
 
-        public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken) =>
+        public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Unexpected hosted open.");
         public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Borrowed descriptor was closed.");
