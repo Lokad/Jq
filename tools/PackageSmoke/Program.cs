@@ -148,15 +148,15 @@ foreach (string path in new[] { "./tiny", "dir/./tiny", "dir//tiny" })
 foreach (string format in new[] { "base64d", "urid" })
 {
     var host = new SmokeHost();
-    var memory = new BenchmarkMemoryBudget(64 * 1024);
     string text = (format == "base64d" ? "!" : "%ZZ") + new string('A', 1048576);
+    var memory = new BenchmarkMemoryBudget(64 * 1024 + 80 + text.Length);
     Check(format + " validates before output admission", await Command(["-nc", "--arg", "text", text, "try ($text|@" + format + ") catch \"caught\""], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "\"caught\"\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
 }
 {
     var host = new SmokeHost();
-    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    var memory = new BenchmarkMemoryBudget(128 * 1024 + 80 + 3 * 32768);
     Check("URI decoded capacity", await Command(["-nc", "--arg", "text", string.Concat(Enumerable.Repeat("%61", 32768)), "$text|@urid|length"], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "32768\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
@@ -185,7 +185,7 @@ foreach (string format in new[] { "base64d", "urid" })
 foreach (string transform in new[] { "ascii_downcase", "ascii_upcase", "@html", "@uri" })
 {
     var host = new SmokeHost();
-    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    var memory = new BenchmarkMemoryBudget(64 * 1024 + 80 + 131072);
     Check(transform + " borrows unchanged text", await Command(["-nr", "--arg", "text", new string('0', 131072), "$text|" + transform + "|length"], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "131072\n" && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0);
@@ -231,7 +231,7 @@ foreach (string format in new[] { "sh", "csv" })
 }
 {
     var host = new SmokeHost();
-    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    var memory = new BenchmarkMemoryBudget(64 * 1024 + 80 + 131072);
     Check("borrowed index key payload", await Command(["-nc", "--arg", "key", new string('k', 131072), "INDEX(0;$key)|length"], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "1\n" && host.Output(JqFileDescriptor.StdErr) == ""
@@ -815,7 +815,7 @@ foreach (bool refuse in new[] { false, true })
         && memory.ReservedBytes == 0);
 }
 {
-    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    var memory = new BenchmarkMemoryBudget(64 * 1024 + 80 + 131072);
     var host = new SmokeHost();
     Check("literal split borrows unchanged payload", await Command(["-nc", "--arg", "s", new string('x', 131072),
         "[($s | split(\"z\") | length), ($s / \"z\" | length)]"], [])
@@ -878,7 +878,9 @@ foreach (bool missingFile in new[] { false, true })
 }
 {
     var host = new SmokeHost();
-    var memory = new BenchmarkMemoryBudget(128 * 1024);
+    long nativeBindings = Enumerable.Range(0, 512).Sum(index =>
+        80L + 1 + 80 + ("v" + index.ToString(System.Globalization.CultureInfo.InvariantCulture)).Length);
+    var memory = new BenchmarkMemoryBudget(128 * 1024 + nativeBindings);
     Check("one named-binding table", await Command(["-nc", .. Enumerable.Range(0, 512).SelectMany(index =>
         new[] { "--arg", "v" + index.ToString(System.Globalization.CultureInfo.InvariantCulture), "x" }), "$ARGS.named|length"], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 0
@@ -927,7 +929,7 @@ foreach (bool separator in new[] { false, true })
 }
 {
     var host = new SmokeHost();
-    var memory = new BenchmarkMemoryBudget(64 * 1024);
+    var memory = new BenchmarkMemoryBudget(64 * 1024 + 80 + 40000 + 80 + 20000);
     Check("repeated date directive parsing", await Command(["-nc", "--arg", "text", string.Concat(Enumerable.Repeat("1970", 10000)),
         "--arg", "format", string.Concat(Enumerable.Repeat("%Y", 10000)), "$text|strptime($format)"], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 0
@@ -945,7 +947,7 @@ foreach (bool separator in new[] { false, true })
 {
     var host = new SmokeHost(); host.SetInput("null" + new string(' ', 65532));
     var memory = new BenchmarkMemoryBudget(1024 * 1024);
-    Check("repeated fromjson scratch refunds", await Command(["-Rrs",
+    Check("repeated native fromjson", await Command(["-Rrs",
         "\"ready\", (. as $t | range(0;32) | $t | fromjson)"], []).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "ready\n" + string.Concat(Enumerable.Repeat("null\n", 32))
         && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
@@ -961,10 +963,10 @@ foreach (bool separator in new[] { false, true })
 }
 {
     var host = new SmokeHost();
-    var memory = new BenchmarkMemoryBudget(64 * 1024);
-    Check("necessary fromjson scratch refusal", await Command(["-nr", "--arg", "text", "null" + new string(' ', 65532),
-        "\"ready\", (try ($text|fromjson) catch \"caught\")"], []).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 5
-        && host.Output(JqFileDescriptor.StdOut) == "ready\n" && host.Output(JqFileDescriptor.StdErr) == "jq: memory budget exceeded\n"
+    var memory = new BenchmarkMemoryBudget(96 * 1024);
+    Check("fromjson reads native input without a conversion buffer", await Command(["-nr", "--arg", "text", "null" + new string(' ', 65532),
+        "\"ready\", (try ($text|fromjson) catch \"caught\")"], []).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 0
+        && host.Output(JqFileDescriptor.StdOut) == "ready\nnull\n" && host.Output(JqFileDescriptor.StdErr) == ""
         && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
 }
 {
@@ -986,10 +988,17 @@ foreach (string expression in new[] { "\"x\" * 1048576", "$text" })
     var host = new SmokeHost();
     var memory = new BenchmarkMemoryBudget(16 * 1024 * 1024);
     using var cancellation = new CancellationTokenSource();
-    var hooked = new SmokeAdmissionBudget(memory, () => { if (memory.ReservedBytes >= 1024 * 1024) cancellation.Cancel(); });
+    bool armed = false;
+    long before = 0;
+    host.BeforeAppend = descriptor =>
+    {
+        if (descriptor != JqFileDescriptor.StdOut) return;
+        before = GC.GetAllocatedBytesForCurrentThread();
+        armed = true;
+    };
+    var hooked = new SmokeAdmissionBudget(memory, () => { if (armed && memory.ReservedBytes >= 1024 * 1024) cancellation.Cancel(); });
     var command = Command(["-nr", "--arg", "text", new string('x', 1024 * 1024), "\"ready\", (" + expression + ")"], []);
     bool canceled = false;
-    long before = GC.GetAllocatedBytesForCurrentThread();
     try { await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, hooked, cancellation.Token); }
     catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { canceled = true; }
     long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -1067,13 +1076,15 @@ foreach (string format in new[] { "text", "html", "missing" })
     var host = new SmokeHost();
     var memory = new BenchmarkMemoryBudget(512 * 1024);
     using var cancellation = new CancellationTokenSource();
-    var hooked = new SmokeAdmissionBudget(memory, () => { if (memory.ReservedBytes >= 200000) cancellation.Cancel(); });
+    bool armed = false;
+    host.BeforeAppend = descriptor => { if (descriptor == JqFileDescriptor.StdOut) armed = true; };
+    var hooked = new SmokeAdmissionBudget(memory, () => { if (armed) cancellation.Cancel(); });
     var command = Command(["-nr", "--arg", "text", new string('x', 65536), "\"ready\", ($text|@base64)"], []);
     bool canceled = false;
     long before = GC.GetAllocatedBytesForCurrentThread();
     try { await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, hooked, cancellation.Token); }
     catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { canceled = true; }
-    Check("encoding scratch admission cancellation", canceled && GC.GetAllocatedBytesForCurrentThread() - before is >= 0 and <= 256 * 1024
+    Check("native encoding output admission cancellation", canceled && GC.GetAllocatedBytesForCurrentThread() - before is >= 0 and <= 256 * 1024
         && host.Output(JqFileDescriptor.StdOut) == "ready\n" && host.Output(JqFileDescriptor.StdErr) == ""
         && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
 }
@@ -1085,14 +1096,14 @@ foreach (string format in new[] { "text", "html", "missing" })
     host.BeforeAppend = descriptor =>
     {
         if (descriptor == JqFileDescriptor.StdOut && pressure is null
-            && !memory.TryReserve(limit - memory.ReservedBytes - 200000, out pressure))
+            && !memory.TryReserve(limit - memory.ReservedBytes - 87463, out pressure))
             throw new InvalidOperationException("Expected pressure admission.");
     };
     int status = await Command(["-nr", "--arg", "text", new string('x', 65536), "\"ready\", (try ($text|@base64) catch \"caught\")"], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None);
     bool retained = pressure is not null && memory.ReservedBytes == pressure.Bytes;
     pressure?.Dispose();
-    Check("encoding overlap refusal stays terminal", status == 5 && retained
+    Check("encoding output refusal stays terminal", status == 5 && retained
         && host.Output(JqFileDescriptor.StdOut) == "ready\n" && host.Output(JqFileDescriptor.StdErr) == "jq: memory budget exceeded\n"
         && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
 }
