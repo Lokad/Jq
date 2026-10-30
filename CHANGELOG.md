@@ -2,6 +2,8 @@
 
 ## 0.3.0 — Unreleased
 
+- Construct date mismatch errors directly in UTF-8, retaining complete payloads
+  without converting input and format strings to CLR text.
 - Reuse the bounded UTF-8 builder pool for repeated `join` calls while keeping
   result strings independent of later writes.
 - Breaking: `IJqRegexEngine.TryCompile` receives `ReadOnlyMemory<byte>` pattern

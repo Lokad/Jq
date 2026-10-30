@@ -426,7 +426,7 @@ internal static class JqTime
             throw new JqException("strptime/1 requires string inputs and arguments");
         var parser = new DateParser(text, format, context.Budget);
         if (!parser.TryParse())
-            throw DateMismatch(context.Budget, text.ToHost(context.Budget), format.ToHost(context.Budget));
+            throw DateMismatch(context.Budget, text, format);
         return parser.BuildResult(context);
     }
 
@@ -438,16 +438,26 @@ internal static class JqTime
         JqString format = JqString.FromUtf8("%Y-%m-%dT%H:%M:%SZ"u8, context.Budget);
         var parser = new DateParser(text, format, context.Budget);
         if (!parser.TryParse())
-            throw DateMismatch(context.Budget, text.ToHost(context.Budget), format.ToHost(context.Budget));
+            throw DateMismatch(context.Budget, text, format);
         return JqScalar.Create(parser.ToEpochSeconds());
     }
 
-    private static JqException DateMismatch(JqBudget budget, string text, string format)
+    private static JqErrorException DateMismatch(JqBudget budget, JqString text, JqString format)
     {
-        const string prefix = "date \"";
-        const string middle = "\" does not match format \"";
-        budget.ReserveString((long)prefix.Length + text.Length + middle.Length + format.Length + 1);
-        return new JqException(prefix + text + middle + format + "\"");
+        int length = JqBudget.BufferCapacity((long)"date \""u8.Length + text.ByteLength
+            + "\" does not match format \""u8.Length + format.ByteLength + 1, 0);
+        JqString message = JqString.Create(length, (Text: text, Format: format), static (bytes, state) =>
+        {
+            "date \""u8.CopyTo(bytes);
+            int offset = "date \""u8.Length;
+            state.Text.Utf8.Span.CopyTo(bytes[offset..]);
+            offset += state.Text.ByteLength;
+            "\" does not match format \""u8.CopyTo(bytes[offset..]);
+            offset += "\" does not match format \""u8.Length;
+            state.Format.Utf8.Span.CopyTo(bytes[offset..]);
+            bytes[^1] = (byte)'"';
+        }, budget);
+        return new JqErrorException(message);
     }
 
     internal static JqString ToDateIso(JqContext context, JqValue? input)
