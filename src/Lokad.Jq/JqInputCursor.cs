@@ -296,13 +296,13 @@ internal sealed class JqInputCursor : IAsyncDisposable
             }
             string operand = _sources[_index];
             using var pathMemory = new JqStorage(_budget.MemoryBudget);
-            JqResolvedPath source;
+            JqPathRequest source;
             using (_budget.UseStorage(pathMemory))
             {
-                source = JqPathResolution.ResolveArgument(operand, _workingDirectory, _budget);
+                source = JqPathResolution.CreateRequest(operand, _workingDirectory, _budget);
             }
             JqOpenedFile opened = await JqHostExtensions.GuardedOpenAsync(
-                _host, source.Request, _cancellationToken).ConfigureAwait(false);
+                _host, source, _cancellationToken).ConfigureAwait(false);
             if (opened.FileDescriptor is not { } descriptor)
             {
                 HasOpenFailures = true;
@@ -311,7 +311,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 var (host, stderr) = _context.Stderr
                     ?? throw new InvalidOperationException("Input diagnostics require a host descriptor.");
                 JqAppendResult? written = await JqDiagnosticWriter.TryWriteAsync(host, stderr,
-                    ["jq: cannot open ", source.Display, ": ", opened.Error?.Message
+                    ["jq: cannot open ", source.Path, ": ", opened.Error?.Message
                         ?? throw new InvalidOperationException("Missing open error.")],
                     true, _budget.MemoryBudget, _cancellationToken).ConfigureAwait(false);
                 if (written is not { CanAcceptMore: true })

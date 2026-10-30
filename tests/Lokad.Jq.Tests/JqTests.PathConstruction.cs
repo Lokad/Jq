@@ -47,12 +47,11 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
-            var result = JqPathResolution.ResolveArgument(raw, new JqPath(directory), budget);
-            Assert.Same(raw, result.Display);
-            Assert.Equal(expected, result.Location(budget));
-            if (raw == expected && raw != "/") Assert.Same(raw, result.Location(budget));
-            Assert.Equal(directory, result.Request.CurrentDirectory.Path);
-            Assert.Same(raw, result.Request.Path);
+            var result = JqPathResolution.CreateRequest(raw, new JqPath(directory), budget);
+            Assert.Same(raw, result.Path);
+            Assert.Equal(expected, JqPathResolution.Location(result, budget));
+            if (raw == expected && raw != "/") Assert.Same(raw, JqPathResolution.Location(result, budget));
+            Assert.Equal(directory, result.CurrentDirectory.Path);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -92,7 +91,7 @@ public sealed partial class JqTests
         cancellation.Cancel();
         var memory = new BenchmarkMemoryBudget(0);
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token);
-        Assert.ThrowsAny<OperationCanceledException>(() => JqPathResolution.ResolveArgument(path, JqPath.Root, budget));
+        Assert.ThrowsAny<OperationCanceledException>(() => JqPathResolution.CreateRequest(path, JqPath.Root, budget));
         Assert.Equal(0, memory.ReservedBytes);
     }
 }

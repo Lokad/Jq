@@ -3,17 +3,6 @@ using System.Collections.Generic;
 
 namespace Lokad.Jq;
 
-internal readonly struct JqResolvedPath(JqPathRequest request)
-{
-    public JqPathRequest Request => request ??
-        throw new InvalidOperationException("The default path has no request.");
-
-    public string Display => Request.Path;
-
-    internal string Location(JqBudget budget) =>
-        JqPathResolution.Combine(Request.CurrentDirectory.Path, Request.Path, budget);
-}
-
 /// <summary>Selects the caller's explicit current directory.</summary>
 public static class JqPathResolution
 {
@@ -39,13 +28,16 @@ public static class JqPathResolution
         return JqPath.Root;
     }
 
-    internal static JqResolvedPath ResolveArgument(string raw, JqPath currentDirectory, JqBudget budget)
+    internal static JqPathRequest CreateRequest(string raw, JqPath currentDirectory, JqBudget budget)
     {
         budget.CheckCancellation();
         budget.ReserveMetadata(32, 1);
         budget.CheckCancellation();
-        return new JqResolvedPath(new JqPathRequest(raw, currentDirectory));
+        return new JqPathRequest(raw, currentDirectory);
     }
+
+    internal static string Location(JqPathRequest request, JqBudget budget) =>
+        Combine(request.CurrentDirectory.Path, request.Path, budget);
 
     // This joins spelling only. Lookup and traversal always belong to the host.
     internal static string Combine(string directory, string path, JqBudget budget)

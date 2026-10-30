@@ -101,7 +101,7 @@ internal static class JqCommandLineParser
                         if (!TryBindName(name)) continue;
                         try
                         {
-                            var resolved = JqPathResolution.ResolveArgument(path, currentDirectory, budget);
+                            var resolved = JqPathResolution.CreateRequest(path, currentDirectory, budget);
                             using var content = await host.ReadFileAsync(resolved, budget, budget.CancellationToken).ConfigureAwait(false);
                             if (option == "rawfile")
                             {
@@ -162,13 +162,13 @@ internal static class JqCommandLineParser
 
             var filterFileArgument = fromFile ? program : null;
             var filter = fromFile ? null : program;
-            var filterFile = filterFileArgument is null ? (JqResolvedPath?)null
-                : JqPathResolution.ResolveArgument(filterFileArgument, currentDirectory, budget);
-            var libraryDirs = new List<JqResolvedPath>();
+            var filterFile = filterFileArgument is null ? (JqPathRequest?)null
+                : JqPathResolution.CreateRequest(filterFileArgument, currentDirectory, budget);
+            var libraryDirs = new List<JqPathRequest>();
             foreach (string library in libraryPaths)
             {
                 if (string.IsNullOrEmpty(library)) continue;
-                libraryDirs.Add(JqPathResolution.ResolveArgument(library, currentDirectory, budget));
+                libraryDirs.Add(JqPathResolution.CreateRequest(library, currentDirectory, budget));
             }
 
             // ARGS owns argument parent links; the variable table borrows them.

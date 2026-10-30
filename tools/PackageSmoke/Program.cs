@@ -120,7 +120,7 @@ foreach (string path in new[] { "./tiny", "dir/./tiny", "dir//tiny" })
     var host = new SmokeHost();
     host.AddFile("/modules/tiny.jq", "def value:42;");
     host.AddFile("/modules/dir/tiny.jq", "def value:43;");
-    Check("normalized module " + path, await Command(["-nc", "-L", "/modules", "import " + JsonSerializer.Serialize(path) + " as m; m::value"], [])
+    Check("host-resolved module " + path, await Command(["-nc", "-L", "/modules", "import " + JsonSerializer.Serialize(path) + " as m; m::value"], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == (path == "./tiny" ? "42\n" : "43\n")
         && host.Output(JqFileDescriptor.StdErr) == "" && host.ClosedDescriptors.Count == 1);
@@ -129,11 +129,11 @@ foreach (string path in new[] { "./tiny", "dir/./tiny", "dir//tiny" })
     var host = new SmokeHost();
     host.AddFile("/modules/tiny.jq", "def value:42;");
     host.AddFile("/modules/dir/tiny.jq", "def value:43;");
-    Check("canonical module aliases and metadata", await Command(["-nc", "-L", "/modules",
+    Check("distinct module spellings and metadata", await Command(["-nc", "-L", "/modules",
         "import \"./tiny\" as a; import \"tiny\" as b; [a::value,b::value,(\"dir/./tiny\"|modulemeta|.defs)]"], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "[42,42,[\"value/0\"]]\n"
-        && host.Output(JqFileDescriptor.StdErr) == "" && host.ClosedDescriptors.Count == 2);
+        && host.Output(JqFileDescriptor.StdErr) == "" && host.ClosedDescriptors.Count == 3);
 }
 {
     string directory = "/" + new string('d', 16384);
@@ -1242,10 +1242,29 @@ sealed class SmokeHost : IJqHost
         return Task.FromResult(descriptor == JqFileDescriptor.StdErr && StderrResult is { } result ? result : JqAppendResult.Open);
     }
 
+    // This in-memory host has no links and owns its namespace traversal policy.
+    private static string? Lookup(JqPathRequest request)
+    {
+        if (JqPath.IsValid(request.Path)) return request.Path;
+        var components = new List<string>();
+        string path = request.Path.StartsWith('/') ? request.Path : request.CurrentDirectory.Path + "/" + request.Path;
+        foreach (string component in path.Split('/'))
+        {
+            if (component is "" or ".") continue;
+            if (component == "..")
+            {
+                if (components.Count == 0) return null;
+                components.RemoveAt(components.Count - 1);
+            }
+            else components.Add(component);
+        }
+        return "/" + string.Join('/', components);
+    }
+
     public Task<JqOpenedFile> OpenReadAsync(JqPathRequest path, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_files.TryGetValue(path.Path, out var bytes))
+        if (Lookup(path) is not { } location || !_files.TryGetValue(location, out var bytes))
             return Task.FromResult(JqOpenedFile.Failure(new JqOperationError(JqOperationErrorKind.NotFound, "path not found")));
         var descriptor = new JqFileDescriptor(_nextDescriptor++);
         _inputs[descriptor.Id] = bytes;

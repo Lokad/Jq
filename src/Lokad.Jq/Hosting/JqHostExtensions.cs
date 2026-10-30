@@ -104,12 +104,12 @@ internal static class JqHostExtensions
         (await GuardedAppendAsync(host, descriptor, content, cancellationToken).ConfigureAwait(false)).ExitCode;
 
     internal static async Task<JqReadResult.Complete> ReadFileAsync(
-        this IJqHost host, JqResolvedPath path, JqBudget budget, CancellationToken cancellationToken)
+        this IJqHost host, JqPathRequest path, JqBudget budget, CancellationToken cancellationToken)
     {
-        var opened = await JqHostExtensions.GuardedOpenAsync(host, path.Request, cancellationToken).ConfigureAwait(false);
+        var opened = await JqHostExtensions.GuardedOpenAsync(host, path, cancellationToken).ConfigureAwait(false);
         if (opened.FileDescriptor is not { } descriptor)
         {
-            throw new JqOperationException("opening", path.Display,
+            throw new JqOperationException("opening", path.Path,
                 opened.Error ?? throw new InvalidOperationException("Missing open error."));
         }
         bool failed = false;
@@ -120,7 +120,7 @@ internal static class JqHostExtensions
             content = result switch
             {
                 JqReadResult.Complete complete => complete,
-                JqReadResult.Failed failure => throw new JqOperationException("reading", path.Display, failure.Error),
+                JqReadResult.Failed failure => throw new JqOperationException("reading", path.Path, failure.Error),
                 _ => throw new InvalidOperationException("Unknown bounded read result.")
             };
             return content;
@@ -132,7 +132,7 @@ internal static class JqHostExtensions
         }
         finally
         {
-            try { await host.CloseOwnedDescriptorAsync(descriptor, path.Display, failed).ConfigureAwait(false); }
+            try { await host.CloseOwnedDescriptorAsync(descriptor, path.Path, failed).ConfigureAwait(false); }
             catch { content?.Dispose(); throw; }
         }
     }

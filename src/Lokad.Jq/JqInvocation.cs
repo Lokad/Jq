@@ -27,11 +27,11 @@ internal sealed class JqInvocation
     public bool Version { get; init; }
     public bool BuildConfiguration { get; init; }
     public string? Filter { get; init; }
-    public JqResolvedPath? FilterFile { get; init; }
+    public JqPathRequest? FilterFile { get; init; }
     public Dictionary<string, JsonNode?> Variables { get; init; } = new(StringComparer.Ordinal);
     public IReadOnlyList<string> InputFiles { get; init; } = [];
     public string? Error { get; init; }
     public JqClock? Clock { get; init; }
-    public List<JqResolvedPath> LibraryDirs { get; init; } = [];
+    public List<JqPathRequest> LibraryDirs { get; init; } = [];
     public JqPath WorkingDirectory { get; init; } = JqPath.Root;
 }

@@ -118,7 +118,7 @@ internal static class JqExecutor
         try
         {
             if (invocation.FilterFile is { } programPath)
-                programSource = JqProgramSource.File(programPath.Display, budget);
+                programSource = JqProgramSource.File(programPath.Path, budget);
             var filterText = invocation.Filter ?? ".";
             if (invocation.FilterFile is { } filterFile)
             {
@@ -134,11 +134,11 @@ internal static class JqExecutor
             var preParser = new JqParser(tokens, programSource, context.RootEnvironment, budget);
             (_, IReadOnlyList<JqModuleImport> mainImports, int bodyIndex) = preParser.ParsePrefix();
             string mainImporterDir = mainImports.Count != 0 && invocation.FilterFile is { } mainProgramPath
-                ? JqPathResolution.ParentDirectory(mainProgramPath.Location(budget), budget)
+                ? JqPathResolution.ParentDirectory(JqPathResolution.Location(mainProgramPath, budget), budget)
                 : invocation.WorkingDirectory.Path;
             var libraryDirs = new List<string>();
             foreach (var lib in invocation.LibraryDirs)
-                libraryDirs.Add(lib.Location(budget));
+                libraryDirs.Add(JqPathResolution.Location(lib, budget));
             var loader = new JqModuleLoader(host, budget, context.Runtime, context.RootEnvironment, libraryDirs, invocation.WorkingDirectory);
             context.ModuleLoader = loader;
             JqEnvironment moduleEnv = await loader.LoadMainImportsAsync(mainImports, mainImporterDir, cancellationToken).ConfigureAwait(false);
