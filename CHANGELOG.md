@@ -2,6 +2,8 @@
 
 ## 0.3.0 — Unreleased
 
+- Reuse the bounded UTF-8 builder pool for repeated `join` calls while keeping
+  result strings independent of later writes.
 - Breaking: `IJqRegexEngine.TryCompile` receives `ReadOnlyMemory<byte>` pattern
   bytes instead of a CLR string. Jq owns immutable cache keys through handle
   disposal; adapt the provider's native byte-pattern compile API.

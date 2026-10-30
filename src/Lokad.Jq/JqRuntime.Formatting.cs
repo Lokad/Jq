@@ -153,7 +153,8 @@ internal sealed partial class JqRuntime
             budget.ReserveString((long)kind.Length + preview.Length + 23);
             throw new JqException("Cannot iterate over " + kind + " (" + preview + ")");
         }
-        using var output = new JqJsonBuffer(budget);
+        using var builder = budget.RentUtf8Builder();
+        JqJsonBuffer output = builder.Value;
         bool first = true;
         Span<byte> scalar = stackalloc byte[128];
         foreach (JqValue? item in IteratorFilter.ReadValues(input, false, budget))
