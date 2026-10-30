@@ -1,4 +1,3 @@
-using System.Text;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -9,8 +8,6 @@ public sealed partial class JqTests
     [InlineData("add")]
     [InlineData("repeat-one")]
     [InlineData("repeat-many")]
-    [InlineData("append")]
-    [InlineData("finish")]
     [InlineData("implode")]
     [InlineData("parse-json")]
     [InlineData("metadata")]
@@ -20,7 +17,6 @@ public sealed partial class JqTests
         const int length = 65536;
         string hostText = new('x', length);
         JqValue text = NativeFixtures.Create(hostText);
-        var builder = operation == "finish" ? new StringBuilder(new string('x', length)) : new StringBuilder();
         var points = new JqArray();
         if (operation == "implode") for (int index = 0; index < length; index++) points.Add(65);
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
@@ -43,8 +39,6 @@ public sealed partial class JqTests
                     case "add": _ = runtime.Add(text, text); break;
                     case "repeat-one": _ = runtime.Multiply(NativeFixtures.Create("x"), NativeFixtures.Create(length)); break;
                     case "repeat-many": _ = runtime.Multiply(text, NativeFixtures.Create(2)); break;
-                    case "append": budget.Append(builder, hostText); break;
-                    case "finish": _ = budget.Finish(builder); break;
                     case "implode": _ = runtime.Implode(points); break;
                     case "parse-json": _ = runtime.ParseJson(hostText); break;
                     case "metadata": budget.ReserveMetadata(2 * length, 1); break;

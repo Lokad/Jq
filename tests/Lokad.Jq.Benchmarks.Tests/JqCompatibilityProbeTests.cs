@@ -249,4 +249,29 @@ public sealed class JqCompatibilityProbeTests
 
         Assert.True(JqReferenceRunner.OutputsMatch(local, reference), JqReferenceRunner.FormatReferenceMismatch(goldenCase.Id, local, reference));
     }
+
+    [Theory]
+    [InlineData("{a1:7}|.\"a\\(1)\"")]
+    [InlineData("{child:{a1:7},key:1}|.child.\"a\\(.key)\"")]
+    [InlineData("{a1:7,a2:8}|.\"a\\((1,2))\"")]
+    [InlineData("{child:{a1:7},key:1}|path(.child.\"a\\(.key)\")")]
+    [InlineData("{\"\\\\(1)\":7}|.\"\\u005c(1)\"")]
+    [InlineData("try (1|.\"a\\(error(\"key\"))\"?) catch .")]
+    public async Task Probe_QuotedFieldInterpolationMatchesReference(string filter)
+    {
+        if (!JqReferenceRunner.TryGetReferencePath(out string referencePath, out string skipReason))
+        {
+            Assert.True(true, skipReason);
+            return;
+        }
+        // Binary output keeps the independently installed Windows reference's
+        // LF bytes comparable with the host byte contract.
+        var golden = new JqGoldenCase("quoted-field", ["-nbc", filter], [],
+            new Dictionary<string, string>(), [], string.Empty, string.Empty, 0);
+        JqProbeResult local = await JqProbeRunner.RunAsync(golden, CancellationToken.None);
+        JqReferenceResult reference = await JqReferenceRunner.RunGoldenCaseAsync(referencePath, golden,
+            TimeSpan.FromSeconds(10), CancellationToken.None);
+        Assert.True(JqReferenceRunner.OutputsMatch(local, reference),
+            JqReferenceRunner.FormatReferenceMismatch(golden.Id, local, reference));
+    }
 }

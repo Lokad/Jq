@@ -53,7 +53,7 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_CompilerWorkspaceReusesAdmissionAcrossSmallStringLiterals()
+    public async Task Jq_CompilerAdmitsSmallNativeLiteralsInBatches()
     {
         string source = "module {items:[" + string.Join(',', Enumerable.Repeat("\"a\"", 512)) + "]}; 1";
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);

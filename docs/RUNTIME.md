@@ -16,8 +16,8 @@ retains Unicode. Unicode escapes follow jq surrogate-pair and replacement rules.
 Host UTF-16 strings encode lone surrogates as U+FFFD; input bytes decode strictly.
 Runtime strings and object keys retain owned UTF-8 payloads. Reads and aliases
 share immutable bytes; retained substrings copy only their selected range.
-String operations, interpolation, formatting, date parsing, regex subjects and
-JSON/raw output consume these bytes directly. The current regex provider contract
+Literal decoding, string operations, interpolation, formatting, date parsing,
+regex subjects and JSON/raw output consume these bytes directly. The current regex provider contract
 still accepts CLR pattern strings and group names; host paths and program source
 also use CLR text.
 
@@ -126,9 +126,9 @@ Keep the invocation and borrowed inputs alive through reused/concurrent executio
 Ordinary argument errors remain status 2; admission and structural failures during
 argument setup remain status 5.
 
-Compiler tokens and literal copies admit as constructed; borrowed comments and
-whitespace add no proportional storage. Temporary lexer workspace ends after
-lexing.
+Compiler tokens and native literal payloads admit as constructed; borrowed
+comments and whitespace add no proportional storage. Interpolation code borrows
+program source until compilation.
 Formatted strings without interpolation reuse decoded constants like ordinary
 string literals.
 Command setup preflights retained bindings, operands, library paths and

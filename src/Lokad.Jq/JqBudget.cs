@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System;
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using System.Threading;
 
 namespace Lokad.Jq;
@@ -219,21 +218,6 @@ internal sealed class JqBudget : IDisposable
         if (length < 0 || length > int.MaxValue)
             throw new JqQuotaException("string result cannot be represented");
         ReserveBytes(checked(length * sizeof(char)));
-    }
-
-    internal void Append(StringBuilder builder, ReadOnlySpan<char> text)
-    {
-        CheckCancellation();
-        if (text.Length > int.MaxValue - builder.Length)
-            throw new JqQuotaException("string result cannot be represented");
-        ReserveString(text.Length);
-        builder.Append(text);
-    }
-
-    internal string Finish(StringBuilder builder)
-    {
-        ReserveString(builder.Length);
-        return builder.ToString();
     }
 
     // Count nested advancement, including a suspended host operation. Yielded

@@ -2,6 +2,9 @@
 
 ## 0.3.0 — Unreleased
 
+- Decode compiler string literals directly into UTF-8, borrowing interpolation
+  source until compilation. Remove decoded templates and lexer builder storage.
+  Support quoted-field interpolation consistently with bracket reads and paths.
 - Use internal UTF-8 strings and object keys throughout evaluation, JSON/raw I/O,
   string primitives, interpolation, formats, date parsing and regex subjects.
   Remove the production JsonNode dependency and subject transcoding buffers.

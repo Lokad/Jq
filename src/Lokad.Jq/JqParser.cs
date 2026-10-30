@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 
 namespace Lokad.Jq;
 
@@ -133,9 +134,9 @@ internal sealed class JqParser(
         if (Peek().Kind != TokenKind.String)
             throw Error("Import path must be constant", Peek().Span);
         var pathToken = Next();
-        if (Lexer.ContainsInterpolation(pathToken.Text))
+        if (pathToken.Interpolations is not null)
             throw Error("Import path must be constant", pathToken.Span);
-        string relPath = Lexer.DecodeLiterals(pathToken.Text, _budget);
+        string relPath = LiteralText(pathToken).ToHost(_budget);
         string? alias = null;
         bool isData = false;
         if (!isInclude)
@@ -638,7 +639,7 @@ internal sealed class JqParser(
                 _depth--;
             }
         }
-        throw Error($"expected pattern, got {Peek().Text}", Peek().Span);
+        throw Error($"expected pattern, got {DiagnosticText(Peek())}", Peek().Span);
     }
 
     private ObjectPatternProperty ParseObjectPatternProperty()
@@ -717,7 +718,7 @@ internal sealed class JqParser(
             var op = Next().Text;
             var right = ParseOr();
             if (Peek().Text is "=" or "|=" or "+=" or "-=" or "*=" or "/=" or "%=" or "//=")
-                throw Error($"unexpected token {Peek().Text}", Peek().Span);
+                throw Error($"unexpected token {DiagnosticText(Peek())}", Peek().Span);
             return new AssignFilter(op, left, right);
         }
         return left;
@@ -748,7 +749,7 @@ internal sealed class JqParser(
             var op = Next().Text;
             left = BinaryFilter.Create(left, op, ParseAdditive());
             if (Peek().Text is "==" or "!=" or "<" or "<=" or ">" or ">=")
-                throw Error($"unexpected token {Peek().Text}", Peek().Span);
+                throw Error($"unexpected token {DiagnosticText(Peek())}", Peek().Span);
         }
         return left;
     }
@@ -806,9 +807,11 @@ internal sealed class JqParser(
                 }
                 else if (Peek().Kind == TokenKind.String)
                 {
-                    var name = Lexer.DecodeLiterals(Next().Text, _budget);
+                    Token name = Next();
                     var optional = Match("?");
-                    filter = FieldFilter.Create(filter, JqString.FromHost(name, _budget), optional);
+                    filter = name.Interpolations is null
+                        ? FieldFilter.Create(filter, LiteralText(name), optional)
+                        : IndexFilter.Create(filter, StringFilterFor(name, null), optional);
                 }
                 else if (Match("["))
                 {
@@ -857,7 +860,7 @@ internal sealed class JqParser(
         // A bare [:] has no upstream production (gen_slice_index always
         // carries at least one bound), so it fails like any unexpected token.
         if (index is null && Peek().Text == "]")
-            throw Error($"unexpected token {Peek().Text}", Peek().Span);
+            throw Error($"unexpected token {DiagnosticText(Peek())}", Peek().Span);
 
         JqFilter? end = null;
         if (!Match("]"))
@@ -884,9 +887,15 @@ internal sealed class JqParser(
                 return new RecursiveDescentFilter();
             var identity = new IdentityFilter();
             if (Peek().Kind == TokenKind.FieldName)
-            return FieldFilter.Create(identity, JqString.FromHost(Lexer.DecodeLiterals(Next().Text, _budget), _budget), Match("?"));
+                return FieldFilter.Create(identity, LiteralText(Next()), Match("?"));
             if (Peek().Kind == TokenKind.String)
-                return FieldFilter.Create(identity, JqString.FromHost(Lexer.DecodeLiterals(Next().Text, _budget), _budget), Match("?"));
+            {
+                Token name = Next();
+                bool optional = Match("?");
+                return name.Interpolations is null
+                    ? FieldFilter.Create(identity, LiteralText(name), optional)
+                    : IndexFilter.Create(identity, StringFilterFor(name, null), optional);
+            }
             if (Match("["))
                 return ParseBracket(identity);
             return identity;
@@ -928,7 +937,7 @@ internal sealed class JqParser(
         {
             Token dollar = Next();
             if (dollar.Kind != TokenKind.Symbol || dollar.Text != "$")
-                throw Error($"expected $, got {dollar.Text}", dollar.Span);
+                throw Error($"expected $, got {DiagnosticText(dollar)}", dollar.Span);
             Token name = Expect(TokenKind.Identifier);
             Expect("|");
             EnterScope();
@@ -947,7 +956,7 @@ internal sealed class JqParser(
         {
             Token dollar = Next();
             if (dollar.Kind != TokenKind.Symbol || dollar.Text != "$")
-                throw Error($"expected $, got {dollar.Text}", dollar.Span);
+                throw Error($"expected $, got {DiagnosticText(dollar)}", dollar.Span);
             Token name = Expect(TokenKind.Identifier);
             foreach (var scope in _scopes)
                 if (scope.Labels is { } labels && labels.TryGetValue(name.Text, out object? label))
@@ -984,7 +993,7 @@ internal sealed class JqParser(
                 && (whole != 0 || !token.Text.StartsWith("-", StringComparison.Ordinal)))
                 return new LiteralFilter(JqScalar.Create(whole));
             if (!double.TryParse(token.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
-                throw Error($"invalid number {token.Text}", token.Span);
+                throw Error($"invalid number {DiagnosticText(token)}", token.Span);
             return new LiteralFilter(JqScalar.Create(value));
         }
         if (token.Kind == TokenKind.String)
@@ -998,7 +1007,7 @@ internal sealed class JqParser(
                 return ParseFunction(token.Text, token.Span);
             return CreateFunction(token.Text, [], token.Span);
         }
-        throw Error($"unexpected token {token.Text}", token.Span);
+        throw Error($"unexpected token {DiagnosticText(token)}", token.Span);
     }
 
     private JqFilter ParseObject()
@@ -1050,7 +1059,7 @@ internal sealed class JqParser(
                     bool isDynamic = KeyFilterForIsDynamic(keyToken);
                     properties.Add(isDynamic
                         ? new ObjectProperty(null, StringFilterFor(keyToken, null), ParseDictValue())
-                        : new ObjectProperty(JqString.FromHost(Lexer.DecodeLiterals(keyToken.Text, _budget), _budget), null, ParseDictValue()));
+                        : new ObjectProperty(LiteralText(keyToken), null, ParseDictValue()));
                 }
                 else if (keyToken.Kind == TokenKind.String)
                 {
@@ -1059,7 +1068,7 @@ internal sealed class JqParser(
                     bool interpolated = KeyFilterForIsDynamic(keyToken);
                     properties.Add(interpolated
                         ? new ObjectProperty(null, StringFilterFor(keyToken, null), IndexFilter.Create(new IdentityFilter(), StringFilterFor(keyToken, null), false))
-                        : new ObjectProperty(JqString.FromHost(Lexer.DecodeLiterals(keyToken.Text, _budget), _budget), null, FieldFilter.Create(new IdentityFilter(), JqString.FromHost(Lexer.DecodeLiterals(keyToken.Text, _budget), _budget), true)));
+                        : new ObjectProperty(LiteralText(keyToken), null, FieldFilter.Create(new IdentityFilter(), LiteralText(keyToken), true)));
                 }
                 else
                 {
@@ -1071,11 +1080,53 @@ internal sealed class JqParser(
         return new ObjectFilter(properties);
     }
 
-    private JqFilter StringFilterFor(Token token, string? format) => Lexer.ContainsInterpolation(token.Text)
-        ? new InterpolatedStringFilter(token.Text, format, token.Span, _programSource, ParseInterpolationPiece, _budget)
-        : new LiteralFilter(JqScalar.Create(Lexer.DecodeLiterals(token.Text, _budget), _budget));
+    private JqString LiteralText(Token token) => token.StringValue ?? JqString.FromHost(token.Text, _budget);
 
-    private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && Lexer.ContainsInterpolation(token.Text);
+    private JqFilter StringFilterFor(Token token, string? format) => token.Interpolations is { } interpolations
+        ? new InterpolatedStringFilter(LiteralText(token), interpolations, format, ParseInterpolationPiece, _budget)
+        : new LiteralFilter(LiteralText(token));
+
+    private static bool KeyFilterForIsDynamic(Token token) => token.Interpolations is not null;
+
+    // Reconstruct the existing token spelling only for a compile diagnostic.
+    // Normal parsing never materializes a decoded UTF-16 data string.
+    private string DiagnosticText(Token token)
+    {
+        if (token.StringValue is not JqString literal) return token.Text;
+        IReadOnlyList<JqStringInterpolation> interpolations = token.Interpolations ?? [];
+        long length = Encoding.UTF8.GetCharCount(literal.Utf8.Span);
+        for (int index = 0; index < literal.ByteLength; index++)
+        {
+            if ((index & 4095) == 0) _budget.CheckCancellation();
+            if (literal.Utf8.Span[index] == (byte)'\\') length++;
+        }
+        foreach (JqStringInterpolation interpolation in interpolations)
+            length += (long)interpolation.Source.Length + 3;
+        _budget.ReserveString(length);
+        _budget.CheckCancellation();
+        return string.Create((int)length, (literal, interpolations, _budget), static (output, state) =>
+        {
+            int written = 0, part = 0, offset = 0;
+            while (true)
+            {
+                state._budget.CheckCancellation();
+                while (part < state.interpolations.Count && state.interpolations[part].ByteOffset == offset)
+                {
+                    output[written++] = '\\';
+                    output[written++] = '(';
+                    ReadOnlySpan<char> code = state.interpolations[part++].Source.Span;
+                    code.CopyTo(output[written..]);
+                    written += code.Length;
+                    output[written++] = ')';
+                }
+                if (offset == state.literal.ByteLength) break;
+                Rune.DecodeFromUtf8(state.literal.Utf8.Span[offset..], out Rune rune, out int consumed);
+                if (rune.Value == '\\') output[written++] = '\\';
+                written += rune.EncodeToUtf16(output[written..]);
+                offset += consumed;
+            }
+        });
+    }
 
     // Reduction sources are update-level expressions with binding patterns;
     // initializers run outside the pattern scope while updates (and the
@@ -1633,20 +1684,20 @@ internal sealed class JqParser(
     {
         var token = Next();
         if (token.Kind != kind)
-            throw Error($"expected {kind}, got {token.Text}", token.Span);
+            throw Error($"expected {kind}, got {DiagnosticText(token)}", token.Span);
         return token;
     }
 
     private void Expect(string text)
     {
         if (!Match(text))
-            throw Error($"expected {text}, got {Peek().Text}", Peek().Span);
+            throw Error($"expected {text}, got {DiagnosticText(Peek())}", Peek().Span);
     }
 
     private void ExpectIdentifier(string text)
     {
         if (!MatchIdentifier(text))
-            throw Error($"expected {text}, got {Peek().Text}", Peek().Span);
+            throw Error($"expected {text}, got {DiagnosticText(Peek())}", Peek().Span);
     }
 
     private Token Peek() { _budget.CheckCancellation(); return _tokens[_index]; }

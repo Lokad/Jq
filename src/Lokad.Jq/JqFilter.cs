@@ -2091,49 +2091,39 @@ internal sealed class InterpolatedStringFilter : JqFilter
     private readonly IReadOnlyList<Segment> _segments;
     private readonly string? _format;
 
-    // Splits once at construction so malformed templates fail before evaluation;
+    // The lexer has already split literal data from borrowed program fragments;
     // each interpolation is parsed once with the definition-site scopes, so unknown
     // names fail at compile time (stage 3) instead of per evaluation as stage 5.
-    internal InterpolatedStringFilter(string template, string? format, JqSourceSpan span, JqProgramSource program, Func<string, JqFilter> parsePiece, JqBudget budget)
+    internal InterpolatedStringFilter(JqString literal, IReadOnlyList<JqStringInterpolation> interpolations,
+        string? format, Func<string, JqFilter> parsePiece, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(parsePiece);
         _format = format;
-        _segments = SplitTemplate(template, span, program, parsePiece, budget);
-    }
+        _segments = SplitTemplate();
 
-    private static IReadOnlyList<Segment> SplitTemplate(string template, JqSourceSpan span, JqProgramSource program, Func<string, JqFilter> parsePiece, JqBudget budget)
-    {
-        ArgumentNullException.ThrowIfNull(template);
-        ArgumentNullException.ThrowIfNull(program);
-        ArgumentNullException.ThrowIfNull(parsePiece);
-        budget.ReserveMetadata(64, 1);
-        var segments = new List<Segment>();
-        int literalStart = 0;
-        for (int i = 0; i < template.Length; i++)
+        IReadOnlyList<Segment> SplitTemplate()
         {
-            budget.CheckCancellation();
-            if (template[i] != '\\' || i + 1 == template.Length) continue;
-            if (template[i + 1] == '\\') { i++; continue; }
-            if (template[i + 1] != '(') continue;
-            AddLiteral(literalStart, i);
-            int start = i + 2;
-            i = Lexer.FindInterpolationEnd(template, start, span, program, budget);
-            if (i == template.Length)
-                throw new JqCompileException("unterminated string interpolation", span, program);
-            budget.ReserveString(i - start);
             budget.ReserveMetadata(64, 1);
-            segments.Add(new Interpolation(parsePiece(template[start..i])));
-            literalStart = i + 1;
-        }
-        AddLiteral(literalStart, template.Length);
-        return segments;
+            var segments = new List<Segment>();
+            int previous = 0;
+            foreach (JqStringInterpolation interpolation in interpolations)
+            {
+                budget.CheckCancellation();
+                AddLiteral(previous, interpolation.ByteOffset);
+                budget.ReserveString(interpolation.Source.Length);
+                budget.ReserveMetadata(64, 1);
+                segments.Add(new Interpolation(parsePiece(interpolation.Source.ToString())));
+                previous = interpolation.ByteOffset;
+            }
+            AddLiteral(previous, literal.ByteLength);
+            return segments;
 
-        void AddLiteral(int start, int end)
-        {
-            if (start == end) return;
-            budget.ReserveString(end - start);
-            budget.ReserveMetadata(64, 1);
-            segments.Add(new Literal(JqString.FromHost(Lexer.DecodeLiterals(template[start..end], budget), budget)));
+            void AddLiteral(int start, int end)
+            {
+                if (start == end) return;
+                budget.ReserveMetadata(64, 1);
+                segments.Add(new Literal(literal.SliceBytes(start, end, budget)));
+            }
         }
     }
 

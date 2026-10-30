@@ -15,6 +15,8 @@ Named `ENV` and `ARGS` arguments remain in `$ARGS.named`; intrinsic bindings ret
 their meaning, including when those named values come from files.
 String search indices count Unicode scalars. String and array searches report
 overlapping matches.
+Quoted field names support interpolation with the same key evaluation and path
+rules as bracket access.
 Literal split and string division use nonoverlapping separators.
 Loops preserve depth-first condition multiplicity, effects and lazy termination.
 `combinations(n)` collects all count-filter results before generating one product,

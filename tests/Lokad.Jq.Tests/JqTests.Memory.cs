@@ -16,7 +16,7 @@ public sealed partial class JqTests
     [InlineData("[\"\\t\" * 4194305] | @tsv | length")]
     [InlineData("\"\\u0000\" * 1398102 | tojson | length")]
     [InlineData("\"xx\" | gsub(\"x\"; \"y\" * 4194305) | length")]
-    public async Task Jq_AdmissionRefusesStringBuilderAmplification(string filter)
+    public async Task Jq_AdmissionRefusesLargeStringMaterialization(string filter)
     {
         // These finite workloads are refused before their large materializations.
         var host = new MockFileSystem();
