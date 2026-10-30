@@ -8,10 +8,35 @@ internal enum TokenKind { Identifier, FieldName, Number, String, Symbol, End }
 
 // Text contains syntax identifiers/operators. Quoted data stays in native bytes;
 // interpolation code borrows the original host-supplied program source.
-internal readonly record struct Token(TokenKind Kind, string Text, JqSourceSpan Span)
+internal readonly record struct Token
 {
-    internal JqString? StringValue { get; init; }
-    internal IReadOnlyList<JqStringInterpolation>? Interpolations { get; init; }
+    private readonly object _content;
+    internal TokenKind Kind { get; }
+    internal JqSourceSpan Span { get; }
+    internal string Text => _content as string ?? string.Empty;
+    internal JqString? StringValue => _content switch
+    {
+        JqString literal => literal,
+        Template template => template.Literal,
+        _ => null
+    };
+    internal IReadOnlyList<JqStringInterpolation>? Interpolations => (_content as Template)?.Interpolations;
+
+    internal Token(TokenKind kind, string text, JqSourceSpan span)
+    {
+        Kind = kind;
+        Span = span;
+        _content = text;
+    }
+
+    internal Token(JqString literal, IReadOnlyList<JqStringInterpolation>? interpolations, JqSourceSpan span)
+    {
+        Kind = TokenKind.String;
+        Span = span;
+        _content = interpolations is null ? literal : new Template(literal, interpolations);
+    }
+
+    private sealed record Template(JqString Literal, IReadOnlyList<JqStringInterpolation> Interpolations);
 }
 
 internal readonly record struct JqStringInterpolation(int ByteOffset, int EndOffset, ReadOnlyMemory<char> Source);
@@ -246,11 +271,7 @@ internal static class Lexer
                         written += ReadScalar(ref cursor).EncodeToUtf8(output[written..]);
                     }
                 }, budget);
-                AddToken(new Token(TokenKind.String, string.Empty, SpanAt(start))
-                {
-                    StringValue = literal,
-                    Interpolations = interpolations
-                });
+                AddToken(new Token(literal, interpolations, SpanAt(start)));
                 continue;
 
                 Rune ReadScalar(ref int cursor)
