@@ -4,6 +4,8 @@
 
 - Guard recursive binding and definition continuations during parsing, including
   inactive branches; report excessive nesting as a compile error.
+- Retain incomplete JSON token scan progress across fragmented reads while
+  preserving early syntax errors, cancellation and shared memory admission.
 - Add .NET 11 library assets while retaining .NET 10 support and runtime tests.
 - Move all benchmark tooling to .NET 11 and separate its tests from runtime tests.
   Use BenchmarkDotNet 0.16.0-preview.2 for .NET 11 toolchain support.

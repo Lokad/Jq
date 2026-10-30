@@ -82,7 +82,7 @@ internal sealed class JqStreamScanner : IDisposable
     private byte[] _token = [];
     private int _tokenLength;
     private bool _inString;
-    private bool _escaped;
+    private JqStringToken _stringToken;
     private bool _lastWasWs = true;
     private bool _seqWaiting;
     private bool _eofConcluded;
@@ -159,11 +159,8 @@ internal sealed class JqStreamScanner : IDisposable
             if (_inString)
             {
                 AppendToken(b);
-                if (_escaped)
-                    _escaped = false;
-                else if (b == (byte)92)
-                    _escaped = true;
-                else if (b == (byte)34)
+                _stringToken.Advance(b, out bool closed);
+                if (closed)
                     return FinishString(i + 1);
                 continue;
             }
@@ -186,7 +183,7 @@ internal sealed class JqStreamScanner : IDisposable
             if (b == (byte)34)
             {
                 _inString = true;
-                _escaped = false;
+                _stringToken = default;
                 AppendToken(b);
                 continue;
             }
@@ -522,7 +519,7 @@ internal sealed class JqStreamScanner : IDisposable
         _stashed = null;
         _tokenLength = 0;
         _inString = false;
-        _escaped = false;
+        _stringToken = default;
     }
 
     private StreamScanOutcome EndStreamRecord(int consumed)

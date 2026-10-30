@@ -146,6 +146,8 @@ fixtures include missing fields, duplicate IDs, skewed groups and Unicode. Input
 and independently constructed expectations are prepared outside measurement.
 
 Local BenchmarkDotNet cases also cover command recognition and reused commands.
+Separate `TokenBenchmarks` vary large JSON string size, escapes and host read
+fragmentation; they do not change the comparison corpus above.
 Allocation diagnostics add wide objects, raw strings, sorted ASCII, scalar
 pipelines and buffered scalars. Governor workloads exercise memory admission,
 retention/refunds and streaming boundaries separately from timing comparisons.

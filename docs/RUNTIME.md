@@ -51,7 +51,8 @@ lazily; `-` uses borrowed stdin at its current position. UTF-8 JSON values and r
 lines may span reads. JSON files form one parse stream: tokens can span sources,
 and one leading UTF-8 BOM belongs to that stream. Decoding retains completed
 nodes, including non-finite literals, and discards parsed prefixes before further
-reads. Definitive JSON errors stop further reads; incomplete
+reads. Incomplete tokens retain scan progress across reads; the JSON reader still
+decodes their complete values. Definitive JSON errors stop further reads; incomplete
 tokens wait for more bytes. LF splits raw input; CR is data. Slurp aggregates the cursor;
 `--stream` emits path/leaf events. `--seq` uses incremental JSON decoding with RS
 framing: complete values can return before another read or a malformed tail;
