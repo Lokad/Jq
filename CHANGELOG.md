@@ -2,6 +2,8 @@
 
 ## 0.3.0 — Unreleased
 
+- Use ordered entries alone for small objects and build their lookup index as
+  they grow, reducing allocation while preserving key order and duplicate handling.
 - Parse regex flags directly from UTF-8 and avoid constructing implicit-global
   modifier strings. Match jq's appended `g` in invalid `gsub` modifier diagnostics.
 - Decode compiler string literals directly into UTF-8, borrowing interpolation

@@ -115,14 +115,14 @@ internal sealed class JqArray : JqValue, IReadOnlyList<JqValue?>, IList<JqValue?
 
 internal sealed class JqObject : JqValue, IEnumerable<KeyValuePair<JqString, JqValue?>>
 {
+    private const int LinearLookupCount = 8;
     private readonly List<KeyValuePair<JqString, JqValue?>> _items = [];
-    private readonly Dictionary<JqString, int> _indices;
+    private Dictionary<JqString, int>? _indices;
     private readonly JqBudget _budget;
 
     internal JqObject(JqBudget budget)
     {
         _budget = budget;
-        _indices = new Dictionary<JqString, int>(budget.StringKeys);
     }
 
     internal int Count => _items.Count;
@@ -133,8 +133,8 @@ internal sealed class JqObject : JqValue, IEnumerable<KeyValuePair<JqString, JqV
         get => TryGetPropertyValue(key, out JqValue? value) ? value : null;
         set
         {
-            var lookup = _indices.GetAlternateLookup<string>();
-            if (lookup.TryGetValue(key, out int index))
+            int index = Find(key);
+            if (index >= 0)
                 _items[index] = new(_items[index].Key, value);
             else Add(JqString.FromHost(key, _budget), value);
         }
@@ -144,30 +144,64 @@ internal sealed class JqObject : JqValue, IEnumerable<KeyValuePair<JqString, JqV
         get => TryGetPropertyValue(key, out JqValue? value) ? value : null;
         set
         {
-            if (_indices.TryGetValue(key, out int index)) _items[index] = new(_items[index].Key, value);
+            int index = Find(key);
+            if (index >= 0) _items[index] = new(_items[index].Key, value);
             else Add(key, value);
         }
     }
 
     internal void Add(JqString key, JqValue? value)
     {
-        _indices.Add(key, _items.Count);
+        _budget.CheckCancellation();
+        if (_indices is null)
+        {
+            if (Find(key) >= 0) throw new ArgumentException("An item with the same key has already been added.", nameof(key));
+            if (_items.Count == LinearLookupCount)
+            {
+                // Small objects need only their ordered entries. Build the
+                // lookup table before publishing it or attaching the new entry.
+                var indices = new Dictionary<JqString, int>(2 * LinearLookupCount, _budget.StringKeys);
+                for (int index = 0; index < _items.Count; index++)
+                {
+                    _budget.CheckCancellation();
+                    indices.Add(_items[index].Key, index);
+                }
+                _indices = indices;
+            }
+        }
+        _indices?.Add(key, _items.Count);
         _items.Add(new(key, value));
     }
     internal void Add(string key, JqValue? value) => Add(JqString.FromHost(key, _budget), value);
-    internal bool ContainsKey(string key) => _indices.GetAlternateLookup<string>().ContainsKey(key);
-    internal bool ContainsKey(JqString key) => _indices.ContainsKey(key);
+    internal bool ContainsKey(string key) => Find(key) >= 0;
+    internal bool ContainsKey(JqString key) => Find(key) >= 0;
     internal bool TryGetPropertyValue(string key, out JqValue? value)
     {
-        bool found = _indices.GetAlternateLookup<string>().TryGetValue(key, out int index);
-        value = found ? _items[index].Value : null;
-        return found;
+        int index = Find(key);
+        value = index >= 0 ? _items[index].Value : null;
+        return index >= 0;
     }
     internal bool TryGetPropertyValue(JqString key, out JqValue? value)
     {
-        bool found = _indices.TryGetValue(key, out int index);
-        value = found ? _items[index].Value : null;
-        return found;
+        int index = Find(key);
+        value = index >= 0 ? _items[index].Value : null;
+        return index >= 0;
+    }
+    private int Find(JqString key)
+    {
+        _budget.CheckCancellation();
+        if (_indices is not null) return _indices.TryGetValue(key, out int index) ? index : -1;
+        for (int index = 0; index < _items.Count; index++)
+            if (ReferenceEquals(key, _items[index].Key) || key.ContentEquals(_items[index].Key, _budget.CancellationToken)) return index;
+        return -1;
+    }
+    private int Find(string key)
+    {
+        _budget.CheckCancellation();
+        if (_indices is not null) return _indices.GetAlternateLookup<string>().TryGetValue(key, out int index) ? index : -1;
+        for (int index = 0; index < _items.Count; index++)
+            if (_items[index].Key.ContentEqualsHost(key, _budget.CancellationToken)) return index;
+        return -1;
     }
     public List<KeyValuePair<JqString, JqValue?>>.Enumerator GetEnumerator() => _items.GetEnumerator();
     IEnumerator<KeyValuePair<JqString, JqValue?>> IEnumerable<KeyValuePair<JqString, JqValue?>>.GetEnumerator() => GetEnumerator();
