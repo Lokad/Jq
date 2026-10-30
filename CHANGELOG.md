@@ -2,6 +2,11 @@
 
 ## 0.3.0 — Unreleased
 
+- Breaking: host open/read/append failures carry `JqOperationError(Kind, Message)`;
+  use `JqOpenedFile.Failure(error)`, `JqByteReadResult.Failure(bytesRead, error)`
+  and `JqAppendResult.Failure(error)`. Hosts no longer select append exit codes.
+  Streaming input preserves complete values before a terminal read failure;
+  expected host failures stay outside jq handlers and diagnostics include their cause.
 - Guard recursive binding and definition continuations during parsing, including
   inactive branches; report excessive nesting as a compile error.
 - Retain incomplete JSON token scan progress across fragmented reads while

@@ -53,7 +53,7 @@ internal sealed class BenchmarkHost : IJqHost, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (descriptor != JqFileDescriptor.StdIn)
-            return ValueTask.FromResult(JqByteReadResult.ReadFailure);
+            return ValueTask.FromResult(JqByteReadResult.Failure(0, new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable")));
         if (_remaining.IsEmpty)
             return ValueTask.FromResult(JqByteReadResult.EndOfFile);
         int count = Math.Min(buffer.Length, _remaining.Length);
@@ -80,14 +80,14 @@ internal sealed class BenchmarkHost : IJqHost, IDisposable
                 throw new InvalidOperationException("Benchmark stderr exceeds its capture bound.");
             _error.Write(content.Span);
         }
-        else return Task.FromResult(JqAppendResult.WriteFailure);
+        else return Task.FromResult(JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed")));
         return Task.FromResult(JqAppendResult.Open);
     }
 
     public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(JqOpenedFile.OpenFailure);
+        return Task.FromResult(JqOpenedFile.Failure(new JqOperationError(JqOperationErrorKind.NotFound, "path not found")));
     }
 
     public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken) =>

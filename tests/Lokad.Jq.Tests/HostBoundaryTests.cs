@@ -58,7 +58,7 @@ public sealed class HostBoundaryTests
     public async Task CleanupFailurePreservesOriginalCancellation()
     {
         using var cancellation = new CancellationTokenSource();
-        var host = new MockFileSystem { CloseFailure = new JqOperationError("storage unavailable") };
+        var host = new MockFileSystem { CloseFailure = new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable") };
         host.AddFile("/input", "42");
         host.BeforeByteRead = _ => cancellation.Cancel();
         var command = Assert.IsType<Jq>(Jq.TryParse(

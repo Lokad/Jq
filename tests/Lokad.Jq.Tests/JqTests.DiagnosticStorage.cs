@@ -11,16 +11,16 @@ public sealed partial class JqTests
     [InlineData(false, true, 0)]
     [InlineData(true, false, 0)]
     [InlineData(true, true, 0)]
-    [InlineData(false, false, 7)]
-    [InlineData(false, true, 7)]
-    [InlineData(true, false, 7)]
-    [InlineData(true, true, 7)]
+    [InlineData(false, false, 1)]
+    [InlineData(false, true, 1)]
+    [InlineData(true, false, 1)]
+    [InlineData(true, true, 1)]
     public async Task Jq_LaterOutputClosurePreservesEarlierDiagnosticFailure(bool previousError, bool diagnostic, int writeStatus)
     {
         var inner = new MockFileSystem();
         inner.AddFile("/input", previousError ? "0\n1\n2\n" : "1\n2\n");
         inner.AddFile("/later", "3\n");
-        JqAppendResult stopped = writeStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(writeStatus);
+        JqAppendResult stopped = writeStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed"));
         var host = new DiagnosticHost(inner)
         {
             ChunkBytes = 2,
@@ -35,7 +35,7 @@ public sealed partial class JqTests
         Assert.Equal(expected, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(diagnostic ? "" : "1\n", inner.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal((previousError ? "jq: error (at /input:1): first\n" : "")
-            + (diagnostic ? "[\"DEBUG:\",1]\n" : ""), inner.GetOutput(JqFileDescriptor.StdErr));
+            + (diagnostic ? "[\"DEBUG:\",1]\n" : writeStatus == 0 ? "" : "jq: error writing <stdout>: write failed\n"), inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(previousError ? 2 : 1, inner.ReadBytesCallCount);
         Assert.Single(inner.ClosedDescriptors);
         Assert.Equal(0, inner.OpenFileCount);
@@ -45,8 +45,8 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false, 0)]
     [InlineData(true, 0)]
-    [InlineData(false, 7)]
-    [InlineData(true, 7)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
     public async Task Jq_ErrorDiagnosticClosureStopsOuterInput(bool owned, int appendStatus)
     {
         var inner = new MockFileSystem();
@@ -57,7 +57,7 @@ public sealed partial class JqTests
         var host = new DiagnosticHost(inner)
         {
             ChunkBytes = 2,
-            StderrResult = appendStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(appendStatus),
+            StderrResult = appendStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed")),
         };
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         string[] arguments = owned
@@ -79,15 +79,15 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false, 0)]
     [InlineData(true, 0)]
-    [InlineData(false, 7)]
-    [InlineData(true, 7)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
     public async Task Jq_ErrorDiagnosticClosurePreservesEarlierFailureDuringCleanup(bool overflow, int appendStatus)
     {
         var inner = new MockFileSystem();
         inner.AddFile("/input", "0\n");
         var host = new DiagnosticHost(inner)
         {
-            StderrResult = appendStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(appendStatus),
+            StderrResult = appendStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed")),
             CloseFailure = overflow ? new OverflowException("close sentinel") : new ArgumentException("close sentinel"),
         };
         var memory = new BenchmarkMemoryBudget(64 * 1024);
@@ -100,7 +100,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(7)]
+    [InlineData(1)]
     public async Task Jq_TerminalDiagnosticClosurePreservesCommandStatus(int appendStatus)
     {
         foreach (var (arguments, status) in new (string[], int)[]
@@ -114,7 +114,7 @@ public sealed partial class JqTests
             var inner = new MockFileSystem();
             var host = new DiagnosticHost(inner)
             {
-                StderrResult = appendStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(appendStatus),
+                StderrResult = appendStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed")),
             };
             var memory = new BenchmarkMemoryBudget(64 * 1024);
             var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
@@ -165,8 +165,8 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("try (range(10000) | debug | empty) catch \"caught\"", 0)]
-    [InlineData("(range(10000) | debug | empty)?", 7)]
-    [InlineData("try (range(10000) | debug(.) | empty) catch \"caught\"", 7)]
+    [InlineData("(range(10000) | debug | empty)?", 1)]
+    [InlineData("try (range(10000) | debug(.) | empty) catch \"caught\"", 1)]
     [InlineData("(range(10000) | \"x\" | stderr | empty)?", 0)]
     public async Task Jq_DiagnosticClosureStopsBeforeFurtherEvaluation(string expression, int status)
     {
@@ -177,7 +177,7 @@ public sealed partial class JqTests
         inner.AddFile("/later", "invalid JSON");
         var host = new DiagnosticHost(inner)
         {
-            StderrResult = status == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(status),
+            StderrResult = status == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed")),
         };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r",
             "\"before\", (" + expression + "), \"after\"", "/first", "/later")));
@@ -195,8 +195,8 @@ public sealed partial class JqTests
     [Theory]
     [InlineData(false, 0)]
     [InlineData(true, 0)]
-    [InlineData(false, 7)]
-    [InlineData(true, 7)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
     public async Task Jq_DiagnosticClosureKeepsCloseFaultsUnlessAppendAlreadyFailed(bool overflow, int status)
     {
         Exception sentinel = overflow ? new OverflowException("close sentinel") : new ArgumentException("close sentinel");
@@ -204,7 +204,7 @@ public sealed partial class JqTests
         inner.AddFile("/input", "42\n");
         var host = new DiagnosticHost(inner)
         {
-            StderrResult = status == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(status),
+            StderrResult = status == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed")),
             CloseFailure = sentinel,
         };
         var memory = new BenchmarkMemoryBudget(64 * 1024);

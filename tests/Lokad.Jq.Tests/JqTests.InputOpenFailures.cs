@@ -56,7 +56,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
         Assert.Equal(early ? mode == "halt error" ? 7 : 0 : 2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(expected, host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal((early ? "" : "jq: cannot open /missing\n") + (mode == "halt error" ? "stop" : ""),
+        Assert.Equal((early ? "" : "jq: cannot open /missing: path not found\n") + (mode == "halt error" ? "stop" : ""),
             host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(early ? 1 : missingFirst ? 1 : 2, host.ClosedDescriptors.Count);
         Assert.Equal(0, host.OpenFileCount);
@@ -72,7 +72,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "try inputs catch \"caught\"", "/missing", "/later")));
         Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: cannot open /missing\njq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: cannot open /missing: path not found\njq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
         Assert.Equal(0, host.OpenFileCount);
         Assert.Equal(0, memory.ReservedBytes);
@@ -87,7 +87,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "inputs", "/missing", "/later")));
         Assert.Equal(2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: cannot open /missing\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: cannot open /missing: path not found\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.ReadBytesCallCount);
         Assert.Empty(host.ClosedDescriptors);
         Assert.Equal(0, memory.ReservedBytes);
@@ -98,24 +98,24 @@ public sealed partial class JqTests
     {
         var inner = new MockFileSystem();
         inner.AddFile("/later", "42");
-        var host = new DiagnosticHost(inner) { StderrResult = JqAppendResult.Failure(7) };
+        var host = new DiagnosticHost(inner) { StderrResult = JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed")) };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "try inputs catch \"caught\"", "/missing", "/later")));
         Assert.Equal(2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: cannot open /missing\n", inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: cannot open /missing: path not found\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, inner.ReadBytesCallCount);
     }
 
     [Fact]
     public async Task Jq_InputOpenFailuresRemainPrimaryDuringLaterClose()
     {
-        var host = new MockFileSystem { CloseFailure = new JqOperationError("storage unavailable") };
+        var host = new MockFileSystem { CloseFailure = new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable") };
         host.AddFile("/later", "42");
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".", "/missing", "/later")));
         Assert.Equal(2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("42\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: cannot open /missing\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: cannot open /missing: path not found\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Single(host.ClosedDescriptors);
         Assert.Equal(0, host.OpenFileCount);
         Assert.Equal(0, memory.ReservedBytes);

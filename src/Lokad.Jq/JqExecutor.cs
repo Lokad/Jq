@@ -31,6 +31,11 @@ internal static class JqExecutor
                 exception.Message, memoryScope, cancellationToken).ConfigureAwait(false);
             return 5;
         }
+        catch (JqOperationException exception)
+        {
+            return await WriteOperationErrorAsync(host, commandInvocation.StdErr, exception,
+                2, memoryScope, cancellationToken).ConfigureAwait(false);
+        }
         catch (JqCloseException exception)
         {
             return await JqDiagnosticWriter.TryWriteAsync(host, commandInvocation.StdErr,
@@ -167,8 +172,9 @@ internal static class JqExecutor
                             var appended = await JqHostExtensions.GuardedAppendAsync(host, invocation.StdOut, rendered, cancellationToken).ConfigureAwait(false);
                             if (!appended.CanAcceptMore)
                             {
-                                if (appended.IsError) cursor.RecordFailure();
-                                return appended.ExitCode == 0 ? cursor.HasOpenFailures ? 2 : stickyError : appended.ExitCode;
+                                if (appended.Error is { } error)
+                                    throw new JqOperationException("writing", "<stdout>", error);
+                                return cursor.HasOpenFailures ? 2 : stickyError;
                             }
                         }
                     }
@@ -241,6 +247,11 @@ internal static class JqExecutor
         {
             return await WriteErrorAsync(host, invocation, ["jq: error closing ", ex.Path, ": ", ex.Error.Message], memoryScope,
                 cancellationToken).ConfigureAwait(false) is not null ? stage == 4 ? 5 : stage : 5;
+        }
+        catch (JqOperationException ex)
+        {
+            return await WriteOperationErrorAsync(host, invocation.StdErr, ex, stage == 4 ? 5 : stage, memoryScope,
+                cancellationToken).ConfigureAwait(false);
         }
         catch (JqCompileException ex)
         {
@@ -335,6 +346,16 @@ internal static class JqExecutor
             context.InputLineNumber = cursor.LastLine;
             yield return slurped;
         }
+    }
+
+    private static async Task<int> WriteOperationErrorAsync(IJqHost host, JqFileDescriptor stderr,
+        JqOperationException exception, int status, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
+    {
+        return await JqDiagnosticWriter.TryWriteAsync(host, stderr,
+            [exception.Operation == "opening" ? "jq: cannot open " : "jq: error " + exception.Operation + " ",
+                exception.Path, ": ", exception.Error.Message],
+            true, memoryBudget, cancellationToken).ConfigureAwait(false) is not null
+            ? exception.Operation == "writing" ? 1 : status : 5;
     }
 
     private static Task<JqAppendResult?> WriteErrorAsync(IJqHost host, JqInvocation invocation,

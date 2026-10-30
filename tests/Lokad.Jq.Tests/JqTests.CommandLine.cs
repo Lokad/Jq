@@ -392,7 +392,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         var (exit, stdout, stderr) = await RunCliAsync(host, "-n", "--rawfile", "x", "/nope", "$x");
         Assert.Equal(2, exit);
-        Assert.Contains("Bad JSON in --rawfile x /nope", stderr);
+        Assert.Contains("cannot open /nope: path not found", stderr);
         Assert.Equal("", stdout);
     }
 

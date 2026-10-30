@@ -15,6 +15,6 @@ internal abstract record JqReadResult
     }
 
     /// <summary>Read failure; partial input is not published.</summary>
-    internal sealed record Failed : JqReadResult;
+    internal sealed record Failed(JqOperationError Error) : JqReadResult;
 
 }

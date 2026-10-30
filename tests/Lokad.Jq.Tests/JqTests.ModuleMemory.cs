@@ -264,7 +264,7 @@ public sealed partial class JqTests
     public async Task Jq_ModuleReadRefundsUnpublishedContentWhenCloseFails()
     {
         var root = new BenchmarkMemoryBudget(1024 * 1024);
-        var host = new MockFileSystem { CloseFailure = new JqOperationError("storage unavailable") };
+        var host = new MockFileSystem { CloseFailure = new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable") };
         host.AddFile("/lib/m.jq", "def f:42;");
         using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))

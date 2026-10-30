@@ -121,10 +121,10 @@ internal sealed class JqModuleLoader(
             if (_cache.TryGetValue(path.Path, out LoadedModule? cached)) return cached;
             var result = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
             if (result is null) continue;
-            if (result is JqReadResult.Failed)
+            if (result is JqReadResult.Failed failure)
             {
                 if (import.IsOptional) return null;
-                throw new JqException("error loading module " + path.Path + ": input read failed");
+                throw new JqOperationException("reading", path.Path, failure.Error);
             }
             using var content = (JqReadResult.Complete)result;
             return await LoadFuncModuleAtPathAsync(path.Path, content.Content, depth, cancellationToken).ConfigureAwait(false);
@@ -144,10 +144,10 @@ internal sealed class JqModuleLoader(
         {
             var result = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
             if (result is null) continue;
-            if (result is JqReadResult.Failed)
+            if (result is JqReadResult.Failed failure)
             {
                 if (import.IsOptional) return null;
-                throw new JqException("error loading data file " + path.Path + ": input read failed");
+                throw new JqOperationException("reading", path.Path, failure.Error);
             }
             loaded = (JqReadResult.Complete)result;
             canonical = path.Path;
@@ -329,7 +329,12 @@ internal sealed class JqModuleLoader(
     private async Task<JqReadResult?> TryReadModuleFileAsync(JqPath path, CancellationToken cancellationToken)
     {
         var opened = await JqHostExtensions.GuardedOpenAsync(host, path, cancellationToken).ConfigureAwait(false);
-        if (opened.FileDescriptor is not { } descriptor) return null;
+        if (opened.FileDescriptor is not { } descriptor)
+        {
+            var error = opened.Error ?? throw new InvalidOperationException("Missing open error.");
+            if (error.Kind == JqOperationErrorKind.NotFound) return null;
+            throw new JqOperationException("opening", path.Path, error);
+        }
         bool failed = false;
         JqReadResult? content = null;
         try
@@ -361,8 +366,8 @@ internal sealed class JqModuleLoader(
         {
             var result = await TryReadModuleFileAsync(path, cancellationToken).ConfigureAwait(false);
             if (result is null) continue;
-            if (result is JqReadResult.Failed)
-                throw new JqException("error loading module " + path.Path + ": input read failed");
+            if (result is JqReadResult.Failed failure)
+                throw new JqOperationException("reading", path.Path, failure.Error);
             using var content = (JqReadResult.Complete)result;
             string source = DecodeModuleSource(path.Path, content.Content);
             var programSource = JqProgramSource.File(path.Path, budget);

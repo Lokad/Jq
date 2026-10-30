@@ -152,7 +152,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "try inputs catch \"caught\"", "/first", "/missing", "/last")));
         Assert.Equal(2, await command.ExecuteAsync(inner, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("12\n", inner.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: cannot open /missing\n", inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal("jq: cannot open /missing: path not found\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(2, inner.ClosedDescriptors.Count);
         Assert.Equal(0, memory.ReservedBytes);
     }

@@ -55,7 +55,7 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", option, name, "/missing", "42")));
         Assert.Equal(2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: Bad JSON in " + option + " " + name + " /missing: cannot open /missing\n",
+        Assert.Equal("jq: cannot open /missing: path not found\n",
             host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.ClosedDescriptors);
         Assert.Equal(0, memory.ReservedBytes);
@@ -85,7 +85,7 @@ public sealed partial class JqTests
     [InlineData("--slurpfile", "ARGS")]
     public async Task Jq_IntrinsicFileArgumentsKeepTerminalCloseFailure(string option, string name)
     {
-        var host = new MockFileSystem { CloseFailure = new JqOperationError("storage unavailable") };
+        var host = new MockFileSystem { CloseFailure = new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable") };
         host.AddFile("/data", "42");
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", option, name, "/data", "42")));

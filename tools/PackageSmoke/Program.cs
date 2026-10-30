@@ -423,7 +423,7 @@ foreach (string format in new[] { "sh", "csv" })
     Check("input open recovery", await Command(["-nc", "try inputs catch \"caught\"", "/missing", "/later"], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 2
         && host.Output(JqFileDescriptor.StdOut) == "1\n2\n"
-        && host.Output(JqFileDescriptor.StdErr) == "jq: cannot open /missing\n"
+        && host.Output(JqFileDescriptor.StdErr) == "jq: cannot open /missing: path not found\n"
         && host.ClosedDescriptors.Count == 1 && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
 }
 {
@@ -432,7 +432,7 @@ foreach (string format in new[] { "sh", "csv" })
     Check("file argument effect order", await Command(["--rawfile", "d", "/missing", "--help"], [])
         .ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None) == 2
         && host.Output(JqFileDescriptor.StdOut) == ""
-        && host.Output(JqFileDescriptor.StdErr) == "jq: Bad JSON in --rawfile d /missing: cannot open /missing\n"
+        && host.Output(JqFileDescriptor.StdErr) == "jq: cannot open /missing: path not found\n"
         && host.OpenFileCount == 0 && memory.ReservedBytes == 0);
 }
 {
@@ -514,7 +514,7 @@ foreach (string format in new[] { "sh", "csv" })
     var host = new SmokeHost();
     Check("open failure", await Command([".", "/missing"], []).ExecuteAsync(host, Utf8RegexAdapter.Instance, CancellationToken.None) == 2
         && host.Output(JqFileDescriptor.StdOut) == ""
-        && host.Output(JqFileDescriptor.StdErr) == "jq: cannot open /missing\n"
+        && host.Output(JqFileDescriptor.StdErr) == "jq: cannot open /missing: path not found\n"
         && host.ClosedDescriptors.Count == 0 && host.OpenFileCount == 0);
 }
 {
@@ -757,7 +757,7 @@ foreach (bool refuse in new[] { false, true })
         && memory.ReservedBytes == 0);
 }
 {
-    var host = new SmokeHost { CloseFailure = new JqOperationError("storage unavailable") };
+    var host = new SmokeHost { CloseFailure = new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable") };
     host.AddFile("/first", "42\n");
     host.AddFile("/later", "99\n");
     var memory = new BenchmarkMemoryBudget(64 * 1024);
@@ -1246,7 +1246,7 @@ sealed class SmokeHost : IJqHost
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!_files.TryGetValue(path.Path, out var bytes))
-            return Task.FromResult(JqOpenedFile.OpenFailure);
+            return Task.FromResult(JqOpenedFile.Failure(new JqOperationError(JqOperationErrorKind.NotFound, "path not found")));
         var descriptor = new JqFileDescriptor(_nextDescriptor++);
         _inputs[descriptor.Id] = bytes;
         return Task.FromResult(JqOpenedFile.Success(descriptor));

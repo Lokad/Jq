@@ -15,11 +15,12 @@ public readonly record struct JqByteReadResult
     private JqByteReadResult(
         ByteReadKind kind,
         int bytesRead,
-        bool reachedEoF)
+        bool reachedEoF, JqOperationError? error)
     {
         _kind = kind;
         _reachedEoF = reachedEoF;
         BytesRead = bytesRead;
+        Error = error;
     }
 
     /// <summary>Gets the number of bytes copied into the caller's buffer.</summary>
@@ -34,11 +35,19 @@ public readonly record struct JqByteReadResult
     /// <summary>Gets whether the descriptor reported a read failure.</summary>
     public bool IsError => _kind == ByteReadKind.Failure;
 
+    /// <summary>Gets the terminal failure cause, after any valid prefix in this read.</summary>
+    public JqOperationError? Error { get; }
+
     /// <summary>Gets a normal end-of-file result.</summary>
     public static JqByteReadResult EndOfFile => default;
 
-    /// <summary>A terminal read failure. No bytes are delivered.</summary>
-    public static JqByteReadResult ReadFailure => new(ByteReadKind.Failure, 0, false);
+    /// <summary>Reports a terminal failure after copying the specified valid byte prefix.</summary>
+    public static JqByteReadResult Failure(int bytesRead, JqOperationError error)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(bytesRead);
+        ArgumentNullException.ThrowIfNull(error);
+        return new JqByteReadResult(ByteReadKind.Failure, bytesRead, false, error);
+    }
 
     /// <summary>Creates a successful read result.</summary>
     public static JqByteReadResult Success(int bytesRead, bool reachedEoF)
@@ -46,7 +55,7 @@ public readonly record struct JqByteReadResult
         if (bytesRead <= 0)
             throw new ArgumentOutOfRangeException(nameof(bytesRead), "A successful read must copy bytes.");
 
-        return new JqByteReadResult(ByteReadKind.Success, bytesRead, reachedEoF);
+        return new JqByteReadResult(ByteReadKind.Success, bytesRead, reachedEoF, null);
     }
 
     private enum ByteReadKind : byte

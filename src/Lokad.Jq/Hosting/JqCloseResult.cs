@@ -1,16 +1,38 @@
 namespace Lokad.Jq;
 
+/// <summary>Portable causes for expected host operation failures.</summary>
+public enum JqOperationErrorKind
+{
+    /// <summary>A failure without a more specific portable cause.</summary>
+    Other,
+    /// <summary>A requested path does not exist.</summary>
+    NotFound,
+    /// <summary>The caller lacks permission.</summary>
+    PermissionDenied,
+    /// <summary>A path component has the wrong kind, such as a file used as a directory.</summary>
+    InvalidPathKind,
+    /// <summary>The host does not support the operation.</summary>
+    NotSupported,
+    /// <summary>An underlying transport or storage operation failed.</summary>
+    TransportFailure
+}
+
 /// <summary>A host-reported operation failure, distinct from an unexpected exception.</summary>
 public sealed record JqOperationError
 {
     /// <summary>Initializes the host detail; the caller supplies operation and path context.</summary>
-    public JqOperationError(string message)
+    public JqOperationError(JqOperationErrorKind kind, string message)
     {
         ArgumentException.ThrowIfNullOrEmpty(message);
+        if (!Enum.IsDefined(kind)) throw new ArgumentOutOfRangeException(nameof(kind));
+        Kind = kind;
         Message = message;
     }
 
-    /// <summary>Gets the host's failure detail.</summary>
+    /// <summary>Gets the portable cause.</summary>
+    public JqOperationErrorKind Kind { get; }
+
+    /// <summary>Gets the host's safe, unprefixed failure detail, suitable for diagnostics.</summary>
     public string Message { get; }
 }
 

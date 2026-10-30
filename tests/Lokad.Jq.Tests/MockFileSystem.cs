@@ -57,7 +57,7 @@ internal sealed class MockFileSystem : IJqHost
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!_files.TryGetValue(path.Path, out var content))
-            return Task.FromResult(JqOpenedFile.OpenFailure);
+            return Task.FromResult(JqOpenedFile.Failure(new JqOperationError(JqOperationErrorKind.NotFound, "path not found")));
         var descriptor = new JqFileDescriptor(_nextDescriptor++);
         _inputs[descriptor] = content;
         return Task.FromResult(JqOpenedFile.Success(descriptor));

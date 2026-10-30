@@ -30,8 +30,8 @@ public sealed partial class JqTests
 
         Assert.Equal(status, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(status == 0 ? "1\n" : "", inner.GetOutput(JqFileDescriptor.StdOut));
-        string message = "error loading " + (data ? "data file " : "module ") + selected + ": input read failed\n";
-        Assert.Equal(status == 0 ? "" : (status == 5 ? "jq: error (at <unknown>): " : "jq: ") + message,
+        string message = "jq: error reading " + selected + ": storage unavailable\n";
+        Assert.Equal(status == 0 ? "" : message,
             inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.DoesNotContain(host.Paths, path => path.StartsWith("/second/", StringComparison.Ordinal));
         Assert.Equal(partial ? 2 : 1, host.Reads);
@@ -91,7 +91,7 @@ public sealed partial class JqTests
             "import \"m\" as m {optional:" + (optional ? "true" : "false") + "}; 1")));
         Assert.Equal(optional ? 0 : 3, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal(optional ? "1\n" : "", inner.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal(optional ? "" : "jq: error loading module /first/m.jq: input read failed\n", inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(optional ? "" : "jq: error reading /first/m.jq: storage unavailable\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.DoesNotContain(host.Paths, path => path.StartsWith("/second/", StringComparison.Ordinal));
         Assert.Single(inner.ClosedDescriptors);
         Assert.Equal(0, inner.OpenFileCount);
@@ -119,7 +119,7 @@ public sealed partial class JqTests
             Reads++;
             if (descriptor != _selected) return inner.ReadBytesAsync(descriptor, buffer, cancellationToken);
             return partial && Reads == 1 ? inner.ReadBytesAsync(descriptor, buffer[..1], cancellationToken)
-                : ValueTask.FromResult(JqByteReadResult.ReadFailure);
+                : ValueTask.FromResult(JqByteReadResult.Failure(0, new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable")));
         }
 
         public Task<JqAppendResult> AppendWhileOpenAsync(JqFileDescriptor descriptor, ReadOnlyMemory<byte> content, CancellationToken cancellationToken) =>

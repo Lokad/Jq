@@ -4,8 +4,8 @@ namespace Lokad.Jq;
 public interface IJqHost
 {
     /// <summary>
-    /// Copies at most buffer.Length bytes. Return EOF or a failure when no bytes are available;
-    /// a successful read must make progress. Do not retain the buffer after completion.
+    /// Copies at most buffer.Length bytes. A terminal failure may accompany a valid byte prefix.
+    /// A successful read must make progress or reach EOF. Do not retain the buffer after completion.
     /// </summary>
     ValueTask<JqByteReadResult> ReadBytesAsync(
         JqFileDescriptor descriptor, Memory<byte> buffer, CancellationToken cancellationToken);
@@ -28,7 +28,7 @@ public interface IJqHost
     Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken);
 }
 
-/// <summary>A successful read-only open, or a failure. The default value is a failure.</summary>
+/// <summary>An owned read-only descriptor or a reported error. The default value is invalid.</summary>
 public readonly record struct JqOpenedFile
 {
     private JqOpenedFile(JqFileDescriptor descriptor)
@@ -36,12 +36,21 @@ public readonly record struct JqOpenedFile
         FileDescriptor = descriptor;
     }
 
+    private JqOpenedFile(JqOperationError error) => Error = error;
+
     /// <summary>Gets the owned descriptor on success.</summary>
     public JqFileDescriptor? FileDescriptor { get; }
+
+    /// <summary>Gets the failure cause when no descriptor was transferred.</summary>
+    public JqOperationError? Error { get; }
 
     /// <summary>Creates a successful open result.</summary>
     public static JqOpenedFile Success(JqFileDescriptor descriptor) => new(descriptor);
 
     /// <summary>A failed read-only open. No descriptor is transferred.</summary>
-    public static JqOpenedFile OpenFailure => default;
+    public static JqOpenedFile Failure(JqOperationError error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        return new JqOpenedFile(error);
+    }
 }

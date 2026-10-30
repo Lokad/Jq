@@ -483,7 +483,7 @@ public sealed partial class JqTests
 
         public Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken cancellationToken)
         {
-            return Task.FromResult(JqOpenedFile.OpenFailure);
+            return Task.FromResult(JqOpenedFile.Failure(new JqOperationError(JqOperationErrorKind.NotFound, "path not found")));
         }
 
         public Task<JqCloseResult> CloseDescriptorAsync(JqFileDescriptor descriptor, CancellationToken cancellationToken)

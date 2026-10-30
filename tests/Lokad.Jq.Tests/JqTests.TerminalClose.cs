@@ -98,16 +98,16 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(7)]
+    [InlineData(1)]
     public async Task Jq_TerminalCloseFailureAfterOutputStopPreservesEarlierWriteFailure(int writeStatus)
     {
         var inner = new MockFileSystem(); inner.AddFile("/first", "42\n"); inner.AddFile("/later", "99\n");
-        var host = new TerminalCloseHost(inner, "/first") { OutputStop = writeStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(writeStatus) };
+        var host = new TerminalCloseHost(inner, "/first") { OutputStop = writeStatus == 0 ? JqAppendResult.Closed : JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed")) };
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", ".", "/first", "/later")));
         Assert.Equal(writeStatus == 0 ? 5 : writeStatus, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("42\n", inner.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal(writeStatus == 0 ? "jq: error closing /first: storage unavailable\n" : "", inner.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(writeStatus == 0 ? "jq: error closing /first: storage unavailable\n" : "jq: error writing <stdout>: write failed\n", inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(["/first"], host.Opened);
         Assert.Single(inner.ClosedDescriptors);
         Assert.Equal(0, inner.OpenFileCount);
@@ -159,7 +159,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", ".", "/first", "/later")));
         Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
-        Assert.Equal(readFailure ? "jq: parse error: input read failed\n"
+        Assert.Equal(readFailure ? "jq: error reading /first: storage unavailable\n"
             : "jq: parse error: '!' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 1.\n",
             inner.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(inner.GetOutput(JqFileDescriptor.StdOut));
@@ -208,7 +208,7 @@ public sealed partial class JqTests
         internal TaskCompletionSource Closing { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ValueTask<JqByteReadResult> ReadBytesAsync(JqFileDescriptor descriptor, Memory<byte> buffer, CancellationToken token) =>
-            ReadFailure ? ValueTask.FromResult(JqByteReadResult.ReadFailure) : inner.ReadBytesAsync(descriptor, buffer, token);
+            ReadFailure ? ValueTask.FromResult(JqByteReadResult.Failure(0, new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable"))) : inner.ReadBytesAsync(descriptor, buffer, token);
         public async Task<JqOpenedFile> OpenReadAsync(JqPath path, CancellationToken token)
         {
             var opened = await inner.OpenReadAsync(path, token).ConfigureAwait(false);
@@ -230,7 +230,7 @@ public sealed partial class JqTests
             {
                 _failed = true;
                 BeforeFailure?.Invoke();
-                return JqCloseResult.Failure(new JqOperationError("storage unavailable"));
+                return JqCloseResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable"));
             }
             return JqCloseResult.Success;
         }

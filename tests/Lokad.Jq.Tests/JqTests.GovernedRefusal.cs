@@ -31,7 +31,7 @@ public sealed partial class JqTests
                 {
                     0 => JqAppendResult.Open,
                     1 => JqAppendResult.Closed,
-                    _ => JqAppendResult.WriteFailure,
+                    _ => JqAppendResult.Failure(new JqOperationError(JqOperationErrorKind.TransportFailure, "write failed")),
                 },
             };
             host.Release.SetResult();

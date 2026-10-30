@@ -128,7 +128,7 @@ public sealed partial class JqTests
         // The owned file stays open while evaluation trips quota; persistent
         // cleanup failures must not replace the quota error.
         var memory = new BenchmarkMemoryBudget(64 * 1024);
-        var host = new MockFileSystem { CloseFailure = new JqOperationError("storage unavailable") };
+        var host = new MockFileSystem { CloseFailure = new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable") };
         host.AddFile("/input", "[0]");
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "[range(0;300000)] | length", "/input")));
         Assert.Equal(5, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
@@ -140,7 +140,7 @@ public sealed partial class JqTests
     {
         // A host-side cancellation on the first append leaves the input file
         // open; the abandoned close must not swallow it into a close error.
-        var host = new MockFileSystem { CloseFailure = new JqOperationError("storage unavailable") };
+        var host = new MockFileSystem { CloseFailure = new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable") };
         host.AddFile("/a", "[0]");
         host.AddFile("/b", "[0]");
         bool fired = false;

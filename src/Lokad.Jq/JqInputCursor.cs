@@ -55,6 +55,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private int _start;
     private int _count;
     private bool _eof;
+    private JqOperationError? _readError;
     private int _bomPosition;
     private bool _reportedFailure;
 
@@ -312,7 +313,9 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 var (host, stderr) = _context.Stderr
                     ?? throw new InvalidOperationException("Input diagnostics require a host descriptor.");
                 JqAppendResult? written = await JqDiagnosticWriter.TryWriteAsync(host, stderr,
-                    ["jq: cannot open ", source.Display], true, _budget.MemoryBudget, _cancellationToken).ConfigureAwait(false);
+                    ["jq: cannot open ", source.Display, ": ", opened.Error?.Message
+                        ?? throw new InvalidOperationException("Missing open error.")],
+                    true, _budget.MemoryBudget, _cancellationToken).ConfigureAwait(false);
                 if (written is not { CanAcceptMore: true })
                     throw new JqOutputClosedException(written is null ? 5 : 2);
                 _active = false;
@@ -326,6 +329,8 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private async Task FillAsync()
     {
         _budget.CheckCancellation();
+        if (_readError is { } pending)
+            throw new JqOperationException("reading", CurrentName ?? "<unknown>", pending);
         if (_readBuffer.Length == 0)
             _readMemory.ReplaceBuffer(ref _readBuffer, ChunkSize, _cancellationToken);
         JqFileDescriptor descriptor = _owned ?? _stdin;
@@ -341,18 +346,15 @@ internal sealed class JqInputCursor : IAsyncDisposable
             throw;
         }
         _budget.CheckCancellation();
-        if (read.IsError)
-        {
-            var failure = new JqException("input read failed");
-            await CloseAndAdvanceAsync(failure).ConfigureAwait(false);
-            throw failure;
-        }
         if (read.BytesRead > 0)
         {
             EnsureAdditional(read.BytesRead);
             Array.Copy(_readBuffer, 0, _buffer, _start + _count, read.BytesRead);
             _count += read.BytesRead;
         }
+        _readError = read.Error;
+        if (_readError is { } error && read.BytesRead == 0)
+            throw new JqOperationException("reading", CurrentName ?? "<unknown>", error);
         if (read.ReachedEoF || read.BytesRead == 0)
             _eof = true;
     }
@@ -371,6 +373,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         _start = 0;
         _count = 0;
         _eof = false;
+        _readError = null;
     }
 
     // The command input is one JSON stream, including across physical files.
@@ -854,13 +857,17 @@ internal sealed class JqInputCursor : IAsyncDisposable
             return;
         _disposed = true;
         _jsonReader?.Reset();
+        var pending = earlier is null && !_reportedFailure && _readError is { } error
+            ? new JqOperationException("reading", CurrentName ?? "<unknown>", error) : null;
         try
         {
             if (_owned is { } owned)
             {
                 _owned = null;
-                await _host.CloseOwnedDescriptorAsync(owned, CurrentName ?? "<unknown>", earlier is not null || _reportedFailure).ConfigureAwait(false);
+                await _host.CloseOwnedDescriptorAsync(owned, CurrentName ?? "<unknown>",
+                    earlier is not null || _reportedFailure || pending is not null).ConfigureAwait(false);
             }
+            if (pending is not null) throw pending;
         }
         finally
         {

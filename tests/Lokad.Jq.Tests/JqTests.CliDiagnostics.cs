@@ -54,9 +54,9 @@ public sealed partial class JqTests
         var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
         Assert.Equal(2, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal(missingFile ? "jq: Bad JSON in --rawfile v /" + text + ": cannot open /" + text + "\n"
+        Assert.Equal(missingFile ? "jq: cannot open /" + text + ": path not found\n"
             : "jq: Unknown option --" + text + "\n", host.GetOutput(JqFileDescriptor.StdErr));
-        Assert.True(memory.PeakBytes > 2L * text.Length);
+        Assert.True(memory.PeakBytes >= System.Text.Encoding.UTF8.GetByteCount(host.GetOutput(JqFileDescriptor.StdErr)));
         Assert.Equal(0, memory.ReservedBytes);
     }
 

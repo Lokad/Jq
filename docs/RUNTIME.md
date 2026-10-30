@@ -28,7 +28,7 @@ Module names validate before canonical resolution; valid dot segments and repeat
 separators resolve to the same executable cache key.
 
 Standard descriptors are borrowed. Successful `OpenReadAsync` calls transfer an
-owned descriptor to execution; `JqOpenedFile.OpenFailure` transfers none. Execution calls `CloseDescriptorAsync` when exhausted
+owned descriptor to execution; `JqOpenedFile.Failure(error)` transfers none. Execution calls `CloseDescriptorAsync` when exhausted
 or abandoned, including on cancellation or failure. Cleanup uses
 `CancellationToken.None`. Each close retires its descriptor and returns
 `JqCloseResult.Success` or `Failure(JqOperationError)`; execution never retries.
@@ -37,7 +37,18 @@ Earlier failures, including nonzero write or evaluation statuses, remain primary
 
 `ReadBytesAsync` copies at most the requested size and releases its buffer borrow
 on completion. Reads must make progress or report EOF/failure; EOF may accompany
-the last bytes. `AppendWhileOpenAsync` may stay pending to apply backpressure and
+the last bytes. A failed read may carry valid bytes: complete values or terminated
+raw lines are delivered before its terminal error. An incomplete tail reports the
+host failure, not an EOF parse error. A definitive syntax error already present in
+the prefix takes precedence. Program, module and argument files load atomically;
+partial contents are not executed or bound. A known read failure also survives
+early successful filter termination.
+`JqOperationError` carries a portable kind and safe, unprefixed host detail.
+Expected read failures bypass jq handlers; runtime reads return status 5, module
+loading status 3 and argument loading status 2. Failed opens retain status 2.
+Append failures carry a cause; execution chooses write status 1. Downstream closure
+has no error cause.
+`AppendWhileOpenAsync` may stay pending to apply backpressure and
 must copy bytes retained beyond completion.
 Execution awaits writes before reusing buffers and stops production on downstream
 closure or failure. Debug renders its envelope around the borrowed value;

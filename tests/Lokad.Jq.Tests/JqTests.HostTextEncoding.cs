@@ -55,7 +55,7 @@ public sealed partial class JqTests
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal(scenario == "halt" ? expected : scenario == "compile-program"
             ? "jq: unexpected token <end> at line 1 column 2 (file \"/" + expected + "\")\n"
-            : "jq: cannot open /" + expected + "\n", host.GetOutput(JqFileDescriptor.StdErr));
+            : "jq: cannot open /" + expected + ": path not found\n", host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(scenario == "compile-program" ? 1 : 0, host.ClosedDescriptors.Count);
         Assert.Equal(0, host.OpenFileCount);
         Assert.Equal(0, memory.ReservedBytes);

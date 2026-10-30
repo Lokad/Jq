@@ -16,7 +16,13 @@ internal static class JqHostExtensions
     internal static async ValueTask<JqOpenedFile> GuardedOpenAsync(
         IJqHost host, JqPath path, CancellationToken cancellationToken)
     {
-        try { return await host.OpenReadAsync(path, cancellationToken).ConfigureAwait(false); }
+        try
+        {
+            var opened = await host.OpenReadAsync(path, cancellationToken).ConfigureAwait(false);
+            if (opened.FileDescriptor is null && opened.Error is null)
+                throw new JqHostFailureException("host open returned neither a descriptor nor an error", null);
+            return opened;
+        }
         catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
         { throw new JqHostFailureException("host operation violated its contract", exception); }
     }
@@ -28,7 +34,7 @@ internal static class JqHostExtensions
         try { read = await host.ReadBytesAsync(descriptor, buffer, cancellationToken).ConfigureAwait(false); }
         catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
         { throw new JqHostFailureException("host operation violated its contract", exception); }
-        if (!read.IsError && read.BytesRead > buffer.Length)
+        if (read.BytesRead > buffer.Length)
         {
             throw new JqHostFailureException("host read returned more bytes than requested", null);
         }
@@ -58,8 +64,8 @@ internal static class JqHostExtensions
                 cancellationToken.ThrowIfCancellationRequested();
                 var read = await GuardedReadAsync(host, descriptor, buffer, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (read.IsError)
-                    return new JqReadResult.Failed();
+                if (read.Error is { } error)
+                    return new JqReadResult.Failed(error);
                 int required = JqBudget.BufferCapacity(output.Length + read.BytesRead, 0);
                 if (required > output.Capacity)
                 {
@@ -103,9 +109,8 @@ internal static class JqHostExtensions
         var opened = await JqHostExtensions.GuardedOpenAsync(host, path.Absolute, cancellationToken).ConfigureAwait(false);
         if (opened.FileDescriptor is not { } descriptor)
         {
-            budget.ReserveString(12L + path.Display.Length);
-            budget.CheckCancellation();
-            throw new JqException($"cannot open {path.Display}");
+            throw new JqOperationException("opening", path.Display,
+                opened.Error ?? throw new InvalidOperationException("Missing open error."));
         }
         bool failed = false;
         JqReadResult.Complete? content = null;
@@ -115,7 +120,7 @@ internal static class JqHostExtensions
             content = result switch
             {
                 JqReadResult.Complete complete => complete,
-                JqReadResult.Failed => throw new JqException("input read failed"),
+                JqReadResult.Failed failure => throw new JqOperationException("reading", path.Display, failure.Error),
                 _ => throw new InvalidOperationException("Unknown bounded read result.")
             };
             return content;
