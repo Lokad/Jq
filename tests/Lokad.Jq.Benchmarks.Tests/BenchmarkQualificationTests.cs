@@ -85,7 +85,7 @@ public sealed class BenchmarkQualificationTests
         var empty = OutputDigest.FromBytes([]);
         var verified = new CaseVerification(workload.Name, workload.Scale, workload.Size, "Equivalent", "", empty, empty);
         var timing = new QualificationResult(PairedStatistics.Summarize(Pairs(11, 40, 80)), Pairs(11, 40, 80), [], 32, 32);
-        var host = new HostProvenance(new string('a', 40), true, "11.0", ".NET 11", "test OS", "X64", "test CPU", 4, "build", "build", "digest", "test provider");
+        var host = new HostProvenance(new string('a', 40), true, "11.0", ".NET 11", "test OS", "X64", "test CPU", 4, "build", "build", "digest", "library digest", "test provider");
         var reference = new ReferenceIdentity("jq-1.8.2", "digest", "test configuration");
         var row = new ComparisonRow(BenchmarkReport.Describe(workload), verified, timing);
         var report = BenchmarkReport.Create("qualify", host, reference, QuietCheck.Evaluate([1, 1]), 11, 1, true, [row]);
@@ -129,7 +129,7 @@ public sealed class BenchmarkQualificationTests
             Timing = row.Timing with { Samples = Pairs(11, 40.024, 80) } };
         var unqualified = row with { Workload = row.Workload with { Name = "unqualified" },
             Timing = row.Timing with { Samples = [], Summary = summary with { Status = "Unqualified", Reason = "Too short." } } };
-        var host = new HostProvenance(new string('a', 40), true, "11.0", ".NET 11", "test OS", "X64", "test CPU", 4, "build", "build", "digest", "test provider");
+        var host = new HostProvenance(new string('a', 40), true, "11.0", ".NET 11", "test OS", "X64", "test CPU", 4, "build", "build", "digest", "library digest", "test provider");
         var report = BenchmarkReport.Create("qualify", host, new("jq-1.8.2", "digest", "test configuration"),
             QuietCheck.Evaluate([1, 1]), 11, 4, true, [second, unqualified, row, first]);
 
@@ -156,7 +156,7 @@ public sealed class BenchmarkQualificationTests
     {
         string commit = new('a', 40);
         var host = new HostProvenance(commit, true, "11.0", ".NET 11", "test OS", "X64", "test CPU", 4,
-            "0.3.0+" + commit, "0.3.0+" + commit, "digest", "test provider");
+            "0.3.0+" + commit, "0.3.0+" + commit, "digest", "library digest", "test provider");
         var workload = WorkloadCatalog.Create().Single(item => item.Name == "identity-compact" && item.Scale == "large");
         var row = new AllocationRow(BenchmarkReport.Describe(workload), OutputDigest.FromBytes([]),
             [new(100, 1, 0, 0), new(200, 0, 1, 0), new(1000, 0, 0, 1)]);

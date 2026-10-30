@@ -182,8 +182,8 @@ dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --stress
 # Reference correctness, qualified timing and documentation rendering
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --check-machine
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --compare --jq PATH_TO_JQ --mode qualify --output artifacts/benchmarks/qualification.json
-dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --render-report artifacts/benchmarks/qualification.json
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --campaign --jq PATH_TO_JQ --output artifacts/benchmarks/campaign
+dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --render-report artifacts/benchmarks/campaign/qualification.json
 
 # Absolute managed allocations and governor diagnostics
 dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --allocations
@@ -195,6 +195,11 @@ dotnet run -c Release --project benchmarks/Lokad.Jq.Benchmarks -- --governor --m
 Comparison/allocation runs accept `--case NAME`, `--scale SCALE` and `--output`;
 governor runs accept `--case` and `--output`. Reports and traces remain ignored.
 The renderers update the marked result and provenance sections.
+`--campaign` retains immutable attempts and retries quiet pauses. Repeat the same
+command after interruption to resume; a changed source, binary, runtime, provider,
+reference or workload requires a new directory. Completed unqualified cases stay
+unqualified; exit 1 can therefore accompany a complete campaign. Raw schema 7
+names paired-median qualification bounds separately from the published mean ratio.
 
 Governor `counts` mode checks stdout/stderr digests, admission calls and complete
 refunds under a shared 256 MiB allowance. Requested workers do not prove concurrent

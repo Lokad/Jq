@@ -9,14 +9,20 @@ namespace Lokad.Jq.Benchmarking;
 
 internal sealed record HostProvenance(string Commit, bool CleanCheckout, string Sdk, string Runtime,
     string OperatingSystem, string Architecture, string Cpu, int LogicalProcessors,
-    string BenchmarkBuild, string LibraryBuild, string BenchmarkAssemblySha256, string RegexProvider);
+    string BenchmarkBuild, string LibraryBuild, string BenchmarkAssemblySha256,
+    string LibraryAssemblySha256, string RegexProvider);
 internal sealed record PolicyProvenance(int JsonDepth);
 internal sealed record ComparisonRow(ComparisonWorkloadInfo Workload, CaseVerification Verification, QualificationResult Timing);
 internal sealed record ComparisonWorkloadInfo(string Name, string Scale, int Size, string[] Arguments,
     ComparisonKind Comparison, OutputDigest Input, string FilterSha256);
 internal sealed record ComparisonReport(int SchemaVersion, string Mode, DateTimeOffset CreatedUtc,
     string MeasurementContract, HostProvenance Host, ReferenceIdentity Reference, PolicyProvenance Policy,
-    QuietCheck MachineGate, int RequestedPairs, int RequestedCases, bool Complete, ComparisonRow[] Cases);
+    QuietCheck MachineGate, int RequestedPairs, int RequestedCases, bool Complete, ComparisonRow[] Cases)
+{
+    public CampaignCheckpoint[] Checkpoints { get; init; } = [];
+}
+
+internal sealed record CampaignCheckpoint(string File, string Sha256);
 
 internal static class BenchmarkReport
 {
@@ -50,9 +56,11 @@ internal static class BenchmarkReport
         string providerIdentity = $"{provider.GetName().Name} {providerVersion}; SHA-256 {providerHash}";
         await using var assembly = File.OpenRead(typeof(BenchmarkReport).Assembly.Location);
         string digest = Convert.ToHexStringLower(await SHA256.HashDataAsync(assembly, cancellationToken).ConfigureAwait(false));
+        await using var library = File.OpenRead(typeof(Jq).Assembly.Location);
+        string libraryDigest = Convert.ToHexStringLower(await SHA256.HashDataAsync(library, cancellationToken).ConfigureAwait(false));
         return new(commit, commit != "Unavailable" && status.Length == 0, sdk, RuntimeInformation.FrameworkDescription,
             RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString(), cpu, Environment.ProcessorCount,
-            benchmarkBuild, libraryBuild, digest, providerIdentity);
+            benchmarkBuild, libraryBuild, digest, libraryDigest, providerIdentity);
 
         async Task<string> QueryAsync(string executable, string[] arguments)
         {

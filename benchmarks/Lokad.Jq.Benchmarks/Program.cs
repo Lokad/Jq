@@ -38,6 +38,16 @@ if (args is ["--render-report", var artifact])
     await BenchmarkReport.RenderFileAsync(artifact, CancellationToken.None);
     return;
 }
+if (args.Length > 0 && args[0] == "--campaign")
+{
+    using var cancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, signal) => { signal.Cancel = true; cancellation.Cancel(); };
+    try { Environment.ExitCode = await ComparisonCampaign.RunAsync(args[1..], cancellation.Token); }
+    catch (OperationCanceledException) { Console.Error.WriteLine("Cancelled; campaign checkpoints are retained."); Environment.ExitCode = 130; }
+    catch (Exception exception) when (exception is IOException or InvalidOperationException or JsonException)
+    { Console.Error.WriteLine("Campaign failed: " + exception.Message); Environment.ExitCode = 1; }
+    return;
+}
 if (args is ["--render-allocations", var allocationArtifact])
 {
     var report = JsonSerializer.Deserialize<AllocationReport>(await File.ReadAllTextAsync(allocationArtifact), ComparisonRunner.JsonOptions)

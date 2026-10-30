@@ -27,6 +27,10 @@ internal static class ComparisonRunner
         WriteIndented = true, Converters = { new JsonStringEnumConverter() }
     };
 
+    internal static bool IsQualificationBuild(HostProvenance host) => IsReleaseBuild && host.CleanCheckout
+        && host.BenchmarkBuild.Contains(host.Commit, StringComparison.Ordinal)
+        && host.LibraryBuild.Contains(host.Commit, StringComparison.Ordinal);
+
     public static async Task<int> RunAsync(string[] arguments, CancellationToken cancellationToken)
     {
         if (!TryOptions(arguments, out var options, out var error))
@@ -63,8 +67,7 @@ internal static class ComparisonRunner
                 Console.Error.WriteLine("Qualification requires a Release build.");
                 return 2;
             }
-            if (!host.CleanCheckout || !host.BenchmarkBuild.Contains(host.Commit, StringComparison.Ordinal)
-                || !host.LibraryBuild.Contains(host.Commit, StringComparison.Ordinal))
+            if (!IsQualificationBuild(host))
             {
                 Console.Error.WriteLine("Qualification requires a clean committed checkout and freshly built assemblies for that revision.");
                 return 2;
