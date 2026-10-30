@@ -145,7 +145,8 @@ public sealed partial class JqTests
         Assert.Throws<OperationCanceledException>(() => runtime.Compare(array, array));
         Assert.Throws<OperationCanceledException>(() => runtime.Compare(NativeFixtures.Create("abc"), NativeFixtures.Create("abc")));
         Assert.Throws<OperationCanceledException>(() => runtime.MinMax(array, false));
-        Assert.Throws<OperationCanceledException>(() => JqComparer.CompareStrings("abc", "abc", cancellation.Token));
+        var text = NativeFixtures.Create("abc");
+        Assert.Throws<OperationCanceledException>(() => text.Compare(text, cancellation.Token));
     }
 
     private static JqObject WideObject(int count)

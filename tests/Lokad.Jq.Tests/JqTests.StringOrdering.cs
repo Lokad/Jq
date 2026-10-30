@@ -13,9 +13,12 @@ public sealed partial class JqTests
         for (int index = 0; index < 180; index++)
             samples.Add(string.Concat(Enumerable.Range(0, random.Next(1, 12))
                 .Select(_ => alphabet[random.Next(alphabet.Length)])));
-        foreach (string? left in samples)
-            foreach (string? right in samples)
-                Assert.Equal(ScalarOrder(left, right), Math.Sign(JqComparer.CompareStrings(left, right, CancellationToken.None)));
+        using var budget = new JqBudget(CancellationToken.None);
+        var runtime = new JqRuntime(budget);
+        JqString?[] native = samples.Select(text => text is null ? null : JqString.FromHost(text, budget)).ToArray();
+        for (int left = 0; left < samples.Count; left++)
+            for (int right = 0; right < samples.Count; right++)
+                Assert.Equal(ScalarOrder(samples[left], samples[right]), Math.Sign(runtime.Compare(native[left], native[right])));
 
         static int ScalarOrder(string? left, string? right)
         {
@@ -33,13 +36,17 @@ public sealed partial class JqTests
     [InlineData(4095)]
     [InlineData(4096)]
     [InlineData(8191)]
-    public void Jq_StringOrderingPreservesSurrogatesAtLongPrefixBoundaries(int length)
+    public void Jq_NativeStringOrderingUsesScalarOrderAtLongPrefixes(int length)
     {
+        using var budget = new JqBudget(CancellationToken.None);
         string prefix = new('a', length);
-        Assert.True(JqComparer.CompareStrings(prefix + "🚀", prefix + "🚁", CancellationToken.None) < 0);
-        Assert.True(JqComparer.CompareStrings(prefix + "\ue000", prefix + "\U00010000", CancellationToken.None) < 0);
-        Assert.Equal(0, JqComparer.CompareStrings(prefix + "\ud800", prefix + "\ud801", CancellationToken.None));
-        Assert.True(JqComparer.CompareStrings(prefix + "\ud800a", prefix + "\ud801b", CancellationToken.None) < 0);
-        Assert.Equal(0, JqComparer.CompareStrings(prefix, new string('a', length), CancellationToken.None));
+        Assert.True(Compare(prefix + "🚀", prefix + "🚁") < 0);
+        Assert.True(Compare(prefix + "\ue000", prefix + "\U00010000") < 0);
+        Assert.Equal(0, Compare(prefix + "\ud800", prefix + "\ud801"));
+        Assert.True(Compare(prefix + "\ud800a", prefix + "\ud801b") < 0);
+        Assert.Equal(0, Compare(prefix, new string('a', length)));
+
+        int Compare(string left, string right) =>
+            JqString.FromHost(left, budget).Compare(JqString.FromHost(right, budget), CancellationToken.None);
     }
 }
