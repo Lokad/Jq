@@ -14,7 +14,7 @@ internal static class JqMatch
     {
         JqString text = RequireText(context, input);
         string pattern = RequirePattern(context, patternNode);
-        JqRegexOptions options = JqRegexOptions.ParseOrThrow(RequireModifiers(context, flagsNode));
+        JqRegexOptions options = JqRegexOptions.ParseOrThrow(RequireModifiers(context, flagsNode), JqRegexGlobalFlag.None, context.Budget);
         using var patternLease = context.Regexes.Rent(pattern, options.Pattern);
         var regex = patternLease.Value;
         return context.Regexes.IsMatch(regex, text.Utf8, options.Match);
@@ -44,22 +44,27 @@ internal static class JqMatch
         return text;
     }
 
-    internal static string RequireModifiers(JqContext context, JqValue? modifiersNode)
+    internal static JqString? RequireModifiers(JqContext context, JqValue? modifiersNode)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (modifiersNode is null)
-            return string.Empty;
+            return null;
         if (modifiersNode is JqString flags)
-            return flags.ToHost(context.Budget);
+            return flags;
         throw new JqException(TypeName(modifiersNode) + " (" + context.Runtime.TruncatedDump(modifiersNode) + ") is not a string");
     }
 
     private enum Projection { Match, Scan, Split }
 
-    private static List<JqValue> SearchText(JqContext context, JqString text, string pattern, string modifiers, Projection projection)
+    private static List<JqValue> SearchText(JqContext context, JqString text, string pattern, JqString? modifiers, Projection projection)
     {
-        JqRegexOptions options = JqRegexOptions.ParseOrThrow(modifiers);
-        bool global = modifiers.Contains('g');
+        JqRegexGlobalFlag implicitGlobal = projection switch
+        {
+            Projection.Scan => JqRegexGlobalFlag.Prefix,
+            Projection.Split => JqRegexGlobalFlag.Suffix,
+            _ => JqRegexGlobalFlag.None
+        };
+        JqRegexOptions options = JqRegexOptions.ParseOrThrow(modifiers, implicitGlobal, context.Budget);
         using var patternLease = context.Regexes.Rent(pattern, options.Pattern);
         var compiled = patternLease.Value;
         var names = projection == Projection.Match ? JqRegexCache.GetGroupNames(compiled) : null;
@@ -91,7 +96,7 @@ internal static class JqMatch
                     previousSplitEnd = byteEnd;
                     break;
             }
-            if (!global) break;
+            if (!options.Global) break;
             if (byteEnd == byteStart)
             {
                 if (byteEnd == text.ByteLength) break;
@@ -279,17 +284,13 @@ internal static class JqMatch
     {
         JqString text = RequireText(context, input);
         string pattern = RequirePattern(context, patternNode);
-        string flags = RequireModifiers(context, flagsNode);
-        if (flags.Length != 0) context.Budget.ReserveString(1L + flags.Length);
-        return SearchText(context, text, pattern, "g" + flags, Projection.Scan);
+        return SearchText(context, text, pattern, RequireModifiers(context, flagsNode), Projection.Scan);
     }
 
     internal static List<JqValue> Split(JqContext context, JqValue? input, JqValue? patternNode, JqValue? flagsNode)
     {
         JqString text = RequireText(context, input);
         string pattern = RequirePattern(context, patternNode);
-        string flags = RequireModifiers(context, flagsNode);
-        if (flags.Length != 0) context.Budget.ReserveString(1L + flags.Length);
-        return SearchText(context, text, pattern, flags + "g", Projection.Split);
+        return SearchText(context, text, pattern, RequireModifiers(context, flagsNode), Projection.Split);
     }
 }

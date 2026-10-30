@@ -1,47 +1,62 @@
-
 namespace Lokad.Jq;
 
+// jq's scan prepends g; splits and gsub append it. Keep that spelling only
+// when rendering an invalid-modifier diagnostic, without constructing flags.
+internal enum JqRegexGlobalFlag { None, Prefix, Suffix }
+
 /// <summary>jq flags shared by regex predicates and substitutions.</summary>
-internal readonly record struct JqRegexOptions(JqRegexCompileOptions Pattern, JqRegexMatchOptions Match)
+internal readonly record struct JqRegexOptions(JqRegexCompileOptions Pattern, JqRegexMatchOptions Match, bool Global)
 {
-    internal static bool TryParse(string flags, out JqRegexOptions options, out char unsupportedFlag)
+    internal static JqRegexOptions ParseOrThrow(JqString? flags, JqRegexGlobalFlag implicitGlobal, JqBudget budget)
     {
-        var pattern = JqRegexCompileOptions.None;
-        var match = JqRegexMatchOptions.None;
-        foreach (var flag in flags)
+        budget.CheckCancellation();
+        ReadOnlySpan<byte> bytes = flags is null ? [] : flags.Utf8.Span;
+        if (TryParse(bytes, out JqRegexOptions options, out byte unsupported)) return options;
+        if (unsupported == (byte)'l')
+            throw new JqException("unsupported regex flag 'l' (longest match is not implemented)");
+        int length = JqBudget.BufferCapacity((long)bytes.Length + (implicitGlobal == JqRegexGlobalFlag.None ? 0 : 1)
+            + " is not a valid modifier string"u8.Length, 0);
+        JqString message = JqString.Create(length, (flags, implicitGlobal), static (output, state) =>
         {
-            switch (flag)
+            int written = 0;
+            if (state.implicitGlobal == JqRegexGlobalFlag.Prefix) output[written++] = (byte)'g';
+            if (state.flags is not null)
             {
-                case 'g': break; // Match iteration belongs to the caller.
-                case 'i': pattern |= JqRegexCompileOptions.Caseless; break;
-                case 'm': pattern |= JqRegexCompileOptions.Multiline; break;
-                case 's': pattern |= JqRegexCompileOptions.DotAll; break;
-                case 'p': pattern |= JqRegexCompileOptions.Multiline | JqRegexCompileOptions.DotAll; break;
-                case 'x': pattern |= JqRegexCompileOptions.Extended; break;
-                case 'n': match |= JqRegexMatchOptions.NotEmpty; break;
-                default:
-                    options = default;
-                    unsupportedFlag = flag;
-                    return false;
+                state.flags.Utf8.Span.CopyTo(output[written..]);
+                written += state.flags.ByteLength;
             }
-        }
+            if (state.implicitGlobal == JqRegexGlobalFlag.Suffix) output[written++] = (byte)'g';
+            " is not a valid modifier string"u8.CopyTo(output[written..]);
+        }, budget);
+        throw new JqErrorException(message);
 
-        options = new JqRegexOptions(pattern, match);
-        unsupportedFlag = default;
-        return true;
-    }
-
-    // Upstream accepts every flag above plus l for longest match, which has
-    // no PCRE2 equivalent and stays explicitly unimplemented. Invalid flags
-    // fail with the reference modifier diagnostic shared by all callers.
-    internal static JqRegexOptions ParseOrThrow(string flags)
-    {
-        if (!TryParse(flags, out JqRegexOptions options, out char unsupported))
+        bool TryParse(ReadOnlySpan<byte> text, out JqRegexOptions parsed, out byte invalid)
         {
-            if (unsupported == 'l')
-                throw new JqException("unsupported regex flag 'l' (longest match is not implemented)");
-            throw new JqException(flags + " is not a valid modifier string");
+            var pattern = JqRegexCompileOptions.None;
+            var match = JqRegexMatchOptions.None;
+            bool global = implicitGlobal != JqRegexGlobalFlag.None;
+            for (int index = 0; index < text.Length; index++)
+            {
+                if ((index & 4095) == 0) budget.CheckCancellation();
+                switch (text[index])
+                {
+                    case (byte)'g': global = true; break;
+                    case (byte)'i': pattern |= JqRegexCompileOptions.Caseless; break;
+                    case (byte)'m': pattern |= JqRegexCompileOptions.Multiline; break;
+                    case (byte)'s': pattern |= JqRegexCompileOptions.DotAll; break;
+                    case (byte)'p': pattern |= JqRegexCompileOptions.Multiline | JqRegexCompileOptions.DotAll; break;
+                    case (byte)'x': pattern |= JqRegexCompileOptions.Extended; break;
+                    case (byte)'n': match |= JqRegexMatchOptions.NotEmpty; break;
+                    default:
+                        parsed = default;
+                        invalid = text[index];
+                        return false;
+                }
+            }
+            budget.CheckCancellation();
+            parsed = new(pattern, match, global);
+            invalid = default;
+            return true;
         }
-        return options;
     }
 }

@@ -274,4 +274,31 @@ public sealed class JqCompatibilityProbeTests
         Assert.True(JqReferenceRunner.OutputsMatch(local, reference),
             JqReferenceRunner.FormatReferenceMismatch(golden.Id, local, reference));
     }
+
+    [Theory]
+    [InlineData("test(\"x\";\"q\")")]
+    [InlineData("match(\"x\";\"q\")")]
+    [InlineData("capture(\"x\";\"q\")")]
+    [InlineData("scan(\"x\";\"q\")")]
+    [InlineData("splits(\"x\";\"q\")")]
+    [InlineData("split(\"x\";\"q\")")]
+    [InlineData("sub(\"x\";\"y\";\"q\")")]
+    [InlineData("gsub(\"x\";\"y\";\"q\")")]
+    [InlineData("scan(\"x\";\"😀\")")]
+    [InlineData("gsub(\"x\";\"y\";\"😀\")")]
+    public async Task Probe_RegexModifierDiagnosticsMatchReference(string operation)
+    {
+        if (!JqReferenceRunner.TryGetReferencePath(out string referencePath, out string skipReason))
+        {
+            Assert.True(true, skipReason);
+            return;
+        }
+        var golden = new JqGoldenCase("regex-modifier", ["-nbcr", "\"x\"|try (" + operation + ") catch ."], [],
+            new Dictionary<string, string>(), [], string.Empty, string.Empty, 0);
+        JqProbeResult local = await JqProbeRunner.RunAsync(golden, CancellationToken.None);
+        JqReferenceResult reference = await JqReferenceRunner.RunGoldenCaseAsync(referencePath, golden,
+            TimeSpan.FromSeconds(10), CancellationToken.None);
+        Assert.True(JqReferenceRunner.OutputsMatch(local, reference),
+            JqReferenceRunner.FormatReferenceMismatch(golden.Id, local, reference));
+    }
 }

@@ -17,7 +17,7 @@ Host UTF-16 strings encode lone surrogates as U+FFFD; input bytes decode strictl
 Runtime strings and object keys retain owned UTF-8 payloads. Reads and aliases
 share immutable bytes; retained substrings copy only their selected range.
 Literal decoding, string operations, interpolation, formatting, date parsing,
-regex subjects and JSON/raw output consume these bytes directly. The current regex provider contract
+regex subjects/flags and JSON/raw output consume these bytes directly. The current regex provider contract
 still accepts CLR pattern strings and group names; host paths and program source
 also use CLR text.
 

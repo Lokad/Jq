@@ -13,10 +13,11 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
         await foreach (var pattern in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
         {
             JqString text = JqMatch.RequireText(context, input);
-            string flagText = JqMatch.RequireModifiers(context, flags);
-            JqRegexOptions options = JqRegexOptions.ParseOrThrow(flagText);
+            JqString? flagText = JqMatch.RequireModifiers(context, flags);
+            JqRegexOptions options = JqRegexOptions.ParseOrThrow(flagText,
+                firstOnly ? JqRegexGlobalFlag.None : JqRegexGlobalFlag.Suffix, context.Budget);
             // sub without an explicit g flag stops after the first match.
-            bool stopFirst = firstOnly && !flagText.Contains('g');
+            bool stopFirst = !options.Global;
             using var patternLease = context.Regexes.Rent(JqMatch.RequirePattern(context, pattern), options.Pattern);
             var regex = patternLease.Value;
             ReadOnlyMemory<byte> subject = text.Utf8;

@@ -2,6 +2,8 @@
 
 ## 0.3.0 — Unreleased
 
+- Parse regex flags directly from UTF-8 and avoid constructing implicit-global
+  modifier strings. Match jq's appended `g` in invalid `gsub` modifier diagnostics.
 - Decode compiler string literals directly into UTF-8, borrowing interpolation
   source until compilation. Remove decoded templates and lexer builder storage.
   Support quoted-field interpolation consistently with bracket reads and paths.

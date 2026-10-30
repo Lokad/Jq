@@ -96,7 +96,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" | gsub(\"x\";\"y\";1)", "number (1) is not a string")]
     [InlineData("\"x\" | gsub(\"[\";\"y\")", "invalid regex")]
     [InlineData("\"x\" | gsub(\"x\";\"y\";\"l\")", "unsupported regex flag")]
-    [InlineData("\"x\" | gsub(\"x\";\"y\";\"z\")", "z is not a valid modifier string")]
+    [InlineData("\"x\" | gsub(\"x\";\"y\";\"z\")", "zg is not a valid modifier string")]
     [InlineData("\"🚀\" | gsub(\"\\\\C\";\"y\")", "invalid regex")]
     public async Task Jq_GsubReportsInvalidInputs(string filter, string diagnostic)
     {

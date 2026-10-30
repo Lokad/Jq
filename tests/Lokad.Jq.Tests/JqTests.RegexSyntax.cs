@@ -64,7 +64,7 @@ public sealed partial class JqTests
     [InlineData("\"x\" | split(\"x\"; \"l\")", "unsupported regex flag")]
     [InlineData("\"x\" | capture(\"x\"; \"l\")", "unsupported regex flag")]
     [InlineData("\"aaa\" | splits(\"a\"; \"l\")", "unsupported regex flag")]
-    [InlineData("\"x\" | gsub(\"x\"; \"y\"; \"q\")", "q is not a valid modifier string")]
+    [InlineData("\"x\" | gsub(\"x\"; \"y\"; \"q\")", "qg is not a valid modifier string")]
 
     [InlineData("\"x\" | scan(\"x\"; \"q\")", "gq is not a valid modifier string")]
     [InlineData("\"x\" | splits(\"x\"; \"q\")", "qg is not a valid modifier string")]

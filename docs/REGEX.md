@@ -64,6 +64,8 @@ After an empty global match Jq advances one Unicode scalar; an empty
 match at the end is the last match. Detailed capture searches are separate
 engine operations. `sub`/`gsub` evaluate jq replacement filters and align
 their result streams.
+Invalid-modifier diagnostics retain jq's implicit `g`: a prefix for `scan`, a
+suffix for regex splitting and `gsub`.
 
 ## Limits and cancellation
 
