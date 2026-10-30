@@ -7,8 +7,10 @@ internal sealed record PairedSample(bool LibraryFirst, int LibraryIterations, in
     public double ReferenceMs => ReferenceTotalMs / ReferenceIterations;
 }
 
-internal sealed record TimingSummary(string Status, string Reason, double LibraryMedianMs,
-    double ReferenceMedianMs, double Ratio, double RatioLow, double RatioHigh, string Interpretation);
+// Bounds describe the paired-median qualification statistic, in the same
+// library/jq direction as the separately rendered arithmetic mean ratio.
+internal sealed record TimingSummary(string Status, string Reason,
+    double PairedMedianLibraryToJqLow, double PairedMedianLibraryToJqHigh);
 
 internal static class PairedStatistics
 {
@@ -47,13 +49,9 @@ internal static class PairedStatistics
         Array.Sort(bootstrap);
         double low = bootstrap[249], high = bootstrap[9749];
         if (high / low > 1.15) return Unqualified("The ratio confidence interval is wider than 15%.");
-        return new("Qualified", "", Median(library), Median(reference), Math.Exp(Median(logs)), low, high,
-            low > 1 ? "Lokad.Jq faster" : high < 1 ? "jq faster" : "Inconclusive");
+        return new("Qualified", "", 1 / high, 1 / low);
 
-        TimingSummary Unqualified(string reason) => new("Unqualified", reason,
-            Median(samples.Where(sample => sample.LibraryIterations > 0 && double.IsFinite(sample.LibraryTotalMs) && sample.LibraryTotalMs > 0).Select(sample => sample.LibraryMs)),
-            Median(samples.Where(sample => sample.ReferenceIterations > 0 && double.IsFinite(sample.ReferenceTotalMs) && sample.ReferenceTotalMs > 0).Select(sample => sample.ReferenceMs)),
-            0, 0, 0, "No performance claim");
+        static TimingSummary Unqualified(string reason) => new("Unqualified", reason, 0, 0);
 
         static double RelativeSpread(double[] values)
         {

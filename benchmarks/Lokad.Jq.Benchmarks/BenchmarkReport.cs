@@ -20,7 +20,7 @@ internal sealed record ComparisonReport(int SchemaVersion, string Mode, DateTime
 
 internal static class BenchmarkReport
 {
-    public const int SchemaVersion = 6;
+    public const int SchemaVersion = 7;
     public const string Contract = "Warm embedded Lokad.Jq versus jq CLI; includes binding/compilation, parsing, evaluation, rendering and SHA-256 consumption; jq includes launch and pipes. No startup subtraction.";
     public const string BeginMarker = "<!-- BEGIN GENERATED COMPARISON -->";
     public const string EndMarker = "<!-- END GENERATED COMPARISON -->";

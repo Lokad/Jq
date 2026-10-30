@@ -100,7 +100,7 @@ internal static class ComparisonRunner
         foreach (var workload in workloads)
         {
             var result = await VerifyAsync(executable, workload, cancellationToken).ConfigureAwait(false);
-            var timing = new QualificationResult(new("NotMeasured", "Correctness verification only.", 0, 0, 0, 0, 0, "No performance claim"), [], [], 0, 0);
+            var timing = new QualificationResult(new("NotMeasured", "Correctness verification only.", 0, 0), [], [], 0, 0);
             if (mode == "qualify" && result.Status == "Equivalent")
                 timing = await TimingQualification.RunAsync(executable, workload, result, pairs, cancellationToken).ConfigureAwait(false);
             results.Add(new(BenchmarkReport.Describe(workload), result, timing));

@@ -11,19 +11,18 @@ public sealed class BenchmarkQualificationTests
         var samples = Pairs(11, 40, 80);
         var result = PairedStatistics.Summarize(samples);
         Assert.Equal("Qualified", result.Status);
-        Assert.Equal(2, result.Ratio, 12);
-        Assert.Equal(2, result.RatioLow, 12);
-        Assert.Equal(2, result.RatioHigh, 12);
-        Assert.Equal("Lokad.Jq faster", result.Interpretation);
+        Assert.Equal(.5, result.PairedMedianLibraryToJqLow, 12);
+        Assert.Equal(.5, result.PairedMedianLibraryToJqHigh, 12);
         Assert.Equal(result, PairedStatistics.Summarize(samples));
     }
 
     [Fact]
-    public void EqualResultsDoNotClaimAWinner()
+    public void EqualResultsHaveUnitQualificationBounds()
     {
         var result = PairedStatistics.Summarize(Pairs(11, 40, 40));
         Assert.Equal("Qualified", result.Status);
-        Assert.Equal("Inconclusive", result.Interpretation);
+        Assert.Equal(1, result.PairedMedianLibraryToJqLow);
+        Assert.Equal(1, result.PairedMedianLibraryToJqHigh);
     }
 
     [Fact]
@@ -31,9 +30,9 @@ public sealed class BenchmarkQualificationTests
     {
         var samples = Enumerable.Range(0, 11).Select(i => new PairedSample(i % 2 == 0, 2, 4, 40, 80)).ToArray();
         var result = PairedStatistics.Summarize(samples);
-        Assert.Equal(1, result.Ratio);
-        Assert.Equal(20, result.LibraryMedianMs);
-        Assert.Equal(20, result.ReferenceMedianMs);
+        Assert.Equal(1, result.PairedMedianLibraryToJqLow);
+        Assert.Equal(1, result.PairedMedianLibraryToJqHigh);
+        Assert.All(samples, sample => { Assert.Equal(20, sample.LibraryMs); Assert.Equal(20, sample.ReferenceMs); });
     }
 
     [Fact]
@@ -42,9 +41,8 @@ public sealed class BenchmarkQualificationTests
         var samples = Enumerable.Range(0, 11).Select(i => new PairedSample(i % 2 == 0, 1, 1, 40, 79 + i * .2)).ToArray();
         var result = PairedStatistics.Summarize(samples);
         Assert.Equal("Qualified", result.Status);
-        Assert.Equal(2, result.Ratio, 12);
-        Assert.InRange(result.RatioLow, 1.975, 2);
-        Assert.InRange(result.RatioHigh, 2, 2.025);
+        Assert.InRange(result.PairedMedianLibraryToJqLow, 1 / 2.025, .5);
+        Assert.InRange(result.PairedMedianLibraryToJqHigh, .5, 1 / 1.975);
         Assert.Equal(result, PairedStatistics.Summarize(samples));
     }
 
@@ -55,8 +53,8 @@ public sealed class BenchmarkQualificationTests
         {
             var result = PairedStatistics.Summarize(samples);
             Assert.Equal("Unqualified", result.Status);
-            Assert.Equal(0, result.Ratio);
-            Assert.True(double.IsFinite(result.LibraryMedianMs));
+            Assert.Equal(0, result.PairedMedianLibraryToJqLow);
+            Assert.Equal(0, result.PairedMedianLibraryToJqHigh);
         }
     }
 

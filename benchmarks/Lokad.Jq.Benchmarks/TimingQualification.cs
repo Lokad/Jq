@@ -61,7 +61,7 @@ internal static class TimingQualification
         catch (InvalidOperationException exception) { return Finish("Failure", exception.Message); }
 
         QualificationResult Finish(string status, string reason) => new(
-            new(status, reason, 0, 0, 0, 0, 0, "No performance claim"), samples.ToArray(), quietChecks.ToArray(), libraryWarmup, referenceWarmup);
+            new(status, reason, 0, 0), samples.ToArray(), quietChecks.ToArray(), libraryWarmup, referenceWarmup);
 
         async Task ExecuteAsync(bool library)
         {
