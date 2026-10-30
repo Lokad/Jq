@@ -9,66 +9,66 @@ lower is better.
 
 | Case / scale | Size | Status | Lokad.Jq ms | jq ms | Lokad.Jq / jq |
 | --- | ---: | --- | ---: | ---: | ---: |
-| snapshot-differences/large | 1024 | Qualified | 7.158 | 6.999 | 1.023 |
-| nested-extraction/large | 1024 | Qualified | 50.644 | 51.700 | 0.980 |
-| api-shaping/large | 1024 | Qualified | 5.470 | 5.617 | 0.974 |
-| incident-logs/large | 4096 | Qualified | 19.762 | 21.106 | 0.936 |
-| ndjson-project/large | 4096 | Qualified | 6.565 | 7.334 | 0.895 |
-| configuration-updates/large | 1024 | Qualified | 6.478 | 7.673 | 0.844 |
-| nested-extraction/medium | 128 | Qualified | 6.370 | 7.657 | 0.832 |
-| foreach/large | 4096 | Qualified | 2.361 | 3.039 | 0.777 |
-| ndjson-select/large | 4096 | Qualified | 3.945 | 5.267 | 0.749 |
-| inventory-enrichment/large | 1024 | Qualified | 3.049 | 4.182 | 0.729 |
-| unicode-strings/large | 1024 | Qualified | 2.353 | 3.888 | 0.605 |
-| reduce/large | 4096 | Qualified | 1.444 | 2.475 | 0.583 |
-| regex-log-cleanup/large | 1024 | Qualified | 13.011 | 22.435 | 0.580 |
-| operational-summary/large | 1024 | Qualified | 2.097 | 4.143 | 0.506 |
-| identity-compact/large | 4096 | Qualified | 3.280 | 6.561 | 0.500 |
-| identity-pretty/large | 4096 | Qualified | 3.329 | 7.459 | 0.446 |
-| json-roundtrip/large | 512 | Qualified | 1.030 | 2.382 | 0.432 |
-| regex-log-cleanup/medium | 128 | Qualified | 1.683 | 4.279 | 0.393 |
-| entries-update/large | 512 | Qualified | 1.881 | 4.816 | 0.391 |
-| sort-group/large | 512 | Qualified | 0.840 | 2.259 | 0.372 |
-| snapshot-differences/medium | 128 | Qualified | 0.733 | 2.058 | 0.356 |
-| walk-paths/large | 512 | Qualified | 2.245 | 6.413 | 0.350 |
-| nested-extraction/small | 16 | Qualified | 0.777 | 2.222 | 0.350 |
-| configuration-updates/medium | 128 | Qualified | 0.707 | 2.131 | 0.332 |
-| api-shaping/medium | 128 | Qualified | 0.614 | 1.900 | 0.323 |
-| incident-logs/medium | 128 | Qualified | 0.666 | 2.145 | 0.311 |
-| unicode-strings/medium | 256 | Qualified | 0.656 | 2.194 | 0.299 |
-| entries-update/medium | 256 | Qualified | 1.035 | 3.528 | 0.293 |
-| walk-paths/medium | 256 | Qualified | 1.236 | 4.340 | 0.285 |
-| map-construct/large | 512 | Qualified | 0.612 | 2.158 | 0.283 |
-| json-roundtrip/medium | 256 | Qualified | 0.567 | 2.053 | 0.276 |
-| sort-group/medium | 256 | Qualified | 0.466 | 2.016 | 0.231 |
-| ndjson-project/medium | 256 | Qualified | 0.369 | 1.626 | 0.227 |
-| inventory-enrichment/medium | 128 | Qualified | 0.375 | 1.708 | 0.220 |
-| operational-summary/medium | 128 | Qualified | 0.314 | 1.739 | 0.181 |
-| map-construct/medium | 256 | Qualified | 0.309 | 1.835 | 0.169 |
-| ndjson-select/medium | 256 | Qualified | 0.223 | 1.526 | 0.146 |
-| regex-log-cleanup/small | 16 | Qualified | 0.271 | 1.993 | 0.136 |
-| identity-pretty/medium | 256 | Qualified | 0.168 | 1.547 | 0.109 |
-| identity-compact/medium | 256 | Qualified | 0.159 | 1.497 | 0.106 |
-| foreach/medium | 256 | Qualified | 0.158 | 1.566 | 0.101 |
-| snapshot-differences/small | 16 | Qualified | 0.099 | 1.496 | 0.066 |
-| configuration-updates/small | 16 | Qualified | 0.099 | 1.507 | 0.066 |
-| reduce/medium | 256 | Qualified | 0.095 | 1.527 | 0.062 |
-| incident-logs/small | 16 | Qualified | 0.093 | 1.587 | 0.059 |
-| api-shaping/small | 16 | Qualified | 0.079 | 1.482 | 0.053 |
-| walk-paths/small | 16 | Qualified | 0.072 | 1.577 | 0.045 |
-| operational-summary/small | 16 | Qualified | 0.061 | 1.435 | 0.042 |
-| entries-update/small | 16 | Qualified | 0.060 | 1.536 | 0.039 |
-| inventory-enrichment/small | 16 | Qualified | 0.054 | 1.421 | 0.038 |
-| unicode-strings/small | 16 | Qualified | 0.041 | 1.383 | 0.029 |
-| sort-group/small | 16 | Qualified | 0.039 | 1.366 | 0.029 |
-| json-roundtrip/small | 16 | Qualified | 0.034 | 1.348 | 0.026 |
-| ndjson-project/small | 16 | Qualified | 0.026 | 1.379 | 0.019 |
-| map-construct/small | 16 | Qualified | 0.021 | 1.343 | 0.016 |
-| ndjson-select/small | 16 | Qualified | 0.017 | 1.327 | 0.013 |
-| identity-pretty/small | 16 | Qualified | 0.013 | 1.305 | 0.010 |
-| foreach/small | 16 | Qualified | 0.012 | 1.304 | 0.009 |
-| identity-compact/small | 16 | Qualified | 0.012 | 1.308 | 0.009 |
-| reduce/small | 16 | Qualified | 0.009 | 1.298 | 0.007 |
+| nested-extraction/large | 1024 | Qualified | 51.066 | 51.612 | 0.989 |
+| api-shaping/large | 1024 | Qualified | 5.373 | 5.622 | 0.956 |
+| snapshot-differences/large | 1024 | Qualified | 6.127 | 7.017 | 0.873 |
+| incident-logs/large | 4096 | Qualified | 17.996 | 21.126 | 0.852 |
+| ndjson-project/large | 4096 | Qualified | 5.542 | 6.607 | 0.839 |
+| nested-extraction/medium | 128 | Qualified | 6.396 | 7.649 | 0.836 |
+| foreach/large | 4096 | Qualified | 2.337 | 2.961 | 0.789 |
+| ndjson-select/large | 4096 | Qualified | 3.381 | 4.694 | 0.720 |
+| configuration-updates/large | 1024 | Qualified | 5.400 | 7.670 | 0.704 |
+| inventory-enrichment/large | 1024 | Qualified | 2.784 | 4.177 | 0.666 |
+| regex-log-cleanup/large | 1024 | Qualified | 13.063 | 22.459 | 0.582 |
+| unicode-strings/large | 1024 | Qualified | 2.235 | 3.880 | 0.576 |
+| reduce/large | 4096 | Qualified | 1.122 | 2.321 | 0.483 |
+| identity-compact/large | 4096 | Qualified | 2.767 | 5.893 | 0.469 |
+| identity-pretty/large | 4096 | Qualified | 2.943 | 6.580 | 0.447 |
+| operational-summary/large | 1024 | Qualified | 1.744 | 4.119 | 0.423 |
+| regex-log-cleanup/medium | 128 | Qualified | 1.707 | 4.285 | 0.398 |
+| entries-update/large | 512 | Qualified | 1.856 | 4.820 | 0.385 |
+| json-roundtrip/large | 512 | Qualified | 0.916 | 2.392 | 0.383 |
+| nested-extraction/small | 16 | Qualified | 0.776 | 2.229 | 0.348 |
+| walk-paths/large | 512 | Qualified | 2.185 | 6.389 | 0.342 |
+| sort-group/large | 512 | Qualified | 0.747 | 2.258 | 0.331 |
+| snapshot-differences/medium | 128 | Qualified | 0.647 | 2.061 | 0.314 |
+| api-shaping/medium | 128 | Qualified | 0.592 | 1.898 | 0.312 |
+| entries-update/medium | 256 | Qualified | 0.923 | 3.155 | 0.293 |
+| configuration-updates/medium | 128 | Qualified | 0.617 | 2.128 | 0.290 |
+| unicode-strings/medium | 256 | Qualified | 0.553 | 1.989 | 0.278 |
+| walk-paths/medium | 256 | Qualified | 1.082 | 3.892 | 0.278 |
+| incident-logs/medium | 128 | Qualified | 0.591 | 2.156 | 0.274 |
+| map-construct/large | 512 | Qualified | 0.505 | 1.996 | 0.253 |
+| json-roundtrip/medium | 256 | Qualified | 0.458 | 1.829 | 0.250 |
+| ndjson-project/medium | 256 | Qualified | 0.348 | 1.638 | 0.213 |
+| sort-group/medium | 256 | Qualified | 0.372 | 1.804 | 0.206 |
+| inventory-enrichment/medium | 128 | Qualified | 0.343 | 1.713 | 0.200 |
+| operational-summary/medium | 128 | Qualified | 0.272 | 1.747 | 0.156 |
+| map-construct/medium | 256 | Qualified | 0.253 | 1.654 | 0.153 |
+| ndjson-select/medium | 256 | Qualified | 0.212 | 1.531 | 0.138 |
+| regex-log-cleanup/small | 16 | Qualified | 0.273 | 1.991 | 0.137 |
+| foreach/medium | 256 | Qualified | 0.146 | 1.402 | 0.104 |
+| identity-pretty/medium | 256 | Qualified | 0.159 | 1.556 | 0.102 |
+| identity-compact/medium | 256 | Qualified | 0.150 | 1.502 | 0.100 |
+| snapshot-differences/small | 16 | Qualified | 0.095 | 1.541 | 0.062 |
+| configuration-updates/small | 16 | Qualified | 0.092 | 1.561 | 0.059 |
+| incident-logs/small | 16 | Qualified | 0.088 | 1.588 | 0.055 |
+| api-shaping/small | 16 | Qualified | 0.077 | 1.482 | 0.052 |
+| reduce/medium | 256 | Qualified | 0.070 | 1.373 | 0.051 |
+| walk-paths/small | 16 | Qualified | 0.071 | 1.585 | 0.045 |
+| operational-summary/small | 16 | Qualified | 0.056 | 1.446 | 0.039 |
+| entries-update/small | 16 | Qualified | 0.060 | 1.538 | 0.039 |
+| inventory-enrichment/small | 16 | Qualified | 0.049 | 1.425 | 0.035 |
+| unicode-strings/small | 16 | Qualified | 0.038 | 1.387 | 0.028 |
+| sort-group/small | 16 | Qualified | 0.036 | 1.376 | 0.026 |
+| json-roundtrip/small | 16 | Qualified | 0.031 | 1.353 | 0.023 |
+| ndjson-project/small | 16 | Qualified | 0.024 | 1.331 | 0.018 |
+| map-construct/small | 16 | Qualified | 0.019 | 1.347 | 0.014 |
+| ndjson-select/small | 16 | Qualified | 0.017 | 1.336 | 0.013 |
+| foreach/small | 16 | Qualified | 0.013 | 1.305 | 0.010 |
+| identity-pretty/small | 16 | Qualified | 0.012 | 1.315 | 0.009 |
+| identity-compact/small | 16 | Qualified | 0.012 | 1.306 | 0.009 |
+| reduce/small | 16 | Qualified | 0.008 | 1.310 | 0.006 |
 | small-request/control | 1 | Unqualified | — | — | — |
 | startup-empty/control | 0 | Unqualified | — | — | — |
 
@@ -82,45 +82,45 @@ lower is better.
 
 | Case / scale | Bytes / execution | Gen0 / Gen1 / Gen2 |
 | --- | ---: | --- |
-| nested-extraction/large | 143615770 | 210 / 12 / 4 |
-| incident-logs/large | 61697808 | 89 / 9 / 0 |
-| regex-log-cleanup/large | 28465200 | 41 / 0 / 0 |
-| configuration-updates/large | 16192256 | 24 / 23 / 1 |
-| ndjson-project/large | 12196560 | 18 / 1 / 0 |
-| api-shaping/large | 12106304 | 18 / 16 / 0 |
-| snapshot-differences/large | 11924888 | 18 / 17 / 1 |
-| ndjson-select/large | 7380764 | 11 / 1 / 0 |
-| inventory-enrichment/large | 6465892 | 9 / 4 / 0 |
-| walk-paths/large | 6288812 | 9 / 5 / 0 |
-| unicode-strings/large | 6114540 | 9 / 3 / 0 |
-| entries-update/large | 5700476 | 8 / 3 / 0 |
-| foreach/large | 4663248 | 7 / 3 / 0 |
-| reduce/large | 4400272 | 7 / 3 / 0 |
-| operational-summary/large | 3313124 | 5 / 3 / 0 |
-| scalar-pipeline/diagnostic | 3251984 | 5 / 4 / 0 |
-| identity-compact/large | 3246189 | 6 / 6 / 2 |
-| identity-pretty/large | 3246181 | 6 / 5 / 2 |
-| json-roundtrip/large | 2193812 | 4 / 2 / 0 |
-| buffered-scalars/diagnostic | 1479820 | 2 / 0 / 0 |
-| sort-group/large | 1396532 | 2 / 1 / 0 |
-| map-construct/large | 1338108 | 2 / 1 / 0 |
-| raw-strings/diagnostic | 1182496 | 1 / 1 / 0 |
-| wide-object/diagnostic | 1039384 | 2 / 0 / 0 |
-| sorted-ascii/diagnostic | 253912 | 0 / 0 / 0 |
-| small-filter/diagnostic | 38696 | 0 / 0 / 0 |
+| nested-extraction/large | 138358430 | 202 / 12 / 4 |
+| incident-logs/large | 48980816 | 70 / 7 / 0 |
+| regex-log-cleanup/large | 26923776 | 39 / 0 / 0 |
+| configuration-updates/large | 12887351 | 21 / 16 / 2 |
+| api-shaping/large | 11427148 | 16 / 15 / 0 |
+| ndjson-project/large | 10820876 | 15 / 1 / 0 |
+| snapshot-differences/large | 10585892 | 16 / 13 / 1 |
+| ndjson-select/large | 6704652 | 9 / 1 / 0 |
+| inventory-enrichment/large | 5882876 | 8 / 4 / 0 |
+| walk-paths/large | 5801356 | 9 / 3 / 0 |
+| unicode-strings/large | 5637044 | 8 / 2 / 0 |
+| entries-update/large | 5168360 | 8 / 3 / 0 |
+| foreach/large | 4434112 | 7 / 2 / 0 |
+| reduce/large | 3843464 | 5 / 1 / 0 |
+| scalar-pipeline/diagnostic | 2982132 | 4 / 3 / 0 |
+| identity-compact/large | 2845232 | 5 / 5 / 2 |
+| identity-pretty/large | 2844936 | 6 / 4 / 2 |
+| operational-summary/large | 2814940 | 4 / 2 / 0 |
+| json-roundtrip/large | 1886932 | 2 / 0 / 0 |
+| buffered-scalars/diagnostic | 1381804 | 2 / 0 / 0 |
+| map-construct/large | 1084708 | 2 / 1 / 0 |
+| sort-group/large | 909800 | 1 / 0 / 0 |
+| wide-object/diagnostic | 684368 | 1 / 0 / 0 |
+| raw-strings/diagnostic | 658480 | 1 / 0 / 0 |
+| sorted-ascii/diagnostic | 227544 | 0 / 0 / 0 |
+| small-filter/diagnostic | 38312 | 0 / 0 / 0 |
 
 Large and diagnostic cases. Bytes are the median of three warmed batches of eight executions; GC columns total those 24 executions. These are total managed allocations, not peak heap or native jq memory.
 
-Measured revision `e52f5a5aaf4d93f834793e7dfa2d6e3bf7c9d5f8`; .NET 11.0.0-rc.3.26522.148; SDK 11.0.100-rc.3.26522.148. All 68 cases completed. Library SHA-256 `7488114da728ae448a400445134d8e5f200c852d9c4d876e942575378446415e`.
+Measured revision `5e972acb8a4beeccc9e1ce006b56c67b6bbd21f2`; .NET 11.0.0-rc.3.26522.148; SDK 11.0.100-rc.3.26522.148. All 68 cases completed. Library SHA-256 `d124c01dd420f8087f56c372d8580073534f2ee9bb27856c7c3fbffb12d6abc9`.
 
 <!-- END GENERATED ALLOCATIONS -->
 
 <!-- BEGIN GENERATED COMPARISON PROVENANCE -->
 ## Comparison provenance
 
-Mode: qualify. Measured revision: `e52f5a5aaf4d93f834793e7dfa2d6e3bf7c9d5f8`. jq: `jq-1.8.2`, SHA-256 `b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f`.
+Mode: qualify. Measured revision: `5e972acb8a4beeccc9e1ce006b56c67b6bbd21f2`. jq: `jq-1.8.2`, SHA-256 `b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f`.
 
-Recorded UTC: 2026-10-30T09:36:48.0989091+00:00. Completed 62/62 requested cases.
+Recorded UTC: 2026-10-30T17:55:12.8260778+00:00. Completed 62/62 requested cases.
 
 .NET 11.0.0-rc.3.26522.148; SDK 11.0.100-rc.3.26522.148; Ubuntu 24.04.5 LTS; AMD EPYC 9V45 96-Core Processor; 4 logical processors.
 
