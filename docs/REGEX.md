@@ -51,6 +51,10 @@ regex splitting and substitutions use detailed captures. jq result fields,
 scalar-based offsets and lengths, unmatched capture nulls, and numbered capture
 order are retained. Duplicate names fold in numbered order, last wins, including
 nulls for non-participating groups.
+`JqRegexCapture` carries only participation and absolute UTF-8 byte bounds,
+including slot zero. Jq projects scalar and UTF-16 positions lazily through one
+sparse index per operation; overlapping captures and lookbehind reuse it.
+Ranges must end on Unicode boundaries. ASCII prefixes need no index storage.
 
 Detailed searches finish before their first result is emitted. `scan` and regex
 splitting build their result strings directly from captures without retaining

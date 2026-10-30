@@ -25,7 +25,7 @@ public sealed partial class JqTests
             using var match = regexes.Match(pattern, subject.Value, 0, JqRegexMatchOptions.None);
             Assert.True(match.Success);
             Assert.Equal(1, match.CaptureSlotCount);
-            Assert.Equal(new JqRegexCapture(true, 0, length, 0, length), match.Value);
+            Assert.Equal(new JqRegexCapture(true, 0, length), match.Value);
         }
         Assert.Equal(before, counted.Counts);
         regexes.Dispose();

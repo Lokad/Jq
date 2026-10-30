@@ -25,7 +25,7 @@ public sealed partial class JqTests
         subject.Dispose();
         Assert.Empty(engine.Cleanup);
         Assert.Equal(compiled + 32, memory.ReservedBytes);
-        Assert.Equal(new JqRegexCapture(true, 0, 1, 0, 1), match.Value);
+        Assert.Equal(new JqRegexCapture(true, 0, 1), match.Value);
         match.Dispose();
         copy.Dispose();
         Assert.Equal(new[] { "result", "compiled" }, engine.Cleanup);
@@ -94,7 +94,7 @@ public sealed partial class JqTests
                 var owner = new ResultOwner(engine, resultMemory);
                 try
                 {
-                    JqRegexCapture[] captures = [new(true, 0, 1, 0, 1)];
+                    JqRegexCapture[] captures = [new(true, 0, 1)];
                     engine.AfterMatch?.Invoke();
                     return new JqRegexMatch(captures, owner);
                 }

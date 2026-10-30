@@ -32,7 +32,7 @@ public interface IJqCompiledRegex : IDisposable
     /// <summary>Searches from an absolute byte offset and transfers an owned capture result.</summary>
     /// <remarks>
     /// Retain complete-input anchor/lookbehind context. Offsets are absolute in the original
-    /// UTF-8/UTF-16 subject; unmatched slots have Success=false. Include slot zero on success.
+    /// UTF-8 subject; unmatched slots have Success=false. Include slot zero on success.
     /// The provider owns capture storage and its admission until the result is disposed.
     /// </remarks>
     JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
@@ -65,9 +65,9 @@ public enum JqRegexMatchOptions
     NotEmpty = 1,
 }
 
-/// <summary>A numbered capture's participation and absolute byte/UTF-16 bounds.</summary>
+/// <summary>A numbered capture's participation and absolute UTF-8 byte bounds.</summary>
 public readonly record struct JqRegexCapture(bool Success, int StartOffsetInBytes,
-    int EndOffsetInBytes, int StartOffsetInUtf16, int EndOffsetInUtf16);
+    int EndOffsetInBytes);
 
 /// <summary>A terminal engine resource failure, distinct from unsupported syntax and cancellation.</summary>
 public sealed class JqRegexResourceException(string message, bool isMemoryAdmission) : Exception(message)

@@ -1197,7 +1197,7 @@ sealed class SmokeCooperatingRegex(CancellationTokenSource cancellation) : IJqRe
             if (start != 0 || !IsMatch(input, options, cancellationToken)) return default;
             if (!budget.TryReserve(32, out var resultMemory))
                 throw new JqRegexResourceException("adapter result admission refused", true);
-            JqRegexCapture[] captures = [new(true, 0, 1, 0, 1)];
+            JqRegexCapture[] captures = [new(true, 0, 1)];
             return new JqRegexMatch(captures, resultMemory);
         }
         public void Dispose() { memory.Dispose(); owner.Disposed = true; }

@@ -107,8 +107,7 @@ internal sealed class Utf8RegexAdapter : IJqRegexEngine
                     if ((index & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
                     if (!match.TryGetGroup(index, out var group)) break;
                     captures[index] = group.Success
-                        ? new(true, group.StartOffsetInBytes, group.EndOffsetInBytes,
-                            group.StartOffsetInUtf16, group.EndOffsetInUtf16)
+                        ? new(true, group.StartOffsetInBytes, group.EndOffsetInBytes)
                         : default;
                 }
                 return new JqRegexMatch(captures, null);

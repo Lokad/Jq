@@ -2,6 +2,9 @@
 
 ## 0.3.0 — Unreleased
 
+- Breaking: `JqRegexCapture` contains participation and UTF-8 byte bounds only.
+  Providers no longer supply UTF-16 coordinates. Jq lazily projects byte ranges
+  through a shared subject index for scalar offsets and string extraction.
 - Breaking: `IJqHost.OpenReadAsync` receives `JqPathRequest(Path, CurrentDirectory)`.
   Resolve traversal and confinement in the host; preserve links, dot segments and
   trailing-slash intent. `JqPath` now describes caller current directories.

@@ -23,6 +23,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
             var regex = patternLease.Value;
             using var ownedSubject = context.Regexes.EncodeSubject(text, regex);
             ReadOnlyMemory<byte> subject = ownedSubject.Value;
+            using var coordinates = new JqRegexCoordinates(subject, context.Budget);
             var matchOptions = options.Match;
             // jq aligns replacement streams by their result index across successive matches.
             context.Budget.ReserveMetadata(32, 1);
@@ -41,14 +42,15 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                 {
                     if (!match.Success) break;
                     context.Budget.CheckCancellation();
-                    end = match.Value.EndOffsetInUtf16;
+                    end = coordinates.At(match.Value.EndOffsetInBytes).Utf16;
+                    int matchStart = coordinates.At(match.Value.StartOffsetInBytes).Utf16;
                     endByte = match.Value.EndOffsetInBytes;
                     isEmpty = endByte == match.Value.StartOffsetInBytes;
-                    if (match.Value.StartOffsetInUtf16 < previous || end < match.Value.StartOffsetInUtf16)
+                    if (matchStart < previous || end < matchStart)
                         throw new JqException("gsub requires non-overlapping forward matches");
-                    gapLength = match.Value.StartOffsetInUtf16 - previous;
+                    gapLength = matchStart - previous;
                     long captureBefore = storage?.UsedBytes ?? 0;
-                    captures = JqMatch.FoldNamedCaptures(context, text, match, JqRegexCache.GetGroupNames(regex), match.CaptureSlotCount - 1);
+                    captures = JqMatch.FoldNamedCaptures(context, text, match, JqRegexCache.GetGroupNames(regex), match.CaptureSlotCount - 1, coordinates);
                     captureDemand = storage is null ? 0 : storage.UsedBytes - captureBefore;
                 }
 
@@ -90,9 +92,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                 if (isEmpty)
                 {
                     if (end == text.Length) break;
-                    int width = char.IsHighSurrogate(text[end]) && end + 1 < text.Length
-                                && char.IsLowSurrogate(text[end + 1]) ? 2 : 1;
-                    start += Encoding.UTF8.GetByteCount(text.AsSpan(end, width));
+                    start = coordinates.AfterEmpty(endByte);
                 }
                 if (stopFirst) break;
             }

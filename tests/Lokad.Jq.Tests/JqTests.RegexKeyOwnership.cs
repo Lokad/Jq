@@ -76,7 +76,7 @@ public sealed partial class JqTests
                 CancellationToken cancellationToken)
             {
                 if (start != 0 || !IsMatch(input, options, cancellationToken)) return default;
-                JqRegexCapture[] captures = [new(true, 0, 1, 0, 1)];
+                JqRegexCapture[] captures = [new(true, 0, 1)];
                 return new JqRegexMatch(captures, null);
             }
             public void Dispose()
