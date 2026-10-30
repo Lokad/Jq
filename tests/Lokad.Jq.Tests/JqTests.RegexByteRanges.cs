@@ -88,4 +88,25 @@ public sealed partial class JqTests
         Assert.Equal(0, root.ReservedBytes);
         Assert.Equal(0, root.ActiveScopes);
     }
+
+    [Fact]
+    public async Task Jq_ShortUnicodeSubstitutionsKeepAdmissionsBatched()
+    {
+        long firstReservations = 0;
+        foreach (int count in new[] { 1, 1000 })
+        {
+            var root = new BenchmarkMemoryBudget(64 * 1024);
+            var memory = new CountingMemoryBudget(root);
+            var host = new MockFileSystem();
+            host.SetStandardInput(string.Concat(Enumerable.Repeat("\"é🚀x\"\n", count)));
+            var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "gsub(\"x\";\"y\") | empty")));
+            Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
+            Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal(0, root.ReservedBytes);
+            Assert.Equal(0, memory.Counts.SameSizeResizes);
+            if (count == 1) firstReservations = memory.Counts.Reservations;
+            else Assert.InRange(memory.Counts.Reservations, 1, firstReservations + 4);
+        }
+    }
 }

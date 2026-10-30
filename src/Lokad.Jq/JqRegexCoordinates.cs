@@ -50,8 +50,6 @@ internal sealed class JqRegexCoordinates(ReadOnlyMemory<byte> subject, JqBudget 
         {
             if ((position.Scalar & 4095) == 0) budget.CheckCancellation();
             byte first = bytes[position.Byte];
-            if (extend && first >= 128 && position.Byte == _asciiPrefix)
-                Add(position);
             int width = Width(first);
             if (position.Byte + width > target || (first & 0xc0) == 0x80)
                 throw new JqHostFailureException("regex capture splits a UTF-8 scalar", null);
@@ -59,7 +57,8 @@ internal sealed class JqRegexCoordinates(ReadOnlyMemory<byte> subject, JqBudget 
             if (extend)
             {
                 if (first < 128 && _asciiPrefix == position.Byte - 1) _asciiPrefix = position.Byte;
-                if (_checkpoints.Count != 0 && position.Byte - _checkpoints[^1].Byte >= Stride) Add(position);
+                int indexed = _checkpoints.Count == 0 ? _asciiPrefix : _checkpoints[^1].Byte;
+                if (position.Byte - indexed >= Stride) Add(position);
             }
         }
     }
@@ -75,7 +74,7 @@ internal sealed class JqRegexCoordinates(ReadOnlyMemory<byte> subject, JqBudget 
             _memory.Resize(64L + 12L * (previous + capacity));
             budget.CheckCancellation();
             _checkpoints.EnsureCapacity(capacity);
-            _memory.Resize(64L + 12L * capacity);
+            if (previous != 0) _memory.Resize(64L + 12L * capacity);
         }
         _checkpoints.Add(position);
     }
