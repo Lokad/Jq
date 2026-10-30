@@ -7,6 +7,35 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Theory]
+    [InlineData("stderr|empty", "", true)]
+    [InlineData("_strindices(.)|length", "1\n", false)]
+    [InlineData("path(ltrimstr(\"z\"))", "[]\n", false)]
+    [InlineData("path(rtrimstr(\"z\"))", "[]\n", false)]
+    [InlineData("path(trimstr(\"z\"))", "[]\n", false)]
+    public async Task Jq_NativeReadBoundariesNeedNoWholePayloadTranscoding(string operation, string output, bool stderr)
+    {
+        const long limit = 2 * 1024 * 1024;
+        string payload = new string('x', 1024 * 1024) + "é🚀";
+        var memory = new BenchmarkMemoryBudget(limit);
+        var host = new MockFileSystem();
+        IMemoryReservation? pressure = null;
+        host.BeforeByteAppend = () =>
+        {
+            if (pressure is null)
+                Assert.True(memory.TryReserve(limit - memory.ReservedBytes - 4096 - 256, out pressure));
+        };
+        var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nrc", "--arg", "text", payload,
+            "\"ready\", ($text|" + operation + ")")));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
+        Assert.Equal("ready\n" + output, host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Equal(stderr ? payload : "", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.NotNull(pressure);
+        Assert.Equal(pressure.Bytes, memory.ReservedBytes);
+        pressure.Dispose();
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
     [Fact]
     public void Jq_NativeNumberParsingAvoidsWholeValueUtf16()
     {

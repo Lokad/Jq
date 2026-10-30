@@ -31,9 +31,9 @@ internal static class JqMatch
     internal static string RequirePattern(JqContext context, JqValue? patternNode)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (!context.Runtime.TryGetString(patternNode, out string? pattern) || pattern is null)
+        if (patternNode is not JqString pattern)
             throw new JqException(TypeName(patternNode) + " (" + context.Runtime.TruncatedDump(patternNode) + ") is not a string");
-        return pattern;
+        return pattern.ToHost(context.Budget);
     }
 
     internal static JqString RequireText(JqContext context, JqValue? input)
@@ -49,8 +49,8 @@ internal static class JqMatch
         ArgumentNullException.ThrowIfNull(context);
         if (modifiersNode is null)
             return string.Empty;
-        if (context.Runtime.TryGetString(modifiersNode, out string? flags) && flags is not null)
-            return flags;
+        if (modifiersNode is JqString flags)
+            return flags.ToHost(context.Budget);
         throw new JqException(TypeName(modifiersNode) + " (" + context.Runtime.TruncatedDump(modifiersNode) + ") is not a string");
     }
 
@@ -264,7 +264,7 @@ internal static class JqMatch
                 return;
             }
         }
-        else if (context.Runtime.TryGetString(value, out string? text) && text is not null)
+        else if (value is JqString)
         {
             pattern = value;
             modifiers = null;

@@ -139,7 +139,7 @@ public sealed partial class JqTests
         {
             string source = "\"" + string.Concat(Enumerable.Repeat("\\(f0)", 20)) + "\"";
             var filter = new JqParser(source, JqProgramSource.Inline, env, context.Budget).Parse();
-            Assert.Equal(new string('1', 20), context.Runtime.ToJqString(await filter.Evaluate(NativeFixtures.Create(1), context, env).SingleAsync()));
+            Assert.Equal(new string('1', 20), context.Runtime.ToNativeString(await filter.Evaluate(NativeFixtures.Create(1), context, env).SingleAsync()).GetValue<string>());
             Assert.True(root.PeakBytes < 2 * 1024 * 1024);
         }
         Assert.Equal(0, root.ReservedBytes);

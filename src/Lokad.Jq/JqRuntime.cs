@@ -839,12 +839,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
     }
 
 
-    internal string String(JqValue? node)
-    {
-        if (TryGetString(node, out var s)) return s;
-        throw new JqException($"expected string, got {TypeName(node)}");
-    }
-
     internal JqString ToNativeString(JqValue? value) => value is JqString text ? text : ToJsonString(value);
 
     internal JqString ToJsonString(JqValue? value)
@@ -853,36 +847,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
         return JqString.FromUtf8(serialized.Value.Span, budget);
     }
 
-    internal string ToJqString(JqValue? node)
-    {
-        if (node == null) return "null";
-        if (TryGetString(node, out var s)) return s;
-        if (node is JqScalar v && v.TryGetValue<bool>(out var b)) return b ? "true" : "false";
-        // Integral storage prints exactly; doubles use the shortest
-        // round-trip form, while non-finite values render as JSON.
-        if (node is JqScalar i && i.TryGetValue<int>(out var intValue)) return intValue.ToString(CultureInfo.InvariantCulture);
-        if (node is JqScalar l && l.TryGetValue<long>(out var longValue)) return longValue.ToString(CultureInfo.InvariantCulture);
-        if (node is JqScalar m && m.TryGetValue<decimal>(out var decimalValue)) return decimalValue.ToString(CultureInfo.InvariantCulture);
-        if (node is JqScalar n && n.TryGetValue<double>(out var d)) return double.IsFinite(d) ? d.ToString(CultureInfo.InvariantCulture) : Serialize(node, false, null, false);
-        return Serialize(node, false, null, false);
-    }
-
-    internal bool TryGetString(JqValue? node, out string value)
-    {
-        value = string.Empty;
-        if (node is JqString text)
-        {
-            value = text.ToHost(budget);
-            return true;
-        }
-        return false;
-    }
-
-    // Array reads accept any numeric key like the reference jv_get: NaN
-    // reads null elsewhere, other values clamp to int range and truncate
-    // toward zero, negatives resolve from the end, and out-of-range reads
-    // yield null. Probe each integral storage in turn since conversions
-    // are storage-strict for created values.
     internal static bool TryGetArrayIndex(JqValue? node, out long index)
     {
         index = 0;
@@ -991,19 +955,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
             JqScalar v when TypeName(v) == "number" => JqScalar.Create(Math.Abs(Number(v))),
             _ => throw new JqException($"{TypeName(node)} ({TruncatedDump(node)}) has no length"),
         };
-    }
-
-    internal int CountStringScalars(ReadOnlySpan<char> text)
-    {
-        budget.CheckCancellation();
-        int count = 0;
-        for (var runes = text.EnumerateRunes(); runes.MoveNext();)
-        {
-            if ((count & 4095) == 0) budget.CheckCancellation();
-            count++;
-        }
-        budget.CheckCancellation();
-        return count;
     }
 
     internal JqString SliceString(JqString text, double? start, double? end)

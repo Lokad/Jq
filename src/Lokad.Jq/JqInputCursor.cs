@@ -782,8 +782,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     {
         if (run.SequenceEqual("true"u8) || run.SequenceEqual("false"u8) || run.SequenceEqual("null"u8))
             return true;
-        string text = System.Text.Encoding.UTF8.GetString(run);
-        return double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double value)
+        return double.TryParse(run, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double value)
             && !double.IsNaN(value)
             && !double.IsInfinity(value);
     }

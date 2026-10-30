@@ -1863,8 +1863,8 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "now": yield return JqScalar.Create(JqTime.Now(context)); break;
                 case "env": yield return context.Runtime.Clone(context.Variables.TryGetValue("ENV", out JqValue? envValue) ? envValue : new JqObject(context.Budget)); break;
                 case "stderr":
-                    if (context.Runtime.TryGetString(input, out string? message) && message is not null)
-                        await context.EmitStderrAsync(message).ConfigureAwait(false);
+                    if (input is JqString message)
+                        await context.EmitStderrAsync(message.Utf8).ConfigureAwait(false);
                     else
                     {
                         using var bytes = context.Runtime.SerializeUtf8(input, false, null, false);
@@ -1900,9 +1900,9 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "normals": if (JqMath.Classify("isnormal", input)) yield return input; break;
                 case "_negate": if (TypeName(input) != "number") throw new JqException(context.Runtime.UnaryTypeError(input, "cannot be negated")); yield return JqScalar.Create(-Number(input)); break;
                 case "_strindices":
-                    if (!context.Runtime.TryGetString(input, out string? strHaystack) || strHaystack is null)
+                    if (input is not JqString)
                         throw new JqException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") cannot be searched, as it is not a string");
-                    if (!context.Runtime.TryGetString(Arg(0), out string? strNeedle) || strNeedle is null)
+                    if (Arg(0) is not JqString)
                         throw new JqException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a string");
                     yield return context.Runtime.Indices(input, Arg(0));
                     break;
@@ -1991,11 +1991,11 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 }
                 case "modulemeta":
                 {
-                    if (!context.Runtime.TryGetString(input, out string? moduleName) || moduleName is null)
+                    if (input is not JqString moduleName)
                         throw new JqException("modulemeta input module name must be a string");
                     if (context.ModuleLoader is null)
                         throw new JqException("modulemeta not available");
-                    yield return await context.ModuleLoader.GetModuleMetadataAsync(moduleName, context.Budget.CancellationToken).ConfigureAwait(false);
+                    yield return await context.ModuleLoader.GetModuleMetadataAsync(moduleName.ToHost(context.Budget), context.Budget.CancellationToken).ConfigureAwait(false);
                     break;
                 }
                 case "input":
@@ -2043,20 +2043,20 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             await foreach (JqValue? affix in args[0].Evaluate(pair.Value, context, environment).ConfigureAwait(false))
             {
                 bool left = name != "rtrimstr", right = name != "ltrimstr";
-                if (!context.Runtime.TryGetString(pair.Value, out string text) || !context.Runtime.TryGetString(affix, out string fix))
+                if (pair.Value is not JqString text || affix is not JqString fix)
                     throw new JqException((left ? "startswith" : "endswith") + "() requires string inputs");
                 JqValuePath current = pair;
-                if (left && text.StartsWith(fix, StringComparison.Ordinal))
+                if (left && text.Utf8.Span.StartsWith(fix.Utf8.Span))
                 {
-                    int width = context.Runtime.CountStringScalars(fix);
+                    int width = fix.ScalarLength;
                     if (!JqPathReads.TrySlicePath(current, JqScalar.Create(width), null, false, context, out JqValuePath? sliced))
                         yield break;
                     current = sliced;
-                    text = context.Runtime.String(current.Value);
+                    text = current.Value as JqString ?? throw new InvalidOperationException("String slicing returned another value kind.");
                 }
-                if (right && text.EndsWith(fix, StringComparison.Ordinal))
+                if (right && text.Utf8.Span.EndsWith(fix.Utf8.Span))
                 {
-                    int end = context.Runtime.CountStringScalars(text) - context.Runtime.CountStringScalars(fix);
+                    int end = text.ScalarLength - fix.ScalarLength;
                     if (!JqPathReads.TrySlicePath(current, null, JqScalar.Create(end), false, context, out JqValuePath? sliced))
                         yield break;
                     current = sliced;

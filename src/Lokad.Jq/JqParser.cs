@@ -695,7 +695,7 @@ internal sealed class JqParser(
             return;
         if (literal.Value is JqObject || literal.Value is JqArray)
             return;
-        string text = new JqRuntime(_budget).ToJqString(literal.Value);
+        string text = new JqRuntime(_budget).Serialize(literal.Value, false, null, false);
         throw Error($"Cannot use {JqRuntime.TypeName(literal.Value)} ({text}) as object key", span);
     }
 

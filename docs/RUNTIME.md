@@ -63,6 +63,7 @@ Execution awaits writes before reusing buffers and stops production on downstrea
 closure or failure. Debug renders its envelope around the borrowed value;
 debug, stderr and sequence warnings await writes before continuing evaluation. Earlier reported evaluation errors remain nonzero after
 normal downstream closure. Cancellation alone does not end a pending buffer borrow.
+Raw `stderr` borrows the string's funded UTF-8 payload through its append.
 Pending reads, including `input`, `inputs` and `modulemeta`, suspend evaluation
 without blocking the caller. Pure evaluation completes synchronously.
 
