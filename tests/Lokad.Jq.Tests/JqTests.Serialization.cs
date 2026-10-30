@@ -42,8 +42,8 @@ public sealed partial class JqTests
         JqValueSegment segment = slice ? new SliceObjectSegment((JqObject)raw) : new InvalidSegment(raw);
         var runtime = new JqRuntime(budget);
 
-        Assert.Equal(slice ? "{\"start\":[1,2]}" : "[1,2]",
-            runtime.Serialize(segment.ToJson(budget), false, null, false));
+        using var rendered = runtime.SerializeUtf8(segment.ToJson(budget), false, null, false);
+        Assert.Equal((slice ? "{\"start\":[1,2]}"u8 : "[1,2]"u8).ToArray(), rendered.Value.ToArray());
         var materialized = Assert.IsType<JqArray>(JqPaths.PathToJson([segment], budget));
         var copiedItems = Assert.IsType<JqArray>(slice ? materialized[0]?["start"] : materialized[0]);
         copiedItems[0] = 9;

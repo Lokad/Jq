@@ -14,13 +14,6 @@ internal sealed partial class JqRuntime(JqBudget budget)
 {
     private const int DiagnosticPreviewBytes = 30;
 
-    internal string Serialize(JqValue? node, bool ascii, int? indent, bool tabs)
-    {
-        using var rendered = SerializeUtf8(node, ascii, indent, tabs);
-        budget.ReserveBytes(2L * Encoding.UTF8.GetCharCount(rendered.Value.Span));
-        return Encoding.UTF8.GetString(rendered.Value.Span);
-    }
-
     internal JqMemoryValue<ReadOnlyMemory<byte>> SerializeUtf8(JqValue? node, bool ascii, int? indent, bool tabs) =>
         SerializeUtf8(node, ascii, indent, tabs, false);
 

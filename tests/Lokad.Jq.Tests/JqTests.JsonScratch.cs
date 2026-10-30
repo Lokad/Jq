@@ -1,3 +1,4 @@
+using System.Text;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -71,7 +72,8 @@ public sealed partial class JqTests
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
-            Assert.Equal(expected, runtime.Serialize(runtime.ParseJson(text), false, null, false));
+            using var rendered = runtime.SerializeUtf8(runtime.ParseJson(text), false, null, false);
+            Assert.Equal(Encoding.UTF8.GetBytes(expected), rendered.Value.ToArray());
         }
         Assert.Equal(0, memory.ReservedBytes);
     }

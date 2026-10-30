@@ -50,6 +50,7 @@ internal static class NativeFixtures
     internal static string ToJsonString(this JqValue value)
     {
         using var budget = Budget();
-        return new JqRuntime(budget).Serialize(value, false, null, false);
+        using var rendered = new JqRuntime(budget).SerializeUtf8(value, false, null, false);
+        return System.Text.Encoding.UTF8.GetString(rendered.Value.Span);
     }
 }

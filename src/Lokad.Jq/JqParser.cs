@@ -695,7 +695,14 @@ internal sealed class JqParser(
             return;
         if (literal.Value is JqObject || literal.Value is JqArray)
             return;
-        string text = new JqRuntime(_budget).Serialize(literal.Value, false, null, false);
+        string text;
+        using (var rendered = new JqRuntime(_budget).SerializeUtf8(literal.Value, false, null, false))
+        {
+            // This compile-error diagnostic is an explicit host-text boundary.
+            _budget.ReserveString(Encoding.UTF8.GetCharCount(rendered.Value.Span));
+            _budget.CheckCancellation();
+            text = Encoding.UTF8.GetString(rendered.Value.Span);
+        }
         throw Error($"Cannot use {JqRuntime.TypeName(literal.Value)} ({text}) as object key", span);
     }
 
