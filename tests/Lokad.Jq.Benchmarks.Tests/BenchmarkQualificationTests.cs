@@ -160,7 +160,7 @@ public sealed class BenchmarkQualificationTests
         var workload = WorkloadCatalog.Create().Single(item => item.Name == "identity-compact" && item.Scale == "large");
         var row = new AllocationRow(BenchmarkReport.Describe(workload), OutputDigest.FromBytes([]),
             [new(100, 1, 0, 0), new(200, 0, 1, 0), new(1000, 0, 0, 1)]);
-        var report = new AllocationReport(host, "digest", false, "test contract", true, [row]);
+        var report = new AllocationReport(host, false, "test contract", true, [row]);
         string rendered = BenchmarkReport.RenderAllocations(report);
         Assert.Contains("| identity-compact/large | 200 | 1 / 1 / 1 |", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("Before", rendered, StringComparison.Ordinal);

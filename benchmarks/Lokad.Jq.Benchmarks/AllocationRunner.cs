@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -7,7 +6,7 @@ namespace Lokad.Jq.Benchmarking;
 
 internal sealed record AllocationBatch(double BytesPerExecution, int Gen0, int Gen1, int Gen2);
 internal sealed record AllocationRow(ComparisonWorkloadInfo Workload, OutputDigest Output, AllocationBatch[] Batches);
-internal sealed record AllocationReport(HostProvenance Host, string LibrarySha256, bool ServerGc,
+internal sealed record AllocationReport(HostProvenance Host, bool ServerGc,
     string Contract, bool Complete, AllocationRow[] Cases);
 
 // Actual managed allocations, including binding, execution, host consumption
@@ -56,7 +55,6 @@ internal static class AllocationRunner
             return 2;
         }
         var host = await BenchmarkReport.IdentifyHostAsync(cancellationToken).ConfigureAwait(false);
-        string librarySha = Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(typeof(Jq).Assembly.Location, cancellationToken).ConfigureAwait(false)));
         var rows = new List<AllocationRow>();
         await SaveAsync(false).ConfigureAwait(false);
         foreach (var workload in workloads)
@@ -101,7 +99,7 @@ internal static class AllocationRunner
         async Task SaveAsync(bool complete)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(output) ?? throw new InvalidOperationException("Missing artifact directory."));
-            var report = new AllocationReport(host, librarySha, System.Runtime.GCSettings.IsServerGC,
+            var report = new AllocationReport(host, System.Runtime.GCSettings.IsServerGC,
                 "Managed GC bytes; application-adapted regex provider; warm binding/execution/SHA-256 consumption and linked 15-second deadline; three batches of eight; no timing/native-memory claim.", complete, rows.ToArray());
             string temporary = output + ".tmp";
             await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(report, ComparisonRunner.JsonOptions), cancellationToken).ConfigureAwait(false);

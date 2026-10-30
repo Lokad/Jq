@@ -179,7 +179,7 @@ internal static class BenchmarkReport
         }
         text.AppendLine().AppendLine("Large and diagnostic cases. Bytes are the median of three warmed batches of eight executions; GC columns total those 24 executions. These are total managed allocations, not peak heap or native jq memory.").AppendLine();
         text.AppendLine($"Measured revision `{Escape(report.Host.Commit)}`; {Escape(report.Host.Runtime)}; SDK {Escape(report.Host.Sdk)}. " +
-            $"All {report.Cases.Length} cases completed. Library SHA-256 `{Escape(report.LibrarySha256)}`.").AppendLine();
+            $"All {report.Cases.Length} cases completed. Library SHA-256 `{Escape(report.Host.LibraryAssemblySha256)}`.").AppendLine();
         return text.AppendLine(AllocationEndMarker).ToString();
     }
 
