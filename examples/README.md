@@ -31,6 +31,8 @@ provider, retains the complete subject and absolute search offsets, and transfer
 capture ownership through `JqRegexMatch`. Syntax errors return `false` from
 `TryCompile`; refused admission throws `JqRegexResourceException` with
 `IsMemoryAdmission = true`. Cancellation propagates.
+Patterns arrive as immutable UTF-8 memory owned by Jq through compiled-handle
+disposal; forward their span to the provider's byte-pattern compile overload.
 
 The example's Utf8Regex 0.4.0 provider observes cancellation during compilation and
 matching. Its internal storage remains outside the host's shared memory budget.

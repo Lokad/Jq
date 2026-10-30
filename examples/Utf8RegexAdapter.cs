@@ -17,7 +17,7 @@ internal sealed class Utf8RegexAdapter : IJqRegexEngine
     public static Utf8RegexAdapter Instance { get; } = new();
 
     /// <inheritdoc />
-    public bool TryCompile(string pattern, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
+    public bool TryCompile(ReadOnlyMemory<byte> patternUtf8, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
         CancellationToken cancellationToken, [NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -28,7 +28,7 @@ internal sealed class Utf8RegexAdapter : IJqRegexEngine
             if ((options & JqRegexCompileOptions.Multiline) != 0) flags |= Pcre2CompileOptions.Multiline;
             if ((options & JqRegexCompileOptions.DotAll) != 0) flags |= Pcre2CompileOptions.DotAll;
             if ((options & JqRegexCompileOptions.Extended) != 0) flags |= Pcre2CompileOptions.Extended;
-            var compiled = Utf8Pcre2Regex.Compile(pattern, flags,
+            var compiled = Utf8Pcre2Regex.Compile(patternUtf8.Span, flags,
                 new Utf8Pcre2CompileSettings
                 {
                     Newline = Pcre2NewlineConvention.Lf,

@@ -2,6 +2,9 @@
 
 ## 0.3.0 — Unreleased
 
+- Breaking: `IJqRegexEngine.TryCompile` receives `ReadOnlyMemory<byte>` pattern
+  bytes instead of a CLR string. Jq owns immutable cache keys through handle
+  disposal; adapt the provider's native byte-pattern compile API.
 - Use ordered entries alone for small objects and build their lookup index as
   they grow, reducing allocation while preserving key order and duplicate handling.
 - Parse regex flags directly from UTF-8 and avoid constructing implicit-global

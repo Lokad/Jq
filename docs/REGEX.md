@@ -18,6 +18,10 @@ compiled handles until all subject/result borrowers finish. Implementations must
 cooperate inside their own operations, admit substantial internal storage before
 allocation, and surface refusal as terminal `JqRegexResourceException`.
 
+`TryCompile` receives immutable `ReadOnlyMemory<byte>` pattern bytes owned by Jq
+through handle disposal. Cache lookups compare UTF-8 content and compile options;
+the adapter compiles these bytes directly through the provider's native overload.
+
 The optional [Utf8RegexAdapter](../examples/Utf8RegexAdapter.cs) source uses managed
 `Lokad.Utf8Regex.Pcre2` 0.4.0 and its matching core package. It compiles into the
 application, alongside explicit provider references. Other adapters choose their

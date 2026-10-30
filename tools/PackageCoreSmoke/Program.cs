@@ -57,7 +57,7 @@ void Check(string name, bool success)
 sealed class DecliningEngine : IJqRegexEngine
 {
     public int Compilations { get; private set; }
-    public bool TryCompile(string pattern, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
+    public bool TryCompile(ReadOnlyMemory<byte> patternUtf8, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
         CancellationToken cancellationToken, [NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
     {
         cancellationToken.ThrowIfCancellationRequested();

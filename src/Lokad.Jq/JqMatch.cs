@@ -13,9 +13,9 @@ internal static class JqMatch
     internal static bool Test(JqContext context, JqValue? input, JqValue? patternNode, JqValue? flagsNode)
     {
         JqString text = RequireText(context, input);
-        string pattern = RequirePattern(context, patternNode);
+        JqString pattern = RequirePattern(context, patternNode);
         JqRegexOptions options = JqRegexOptions.ParseOrThrow(RequireModifiers(context, flagsNode), JqRegexGlobalFlag.None, context.Budget);
-        using var patternLease = context.Regexes.Rent(pattern, options.Pattern);
+        using var patternLease = context.Regexes.Rent(pattern.Utf8, options.Pattern);
         var regex = patternLease.Value;
         return context.Regexes.IsMatch(regex, text.Utf8, options.Match);
     }
@@ -24,16 +24,16 @@ internal static class JqMatch
     {
         ArgumentNullException.ThrowIfNull(context);
         JqString text = RequireText(context, input);
-        string pattern = RequirePattern(context, patternNode);
+        JqString pattern = RequirePattern(context, patternNode);
         return SearchText(context, text, pattern, RequireModifiers(context, modifiersNode), Projection.Match);
     }
 
-    internal static string RequirePattern(JqContext context, JqValue? patternNode)
+    internal static JqString RequirePattern(JqContext context, JqValue? patternNode)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (patternNode is not JqString pattern)
             throw new JqException(TypeName(patternNode) + " (" + context.Runtime.TruncatedDump(patternNode) + ") is not a string");
-        return pattern.ToHost(context.Budget);
+        return pattern;
     }
 
     internal static JqString RequireText(JqContext context, JqValue? input)
@@ -56,7 +56,7 @@ internal static class JqMatch
 
     private enum Projection { Match, Scan, Split }
 
-    private static List<JqValue> SearchText(JqContext context, JqString text, string pattern, JqString? modifiers, Projection projection)
+    private static List<JqValue> SearchText(JqContext context, JqString text, JqString pattern, JqString? modifiers, Projection projection)
     {
         JqRegexGlobalFlag implicitGlobal = projection switch
         {
@@ -65,7 +65,7 @@ internal static class JqMatch
             _ => JqRegexGlobalFlag.None
         };
         JqRegexOptions options = JqRegexOptions.ParseOrThrow(modifiers, implicitGlobal, context.Budget);
-        using var patternLease = context.Regexes.Rent(pattern, options.Pattern);
+        using var patternLease = context.Regexes.Rent(pattern.Utf8, options.Pattern);
         var compiled = patternLease.Value;
         var names = projection == Projection.Match ? JqRegexCache.GetGroupNames(compiled) : null;
         ReadOnlyMemory<byte> subject = text.Utf8;
@@ -283,14 +283,14 @@ internal static class JqMatch
     internal static List<JqValue> Scan(JqContext context, JqValue? input, JqValue? patternNode, JqValue? flagsNode)
     {
         JqString text = RequireText(context, input);
-        string pattern = RequirePattern(context, patternNode);
+        JqString pattern = RequirePattern(context, patternNode);
         return SearchText(context, text, pattern, RequireModifiers(context, flagsNode), Projection.Scan);
     }
 
     internal static List<JqValue> Split(JqContext context, JqValue? input, JqValue? patternNode, JqValue? flagsNode)
     {
         JqString text = RequireText(context, input);
-        string pattern = RequirePattern(context, patternNode);
+        JqString pattern = RequirePattern(context, patternNode);
         return SearchText(context, text, pattern, RequireModifiers(context, flagsNode), Projection.Split);
     }
 }

@@ -8,14 +8,14 @@ namespace Lokad.Jq;
 /// an independent allowance. Refused admission must throw JqRegexResourceException with
 /// IsMemoryAdmission set. Cancellation must propagate as OperationCanceledException.
 /// The host owns this engine; each successful compilation transfers a handle to Jq.
-/// Jq owns the supplied pattern text through the handle's lifetime. Its cache-key
+/// Jq owns the immutable supplied UTF-8 pattern bytes through the handle's lifetime. Its cache-key
 /// storage is already charged. Providers own syntax validation, resource bounds,
 /// and admission for compilation, workspace and capture results.
 /// </remarks>
 public interface IJqRegexEngine
 {
     /// <summary>Compiles a pattern, or returns false and a catchable syntax/unsupported diagnostic.</summary>
-    bool TryCompile(string pattern, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
+    bool TryCompile(ReadOnlyMemory<byte> patternUtf8, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
         CancellationToken cancellationToken, [NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error);
 }
 

@@ -10,21 +10,33 @@ internal sealed class JqRegexCache : IDisposable
     private bool _disposed;
     private Pattern? _idlePattern;
     private Pattern? _olderIdlePattern;
-    private readonly Dictionary<(string Pattern, JqRegexCompileOptions Options), Pattern> _patterns = new();
+    private readonly Dictionary<PatternKey, Pattern> _patterns = new();
 
     internal JqRegexCache(JqBudget budget)
     {
         _budget = budget;
     }
 
-    internal JqMemoryValue<Pattern> Rent(string pattern, JqRegexCompileOptions options)
+    internal JqMemoryValue<Pattern> Rent(ReadOnlyMemory<byte> pattern, JqRegexCompileOptions options)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _budget.CheckCancellation();
         IJqRegexEngine regexEngine = _budget.RegexEngine
             ?? throw new JqException("regex engine is not configured");
-        if (_patterns.TryGetValue((pattern, options), out Pattern? cached))
+        var hash = new HashCode();
+        hash.Add(options);
+        for (int offset = 0; offset < pattern.Length;)
         {
+            _budget.CheckCancellation();
+            int length = Math.Min(4096, pattern.Length - offset);
+            hash.AddBytes(pattern.Span.Slice(offset, length));
+            offset += length;
+        }
+        int contentHash = hash.ToHashCode();
+        var lookup = new PatternKey(pattern, options, contentHash);
+        if (_patterns.TryGetValue(lookup, out Pattern? cached))
+        {
+            _budget.CheckCancellation();
             var lease = new JqMemoryValue<Pattern>(cached, cached);
             if (ReferenceEquals(cached, _idlePattern))
             {
@@ -42,11 +54,11 @@ internal sealed class JqRegexCache : IDisposable
         try
         {
             // Own the persistent key before giving it to a borrowed engine. The
-            // provider may retain no pattern text; record-local input can expire.
+            // provider may borrow the bytes; record-local input can expire.
             // The key owner follows the compiled handle through all its borrowers.
-            keys.Resize(checked(128 + 2L * pattern.Length));
+            keys.Resize(128L + pattern.Length);
             _budget.CheckCancellation();
-            string ownedPattern = new(pattern.AsSpan());
+            ReadOnlyMemory<byte> ownedPattern = pattern.ToArray();
             try
             {
                 if (!regexEngine.TryCompile(ownedPattern, options, _budget.MemoryBudget,
@@ -56,9 +68,10 @@ internal sealed class JqRegexCache : IDisposable
             catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
             { throw new JqHostFailureException("regex compilation violated its contract", exception); }
             _budget.CheckCancellation();
-            cached = new Pattern(this, ownedPattern, options, compiled, keys);
+            var ownedKey = new PatternKey(ownedPattern, options, contentHash);
+            cached = new Pattern(this, ownedKey, compiled, keys);
             var lease = new JqMemoryValue<Pattern>(cached, cached);
-            _patterns.Add((ownedPattern, options), cached);
+            _patterns.Add(ownedKey, cached);
             cached.Borrowers++;
             retained = true;
             return lease;
@@ -158,18 +171,26 @@ internal sealed class JqRegexCache : IDisposable
 
     private void Retire(Pattern pattern)
     {
-        _patterns.Remove((pattern.Text, pattern.Options));
+        _patterns.Remove(pattern.Key);
         pattern.Compiled.Dispose();
         pattern.Keys.Dispose();
     }
 
+    internal readonly struct PatternKey(ReadOnlyMemory<byte> utf8, JqRegexCompileOptions options, int hash) : IEquatable<PatternKey>
+    {
+        private ReadOnlyMemory<byte> Utf8 { get; } = utf8;
+        private JqRegexCompileOptions Options { get; } = options;
+        public bool Equals(PatternKey other) => Options == other.Options && Utf8.Span.SequenceEqual(other.Utf8.Span);
+        public override bool Equals(object? other) => other is PatternKey key && Equals(key);
+        public override int GetHashCode() => hash;
+    }
+
     // Each operation and result holds its own borrow. Only the last
     // two returned idle patterns are reusable; active entries are never evicted.
-    internal sealed class Pattern(JqRegexCache cache, string text, JqRegexCompileOptions options,
+    internal sealed class Pattern(JqRegexCache cache, PatternKey key,
         IJqCompiledRegex compiled, JqMemoryReservation keys) : IDisposable
     {
-        internal string Text { get; } = text;
-        internal JqRegexCompileOptions Options { get; } = options;
+        internal PatternKey Key { get; } = key;
         internal IJqCompiledRegex Compiled { get; } = compiled;
         internal JqMemoryReservation Keys { get; } = keys;
         internal int Borrowers { get; set; }

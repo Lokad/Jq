@@ -18,8 +18,8 @@ public sealed partial class JqTests
         using var cache = new JqRegexCache(budget);
         for (int index = 0; index < 1000; index++)
         {
-            using var lease = cache.Rent($"p{index % distinct:D5}", JqRegexCompileOptions.None);
-            Assert.Equal(140 * Math.Min(Math.Min(index + 1, distinct), 2), root.ReservedBytes);
+            using var lease = cache.Rent(Encoding.UTF8.GetBytes($"p{index % distinct:D5}"), JqRegexCompileOptions.None);
+            Assert.Equal(134 * Math.Min(Math.Min(index + 1, distinct), 2), root.ReservedBytes);
         }
         Assert.Equal(distinct, engine.Compilations);
         Assert.Equal(engine.Compilations, counted.Counts.Reservations);
@@ -37,16 +37,16 @@ public sealed partial class JqTests
         var engine = new FixedRegexEngine();
         using var budget = new JqBudget(engine, root, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
-        using var outer = cache.Rent("outer", JqRegexCompileOptions.None);
+        using var outer = cache.Rent("outer"u8.ToArray(), JqRegexCompileOptions.None);
         ReadOnlyMemory<byte> subject = "x"u8.ToArray();
         var match = cache.Match(outer.Value, subject, 0, JqRegexMatchOptions.None);
         var copy = match;
         for (int index = 0; index < 1000; index++)
         {
-            using var inner = cache.Rent($"p{index:D5}", JqRegexCompileOptions.None);
+            using var inner = cache.Rent(Encoding.UTF8.GetBytes($"p{index:D5}"), JqRegexCompileOptions.None);
             Assert.True(cache.IsMatch(inner.Value, "x"u8.ToArray(), JqRegexMatchOptions.None));
         }
-        using (var same = cache.Rent("outer", JqRegexCompileOptions.None))
+        using (var same = cache.Rent("outer"u8.ToArray(), JqRegexCompileOptions.None))
             Assert.Same(outer.Value, same.Value);
         Assert.Equal(1001, engine.Compilations);
         Assert.Equal(3, engine.PeakLive);
@@ -55,7 +55,7 @@ public sealed partial class JqTests
         cache.Dispose();
         Assert.Equal(1000, engine.Disposals);
         Assert.True(match.Success);
-        Assert.Equal(138, root.ReservedBytes);
+        Assert.Equal(133, root.ReservedBytes);
         match.Dispose();
         copy.Dispose();
         Assert.Equal(1001, engine.Disposals);
@@ -70,14 +70,14 @@ public sealed partial class JqTests
         var engine = new FixedRegexEngine();
         using var budget = new JqBudget(engine, counted, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
-        using (var first = cache.Rent("first", JqRegexCompileOptions.None)) { }
-        using (var second = cache.Rent("second", JqRegexCompileOptions.None)) { }
-        var failure = Assert.Throws<JqQuotaException>(() => cache.Rent(new string('x', 100), JqRegexCompileOptions.None));
+        using (var first = cache.Rent("first"u8.ToArray(), JqRegexCompileOptions.None)) { }
+        using (var second = cache.Rent("second"u8.ToArray(), JqRegexCompileOptions.None)) { }
+        var failure = Assert.Throws<JqQuotaException>(() => cache.Rent(Encoding.UTF8.GetBytes(new string('x', 100)), JqRegexCompileOptions.None));
         Assert.True(failure.IsMemoryAdmission);
         Assert.Equal(1, counted.Counts.Refusals);
         Assert.Equal(2, engine.Compilations);
         Assert.Equal(1, engine.Disposals);
-        Assert.Equal(140, root.ReservedBytes);
+        Assert.Equal(134, root.ReservedBytes);
         cache.Dispose();
         Assert.Equal(2, engine.Disposals);
         Assert.Equal(0, root.ReservedBytes);

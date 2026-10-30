@@ -12,7 +12,7 @@ public sealed partial class JqTests
         var engine = new OwnedResultRegexEngine();
         using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
-        using var patternLease = cache.Rent("x", JqRegexCompileOptions.None);
+        using var patternLease = cache.Rent("x"u8.ToArray(), JqRegexCompileOptions.None);
         var pattern = patternLease.Value;
         long compiled = memory.ReservedBytes;
         ReadOnlyMemory<byte> subject = "x"u8.ToArray();
@@ -60,7 +60,7 @@ public sealed partial class JqTests
         internal List<string> Cleanup { get; } = [];
         internal Action? AfterMatch { get; init; }
 
-        public bool TryCompile(string pattern, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
+        public bool TryCompile(ReadOnlyMemory<byte> patternUtf8, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
             CancellationToken cancellationToken, [NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
         {
             cancellationToken.ThrowIfCancellationRequested();

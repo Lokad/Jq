@@ -1179,7 +1179,7 @@ sealed class SmokeCooperatingRegex(CancellationTokenSource cancellation) : IJqRe
 {
     internal bool Disposed { get; private set; }
     internal bool CancelOnSearch { get; init; } = true;
-    public bool TryCompile(string pattern, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
+    public bool TryCompile(ReadOnlyMemory<byte> patternUtf8, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
         CancellationToken cancellationToken,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
     {

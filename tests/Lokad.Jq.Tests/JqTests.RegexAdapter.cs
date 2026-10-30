@@ -88,7 +88,7 @@ public sealed partial class JqTests
         var engine = new ObservedRegexEngine((_, _, _) => { });
         using var budget = new JqBudget(engine, memory, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
-        using var patternLease = cache.Rent("x", JqRegexCompileOptions.None);
+        using var patternLease = cache.Rent("x"u8.ToArray(), JqRegexCompileOptions.None);
         var pattern = patternLease.Value;
         ReadOnlyMemory<byte> subject = "x"u8.ToArray();
         var match = cache.Match(pattern, subject, 0, JqRegexMatchOptions.None);
@@ -109,11 +109,11 @@ public sealed partial class JqTests
         internal int Created { get; private set; }
         internal int Disposed { get; private set; }
 
-        public bool TryCompile(string pattern, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
+        public bool TryCompile(ReadOnlyMemory<byte> patternUtf8, JqRegexCompileOptions options, IMemoryBudget? memoryBudget,
             CancellationToken cancellationToken, [NotNullWhen(true)] out IJqCompiledRegex? regex, out string? error)
         {
             observe("compile", memoryBudget, cancellationToken);
-            if (!Utf8RegexAdapter.Instance.TryCompile(pattern, options, memoryBudget, cancellationToken, out var compiled, out error))
+            if (!Utf8RegexAdapter.Instance.TryCompile(patternUtf8, options, memoryBudget, cancellationToken, out var compiled, out error))
             { regex = null; return false; }
             Created++;
             regex = new ObservedCompiled(compiled, memoryBudget, this, observe, cancellationToken);

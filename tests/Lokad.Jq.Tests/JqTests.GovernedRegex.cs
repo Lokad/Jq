@@ -16,7 +16,7 @@ public sealed partial class JqTests
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
         string literal = new('x', length);
-        using var patternLease = regexes.Rent(literal, JqRegexCompileOptions.None);
+        using var patternLease = regexes.Rent(Encoding.UTF8.GetBytes(literal), JqRegexCompileOptions.None);
         var pattern = patternLease.Value;
         ReadOnlyMemory<byte> subject = Encoding.UTF8.GetBytes(literal);
         MemoryCallCounts before = counted.Counts;
@@ -41,15 +41,15 @@ public sealed partial class JqTests
         var budget = new JqBudget(Utf8RegexAdapter.Instance, scope, CancellationToken.None);
         using (var regexes = new JqRegexCache(budget))
         {
-            using var patternLease = regexes.Rent("x", JqRegexCompileOptions.None);
+            using var patternLease = regexes.Rent("x"u8.ToArray(), JqRegexCompileOptions.None);
             var pattern = patternLease.Value;
-            Assert.Equal(130, memory.ReservedBytes);
-            using (var same = regexes.Rent("x", JqRegexCompileOptions.None)) Assert.Same(pattern, same.Value);
-            Assert.Equal(130, memory.ReservedBytes);
+            Assert.Equal(129, memory.ReservedBytes);
+            using (var same = regexes.Rent("x"u8.ToArray(), JqRegexCompileOptions.None)) Assert.Same(pattern, same.Value);
+            Assert.Equal(129, memory.ReservedBytes);
             Assert.StartsWith("invalid regex:", Assert.Throws<JqException>(() =>
-                regexes.Rent("[", JqRegexCompileOptions.None)).Message, StringComparison.Ordinal);
-            Assert.Equal(130, memory.ReservedBytes);
-            Assert.Equal(260, memory.PeakBytes);
+                regexes.Rent("["u8.ToArray(), JqRegexCompileOptions.None)).Message, StringComparison.Ordinal);
+            Assert.Equal(129, memory.ReservedBytes);
+            Assert.Equal(258, memory.PeakBytes);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -60,7 +60,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None);
         using var regexes = new JqRegexCache(budget);
-        using var patternLease = regexes.Rent("x", JqRegexCompileOptions.None);
+        using var patternLease = regexes.Rent("x"u8.ToArray(), JqRegexCompileOptions.None);
         var pattern = patternLease.Value;
         long compiled = memory.ReservedBytes;
         ReadOnlyMemory<byte> parent = "x"u8.ToArray();

@@ -18,7 +18,7 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                 firstOnly ? JqRegexGlobalFlag.None : JqRegexGlobalFlag.Suffix, context.Budget);
             // sub without an explicit g flag stops after the first match.
             bool stopFirst = !options.Global;
-            using var patternLease = context.Regexes.Rent(JqMatch.RequirePattern(context, pattern), options.Pattern);
+            using var patternLease = context.Regexes.Rent(JqMatch.RequirePattern(context, pattern).Utf8, options.Pattern);
             var regex = patternLease.Value;
             ReadOnlyMemory<byte> subject = text.Utf8;
             using var coordinates = new JqRegexCoordinates(subject, context.Budget);

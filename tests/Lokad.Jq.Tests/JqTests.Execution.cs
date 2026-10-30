@@ -136,7 +136,7 @@ public sealed partial class JqTests
     {
         using var cancellation = new CancellationTokenSource();
         using var regexes = new JqRegexCache(new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token));
-        using var patternLease = regexes.Rent("x", JqRegexCompileOptions.None);
+        using var patternLease = regexes.Rent("x"u8.ToArray(), JqRegexCompileOptions.None);
         var pattern = patternLease.Value;
         cancellation.Cancel();
         var error = Assert.Throws<OperationCanceledException>(() =>
