@@ -84,7 +84,7 @@ public sealed partial class JqTests
         Assert.Equal("42\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, host.ReadBytesCallCount);
-        Assert.True(memory.PeakBytes < 8192);
+        Assert.True(memory.PeakBytes < 8192 + 80 + directory.Length);
         Assert.Equal(0, memory.ReservedBytes);
     }
 

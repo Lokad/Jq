@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -18,9 +17,9 @@ public sealed partial class JqTests
         };
         foreach (var item in cases)
         {
-            JsonNode result = JqRuntime.CreateNumber(item.Value);
+            JqValue result = JqRuntime.CreateNumber(item.Value);
             Assert.Equal(BitConverter.DoubleToInt64Bits(item.Value), BitConverter.DoubleToInt64Bits(JqRuntime.Number(result)));
-            Assert.Equal(item.Integral, Assert.IsAssignableFrom<JsonValue>(result).TryGetValue<long>(out _));
+            Assert.Equal(item.Integral, Assert.IsAssignableFrom<JqScalar>(result).TryGetValue<long>(out _));
         }
     }
 

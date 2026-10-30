@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -10,7 +9,7 @@ public sealed partial class JqTests
     public void Jq_EmptyPrefixAvoidsUnusedEnvironmentCollections(int functions)
     {
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
-        var environment = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        var environment = JqEnvironment.CreateRoot(new Dictionary<string, JqValue?>());
         for (int i = 0; i < functions; i++)
             environment = environment.ExtendFunction(new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
         var tokens = Lexer.Tokenize("42", JqProgramSource.Inline, budget);
@@ -36,7 +35,7 @@ public sealed partial class JqTests
     {
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
-        var environment = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        var environment = JqEnvironment.CreateRoot(new Dictionary<string, JqValue?>());
         var parser = new JqParser("42", JqProgramSource.Inline, environment, budget);
         cancellation.Cancel();
         Assert.ThrowsAny<OperationCanceledException>(() => parser.ParsePrefix());

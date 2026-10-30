@@ -10,12 +10,17 @@ internal static class JqDiagnosticWriter
     private static readonly ReadOnlyMemory<byte> Refusal = "jq: memory budget exceeded\n"u8.ToArray();
 
     // Null denotes admission refusal; an admitted write retains the host outcome.
-    internal static async Task<JqAppendResult?> TryWriteAsync(IJqHost host, JqFileDescriptor descriptor,
+    internal static Task<JqAppendResult?> TryWriteAsync(IJqHost host, JqFileDescriptor descriptor,
         IReadOnlyList<string> parts, bool newline, IMemoryBudget? memoryBudget,
+        CancellationToken cancellationToken) =>
+        TryWriteAsync(host, descriptor, parts, ReadOnlyMemory<byte>.Empty, newline, memoryBudget, cancellationToken);
+
+    internal static async Task<JqAppendResult?> TryWriteAsync(IJqHost host, JqFileDescriptor descriptor,
+        IReadOnlyList<string> parts, ReadOnlyMemory<byte> payload, bool newline, IMemoryBudget? memoryBudget,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        long length = newline ? 1 : 0;
+        long length = (long)payload.Length + (newline ? 1 : 0);
         foreach (string part in parts)
         {
             long count = Utf8Text.GetByteCount(part, cancellationToken);
@@ -37,6 +42,8 @@ internal static class JqDiagnosticWriter
         int offset = 0;
         foreach (string part in parts)
             offset += Utf8Text.Encode(part, bytes.AsSpan(offset));
+        payload.Span.CopyTo(bytes.AsSpan(offset));
+        offset += payload.Length;
         if (newline) bytes[offset] = (byte)'\n';
         cancellationToken.ThrowIfCancellationRequested();
         return await JqHostExtensions.GuardedAppendAsync(host, descriptor, bytes, cancellationToken).ConfigureAwait(false);

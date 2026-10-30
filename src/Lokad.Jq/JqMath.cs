@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json.Nodes;
 using static Lokad.Jq.JqRuntime;
 
 namespace Lokad.Jq;
@@ -86,7 +85,7 @@ internal static class JqMath
         ["ldexp"] = Scalbn,
     };
 
-    internal static bool TryEvaluate(JqContext context, string name, JsonNode?[] combo, JsonNode? input, out JsonNode? result)
+    internal static bool TryEvaluate(JqContext context, string name, JqValue?[] combo, JqValue? input, out JqValue? result)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(combo);
@@ -95,7 +94,7 @@ internal static class JqMath
         {
             if (combo.Length != 0)
                 return false;
-            result = JsonValue.Create(unary(RequireNumber(context.Runtime, input)));
+            result = JqScalar.Create(unary(RequireNumber(context.Runtime, input)));
             return true;
         }
         if (Binary.TryGetValue(name, out Func<double, double, double>? binary))
@@ -104,7 +103,7 @@ internal static class JqMath
                 return false;
             double first = RequireNumber(context.Runtime, combo[0]);
             double second = RequireNumber(context.Runtime, combo[1]);
-            result = JsonValue.Create(binary(first, second));
+            result = JqScalar.Create(binary(first, second));
             return true;
         }
         switch (name)
@@ -120,28 +119,28 @@ internal static class JqMath
             case "isfinite":
                 if (combo.Length != 0)
                     return false;
-                result = JsonValue.Create(Classify(name, input));
+                result = JqScalar.Create(Classify(name, input));
                 return true;
             case "infinite":
                 if (combo.Length != 0)
                     return false;
-                result = JsonValue.Create(double.PositiveInfinity);
+                result = JqScalar.Create(double.PositiveInfinity);
                 return true;
             case "nan":
                 if (combo.Length != 0)
                     return false;
-                result = JsonValue.Create(double.NaN);
+                result = JqScalar.Create(double.NaN);
                 return true;
             case "have_decnum":
             case "have_literal_numbers":
                 if (combo.Length != 0)
                     return false;
-                result = JsonValue.Create(false);
+                result = JqScalar.Create(false);
                 return true;
             case "fma":
                 if (combo.Length != 3)
                     return false;
-                result = JsonValue.Create(Math.FusedMultiplyAdd(RequireNumber(context.Runtime, combo[0]), RequireNumber(context.Runtime, combo[1]), RequireNumber(context.Runtime, combo[2])));
+                result = JqScalar.Create(Math.FusedMultiplyAdd(RequireNumber(context.Runtime, combo[0]), RequireNumber(context.Runtime, combo[1]), RequireNumber(context.Runtime, combo[2])));
                 return true;
             case "modf":
                 if (combo.Length != 0)
@@ -157,7 +156,7 @@ internal static class JqMath
                 if (combo.Length != 0)
                     return false;
                 (double lgammaValue, int lgammaSign) = LogGammaSigned(RequireNumber(context.Runtime, input));
-                result = new JsonArray(JsonValue.Create(lgammaValue), JsonValue.Create(lgammaSign));
+                result = new JqArray(JqScalar.Create(lgammaValue), JqScalar.Create(lgammaSign));
                 return true;
             case "jn":
             case "yn":
@@ -165,7 +164,7 @@ internal static class JqMath
                     return false;
                 double order = RequireNumber(context.Runtime, combo[0]);
                 double point = RequireNumber(context.Runtime, combo[1]);
-                result = JsonValue.Create(name == "yn"
+                result = JqScalar.Create(name == "yn"
                     ? JqBessel.Yn(context.Budget, order, point)
                     : JqBessel.Jn(context.Budget, order, point));
                 return true;
@@ -174,7 +173,7 @@ internal static class JqMath
         }
     }
 
-    private static double RequireNumber(JqRuntime runtime, JsonNode? node)
+    private static double RequireNumber(JqRuntime runtime, JqValue? node)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         if (TypeName(node) == "number")
@@ -188,21 +187,21 @@ internal static class JqMath
     // decimal order ranks -0 below +0, so abs(-0) negates to +0; that quirk
     // stays local to abs (ordering keeps signed zeros equal) while the result
     // matches the upstream vector.
-    private static JsonNode? Abs(JqContext context, JsonNode? input)
+    private static JqValue? Abs(JqContext context, JqValue? input)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (context.Runtime.Compare(input, JsonValue.Create(0)) < 0)
+        if (context.Runtime.Compare(input, JqScalar.Create(0)) < 0)
         {
             if (TypeName(input) == "number")
-                return JsonValue.Create(-Number(input));
+                return JqScalar.Create(-Number(input));
             throw new JqException(context.Runtime.UnaryTypeError(input, "cannot be negated"));
         }
         if (TypeName(input) == "number" && Number(input) == 0.0 && double.IsNegative(Number(input)))
-            return JsonValue.Create(0.0);
+            return JqScalar.Create(0.0);
         return input;
     }
 
-    internal static bool Classify(string name, JsonNode? input)
+    internal static bool Classify(string name, JqValue? input)
     {
         if (TypeName(input) != "number")
             return false;
@@ -310,22 +309,22 @@ internal static class JqMath
         return Math.ScaleB(x, shift);
     }
 
-    private static JsonNode ModfArray(double x)
+    private static JqValue ModfArray(double x)
     {
         if (double.IsNaN(x))
-            return new JsonArray(JsonValue.Create(double.NaN), JsonValue.Create(double.NaN));
+            return new JqArray(JqScalar.Create(double.NaN), JqScalar.Create(double.NaN));
         if (double.IsInfinity(x))
-            return new JsonArray(JsonValue.Create(Math.CopySign(0.0, x)), JsonValue.Create(x));
+            return new JqArray(JqScalar.Create(Math.CopySign(0.0, x)), JqScalar.Create(x));
         double integral = Math.Truncate(x);
-        return new JsonArray(JsonValue.Create(Math.CopySign(x - integral, x)), JsonValue.Create(integral));
+        return new JqArray(JqScalar.Create(Math.CopySign(x - integral, x)), JqScalar.Create(integral));
     }
 
-    private static JsonNode FrexpArray(double x)
+    private static JqValue FrexpArray(double x)
     {
         if (x == 0.0 || double.IsNaN(x) || double.IsInfinity(x))
-            return new JsonArray(JsonValue.Create(x), JsonValue.Create(0));
+            return new JqArray(JqScalar.Create(x), JqScalar.Create(0));
         int exponent = Math.ILogB(x) + 1;
-        return new JsonArray(JsonValue.Create(Math.ScaleB(x, -exponent)), JsonValue.Create(exponent));
+        return new JqArray(JqScalar.Create(Math.ScaleB(x, -exponent)), JqScalar.Create(exponent));
     }
 
     private static double Gamma(double x)

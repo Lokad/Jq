@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -14,9 +13,9 @@ public sealed partial class JqTests
     [InlineData(true, true)]
     public void Jq_SerializationBorrowsWideArraysAndNormalizesNumbersWhileWriting(bool sorted, bool nonfinite)
     {
-        var input = new JsonArray();
-        for (int index = 0; index < 10000; index++) input.Add((JsonNode?)null);
-        if (nonfinite) input[0] = JsonValue.Create(double.NaN);
+        var input = new JqArray();
+        for (int index = 0; index < 10000; index++) input.Add((JqValue?)null);
+        if (nonfinite) input[0] = NativeFixtures.Create(double.NaN);
         byte[] expected = Encoding.UTF8.GetBytes("[" + string.Join(',', Enumerable.Repeat("null", 10000)) + "]");
         var root = new BenchmarkMemoryBudget(192 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
@@ -34,8 +33,8 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_SortedSerializationReusesKeyStorageAcrossSiblingObjects()
     {
-        var input = new JsonArray();
-        for (int index = 0; index < 10000; index++) input.Add(new JsonObject { ["z"] = 1, ["a"] = 2 });
+        var input = new JqArray();
+        for (int index = 0; index < 10000; index++) input.Add(new JqObject(NativeFixtures.Budget()) { ["z"] = 1, ["a"] = 2 });
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var counted = new CountingMemoryBudget(root);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
@@ -53,7 +52,7 @@ public sealed partial class JqTests
             }
             Assert.Equal(0, root.ReservedBytes);
             Assert.InRange(counted.Counts.Reservations + counted.Counts.Resizes, 1, 30);
-            Assert.All(input, value => Assert.Equal(new[] { "z", "a" }, Assert.IsType<JsonObject>(value).Select(property => property.Key)));
+            Assert.All(input, value => Assert.Equal(new[] { "z", "a" }, Assert.IsType<JqObject>(value).Select(property => property.Key.GetValue<string>())));
         }
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -77,8 +76,8 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_DirectSerializationCancelsDuringBufferAdmission(bool sorted)
     {
-        var input = new JsonArray();
-        for (int index = 0; index < 100000; index++) input.Add((JsonNode?)null);
+        var input = new JqArray();
+        for (int index = 0; index < 100000; index++) input.Add((JqValue?)null);
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
@@ -96,9 +95,9 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_NormalizingANonfiniteLeafPreservesDepthProtection(bool sorted)
     {
-        JsonNode? deep = null;
-        for (int depth = 0; depth < 64; depth++) deep = new JsonArray(deep);
-        var input = new JsonArray(JsonValue.Create(double.NaN), deep);
+        JqValue? deep = null;
+        for (int depth = 0; depth < 64; depth++) deep = new JqArray(deep);
+        var input = new JqArray(NativeFixtures.Create(double.NaN), deep);
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {

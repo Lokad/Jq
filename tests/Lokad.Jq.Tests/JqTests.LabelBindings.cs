@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -54,11 +53,11 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_CaughtLabelPayloadAdmissionIsTerminal()
     {
-        using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
+        using var compiler = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         var filter = new JqParser("label $out | try break $out catch 42", JqProgramSource.Inline,
             compiler.RootEnvironment, compiler.Budget).Parse();
         var root = new BenchmarkMemoryBudget(128);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var error = await Assert.ThrowsAsync<JqQuotaException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).ToArrayAsync());

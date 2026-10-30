@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -46,14 +45,14 @@ public sealed partial class JqTests
         byte[] bytes = Encoding.UTF8.GetBytes(input);
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
-        JsonNode? expected = runtime.ReadJsonValue(bytes, out int expectedConsumed);
+        JqValue? expected = runtime.ReadJsonValue(bytes, out int expectedConsumed);
         foreach (int chunk in new[] { 1, 2, 3, 7, bytes.Length })
         {
             var reader = new JqRuntime.InputReader(runtime, budget);
             int start = 0;
             for (int end = Math.Min(chunk, bytes.Length); ; end = Math.Min(end + chunk, bytes.Length))
             {
-                if (reader.TryRead(bytes.AsSpan(start, end - start), end == bytes.Length, out JsonNode? actual, out int consumed))
+                if (reader.TryRead(bytes.AsSpan(start, end - start), end == bytes.Length, out JqValue? actual, out int consumed))
                 {
                     Assert.Equal(expectedConsumed, start + consumed);
                     Assert.Equal(0, runtime.Compare(expected, actual));

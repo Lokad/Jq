@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -18,15 +17,15 @@ public sealed partial class JqTests
     public void Jq_ScalarFormattingAdmitsOutputWithoutPerFieldSerialization(string format, bool? value)
     {
         const int count = 2500;
-        var row = new JsonArray();
-        for (int index = 0; index < count; index++) row.Add(value.HasValue ? JsonValue.Create(value.Value) : null);
+        var row = new JqArray();
+        for (int index = 0; index < count; index++) row.Add(value.HasValue ? NativeFixtures.Create(value.Value) : null);
         string separator = format == "sh" ? " " : format == "csv" ? "," : "\t";
         string spelling = value.HasValue ? value.Value ? "true" : "false" : format == "sh" ? "null" : "";
         string original = row.ToJsonString();
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
-            Assert.Equal(string.Join(separator, Enumerable.Repeat(spelling, count)), new JqRuntime(budget).Format(format, row));
+            Assert.Equal(string.Join(separator, Enumerable.Repeat(spelling, count)), new JqRuntime(budget).FormatValue(format, row).GetValue<string>());
             Assert.Equal(original, row.ToJsonString());
         }
         Assert.Equal(0, memory.ReservedBytes);
@@ -37,11 +36,11 @@ public sealed partial class JqTests
     [InlineData("csv")]
     public void Jq_ScalarFormattingStillRefusesActualOutputConstruction(string format)
     {
-        var row = new JsonArray();
-        for (int index = 0; index < 8000; index++) row.Add(true);
+        var row = new JqArray();
+        for (int index = 0; index < 16000; index++) row.Add(true);
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
-            Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).Format(format, row));
+            Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).FormatValue(format, row).GetValue<string>());
         Assert.Equal(0, memory.ReservedBytes);
     }
 

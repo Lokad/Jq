@@ -137,7 +137,8 @@ public sealed partial class JqTests
     {
         string[] arguments = ["-nc", .. Enumerable.Range(0, 512).SelectMany(i => new[] { "--arg", "v" + i, "x" }), "$ARGS.named|length"];
         var host = new MockFileSystem();
-        var memory = new BenchmarkMemoryBudget(128 * 1024);
+        long nativeBindings = Enumerable.Range(0, 512).Sum(i => 80L + 1 + 80 + ("v" + i).Length);
+        var memory = new BenchmarkMemoryBudget(128 * 1024 + nativeBindings);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", arguments)));
         Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("512\n", host.GetOutput(JqFileDescriptor.StdOut));

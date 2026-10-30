@@ -178,7 +178,7 @@ public sealed partial class JqTests
     public async Task Jq_EvaluationObservesCancellationBetweenResults(string filter)
     {
         using var cancellation = new CancellationTokenSource();
-        using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token));
+        using var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token));
         await using var values = new JqParser(filter, JqProgramSource.Inline, context.RootEnvironment, context.Budget).Parse().Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
         Assert.True(await values.MoveNextAsync());
         cancellation.Cancel();
@@ -476,14 +476,16 @@ public sealed partial class JqTests
             ? new[] { "-n", "-f", "filter" }
             : new[] { "-n", "inputs | empty" }.Concat(Enumerable.Repeat("file", 64)).ToArray();
         var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", args, [new JqEnvironmentVariable("PWD", directory)]);
-        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(64 * 1024 + 80 + directory.Length);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(invocation));
 
         Assert.Equal(2, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.DoesNotContain("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr), StringComparison.Ordinal);
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.True(memory.PeakBytes < 8192);
+        // ENV owns one native copy; path requests continue to borrow the
+        // original directory without copying it for every operand.
+        Assert.True(memory.PeakBytes < 8192 + 80 + directory.Length);
         Assert.Equal(0, memory.ReservedBytes);
     }
 

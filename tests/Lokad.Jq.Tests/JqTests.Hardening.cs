@@ -185,16 +185,16 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_WalkFanOutFailsStaged()
+    public async Task Jq_WalkFanOutSharesRebuiltBranchesWithinItsAllowance()
     {
-        // Collect-all fan-out grows rebuilt trees exponentially; per-output
-        // budget charges fail staged instead of hanging or exhausting memory.
+        // Repeated children share the rebuilt value instead of copying its tree.
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var host = new MockFileSystem();
         var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "null | setpath([range(12)|0]; 0) | walk((.,.)) | length")));
-        Assert.Equal(5, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
-        Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Contains("memory budget exceeded", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, await tool.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
+        Assert.Equal("2\n2\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
     }
 
 [Theory]

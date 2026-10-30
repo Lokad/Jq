@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -54,9 +53,9 @@ public sealed partial class JqTests
     [InlineData(65536, false)]
     public async Task Jq_UserTailFirstResultDoesNotInventoryBorrowedArguments(long allowance, bool refused)
     {
-        var values = new JsonArray();
-        for (int i = 0; i < 100000; i++) values.Add((JsonNode?)null);
-        var variables = new Dictionary<string, JsonNode?> { ["values"] = values };
+        var values = new JqArray();
+        for (int i = 0; i < 100000; i++) values.Add((JqValue?)null);
+        var variables = new Dictionary<string, JqValue?> { ["values"] = values };
         using var compiler = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         var filter = new JqParser("def f($x): if $x==1 then f($values[]) else . end; try first(f(1)) catch 42",
             JqProgramSource.Inline, compiler.RootEnvironment, compiler.Budget).Parse();

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -11,9 +10,9 @@ public sealed partial class JqTests
     [InlineData(4096, 8)]
     public void Jq_QualifiedLookupBorrowsNamesAndPreservesDefinitionCapture(int aliasLength, int depth)
     {
-        var root = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        var root = JqEnvironment.CreateRoot(new Dictionary<string, JqValue?>());
         var definition = new JqFunctionDefinition("f", [], new IdentityFilter());
-        var capture = root.Extend("x", JsonValue.Create(42)).ExtendFunction(definition);
+        var capture = root.Extend("x", NativeFixtures.Create(42)).ExtendFunction(definition);
         JqEnvironment environment = capture;
         string alias = new('m', aliasLength);
         for (int i = 0; i < depth; i++) environment = root.ExtendModule(alias, environment);
@@ -39,10 +38,10 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_DefinitionClosuresRetainActivationIdentityAcrossRecursionAndExports()
     {
-        var root = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        var root = JqEnvironment.CreateRoot(new Dictionary<string, JqValue?>());
         var definition = new JqFunctionDefinition("f", [], new VariableFilter("x"));
-        var first = root.Extend("x", JsonValue.Create(1)).ExtendFunction(definition);
-        var second = root.Extend("x", JsonValue.Create(2)).ExtendFunction(definition);
+        var first = root.Extend("x", NativeFixtures.Create(1)).ExtendFunction(definition);
+        var second = root.Extend("x", NativeFixtures.Create(2)).ExtendFunction(definition);
         Assert.True(first.TryGetFunctionQualified("f", 0, out var older));
         Assert.True(second.TryGetFunctionQualified("f", 0, out var newer));
         Assert.NotNull(older);

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -10,16 +9,16 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_FormatDispatchRejectsUnknownNamesWithoutConvertingBorrowedContainers(bool objectInput)
     {
-        var array = new JsonArray();
+        var array = new JqArray();
         for (int index = 0; index < 10000; index++) array.Add(index);
-        JsonNode input = objectInput ? new JsonObject { ["data"] = array } : array;
+        JqValue input = objectInput ? new JqObject(NativeFixtures.Budget()) { ["data"] = array } : array;
         var memory = new BenchmarkMemoryBudget(256);
         var counted = new CountingMemoryBudget(memory);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
-            var failure = Assert.Throws<JqException>(() => runtime.Format("missing", input));
+            var failure = Assert.Throws<JqException>(() => runtime.FormatValue("missing", input).GetValue<string>());
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
             Assert.Equal("missing is not a valid format", failure.Message);
             Assert.InRange(allocated, 0, 32 * 1024);
@@ -39,7 +38,7 @@ public sealed partial class JqTests
         cancellation.Cancel();
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
         var runtime = new JqRuntime(budget);
-        var failure = Assert.Throws<OperationCanceledException>(() => runtime.Format("missing", null));
+        var failure = Assert.Throws<OperationCanceledException>(() => runtime.FormatValue("missing", null).GetValue<string>());
         Assert.Equal(cancellation.Token, failure.CancellationToken);
     }
 

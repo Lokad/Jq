@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -76,11 +75,11 @@ public sealed partial class JqTests
     [InlineData("null + .")]
     public async Task Jq_PassThroughBuiltinsBorrowLargeValuesWithoutAdmission(string source)
     {
-        var input = new JsonArray();
+        var input = new JqArray();
         for (int index = 0; index < 10000; index++) input.Add(index);
         var memory = new BenchmarkMemoryBudget(0);
         using var lexical = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             JqFilter filter = new JqParser(source, JqProgramSource.Inline, context.RootEnvironment, lexical).Parse();
             Assert.Same(input, await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync());

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -47,11 +46,11 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_CaughtErrorBorrowsDeepPayloadWithoutAdmissionAndStillCancels()
     {
-        JsonNode? payload = new JsonArray();
-        for (int index = 0; index < 100; index++) payload = new JsonArray(payload);
+        JqValue? payload = new JqArray();
+        for (int index = 0; index < 100; index++) payload = new JqArray(payload);
         var root = new BenchmarkMemoryBudget(0);
         using var cancellation = new CancellationTokenSource();
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
         {
             var filter = new TryFilter(new FunctionFilter("error", []), new IdentityFilter());

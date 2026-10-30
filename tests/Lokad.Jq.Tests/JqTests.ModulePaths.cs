@@ -115,7 +115,7 @@ public sealed partial class JqTests
         var host = new MockFileSystem();
         host.AddFile(directory + "/tiny.jq", "def value:42;");
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq", ["-nc", "import \"tiny\" as m {optional:true}; 42"], [new("PWD", directory)]);
-        var memory = new BenchmarkMemoryBudget(allowance);
+        var memory = new BenchmarkMemoryBudget(allowance + 80 + directory.Length);
         Assert.Equal(5, await Assert.IsType<Jq>(Jq.TryParse(invocation)).ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));

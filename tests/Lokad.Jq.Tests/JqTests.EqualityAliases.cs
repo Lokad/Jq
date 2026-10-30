@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -26,11 +25,11 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_SharedEqualityStillObservesCancellationAndDistinctTreeDepth()
     {
-        JsonNode left = JsonValue.Create(0), right = JsonValue.Create(0);
+        JqValue left = NativeFixtures.Create(0), right = NativeFixtures.Create(0);
         for (int index = 0; index < 80; index++)
         {
-            left = new JsonArray(left);
-            right = new JsonArray(right);
+            left = new JqArray(left);
+            right = new JqArray(right);
         }
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);

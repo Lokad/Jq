@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -8,13 +7,13 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_AddAppendsIntoItsOwnedArrayWithoutCopyingHistory()
     {
-        var fragments = new JsonArray();
-        for (int index = 0; index < 1024; index++) fragments.Add(new JsonArray(index));
+        var fragments = new JqArray();
+        for (int index = 0; index < 1024; index++) fragments.Add(new JqArray(index));
         var root = new BenchmarkMemoryBudget(128 * 1024);
         var counted = new CountingMemoryBudget(root);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
-            var result = Assert.IsType<JsonArray>(await new JqRuntime(budget).AddValues(fragments.ToAsyncEnumerable()));
+            var result = Assert.IsType<JqArray>(await new JqRuntime(budget).AddValues(fragments.ToAsyncEnumerable()));
             Assert.Equal(1024, result.Count);
             for (int index = 0; index < result.Count; index++)
             {
@@ -53,7 +52,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_ArrayAddPreflightsGrowthAndCancelsBeforeMutation(bool cancel)
     {
-        var fragment = new JsonArray(1);
+        var fragment = new JqArray(1);
         var root = new BenchmarkMemoryBudget(1024);
         using var cancellation = new CancellationTokenSource();
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token))
@@ -66,7 +65,7 @@ public sealed partial class JqTests
         }
         Assert.Equal(0, root.ReservedBytes);
 
-        IEnumerable<JsonNode?> Generate()
+        IEnumerable<JqValue?> Generate()
         {
             for (int index = 0; index < 100; index++)
             {

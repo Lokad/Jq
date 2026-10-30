@@ -5,7 +5,6 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Helpers;
 using static Lokad.Jq.JqRuntime;
 using static Lokad.Jq.JqPaths;
@@ -14,7 +13,7 @@ namespace Lokad.Jq;
 
 internal abstract class JqFilter
 {
-    public virtual async IAsyncEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment)
+    public virtual async IAsyncEnumerable<JqValue?> Evaluate(JqValue? input, JqContext context, JqEnvironment environment)
     {
         var values = EvaluateCore(input, context, environment).GetAsyncEnumerator();
         await using var lifetime = values.ConfigureAwait(false);
@@ -26,7 +25,7 @@ internal abstract class JqFilter
     }
 
     /// <summary>Evaluates within the caller's shared budget; charge before growing intermediate values.</summary>
-    protected abstract IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment);
+    protected abstract IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment);
 
     internal async IAsyncEnumerable<JqValuePath> EvaluatePaths(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
@@ -50,7 +49,7 @@ internal abstract class JqFilter
     // bindings or another result. Collectors may take it without another copy.
     internal virtual bool ConstructsFreshContainer => false;
 
-    internal static JqValuePath TrackResult(JqValuePath pair, JsonNode? value)
+    internal static JqValuePath TrackResult(JqValuePath pair, JqValue? value)
     {
         JqValuePath? origin = pair.Tracked ? pair : pair.Origin;
         bool intact = origin is not null && PathIntact(origin.Value, value);
@@ -59,16 +58,16 @@ internal abstract class JqFilter
 
     protected virtual async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        await foreach (JsonNode? value in Evaluate(pair.Value, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? value in Evaluate(pair.Value, context, environment).ConfigureAwait(false))
             yield return TrackResult(pair, value);
     }
 
     // Heap values retain their identity by reference. Immediate numbers keep
     // their representation, including signed zero and NaN bits.
-    internal static bool PathIntact(JsonNode? expected, JsonNode? actual)
+    internal static bool PathIntact(JqValue? expected, JqValue? actual)
     {
         if (ReferenceEquals(expected, actual)) return true;
-        if (expected is JsonValue a && actual is JsonValue b
+        if (expected is JqScalar a && actual is JqScalar b
             && a.TryGetValue<bool>(out bool x) && b.TryGetValue<bool>(out bool y)) return x == y;
         return TypeName(expected) == "number" && TypeName(actual) == "number"
             && BitConverter.DoubleToInt64Bits(Number(expected)) == BitConverter.DoubleToInt64Bits(Number(actual));
@@ -81,29 +80,29 @@ internal abstract class SingleValueFilter : JqFilter
 
     // Pure leaves need no asynchronous state machine. Keep their single cursor
     // small while retaining lazy evaluation and the recursion/cancellation guard.
-    public sealed override IAsyncEnumerable<JsonNode?> Evaluate(JsonNode? input, JqContext context, JqEnvironment environment) =>
+    public sealed override IAsyncEnumerable<JqValue?> Evaluate(JqValue? input, JqContext context, JqEnvironment environment) =>
         new ValueCursor(this, input, context, environment);
 
-    internal JsonNode? ReadValue(JsonNode? input, JqContext context, JqEnvironment environment)
+    internal JqValue? ReadValue(JqValue? input, JqContext context, JqEnvironment environment)
     {
         context.Budget.EnterRecursion();
         try
         {
-            JsonNode? value = EvaluateValue(input, context, environment);
+            JqValue? value = EvaluateValue(input, context, environment);
             context.Budget.CheckCancellation();
             return value;
         }
         finally { context.Budget.LeaveRecursion(); }
     }
 
-    private sealed class ValueCursor(SingleValueFilter filter, JsonNode? input, JqContext context, JqEnvironment environment)
-        : IAsyncEnumerable<JsonNode?>, IAsyncEnumerator<JsonNode?>
+    private sealed class ValueCursor(SingleValueFilter filter, JqValue? input, JqContext context, JqEnvironment environment)
+        : IAsyncEnumerable<JqValue?>, IAsyncEnumerator<JqValue?>
     {
         private int _enumerated;
         private bool _started;
-        public JsonNode? Current { get; private set; }
+        public JqValue? Current { get; private set; }
 
-        public IAsyncEnumerator<JsonNode?> GetAsyncEnumerator(CancellationToken cancellationToken)
+        public IAsyncEnumerator<JqValue?> GetAsyncEnumerator(CancellationToken cancellationToken)
         {
             if (Interlocked.Exchange(ref _enumerated, 1) == 0) return this;
             return new ValueCursor(filter, input, context, environment) { _enumerated = 1 };
@@ -125,17 +124,17 @@ internal abstract class SingleValueFilter : JqFilter
         }
     }
 
-    protected sealed override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected sealed override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         yield return EvaluateValue(input, context, environment);
     }
 
-    protected abstract JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment);
+    protected abstract JqValue? EvaluateValue(JqValue? input, JqContext context, JqEnvironment environment);
 }
 
 internal sealed class IdentityFilter : SingleValueFilter
 {
-    protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override JqValue? EvaluateValue(JqValue? input, JqContext context, JqEnvironment environment)
     {
         return input;
     }
@@ -151,11 +150,11 @@ internal sealed class IdentityFilter : SingleValueFilter
     }
 }
 
-internal sealed class LiteralFilter(JsonNode? value) : SingleValueFilter
+internal sealed class LiteralFilter(JqValue? value) : SingleValueFilter
 {
-    internal JsonNode? Value => value;
+    internal JqValue? Value => value;
 
-    protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override JqValue? EvaluateValue(JqValue? input, JqContext context, JqEnvironment environment)
     {
         return value;
     }
@@ -163,9 +162,9 @@ internal sealed class LiteralFilter(JsonNode? value) : SingleValueFilter
 
 internal sealed class VariableFilter(string name) : SingleValueFilter
 {
-    protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override JqValue? EvaluateValue(JqValue? input, JqContext context, JqEnvironment environment)
     {
-        if (!environment.TryGetValue(name, out JsonNode? value))
+        if (!environment.TryGetValue(name, out JqValue? value))
             throw new JqException($"undefined variable ${name}");
         return value;
     }
@@ -179,7 +178,7 @@ internal sealed class VariableFilter(string name) : SingleValueFilter
     // other heap values remain borrowed but travel untracked.
     protected override async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment)
     {
-        if (!environment.TryGetValue(name, out JsonNode? value))
+        if (!environment.TryGetValue(name, out JqValue? value))
             throw new JqException($"undefined variable ${name}");
         yield return TrackResult(pair, value);
     }
@@ -190,13 +189,12 @@ internal sealed class VariableFilter(string name) : SingleValueFilter
 // for inline filters; the line is 1-based.
 internal sealed class LocFilter(string file, int line) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var location = new JsonObject
-        {
-            ["file"] = JsonValue.Create(file),
-            ["line"] = JsonValue.Create(line),
+        var location = new JqObject(context.Budget) {
+            ["file"] = JqScalar.Create(file, context.Budget),
+            ["line"] = JqScalar.Create(line),
         };
         context.Budget.CheckCancellation();
         context.Budget.ReserveString(file.Length + 8);
@@ -224,9 +222,9 @@ internal sealed class AsFilter(
         return names;
     }
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
-        await foreach (JsonNode? bound in source.Evaluate(input, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? bound in source.Evaluate(input, context, environment).ConfigureAwait(false))
             await foreach (var (_, output) in DriveAlternatives(alternatives, _allNames, bound, environment, context, scope => body.Evaluate(input, context, scope)).ConfigureAwait(false))
                 yield return output;
     }
@@ -235,7 +233,7 @@ internal sealed class AsFilter(
     // starts null, the first non-erroring alternative wins (even when it
     // yields nothing), and catchable match or body errors retry later
     // alternatives. Reduction drivers reuse it with collecting bodies.
-    internal static async IAsyncEnumerable<(JqEnvironment Scope, JsonNode? Output)> DriveAlternatives(IReadOnlyList<BindingPattern> alternatives, HashSet<string> allNames, JsonNode? bound, JqEnvironment environment, JqContext context, Func<JqEnvironment, IAsyncEnumerable<JsonNode?>> body)
+    internal static async IAsyncEnumerable<(JqEnvironment Scope, JqValue? Output)> DriveAlternatives(IReadOnlyList<BindingPattern> alternatives, HashSet<string> allNames, JqValue? bound, JqEnvironment environment, JqContext context, Func<JqEnvironment, IAsyncEnumerable<JqValue?>> body)
     {
         ArgumentNullException.ThrowIfNull(alternatives);
         ArgumentNullException.ThrowIfNull(allNames);
@@ -309,7 +307,7 @@ internal sealed class AsFilter(
         return environment;
     }
 
-    private static async IAsyncEnumerable<JqEnvironment> Match(BindingPattern pattern, JsonNode? value, JqEnvironment scope, JqContext context, JqScopeStorage storage, int depth)
+    private static async IAsyncEnumerable<JqEnvironment> Match(BindingPattern pattern, JqValue? value, JqEnvironment scope, JqContext context, JqScopeStorage storage, int depth)
     {
         context.Budget.CheckCancellation();
         JqRecursion.CheckDepth(depth, "pattern nesting limit exceeded");
@@ -346,11 +344,11 @@ internal sealed class AsFilter(
 
         async IAsyncEnumerable<JqEnvironment> MatchProperty(ObjectPatternProperty property, JqEnvironment current)
         {
-            await foreach (JsonNode? keyValue in property.Key.Evaluate(value, context, current).ConfigureAwait(false))
+            await foreach (JqValue? keyValue in property.Key.Evaluate(value, context, current).ConfigureAwait(false))
             {
-                if (!TryGetString(keyValue, out string key))
+                if (keyValue is not JqString key)
                     throw new JqException($"Cannot use {TypeName(keyValue)} ({context.Runtime.TruncatedDump(keyValue)}) as object key");
-                JsonNode? field = JqPathReads.ReadField(value, key, context.Runtime);
+                JqValue? field = JqPathReads.ReadField(value, key, context.Runtime, context.Budget);
                 await foreach (JqEnvironment bound in Match(property.Value, field, current, context, storage, depth + 1).ConfigureAwait(false))
                     yield return bound;
             }
@@ -417,7 +415,7 @@ internal sealed class AsFilter(
         JqEnvironment prebound = Prebind(alternatives, _allNames, environment, context, storage);
         await foreach (JqValuePath sourcePair in source.EvaluatePaths(pair, context, environment).ConfigureAwait(false))
         {
-            JsonNode? bound = sourcePair.Value;
+            JqValue? bound = sourcePair.Value;
             bool completed = false;
             for (int index = 0; index < alternatives.Count && !completed; index++)
             {
@@ -448,7 +446,7 @@ internal sealed class AsFilter(
         }
     }
 
-    private async IAsyncEnumerable<JqValuePath> RunPathAlternative(BindingPattern alternative, JsonNode? bound, JqEnvironment prebound, JqValuePath pair, JqContext context, JqScopeStorage storage)
+    private async IAsyncEnumerable<JqValuePath> RunPathAlternative(BindingPattern alternative, JqValue? bound, JqEnvironment prebound, JqValuePath pair, JqContext context, JqScopeStorage storage)
     {
         await foreach (JqEnvironment scope in Match(alternative, bound, prebound, context, storage, 1).ConfigureAwait(false))
             await foreach (JqValuePath next in body.EvaluatePaths(pair, context, scope).ConfigureAwait(false))
@@ -462,7 +460,7 @@ internal sealed class AsFilter(
 // observes exactly the bindings visible at its own site.
 internal sealed class DefFilter(JqFunctionDefinition Definition, JqFilter Continuation) : JqFilter
 {
-    protected override IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+    protected override IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment) =>
         Run(environment, context, (scope, continuation) => continuation.Evaluate(input, context, scope));
 
     protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
@@ -539,7 +537,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         && environment.TryGetFunctionQualified(Name, Arity, out JqUserClosure? closure) && closure is not null
         && closure.Definition.Body.IsSingleValued(closure.Environment, depth + 1);
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -547,7 +545,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
             throw new JqException($"undefined function {Name}/{Arity}");
         if (Args.Count != closure.Definition.Arity)
             throw new JqException($"undefined function {Name}/{Arity}");
-        await foreach (JsonNode? value in EvaluateCallLoop(closure, input, Args, environment, context).ConfigureAwait(false))
+        await foreach (JqValue? value in EvaluateCallLoop(closure, input, Args, environment, context).ConfigureAwait(false))
             yield return value;
     }
 
@@ -567,7 +565,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
     internal int FunctionArity => Arity;
     internal IReadOnlyList<JqFilter> CallArgs => Args;
 
-    private sealed record CallFrame(JsonNode? Input, JsonNode?[] Values, IReadOnlyList<int> Positions,
+    private sealed record CallFrame(JqValue? Input, JqValue?[] Values, IReadOnlyList<int> Positions,
         JqFilterClosure?[] Filters, JqValuePath? Path);
 
     private sealed class CallCursor(IAsyncEnumerator<CallFrame> frames, TailCallSignal request) : IAsyncEnumerator<CallFrame>
@@ -582,7 +580,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
         }
     }
 
-    internal static IAsyncEnumerable<JsonNode?> EvaluateCallLoop(JqUserClosure closure, JsonNode? input,
+    internal static IAsyncEnumerable<JqValue?> EvaluateCallLoop(JqUserClosure closure, JqValue? input,
         IReadOnlyList<JqFilter> args, JqEnvironment environment, JqContext context) =>
         RunCalls(closure, new TailCallSignal(closure.Definition, input, environment, args, null, null), context,
             frame => closure.Definition.Body.Evaluate(frame.Input, context, Bind(frame, closure)));
@@ -798,10 +796,10 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                 };
             }
             await foreach (var source in Sources().ConfigureAwait(false))
-                await foreach (JsonNode?[] combo in Combine(source.Value).ConfigureAwait(false))
+                await foreach (JqValue?[] combo in Combine(source.Value).ConfigureAwait(false))
                     yield return new CallFrame(source.Value, combo, positions, filters, source.Path);
 
-            async IAsyncEnumerable<(JsonNode? Value, JqValuePath? Path)> Sources()
+            async IAsyncEnumerable<(JqValue? Value, JqValuePath? Path)> Sources()
             {
                 if (next.InputSource is not JqFilter source)
                     yield return (next.Input, next.Path);
@@ -809,21 +807,21 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                     await foreach (JqValuePath value in source.EvaluatePaths(path, context, next.Environment).ConfigureAwait(false))
                         yield return (value.Value, value);
                 else
-                    await foreach (JsonNode? value in source.Evaluate(next.Input, context, next.Environment).ConfigureAwait(false))
+                    await foreach (JqValue? value in source.Evaluate(next.Input, context, next.Environment).ConfigureAwait(false))
                         yield return (value, null);
             }
 
             // First argument varies slowest. One reusable vector and iterative
             // cursors avoid both a cartesian inventory and an arity-sized C# stack.
-            async IAsyncEnumerable<JsonNode?[]> Combine(JsonNode? input)
+            async IAsyncEnumerable<JqValue?[]> Combine(JqValue? input)
             {
-                var currentValues = new JsonNode?[values.Count];
+                var currentValues = new JqValue?[values.Count];
                 if (values.Count == 0)
                 {
                     yield return currentValues;
                     yield break;
                 }
-                var iterators = new IAsyncEnumerator<JsonNode?>?[values.Count];
+                var iterators = new IAsyncEnumerator<JqValue?>?[values.Count];
                 int index = 0;
                 Exception? primary = null;
                 try
@@ -839,7 +837,7 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
                         try
                         {
                             context.Budget.CheckCancellation();
-                            IAsyncEnumerator<JsonNode?> iterator = iterators[index] ??=
+                            IAsyncEnumerator<JqValue?> iterator = iterators[index] ??=
                                 values[index].Evaluate(input, context, next.Environment).GetAsyncEnumerator();
                             if (await iterator.MoveNextAsync().ConfigureAwait(false))
                             {
@@ -885,12 +883,12 @@ internal sealed class UserCallFilter(string Name, int Arity, IReadOnlyList<JqFil
 // the current input in the caller environment from the call site.
 internal sealed class FilterParamCallFilter(string Name) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
         JqFilterClosure closure = Resolve(environment);
-        await foreach (JsonNode? value in closure.Filter.Evaluate(input, context, closure.Environment).ConfigureAwait(false))
+        await foreach (JqValue? value in closure.Filter.Evaluate(input, context, closure.Environment).ConfigureAwait(false))
             yield return value;
     }
 
@@ -915,7 +913,7 @@ internal sealed class FilterParamCallFilter(string Name) : JqFilter
 // nesting another evaluator frame, so tail-recursive runs take heap and
 // budget rather than C# stack. Deliberately not a JqException: quota,
 // cancellation, and language-error boundaries must never observe it.
-internal sealed class TailCallSignal(JqFunctionDefinition definition, JsonNode? input, JqEnvironment environment,
+internal sealed class TailCallSignal(JqFunctionDefinition definition, JqValue? input, JqEnvironment environment,
     IReadOnlyList<JqFilter> args, JqFilter? source, JqValuePath? path) : Exception
 {
     private JqScopeStorage? _scopes;
@@ -946,7 +944,7 @@ internal sealed class TailCallSignal(JqFunctionDefinition definition, JsonNode? 
     }
 
     internal JqFunctionDefinition Definition { get; } = definition;
-    internal JsonNode? Input { get; } = input;
+    internal JqValue? Input { get; } = input;
     internal JqEnvironment Environment { get; } = environment;
     internal IReadOnlyList<JqFilter> Args { get; } = args;
     internal JqFilter? InputSource { get; } = source;
@@ -955,7 +953,7 @@ internal sealed class TailCallSignal(JqFunctionDefinition definition, JsonNode? 
 
 internal sealed class TailSelfCallFilter(JqFunctionDefinition Definition, IReadOnlyList<JqFilter> Args) : JqFilter
 {
-    protected override IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+    protected override IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment) =>
         throw new TailCallSignal(Definition, input, environment, Args, null, null);
 
     protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
@@ -969,7 +967,7 @@ internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
     internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
         depth < JqRecursion.MaximumDepth && left.IsSingleValued(environment, depth + 1)
         && right.IsSingleValued(environment, depth + 1);
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         await foreach (var value in left.Evaluate(input, context, environment).ConfigureAwait(false))
             await foreach (var output in right.Evaluate(value, context, environment).ConfigureAwait(false))
@@ -998,7 +996,7 @@ internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
 // siblings remain owned there while the selected call runs, without lookahead.
 internal sealed class PipeTailLoop(JqFilter Source, JqFunctionDefinition Definition, IReadOnlyList<JqFilter> Args) : JqFilter
 {
-    protected override IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+    protected override IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment) =>
         throw new TailCallSignal(Definition, input, environment, Args, Source, null);
 
     protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
@@ -1008,7 +1006,7 @@ internal sealed class PipeTailLoop(JqFilter Source, JqFunctionDefinition Definit
 internal sealed class CommaFilter(JqFilter left, JqFilter right) : JqFilter
 {
     internal JqFilter Left => left;
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         await foreach (var value in left.Evaluate(input, context, environment).ConfigureAwait(false))
             yield return value;
@@ -1033,41 +1031,41 @@ internal sealed class CommaFilter(JqFilter left, JqFilter right) : JqFilter
     }
 }
 
-internal sealed class FieldFilter(JqFilter source, string name, bool optional) : JqFilter
+internal sealed class FieldFilter(JqFilter source, JqString name, bool optional) : JqFilter
 {
-    internal static JqFilter Create(JqFilter source, string name, bool optional) =>
+    internal static JqFilter Create(JqFilter source, JqString name, bool optional) =>
         !optional && source is SingleValueFilter scalar ? new ValueFilter(scalar, name) : new FieldFilter(source, name, optional);
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         await foreach (var value in source.Evaluate(input, context, environment).ConfigureAwait(false))
         {
-            if (optional && value is not null && value is not JsonObject) continue;
-            yield return JqPathReads.ReadField(value, name, context.Runtime);
+            if (optional && value is not null && value is not JqObject) continue;
+            yield return JqPathReads.ReadField(value, name, context.Runtime, context.Budget);
         }
     }
 
     protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
         ReadPaths(source, name, optional, pair, context, environment);
 
-    private static async IAsyncEnumerable<JqValuePath> ReadPaths(JqFilter filter, string name, bool optional,
+    private static async IAsyncEnumerable<JqValuePath> ReadPaths(JqFilter filter, JqString name, bool optional,
         JqValuePath pair, JqContext context, JqEnvironment environment)
     {
         await foreach (JqValuePath source in filter.EvaluatePaths(pair, context, environment).ConfigureAwait(false))
         {
             RequireTracked(source, new KeySegment(name), context);
-            if (optional && source.Value is not null && source.Value is not JsonObject) continue;
-            JsonNode? field = JqPathReads.ReadField(source.Value, name, context.Runtime);
+            if (optional && source.Value is not null && source.Value is not JqObject) continue;
+            JqValue? field = JqPathReads.ReadField(source.Value, name, context.Runtime, context.Budget);
             yield return new JqValuePath(Extend(source.Segments, new KeySegment(name), context.Budget), field, true);
         }
     }
 
     // A required field of a single-result source returns one value or fails.
     // Reuse the scalar cursor instead of suspending a streaming source iterator.
-    private sealed class ValueFilter(SingleValueFilter source, string name) : SingleValueFilter
+    private sealed class ValueFilter(SingleValueFilter source, JqString name) : SingleValueFilter
     {
-        protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment) =>
-            JqPathReads.ReadField(source.ReadValue(input, context, environment), name, context.Runtime);
+        protected override JqValue? EvaluateValue(JqValue? input, JqContext context, JqEnvironment environment) =>
+            JqPathReads.ReadField(source.ReadValue(input, context, environment), name, context.Runtime, context.Budget);
 
         protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
             ReadPaths(source, name, false, pair, context, environment);
@@ -1080,11 +1078,11 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
         !optional && source is SingleValueFilter value && index is SingleValueFilter key
             ? new ValueFilter(value, key) : new IndexFilter(source, index, optional);
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
-        await foreach (JsonNode? key in index.Evaluate(input, context, environment).ConfigureAwait(false))
-            await foreach (JsonNode? value in source.Evaluate(input, context, environment).ConfigureAwait(false))
-                if (JqPathReads.TryIndex(value, key, optional, context, out JsonNode? result))
+        await foreach (JqValue? key in index.Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? value in source.Evaluate(input, context, environment).ConfigureAwait(false))
+                if (JqPathReads.TryIndex(value, key, optional, context, out JqValue? result))
                     yield return result;
     }
 
@@ -1096,18 +1094,18 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
     {
         // Keys are subexpressions of the enclosing input, before the source.
         // Optional access suppresses read failures, never key/source effects.
-        await foreach (JsonNode? key in index.Evaluate(outer.Value, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? key in index.Evaluate(outer.Value, context, environment).ConfigureAwait(false))
             await foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment).ConfigureAwait(false))
             {
                 if (!pair.Tracked) RequireTracked(pair, PathSegmentFor(key, context), context);
-                if (JqPathReads.TryIndex(pair.Value, key, optional, context, out JsonNode? result))
+                if (JqPathReads.TryIndex(pair.Value, key, optional, context, out JqValue? result))
                     yield return new JqValuePath(Extend(pair.Segments, PathSegmentFor(key, context), context.Budget), result, true);
             }
     }
 
-    private static JqValueSegment PathSegmentFor(JsonNode? key, JqContext context)
+    private static JqValueSegment PathSegmentFor(JqValue? key, JqContext context)
     {
-        if (TryGetString(key, out string? name)) return new KeySegment(name);
+        if (key is JqString name) return new KeySegment(name);
         if (JqPaths.TryGetFractional(key, out double fractional)) return new FractionalSegment(fractional);
         if (TryGetIndex(key, out long index, out bool isNaN)) return new IndexSegment(index, isNaN);
         return new InvalidSegment(context.Budget.CopyValue(key, 0));
@@ -1115,12 +1113,12 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
 
     private sealed class ValueFilter(SingleValueFilter source, SingleValueFilter index) : SingleValueFilter
     {
-        protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
+        protected override JqValue? EvaluateValue(JqValue? input, JqContext context, JqEnvironment environment)
         {
-            JsonNode? key = index.ReadValue(input, context, environment);
-            JsonNode? value = source.ReadValue(input, context, environment);
+            JqValue? key = index.ReadValue(input, context, environment);
+            JqValue? value = source.ReadValue(input, context, environment);
             // Required indexing returns one value (including null) or throws.
-            _ = JqPathReads.TryIndex(value, key, false, context, out JsonNode? result);
+            _ = JqPathReads.TryIndex(value, key, false, context, out JqValue? result);
             return result;
         }
 
@@ -1131,19 +1129,19 @@ internal sealed class IndexFilter(JqFilter source, JqFilter index, bool optional
 
 internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? end, bool optional) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
-        await foreach (JsonNode? lower in Bounds(start, input, context, environment).ConfigureAwait(false))
-            await foreach (JsonNode? upper in Bounds(end, input, context, environment).ConfigureAwait(false))
-                await foreach (JsonNode? value in source.Evaluate(input, context, environment).ConfigureAwait(false))
-                    if (JqPathReads.TrySlice(value, lower, upper, optional, context, out JsonNode? result))
+        await foreach (JqValue? lower in Bounds(start, input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? upper in Bounds(end, input, context, environment).ConfigureAwait(false))
+                await foreach (JqValue? value in source.Evaluate(input, context, environment).ConfigureAwait(false))
+                    if (JqPathReads.TrySlice(value, lower, upper, optional, context, out JqValue? result))
                         yield return result;
     }
 
     protected override async IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath outer, JqContext context, JqEnvironment environment)
     {
-        await foreach (JsonNode? lower in Bounds(start, outer.Value, context, environment).ConfigureAwait(false))
-            await foreach (JsonNode? upper in Bounds(end, outer.Value, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? lower in Bounds(start, outer.Value, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? upper in Bounds(end, outer.Value, context, environment).ConfigureAwait(false))
                 await foreach (JqValuePath pair in source.EvaluatePaths(outer, context, environment).ConfigureAwait(false))
                 {
                     if (JqPathReads.TrySlicePath(pair, lower, upper, optional, context, out JqValuePath? result))
@@ -1151,36 +1149,36 @@ internal sealed class SliceFilter(JqFilter source, JqFilter? start, JqFilter? en
                 }
     }
 
-    private static async IAsyncEnumerable<JsonNode?> Bounds(JqFilter? bound, JsonNode? input, JqContext context, JqEnvironment environment)
+    private static async IAsyncEnumerable<JqValue?> Bounds(JqFilter? bound, JqValue? input, JqContext context, JqEnvironment environment)
     {
         if (bound is null) yield return null;
         else
-            await foreach (JsonNode? value in bound.Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? value in bound.Evaluate(input, context, environment).ConfigureAwait(false))
                 yield return value;
     }
 }
 
 internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         await foreach (var value in source.Evaluate(input, context, environment).ConfigureAwait(false))
-            foreach (JsonNode? child in ReadValues(value, optional, context.Budget))
+            foreach (JqValue? child in ReadValues(value, optional, context.Budget))
                 yield return child;
     }
 
-    internal static IEnumerable<JsonNode?> ReadValues(JsonNode? value, bool optional, JqBudget budget)
+    internal static IEnumerable<JqValue?> ReadValues(JqValue? value, bool optional, JqBudget budget)
     {
         budget.CheckCancellation();
-        if (value is JsonArray arr)
+        if (value is JqArray arr)
         {
-            foreach (JsonNode? child in arr)
+            foreach (JqValue? child in arr)
             {
                 budget.CheckCancellation();
                 yield return child;
             }
         }
-        else if (value is JsonObject obj)
+        else if (value is JqObject obj)
         {
             foreach (var child in obj)
             {
@@ -1201,14 +1199,14 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
 
     internal static IEnumerable<JqValuePath> ReadPaths(JqValuePath pair, JqContext context)
     {
-        if ((pair.Value is JsonArray || pair.Value is JsonObject) && !pair.Tracked)
+        if ((pair.Value is JqArray || pair.Value is JqObject) && !pair.Tracked)
             throw new JqException(InvalidIterate(pair.Value, context));
-        if (pair.Value is JsonArray arr)
+        if (pair.Value is JqArray arr)
         {
             for (int index = 0; index < arr.Count; index++)
                 yield return new JqValuePath(Extend(pair.Segments, new IndexSegment(index, false), context.Budget), arr[index], true);
         }
-        else if (pair.Value is JsonObject obj)
+        else if (pair.Value is JqObject obj)
         {
             foreach (var property in obj)
                 yield return new JqValuePath(Extend(pair.Segments, new KeySegment(property.Key), context.Budget), property.Value, true);
@@ -1226,14 +1224,14 @@ internal sealed class IteratorFilter(JqFilter source, bool optional) : JqFilter
 // order, matching recursive descent through iteration.
 internal sealed class RecursiveDescentFilter : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         yield return input;
         using var cursor = new JqTreeCursor(context.Budget);
-        JsonNode? current = input;
+        JqValue? current = input;
         while (true)
         {
-            if (current is JsonArray { Count: > 0 } or JsonObject { Count: > 0 }) cursor.Push(current);
+            if (current is JqArray { Count: > 0 } or JqObject { Count: > 0 }) cursor.Push(current);
             while (cursor.Count != 0 && !cursor.TryNext(out current)) cursor.Pop();
             if (cursor.Count == 0) yield break;
             yield return current;
@@ -1246,10 +1244,10 @@ internal sealed class RecursiveDescentFilter : JqFilter
         if (pair.Value is not null && !pair.Tracked)
             throw new JqException(InvalidIterate(pair.Value, context));
         using var cursor = new JqTreeCursor(context.Budget);
-        JsonNode? current = pair.Value;
+        JqValue? current = pair.Value;
         while (true)
         {
-            if (current is JsonArray { Count: > 0 } or JsonObject { Count: > 0 }) cursor.Push(current);
+            if (current is JqArray { Count: > 0 } or JqObject { Count: > 0 }) cursor.Push(current);
             while (cursor.Count != 0 && !cursor.TryNext(out current)) cursor.Pop();
             if (cursor.Count == 0) yield break;
             yield return new JqValuePath(cursor.CopySegments(pair.Segments), current, true);
@@ -1262,15 +1260,15 @@ internal sealed class ArrayFilter(JqFilter item) : JqFilter
     internal JqFilter Item => item;
     internal override bool ConstructsFreshContainer => true;
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         context.Budget.ReserveBytes(64);
-        var array = new JsonArray();
+        var array = new JqArray();
         bool fresh = item.ConstructsFreshContainer;
         await foreach (var value in item.Evaluate(input, context, environment).ConfigureAwait(false))
         {
-            context.Budget.ReserveBytes(value is JsonValue ? 88 : 24);
-            if (fresh && value is JsonArray or JsonObject)
+            context.Budget.ReserveBytes(value is JqScalar ? 88 : 24);
+            if (fresh && value is JqArray or JqObject)
             {
                 CheckDepth(value, 1, context.Budget);
                 array.Add(value);
@@ -1279,39 +1277,39 @@ internal sealed class ArrayFilter(JqFilter item) : JqFilter
         }
         yield return array;
 
-        static void CheckDepth(JsonNode? value, int depth, JqBudget budget)
+        static void CheckDepth(JqValue? value, int depth, JqBudget budget)
         {
             budget.CheckCancellation();
             JqRecursion.CheckValueDepth(value, depth);
-            if (value is JsonArray elements)
-                foreach (JsonNode? element in elements) CheckDepth(element, depth + 1, budget);
-            else if (value is JsonObject properties)
+            if (value is JqArray elements)
+                foreach (JqValue? element in elements) CheckDepth(element, depth + 1, budget);
+            else if (value is JqObject properties)
                 foreach (var property in properties) CheckDepth(property.Value, depth + 1, budget);
         }
     }
 }
 
-internal sealed record ObjectProperty(string? StaticKey, JqFilter? KeyFilter, JqFilter Value);
+internal sealed record ObjectProperty(JqString? StaticKey, JqFilter? KeyFilter, JqFilter Value);
 
 internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : JqFilter
 {
     internal IReadOnlyList<ObjectProperty> Properties => properties;
     internal override bool ConstructsFreshContainer => true;
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         if (properties.Count == 0)
         {
             context.Budget.ReserveBytes(64);
-            yield return new JsonObject();
+            yield return new JqObject(context.Budget);
             yield break;
         }
         using var workspace = new JqScopeStorage(context.Budget);
         workspace.Reserve(128L * properties.Count, properties.Count);
-        var fields = new Dictionary<string, JsonNode?>(properties.Count, StringComparer.Ordinal);
-        var iterators = new IAsyncEnumerator<(string Key, JsonNode? Value)>?[properties.Count];
-        var keys = new string?[properties.Count];
-        var previous = new (bool Exists, JsonNode? Value)[properties.Count];
+        var fields = new Dictionary<JqString, JqValue?>(properties.Count, context.Budget.StringKeys);
+        var iterators = new IAsyncEnumerator<(JqString Key, JqValue? Value)>?[properties.Count];
+        var keys = new JqString?[properties.Count];
+        var previous = new (bool Exists, JqValue? Value)[properties.Count];
         int index = 0;
         try
         {
@@ -1331,8 +1329,8 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
                         continue;
                     }
                 }
-                (string Key, JsonNode? Value) choice;
-                if (property is { StaticKey: string key, KeyFilter: null, Value: SingleValueFilter single })
+                (JqString Key, JqValue? Value) choice;
+                if (property is { StaticKey: JqString key, KeyFilter: null, Value: SingleValueFilter single })
                     choice = (key, single.ReadValue(input, context, environment));
                 else
                 {
@@ -1351,8 +1349,8 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
                 keys[index] = choice.Key;
                 if (index + 1 < properties.Count) { index++; continue; }
                 context.Budget.ReserveBytes(64 + 96L * fields.Count);
-                context.Budget.ReserveBytes(64L * fields.Values.Count(value => value is JsonValue));
-                var result = new JsonObject();
+                context.Budget.ReserveBytes(64L * fields.Values.Count(value => value is JqScalar));
+                var result = new JqObject(context.Budget);
                 foreach (var field in fields)
                     result.Add(field.Key, context.Budget.CopyValue(field.Value, 1));
                 yield return result;
@@ -1364,9 +1362,9 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
                 if (iterators[pending] is { } remainingIterator) await remainingIterator.DisposeAsync().ConfigureAwait(false);
         }
 
-        async IAsyncEnumerable<(string Key, JsonNode? Value)> Choices(ObjectProperty property)
+        async IAsyncEnumerable<(JqString Key, JqValue? Value)> Choices(ObjectProperty property)
         {
-            if (property is { StaticKey: string key, KeyFilter: null })
+            if (property is { StaticKey: JqString key, KeyFilter: null })
             {
                 await foreach (var value in Values(property.Value).ConfigureAwait(false)) yield return (key, value);
             }
@@ -1374,28 +1372,28 @@ internal sealed class ObjectFilter(IReadOnlyList<ObjectProperty> properties) : J
             {
                 await foreach (var keyValue in Values(keyFilter).ConfigureAwait(false))
                 {
-                    if (!TryGetString(keyValue, out string keyName))
+                    if (keyValue is not JqString keyName)
                         throw new JqException($"Cannot use {TypeName(keyValue)} ({context.Runtime.TruncatedDump(keyValue)}) as object key");
                     await foreach (var value in Values(property.Value).ConfigureAwait(false)) yield return (keyName, value);
                 }
             }
         }
 
-        async IAsyncEnumerable<JsonNode?> Values(JqFilter filter)
+        async IAsyncEnumerable<JqValue?> Values(JqFilter filter)
         {
             // Scalar leaves need no suspended evaluator frame while later
             // properties run. Complete their single-value iterator first.
             if (filter is SingleValueFilter single)
             {
-                JsonNode? value = single.ReadValue(input, context, environment);
+                JqValue? value = single.ReadValue(input, context, environment);
                 yield return value;
                 yield break;
             }
-            await foreach (JsonNode? value in filter.Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? value in filter.Evaluate(input, context, environment).ConfigureAwait(false))
                 yield return value;
         }
 
-        void RestoreField(string key, (bool Exists, JsonNode? Value) old)
+        void RestoreField(JqString key, (bool Exists, JqValue? Value) old)
         {
             if (old.Exists) fields[key] = old.Value;
             else fields.Remove(key);
@@ -1413,7 +1411,7 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
         depth < JqRecursion.MaximumDepth && left.IsSingleValued(environment, depth + 1)
         && right.IsSingleValued(environment, depth + 1);
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         // Value operators distribute with the left operand inner (fast),
         // matching reversed call prelude order with backtracking. Boolean
@@ -1421,29 +1419,29 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
         // the right side, while an undecided left streams it as booleans.
         if (op is "and")
         {
-            await foreach (JsonNode? l in left.Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? l in left.Evaluate(input, context, environment).ConfigureAwait(false))
             {
                 if (!Truthy(l))
                 {
-                    yield return JsonValue.Create(false);
+                    yield return JqScalar.Create(false);
                     continue;
                 }
-                await foreach (JsonNode? r in right.Evaluate(input, context, environment).ConfigureAwait(false))
-                    yield return JsonValue.Create(Truthy(r));
+                await foreach (JqValue? r in right.Evaluate(input, context, environment).ConfigureAwait(false))
+                    yield return JqScalar.Create(Truthy(r));
             }
             yield break;
         }
         if (op is "or")
         {
-            await foreach (JsonNode? l in left.Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? l in left.Evaluate(input, context, environment).ConfigureAwait(false))
             {
                 if (Truthy(l))
                 {
-                    yield return JsonValue.Create(true);
+                    yield return JqScalar.Create(true);
                     continue;
                 }
-                await foreach (JsonNode? r in right.Evaluate(input, context, environment).ConfigureAwait(false))
-                    yield return JsonValue.Create(Truthy(r));
+                await foreach (JqValue? r in right.Evaluate(input, context, environment).ConfigureAwait(false))
+                    yield return JqScalar.Create(Truthy(r));
             }
             yield break;
         }
@@ -1457,22 +1455,22 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
 
     private sealed class ValueFilter(SingleValueFilter left, string op, SingleValueFilter right) : SingleValueFilter
     {
-        protected override JsonNode? EvaluateValue(JsonNode? input, JqContext context, JqEnvironment environment)
+        protected override JqValue? EvaluateValue(JqValue? input, JqContext context, JqEnvironment environment)
         {
             if (op is "and" or "or")
             {
                 bool first = Truthy(left.ReadValue(input, context, environment));
-                return JsonValue.Create(op == "and"
+                return JqScalar.Create(op == "and"
                     ? first && Truthy(right.ReadValue(input, context, environment))
                     : first || Truthy(right.ReadValue(input, context, environment)));
             }
             // Ordinary operators retain jq's right-before-left operand order.
-            JsonNode? second = right.ReadValue(input, context, environment);
+            JqValue? second = right.ReadValue(input, context, environment);
             return Apply(context, op, left.ReadValue(input, context, environment), second);
         }
     }
 
-    internal static JsonNode? Apply(JqContext context, string op, JsonNode? l, JsonNode? r)
+    internal static JqValue? Apply(JqContext context, string op, JqValue? l, JqValue? r)
     {
         context.Budget.CheckCancellation();
         return op switch
@@ -1482,45 +1480,45 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
             "*" => context.Runtime.Multiply(l, r),
             "/" => Divide(l, r),
             "%" => Modulo(l, r),
-            "==" => JsonValue.Create(context.Runtime.JsonEquals(l, r)),
-            "!=" => JsonValue.Create(!context.Runtime.JsonEquals(l, r)),
-            "<" => JsonValue.Create(context.Runtime.Compare(l, r) < 0),
-            "<=" => JsonValue.Create(context.Runtime.Compare(l, r) <= 0),
-            ">" => JsonValue.Create(context.Runtime.Compare(l, r) > 0),
-            ">=" => JsonValue.Create(context.Runtime.Compare(l, r) >= 0),
+            "==" => JqScalar.Create(context.Runtime.JsonEquals(l, r)),
+            "!=" => JqScalar.Create(!context.Runtime.JsonEquals(l, r)),
+            "<" => JqScalar.Create(context.Runtime.Compare(l, r) < 0),
+            "<=" => JqScalar.Create(context.Runtime.Compare(l, r) <= 0),
+            ">" => JqScalar.Create(context.Runtime.Compare(l, r) > 0),
+            ">=" => JqScalar.Create(context.Runtime.Compare(l, r) >= 0),
             _ => throw new JqException($"unsupported operator {op}")
         };
 
-        JsonNode? Divide(JsonNode? l, JsonNode? r)
+        JqValue? Divide(JqValue? l, JqValue? r)
         {
             if (TypeName(l) == "number" && TypeName(r) == "number")
             {
                 double divisor = Number(r);
                 if (divisor == 0.0)
                     throw new JqException(context.Runtime.TypeError(l, r, "cannot be divided because the divisor is zero"));
-                return JsonValue.Create(Number(l) / divisor);
+                return JqScalar.Create(Number(l) / divisor);
             }
-            if (TryGetString(l, out _) && TryGetString(r, out _))
+            if (l is JqString && r is JqString)
                 return context.Runtime.Split(l, r);
             throw new JqException(context.Runtime.TypeError(l, r, "cannot be divided"));
         }
 
         // Integer remainder matching the reference: operands truncate
         // toward zero with clamping, NaN propagates, zero divisors fail.
-        JsonNode? Modulo(JsonNode? l, JsonNode? r)
+        JqValue? Modulo(JqValue? l, JqValue? r)
         {
             if (TypeName(l) != "number" || TypeName(r) != "number")
                 throw new JqException(context.Runtime.TypeError(l, r, "cannot be divided (remainder)"));
             double left = Number(l);
             double right = Number(r);
             if (double.IsNaN(left) || double.IsNaN(right))
-                return JsonValue.Create(double.NaN);
+                return JqScalar.Create(double.NaN);
             long divisor = Truncate(right);
             if (divisor == 0)
                 throw new JqException(context.Runtime.TypeError(l, r, "cannot be divided (remainder) because the divisor is zero"));
             if (divisor == -1)
-                return JsonValue.Create(0L);
-            return JsonValue.Create(Truncate(left) % divisor);
+                return JqScalar.Create(0L);
+            return JqScalar.Create(Truncate(left) % divisor);
         }
 
         static long Truncate(double value)
@@ -1539,7 +1537,7 @@ internal sealed class BinaryFilter(JqFilter left, string op, JqFilter right) : J
 // Quota, compile, cancellation, and host failures still propagate.
 internal sealed class OptionalFilter(JqFilter inner) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         var results = inner.Evaluate(input, context, environment).GetAsyncEnumerator();
         await using var resultsLifetime = results.ConfigureAwait(false);
@@ -1588,10 +1586,10 @@ internal sealed class OptionalFilter(JqFilter inner) : JqFilter
 internal sealed class AlternativeFilter(JqFilter left, JqFilter right) : JqFilter
 {
     internal JqFilter Left => left;
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         bool found = false;
-        await foreach (JsonNode? value in left.Evaluate(input, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? value in left.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             if (Truthy(value))
             {
@@ -1600,7 +1598,7 @@ internal sealed class AlternativeFilter(JqFilter left, JqFilter right) : JqFilte
             }
         }
         if (!found)
-            await foreach (JsonNode? value in right.Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? value in right.Evaluate(input, context, environment).ConfigureAwait(false))
                 yield return value;
     }
 
@@ -1632,7 +1630,7 @@ internal sealed class UnaryFilter(string op, JqFilter inner) : JqFilter
 {
     internal override bool IsSingleValued(JqEnvironment environment, int depth) =>
         depth < JqRecursion.MaximumDepth && inner.IsSingleValued(environment, depth + 1);
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         await foreach (var value in inner.Evaluate(input, context, environment).ConfigureAwait(false))
         {
@@ -1640,11 +1638,11 @@ internal sealed class UnaryFilter(string op, JqFilter inner) : JqFilter
             {
                 if (TypeName(value) != "number")
                     throw new JqException(context.Runtime.UnaryTypeError(value, "cannot be negated"));
-                yield return JsonValue.Create(-Number(value));
+                yield return JqScalar.Create(-Number(value));
             }
             else if (op == "not")
             {
-                yield return JsonValue.Create(!Truthy(value));
+                yield return JqScalar.Create(!Truthy(value));
             }
             else
             {
@@ -1663,7 +1661,7 @@ internal sealed class IfFilter(
         && branches.All(branch => branch.Condition.IsSingleValued(environment, depth + 1)
             && branch.Then.IsSingleValued(environment, depth + 1));
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         // Reference distribution: every condition output routes independently,
         // truthy outputs run the branch body while falsy outputs fall through
@@ -1671,7 +1669,7 @@ internal sealed class IfFilter(
         await foreach (var value in RunBranch(0).ConfigureAwait(false))
             yield return value;
 
-        async IAsyncEnumerable<JsonNode?> RunBranch(int index)
+        async IAsyncEnumerable<JqValue?> RunBranch(int index)
         {
             if (index >= branches.Count)
             {
@@ -1680,7 +1678,7 @@ internal sealed class IfFilter(
                 yield break;
             }
             var (condition, then) = branches[index];
-            await foreach (JsonNode? probe in condition.Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? probe in condition.Evaluate(input, context, environment).ConfigureAwait(false))
             {
                 if (Truthy(probe))
                 {
@@ -1712,7 +1710,7 @@ internal sealed class IfFilter(
                 yield break;
             }
             var (condition, then) = branches[index];
-            await foreach (JsonNode? probe in condition.Evaluate(pair.Value, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? probe in condition.Evaluate(pair.Value, context, environment).ConfigureAwait(false))
             {
                 if (Truthy(probe))
                 {
@@ -1746,7 +1744,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
         depth < JqRecursion.MaximumDepth && name != "inputs"
         && args.All(arg => arg.IsSingleValued(environment, depth + 1));
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         if (name == "empty")
             yield break;
@@ -1793,7 +1791,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
 
         if (args.Count == 0)
         {
-            await foreach (JsonNode? output in EvaluateWith(Array.Empty<JsonNode?>()).ConfigureAwait(false))
+            await foreach (JqValue? output in EvaluateWith(Array.Empty<JqValue?>()).ConfigureAwait(false))
                 yield return output;
             yield break;
         }
@@ -1807,12 +1805,12 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
 
         yield break;
 
-        IAsyncEnumerable<JsonNode?[]> ArgumentCombos()
+        IAsyncEnumerable<JqValue?[]> ArgumentCombos()
         {
-            var current = new JsonNode?[args.Count];
+            var current = new JqValue?[args.Count];
             return Combine(args.Count - 1);
 
-            async IAsyncEnumerable<JsonNode?[]> Combine(int index)
+            async IAsyncEnumerable<JqValue?[]> Combine(int index)
             {
                 if (index < 0)
                 {
@@ -1829,33 +1827,29 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             }
         }
 
-        static int HaltCode(JsonNode? value)
+        static int HaltCode(JqValue? value)
         {
-            if (value is JsonValue scalar && TryGetString(scalar, out _))
+            if (value is JqString)
                 throw new JqException("halt_error requires a numeric exit code");
             return (int)Number(value);
         }
 
-        static JqHaltException NewHalt(JqContext context, JsonNode? input, int code)
+        static JqHaltException NewHalt(JqContext context, JqValue? input, int code)
         {
-            // Strings render raw with no prefix or newline; other values
-            // render as JSON with a newline; null renders nothing.
-            string? text = input is null ? null
-                : TryGetString(input, out string? raw) ? raw
-                : context.Runtime.Serialize(input, false, null, false) + "\n";
-            return new JqHaltException(code, text);
+            context.Budget.CheckCancellation();
+            return new JqHaltException(code, input);
         }
 
         // Like the reference indices definition, only array inputs and
         // string haystacks with string needles use substring search; every
         // other combination falls through to a plain .[$i] index read.
-        static bool UsesSubstringSearch(JsonNode? input, JsonNode? needle) =>
-            input is JsonArray || (TryGetString(input, out _) && TryGetString(needle, out _));
+        static bool UsesSubstringSearch(JqValue? input, JqValue? needle) =>
+            input is JqArray || (input is JqString && needle is JqString);
 
-        async IAsyncEnumerable<JsonNode?> EvaluateWith(JsonNode?[] combo)
+        async IAsyncEnumerable<JqValue?> EvaluateWith(JqValue?[] combo)
         {
-            JsonNode? Arg(int i) => combo[i];
-            if (JqMath.TryEvaluate(context, name, combo, input, out JsonNode? math))
+            JqValue? Arg(int i) => combo[i];
+            if (JqMath.TryEvaluate(context, name, combo, input, out JqValue? math))
             {
                 yield return math;
                 yield break;
@@ -1864,12 +1858,12 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
             switch (name)
             {
                 case "length": yield return context.Runtime.Length(input); break;
-                case "type": yield return JsonValue.Create(TypeName(input)); break;
-                case "not": yield return JsonValue.Create(!Truthy(input)); break;
-                case "now": yield return JsonValue.Create(JqTime.Now(context)); break;
-                case "env": yield return context.Runtime.Clone(context.Variables.TryGetValue("ENV", out JsonNode? envValue) ? envValue : new JsonObject()); break;
+                case "type": yield return JqScalar.Create(TypeName(input), context.Budget); break;
+                case "not": yield return JqScalar.Create(!Truthy(input)); break;
+                case "now": yield return JqScalar.Create(JqTime.Now(context)); break;
+                case "env": yield return context.Runtime.Clone(context.Variables.TryGetValue("ENV", out JqValue? envValue) ? envValue : new JqObject(context.Budget)); break;
                 case "stderr":
-                    if (TryGetString(input, out string? message) && message is not null)
+                    if (context.Runtime.TryGetString(input, out string? message) && message is not null)
                         await context.EmitStderrAsync(message).ConfigureAwait(false);
                     else
                     {
@@ -1879,10 +1873,10 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     yield return input;
                     break;
                 case "tonumber": yield return context.Runtime.ToJsonNumber(input); break;
-                case "toboolean": yield return TypeName(input) == "boolean" ? input : JsonValue.Create(context.Runtime.ToJsonBoolean(input)); break;
-                case "utf8bytelength": yield return JsonValue.Create(Utf8ByteLength(input, context)); break;
-                case "tostring": yield return TryGetString(input, out _) ? input : JsonValue.Create(context.Runtime.ToJqString(input)); break;
-                case "tojson": yield return JsonValue.Create(context.Runtime.Serialize(input, false, null, false)); break;
+                case "toboolean": yield return TypeName(input) == "boolean" ? input : JqScalar.Create(context.Runtime.ToJsonBoolean(input)); break;
+                case "utf8bytelength": yield return JqScalar.Create(Utf8ByteLength(input, context)); break;
+                case "tostring": yield return context.Runtime.ToNativeString(input); break;
+                case "tojson": yield return context.Runtime.ToJsonString(input); break;
                 case "fromjson": yield return context.Runtime.ParseJson(input); break;
                 case "min": yield return context.Runtime.MinMax(input, false); break;
                 case "max": yield return context.Runtime.MinMax(input, true); break;
@@ -1904,28 +1898,28 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 case "scalars": if (TypeName(input) is not ("array" or "object")) yield return input; break;
                 case "finites": if (JqMath.Classify("isfinite", input)) yield return input; break;
                 case "normals": if (JqMath.Classify("isnormal", input)) yield return input; break;
-                case "_negate": if (TypeName(input) != "number") throw new JqException(context.Runtime.UnaryTypeError(input, "cannot be negated")); yield return JsonValue.Create(-Number(input)); break;
+                case "_negate": if (TypeName(input) != "number") throw new JqException(context.Runtime.UnaryTypeError(input, "cannot be negated")); yield return JqScalar.Create(-Number(input)); break;
                 case "_strindices":
-                    if (!TryGetString(input, out string? strHaystack) || strHaystack is null)
+                    if (!context.Runtime.TryGetString(input, out string? strHaystack) || strHaystack is null)
                         throw new JqException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") cannot be searched, as it is not a string");
-                    if (!TryGetString(Arg(0), out string? strNeedle) || strNeedle is null)
+                    if (!context.Runtime.TryGetString(Arg(0), out string? strNeedle) || strNeedle is null)
                         throw new JqException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a string");
                     yield return context.Runtime.Indices(input, Arg(0));
                     break;
                 case "format":
-                    if (!TryGetString(Arg(0), out string? formatName) || formatName is null)
+                    if (Arg(0) is not JqString formatName)
                         throw new JqException(TypeName(Arg(0)) + " (" + context.Runtime.TruncatedDump(Arg(0)) + ") is not a valid format");
                     yield return context.Runtime.FormatValue(formatName, input);
                     break;
-                case "contains": yield return JsonValue.Create(context.Runtime.Contains(input, Arg(0))); break;
-                case "inside": yield return JsonValue.Create(context.Runtime.Contains(Arg(0), input)); break;
-                case "has": yield return JsonValue.Create(context.Runtime.Has(input, Arg(0))); break;
+                case "contains": yield return JqScalar.Create(context.Runtime.Contains(input, Arg(0))); break;
+                case "inside": yield return JqScalar.Create(context.Runtime.Contains(Arg(0), input)); break;
+                case "has": yield return JqScalar.Create(context.Runtime.Has(input, Arg(0))); break;
                 case "indices":
                     if (UsesSubstringSearch(input, Arg(0)))
                         yield return context.Runtime.Indices(input, Arg(0));
                     else
                     {
-                        _ = JqPathReads.TryIndex(input, Arg(0), false, context, out JsonNode? got);
+                        _ = JqPathReads.TryIndex(input, Arg(0), false, context, out JqValue? got);
                         yield return got;
                     }
                     break;
@@ -1935,15 +1929,15 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                         yield return context.Runtime.Index(input, Arg(0), name == "rindex");
                     else
                     {
-                        _ = JqPathReads.TryIndex(input, Arg(0), false, context, out JsonNode? values);
+                        _ = JqPathReads.TryIndex(input, Arg(0), false, context, out JqValue? values);
                         if (name == "rindex")
-                            _ = JqPathReads.TrySlice(values, JsonValue.Create(-1), null, false, context, out values);
-                        _ = JqPathReads.TryIndex(values, JsonValue.Create(0), false, context, out JsonNode? got);
+                            _ = JqPathReads.TrySlice(values, JqScalar.Create(-1), null, false, context, out values);
+                        _ = JqPathReads.TryIndex(values, JqScalar.Create(0), false, context, out JqValue? got);
                         yield return got;
                     }
                     break;
-                case "startswith": yield return JsonValue.Create(StartsEndsWith(input, Arg(0), true)); break;
-                case "endswith": yield return JsonValue.Create(StartsEndsWith(input, Arg(0), false)); break;
+                case "startswith": yield return JqScalar.Create(context.Runtime.StartsEndsWith(input, Arg(0), true)); break;
+                case "endswith": yield return JqScalar.Create(context.Runtime.StartsEndsWith(input, Arg(0), false)); break;
                 case "ltrimstr": yield return context.Runtime.TrimAffix(input, Arg(0), true, false); break;
                 case "rtrimstr": yield return context.Runtime.TrimAffix(input, Arg(0), false, true); break;
                 case "trimstr": yield return context.Runtime.TrimAffix(input, Arg(0), true, true); break;
@@ -1960,25 +1954,25 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     }
                     else
                     {
-                        List<JsonNode> values = JqMatch.Split(context, input, Arg(0), Arg(1));
+                        List<JqValue> values = JqMatch.Split(context, input, Arg(0), Arg(1));
                         context.Budget.ReserveMetadata(64 + 24L * values.Count, 1);
-                        var pieces = new JsonArray();
-                        foreach (JsonNode piece in values)
+                        var pieces = new JqArray();
+                        foreach (JqValue piece in values)
                             pieces.Add(piece);
                         yield return pieces;
                         break;
                     }
                 case "join": yield return context.Runtime.Join(input, Arg(0)); break;
-                case "ascii_downcase": yield return JsonValue.Create(context.Runtime.AsciiCase(input, true)); break;
-                case "ascii_upcase": yield return JsonValue.Create(context.Runtime.AsciiCase(input, false)); break;
+                case "ascii_downcase": yield return context.Runtime.AsciiCase(input, true); break;
+                case "ascii_upcase": yield return context.Runtime.AsciiCase(input, false); break;
 
                 case "fromdate":
                 case "fromdateiso8601": yield return JqTime.FromDateIso(context, input); break;
                 case "todate":
-                case "todateiso8601": yield return JsonValue.Create(JqTime.ToDateIso(context, input)); break;
+                case "todateiso8601": yield return JqTime.ToDateIso(context, input); break;
                 case "strptime": yield return JqTime.Strptime(context, input, Arg(0)); break;
-                case "strftime": yield return JsonValue.Create(JqTime.Strftime(context, input, Arg(0), false)); break;
-                case "strflocaltime": yield return JsonValue.Create(JqTime.Strftime(context, input, Arg(0), true)); break;
+                case "strftime": yield return JqTime.Strftime(context, input, Arg(0), false); break;
+                case "strflocaltime": yield return JqTime.Strftime(context, input, Arg(0), true); break;
                 case "gmtime": yield return JqTime.Gmtime(context, input); break;
                 case "localtime": yield return JqTime.Localtime(context, input); break;
                 case "mktime": yield return JqTime.MktimeUtc(context, input); break;
@@ -1986,18 +1980,18 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                 {
                     var names = JqBuiltinRegistry.ListAll();
                     context.Budget.ReserveBytes(64 + 88L * names.Count);
-                    var array = new JsonArray();
+                    var array = new JqArray();
                     foreach (var entry in names)
                     {
                         context.Budget.CheckCancellation();
-                        array.Add(JsonValue.Create(entry));
+                        array.Add(JqScalar.Create(entry, context.Budget));
                     }
                     yield return array;
                     break;
                 }
                 case "modulemeta":
                 {
-                    if (!TryGetString(input, out string? moduleName) || moduleName is null)
+                    if (!context.Runtime.TryGetString(input, out string? moduleName) || moduleName is null)
                         throw new JqException("modulemeta input module name must be a string");
                     if (context.ModuleLoader is null)
                         throw new JqException("modulemeta not available");
@@ -2025,8 +2019,8 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
                     }
                     break;
                 }
-                case "input_filename": yield return context.InputFilename is string filename ? JsonValue.Create(filename) : null; break;
-                case "input_line_number": yield return JsonValue.Create(context.InputLineNumber); break;
+                case "input_filename": yield return context.InputFilename is string filename ? JqScalar.Create(filename, context.Budget) : null; break;
+                case "input_line_number": yield return JqScalar.Create(context.InputLineNumber); break;
                 default: throw new JqException($"unsupported function {name}");
             }
         }
@@ -2039,31 +2033,31 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
         if (name == "select")
         {
             // Predicates run in value mode; surviving pairs keep paths.
-            await foreach (JsonNode? probe in args[0].Evaluate(pair.Value, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? probe in args[0].Evaluate(pair.Value, context, environment).ConfigureAwait(false))
                 if (Truthy(probe))
                     yield return pair;
             yield break;
         }
         if (name is "ltrimstr" or "rtrimstr" or "trimstr")
         {
-            await foreach (JsonNode? affix in args[0].Evaluate(pair.Value, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? affix in args[0].Evaluate(pair.Value, context, environment).ConfigureAwait(false))
             {
                 bool left = name != "rtrimstr", right = name != "ltrimstr";
-                if (!TryGetString(pair.Value, out string text) || !TryGetString(affix, out string fix))
+                if (!context.Runtime.TryGetString(pair.Value, out string text) || !context.Runtime.TryGetString(affix, out string fix))
                     throw new JqException((left ? "startswith" : "endswith") + "() requires string inputs");
                 JqValuePath current = pair;
                 if (left && text.StartsWith(fix, StringComparison.Ordinal))
                 {
                     int width = context.Runtime.CountStringScalars(fix);
-                    if (!JqPathReads.TrySlicePath(current, JsonValue.Create(width), null, false, context, out JqValuePath? sliced))
+                    if (!JqPathReads.TrySlicePath(current, JqScalar.Create(width), null, false, context, out JqValuePath? sliced))
                         yield break;
                     current = sliced;
-                    text = String(current.Value);
+                    text = context.Runtime.String(current.Value);
                 }
                 if (right && text.EndsWith(fix, StringComparison.Ordinal))
                 {
                     int end = context.Runtime.CountStringScalars(text) - context.Runtime.CountStringScalars(fix);
-                    if (!JqPathReads.TrySlicePath(current, null, JsonValue.Create(end), false, context, out JqValuePath? sliced))
+                    if (!JqPathReads.TrySlicePath(current, null, JqScalar.Create(end), false, context, out JqValuePath? sliced))
                         yield break;
                     current = sliced;
                 }
@@ -2078,7 +2072,7 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
 internal sealed class FormatFilter(string format) : JqFilter
 {
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         yield return context.Runtime.FormatValue(format, input);
     }
@@ -2090,7 +2084,7 @@ internal sealed class InterpolatedStringFilter : JqFilter
 
     private abstract record Segment;
 
-    private sealed record Literal(string Text) : Segment;
+    private sealed record Literal(JqString Text) : Segment;
 
     private sealed record Interpolation(JqFilter Filter) : Segment;
 
@@ -2139,18 +2133,18 @@ internal sealed class InterpolatedStringFilter : JqFilter
             if (start == end) return;
             budget.ReserveString(end - start);
             budget.ReserveMetadata(64, 1);
-            segments.Add(new Literal(Lexer.DecodeLiterals(template[start..end], budget)));
+            segments.Add(new Literal(JqString.FromHost(Lexer.DecodeLiterals(template[start..end], budget), budget)));
         }
     }
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        if (_segments.Count == 0) { yield return JsonValue.Create(string.Empty); yield break; }
+        if (_segments.Count == 0) { yield return JqScalar.Create(string.Empty, context.Budget); yield break; }
         context.Budget.ReserveBytes(64L * _segments.Count);
-        var iterators = new IAsyncEnumerator<string>?[_segments.Count];
-        var pieces = new string?[_segments.Count];
+        var iterators = new IAsyncEnumerator<JqString>?[_segments.Count];
+        var pieces = new JqString?[_segments.Count];
         int index = _segments.Count - 1;
         try
         {
@@ -2168,10 +2162,20 @@ internal sealed class InterpolatedStringFilter : JqFilter
                 }
                 pieces[index] = iterator.Current;
                 if (index != 0) { index--; continue; }
-                var assembled = new StringBuilder();
+                int length = 0;
                 foreach (var piece in pieces)
-                    context.Budget.Append(assembled, piece.AsSpan());
-                yield return JsonValue.Create(context.Budget.Finish(assembled));
+                    length = JqBudget.BufferCapacity((long)length + (piece?.ByteLength ?? 0), 0);
+                yield return JqString.Create(length, (pieces, context.Budget), static (target, state) =>
+                {
+                    int offset = 0;
+                    foreach (JqString? piece in state.pieces)
+                    {
+                        state.Budget.CheckCancellation();
+                        if (piece is null) continue;
+                        piece.Utf8.Span.CopyTo(target.Slice(offset));
+                        offset += piece.ByteLength;
+                    }
+                }, context.Budget);
             }
         }
         finally
@@ -2181,7 +2185,7 @@ internal sealed class InterpolatedStringFilter : JqFilter
                 if (iterator is not null) await iterator.DisposeAsync().ConfigureAwait(false);
         }
 
-        async IAsyncEnumerable<string> Pieces(Segment segment)
+        async IAsyncEnumerable<JqString> Pieces(Segment segment)
         {
             if (segment is Literal literal) { yield return literal.Text; yield break; }
             if (segment is Interpolation interpolation)
@@ -2196,8 +2200,8 @@ internal sealed class InterpolatedStringFilter : JqFilter
             }
         }
 
-        string Render(JsonNode? value) => _format is null
-            ? context.Runtime.ToJqString(value)
-            : context.Runtime.Format(_format, value);
+        JqString Render(JqValue? value) => _format is null
+            ? context.Runtime.ToNativeString(value)
+            : context.Runtime.FormatValue(_format, value);
     }
 }

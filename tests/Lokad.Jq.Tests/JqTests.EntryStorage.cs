@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -8,14 +7,14 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_WithEntriesBorrowsMappedValuesAndCopiesTheFinalPayloadOnce()
     {
-        var payload = new JsonArray();
+        var payload = new JqArray();
         for (int index = 0; index < 1000; index++) payload.Add(index);
-        var input = new JsonObject { ["payload"] = payload };
+        var input = new JqObject(NativeFixtures.Budget()) { ["payload"] = payload };
         var root = new BenchmarkMemoryBudget(200000);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            var result = Assert.IsType<JsonObject>(await new WithEntriesFilter(new IdentityFilter()).Evaluate(input, context, context.RootEnvironment).SingleAsync());
-            Assert.Equal(1000, Assert.IsType<JsonArray>(result["payload"]).Count);
+            var result = Assert.IsType<JqObject>(await new WithEntriesFilter(new IdentityFilter()).Evaluate(input, context, context.RootEnvironment).SingleAsync());
+            Assert.Equal(1000, Assert.IsType<JqArray>(result["payload"]).Count);
             result["payload"]?[0] = -1;
             Assert.Equal(0, payload[0]?.GetValue<int>());
             Assert.InRange(root.PeakBytes, 176000, 200000);
@@ -45,12 +44,12 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_WithEntriesCancelsBeforeRetainingAnotherMappedValue()
     {
-        var input = new JsonObject { ["a"] = 1, ["b"] = 2 };
+        var input = new JqObject(NativeFixtures.Budget()) { ["a"] = 1, ["b"] = 2 };
         using var cancellation = new CancellationTokenSource();
         int visits = 0;
         var body = new WalkVisitFilter(() => { if (++visits == 2) cancellation.Cancel(); });
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
             await Assert.ThrowsAsync<OperationCanceledException>(async () => await new WithEntriesFilter(body).Evaluate(input, context, context.RootEnvironment).SingleAsync());
         Assert.Equal(2, visits);
         Assert.Equal("{\"a\":1,\"b\":2}", input.ToJsonString());

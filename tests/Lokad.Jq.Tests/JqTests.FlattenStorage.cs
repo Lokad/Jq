@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -10,15 +9,15 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_FlattenWideLeavesNeedOnlyOutputAndAncestorStorage(bool nested)
     {
-        var values = new JsonArray();
-        for (int index = 0; index < 10000; index++) values.Add((JsonNode?)null);
-        JsonNode input = nested ? new JsonArray(values) : values;
+        var values = new JqArray();
+        for (int index = 0; index < 10000; index++) values.Add((JqValue?)null);
+        JqValue input = nested ? new JqArray(values) : values;
         var root = new BenchmarkMemoryBudget(256 * 1024);
         var counted = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
         {
             long before = GC.GetAllocatedBytesForCurrentThread();
-            var result = Assert.IsType<JsonArray>(context.Runtime.Flatten(input, JsonValue.Create(-1)));
+            var result = Assert.IsType<JqArray>(context.Runtime.Flatten(input, NativeFixtures.Create(-1)));
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
             Assert.Equal(10000, result.Count);
             Assert.All(result, Assert.Null);
@@ -33,24 +32,24 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_FlattenTraversesDeepArraysIteratively()
     {
-        JsonNode input = JsonValue.Create(1);
-        for (int depth = 0; depth < 5000; depth++) input = new JsonArray(input);
+        JqValue input = NativeFixtures.Create(1);
+        for (int depth = 0; depth < 5000; depth++) input = new JqArray(input);
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
-            Assert.Equal("[1]", context.Runtime.Flatten(input, JsonValue.Create(-1)).ToJsonString());
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+            Assert.Equal("[1]", context.Runtime.Flatten(input, NativeFixtures.Create(-1)).ToJsonString());
         Assert.Equal(0, root.ReservedBytes);
     }
 
     [Fact]
     public void Jq_FlattenCancelsDuringDescentAndRefundsStorage()
     {
-        JsonNode? input = null;
-        for (int depth = 0; depth < 5000; depth++) input = new JsonArray(input);
+        JqValue? input = null;
+        for (int depth = 0; depth < 5000; depth++) input = new JqArray(input);
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var budget = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, budget, cancellation.Token)))
-            Assert.Throws<OperationCanceledException>(() => context.Runtime.Flatten(input, JsonValue.Create(-1)));
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, budget, cancellation.Token)))
+            Assert.Throws<OperationCanceledException>(() => context.Runtime.Flatten(input, NativeFixtures.Create(-1)));
         Assert.Equal(0, root.ReservedBytes);
     }
 

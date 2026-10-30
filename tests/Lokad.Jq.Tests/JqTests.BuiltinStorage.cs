@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -17,22 +16,22 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public async Task Jq_BuiltinResultsRemainIndependentWithOneAdmissionPerResult()
+    public async Task Jq_BuiltinResultsRemainIndependentWithBatchedNativeAdmission()
     {
-        using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
+        using var compiler = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         JqFilter filter = new JqParser("builtins", JqProgramSource.Inline, compiler.RootEnvironment, compiler.Budget).Parse();
-        var root = new BenchmarkMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(128 * 1024);
         var counted = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
         {
-            var first = Assert.IsType<JsonArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
+            var first = Assert.IsType<JqArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
             string original = first[0]?.GetValue<string>() ?? throw new InvalidOperationException();
-            first[0] = "changed";
-            var second = Assert.IsType<JsonArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
+            first[0] = NativeFixtures.Create("changed");
+            var second = Assert.IsType<JqArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(original, second[0]?.GetValue<string>());
             Assert.Equal(original, JqBuiltinRegistry.ListAll()[0]);
             Assert.NotSame(first, second);
-            Assert.InRange(counted.Counts.Reservations + counted.Counts.Resizes, 1, 2);
+            Assert.InRange(counted.Counts.Reservations + counted.Counts.Resizes, 1, 16);
         }
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -54,13 +53,13 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_BuiltinResultsObserveCancellationBeforeAndAfterAdmission(bool duringAdmission)
     {
-        using var compiler = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
+        using var compiler = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         JqFilter filter = new JqParser("builtins", JqProgramSource.Inline, compiler.RootEnvironment, compiler.Budget).Parse();
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource();
         if (!duringAdmission) cancellation.Cancel();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
             await Assert.ThrowsAsync<OperationCanceledException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
         Assert.Equal(0, root.ReservedBytes);
     }

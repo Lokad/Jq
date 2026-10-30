@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json.Nodes;
 using static Lokad.Jq.JqRuntime;
 
 namespace Lokad.Jq;
@@ -14,31 +13,33 @@ namespace Lokad.Jq;
 internal abstract record JqValueSegment
 {
     // Raw values are borrowed for diagnostics; PathToJson copies before parenting.
-    internal abstract JsonNode? ToJson();
+    internal abstract JqValue? ToJson(JqBudget budget);
 }
 
-internal sealed record KeySegment(string Key) : JqValueSegment
+internal sealed record KeySegment(JqString Key) : JqValueSegment
 {
-    internal override JsonNode? ToJson() => JsonValue.Create(Key);
+    internal override JqValue? ToJson(JqBudget budget) => JqScalar.Create(Key);
+    public bool Equals(KeySegment? other) => other is not null && Key.ContentEquals(other.Key, CancellationToken.None);
+    public override int GetHashCode() => Key.ContentHashCode(CancellationToken.None);
 }
 
 internal sealed record IndexSegment(long Index, bool IsNaN) : JqValueSegment
 {
-    internal override JsonNode? ToJson() => IsNaN ? JsonValue.Create(double.NaN) : JsonValue.Create(Index);
+    internal override JqValue? ToJson(JqBudget budget) => IsNaN ? JqScalar.Create(double.NaN) : JqScalar.Create(Index);
 }
 
 // A fractional array index preserves its double for rendering and deletion
 // bucketing; reads and writes truncate it toward zero like the reference.
 internal sealed record FractionalSegment(double Value) : JqValueSegment
 {
-    internal override JsonNode? ToJson() => JsonValue.Create(Value);
+    internal override JqValue? ToJson(JqBudget budget) => JqScalar.Create(Value);
 }
 
 internal sealed record SliceSegment(double? Start, double? End) : JqValueSegment
 {
-    internal override JsonNode? ToJson()
+    internal override JqValue? ToJson(JqBudget budget)
     {
-        var slice = new JsonObject();
+        var slice = new JqObject(budget);
         slice["start"] = Start.HasValue ? JqRuntime.CreateNumber(Start.Value) : null;
         slice["end"] = End.HasValue ? JqRuntime.CreateNumber(End.Value) : null;
         return slice;
@@ -51,27 +52,27 @@ internal sealed record SliceSegment(double? Start, double? End) : JqValueSegment
 // parse_slice step rejects those only against arrays and strings, while
 // other containers report their own kind errors, so validation stays at
 // the use sites and rendering keeps the raw key set.
-internal sealed record SliceObjectSegment(JsonObject Raw) : JqValueSegment
+internal sealed record SliceObjectSegment(JqObject Raw) : JqValueSegment
 {
-    internal override JsonNode? ToJson() => Raw;
+    internal override JqValue? ToJson(JqBudget budget) => Raw;
 }
 
 // A segment that can never address a container (booleans, arrays, and nulls
 // from path values). Traversal reports container-shaped type errors.
-internal sealed record InvalidSegment(JsonNode? Raw) : JqValueSegment
+internal sealed record InvalidSegment(JqValue? Raw) : JqValueSegment
 {
-    internal override JsonNode? ToJson() => Raw;
+    internal override JqValue? ToJson(JqBudget budget) => Raw;
 }
 
 // One enumerated path: accumulated segments, the value found there, and
 // whether the value survived intact (fresh values travel untracked and fail
 // at the next path boundary).
-internal sealed record JqValuePath(IReadOnlyList<JqValueSegment> Segments, JsonNode? Value, bool Tracked)
+internal sealed record JqValuePath(IReadOnlyList<JqValueSegment> Segments, JqValue? Value, bool Tracked)
 {
     // Keep the selected value so a later identical result can restore its path.
     internal JqValuePath? Origin { get; init; }
 
-    internal JqValuePath WithValue(JsonNode? value, bool tracked) =>
+    internal JqValuePath WithValue(JqValue? value, bool tracked) =>
         new(Segments, value, tracked) { Origin = tracked ? null : Tracked ? this : Origin };
 }
 
@@ -79,13 +80,13 @@ internal static class JqPaths
 {
     internal const int MaxPathDepth = 10000;
 
-    internal static string InvalidResult(JsonNode? value, JqContext context)
+    internal static string InvalidResult(JqValue? value, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         return "Invalid path expression with result " + context.Runtime.TruncatedDump(value);
     }
 
-    internal static string InvalidAccess(JsonNode? segment, JsonNode? container, JqContext context)
+    internal static string InvalidAccess(JqValue? segment, JqValue? container, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         return "Invalid path expression near attempt to access element "
@@ -94,7 +95,7 @@ internal static class JqPaths
             + context.Runtime.TruncatedDump(container);
     }
 
-    internal static string InvalidIterate(JsonNode? value, JqContext context)
+    internal static string InvalidIterate(JqValue? value, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         return "Invalid path expression near attempt to iterate through " + context.Runtime.TruncatedDump(value);
@@ -102,7 +103,7 @@ internal static class JqPaths
 
     // Collects tracked segments; fresh values fail exactly like upstream.
     [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
-    internal static async ValueTask<List<IReadOnlyList<JqValueSegment>>> CollectPaths(JqFilter paths, JsonNode? input, JqContext context, JqEnvironment environment)
+    internal static async ValueTask<List<IReadOnlyList<JqValueSegment>>> CollectPaths(JqFilter paths, JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(context);
@@ -139,14 +140,14 @@ internal static class JqPaths
         ArgumentNullException.ThrowIfNull(segment);
         ArgumentNullException.ThrowIfNull(context);
         if (!pair.Tracked)
-            throw new JqException(InvalidAccess(segment.ToJson(), pair.Value, context));
+            throw new JqException(InvalidAccess(segment.ToJson(context.Budget), pair.Value, context));
     }
 
-    internal static JsonNode PathToJson(IReadOnlyList<JqValueSegment> segments, JqBudget budget)
+    internal static JqValue PathToJson(IReadOnlyList<JqValueSegment> segments, JqBudget budget)
     {
         ArgumentNullException.ThrowIfNull(segments);
         budget.ReserveBytes(64 + 88L * segments.Count);
-        var path = new JsonArray();
+        var path = new JqArray();
         foreach (JqValueSegment segment in segments)
         {
             if (segment is SliceObjectSegment slice)
@@ -156,7 +157,7 @@ internal static class JqPaths
             else
             {
                 if (segment is SliceSegment) budget.ReserveBytes(384);
-                path.Add(segment.ToJson());
+                path.Add(segment.ToJson(budget));
             }
         }
         return path;
@@ -164,25 +165,25 @@ internal static class JqPaths
 
     // Parses a path value (getpath/setpath/delpaths arguments). Numbers
     // truncate toward zero; NaN indices are kept for downstream handling.
-    internal static List<JqValueSegment> ParsePathValue(JsonNode? path, JqContext context)
+    internal static List<JqValueSegment> ParsePathValue(JqValue? path, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (path is not JsonArray array)
+        if (path is not JqArray array)
             throw new JqException("Path must be specified as an array");
         if (array.Count > MaxPathDepth)
             throw new JqException("Path too deep");
         context.Budget.ReserveBytes(64L * array.Count);
         var segments = new List<JqValueSegment>();
-        foreach (JsonNode? element in array)
+        foreach (JqValue? element in array)
         {
             context.Budget.CheckCancellation();
-            if (TryGetString(element, out string? key))
+            if (element is JqString key)
                 segments.Add(new KeySegment(key));
             else if (TryGetFractional(element, out double fractional))
                 segments.Add(new FractionalSegment(fractional));
             else if (TryGetIndex(element, out long index, out bool isNaN))
                 segments.Add(new IndexSegment(index, isNaN));
-            else if (element is JsonObject slice)
+            else if (element is JqObject slice)
             {
                 segments.Add(new SliceObjectSegment(slice));
             }
@@ -196,21 +197,21 @@ internal static class JqPaths
 
     // Integral storage does not convert through TryGetValue<double>, so
     // probe whole numbers first; fractional values truncate toward zero.
-    internal static bool TryGetIndex(JsonNode? key, out long index, out bool isNaN)
+    internal static bool TryGetIndex(JqValue? key, out long index, out bool isNaN)
     {
         index = 0;
         isNaN = false;
-        if (key is JsonValue small && small.TryGetValue<int>(out int directInt))
+        if (key is JqScalar small && small.TryGetValue<int>(out int directInt))
         {
             index = directInt;
             return true;
         }
-        if (key is JsonValue whole && whole.TryGetValue<long>(out long direct))
+        if (key is JqScalar whole && whole.TryGetValue<long>(out long direct))
         {
             index = direct;
             return true;
         }
-        if (key is JsonValue real && real.TryGetValue<double>(out double value))
+        if (key is JqScalar real && real.TryGetValue<double>(out double value))
         {
             if (double.IsNaN(value))
             {
@@ -227,10 +228,10 @@ internal static class JqPaths
     // reference casts; deletions resolve the sign separately.
     internal static long TruncateIndex(double value) => (long)ClampDouble(value);
 
-    internal static bool TryGetFractional(JsonNode? key, out double value)
+    internal static bool TryGetFractional(JqValue? key, out double value)
     {
         value = 0;
-        if (key is JsonValue real && real.TryGetValue<double>(out double candidate) &&
+        if (key is JqScalar real && real.TryGetValue<double>(out double candidate) &&
             double.IsFinite(candidate) && candidate != Math.Truncate(candidate))
         {
             value = candidate;
@@ -252,7 +253,7 @@ internal static class JqPaths
     // can apply the reference container-dependent dispatch.
     internal static JqValueSegment UpdateSegment(JqValueSegment segment)
     {
-        if (segment is InvalidSegment invalid && invalid.Raw is JsonObject slice)
+        if (segment is InvalidSegment invalid && invalid.Raw is JqObject slice)
             return new SliceObjectSegment(slice);
         return segment;
     }
@@ -270,36 +271,36 @@ internal static class JqPaths
     // both keys must be present (explicit nulls and NaN take the same
     // container-dependent defaults as evaluated bounds); numbers keep their
     // values and anything else fails the slice at the use site.
-    internal static bool TryGetSliceObjectBounds(JsonObject slice, out double? start, out double? end)
+    internal static bool TryGetSliceObjectBounds(JqObject slice, out double? start, out double? end)
     {
         start = null;
         end = null;
-        if (!slice.TryGetPropertyValue("start", out JsonNode? startNode) ||
-            !slice.TryGetPropertyValue("end", out JsonNode? endNode))
+        if (!slice.TryGetPropertyValue("start", out JqValue? startNode) ||
+            !slice.TryGetPropertyValue("end", out JqValue? endNode))
             return false;
         if (!TrySliceBoundValue(startNode, out start) || !TrySliceBoundValue(endNode, out end))
             return false;
         return true;
     }
 
-    internal static bool TrySliceBoundValue(JsonNode? bound, out double? value)
+    internal static bool TrySliceBoundValue(JqValue? bound, out double? value)
     {
         if (bound is null)
         {
             value = null;
             return true;
         }
-        if (bound is JsonValue small && small.TryGetValue<int>(out int directInt))
+        if (bound is JqScalar small && small.TryGetValue<int>(out int directInt))
         {
             value = directInt;
             return true;
         }
-        if (bound is JsonValue whole && whole.TryGetValue<long>(out long direct))
+        if (bound is JqScalar whole && whole.TryGetValue<long>(out long direct))
         {
             value = direct;
             return true;
         }
-        if (bound is JsonValue real && real.TryGetValue<double>(out double candidate))
+        if (bound is JqScalar real && real.TryGetValue<double>(out double candidate))
         {
             value = double.IsNaN(candidate) ? null : candidate;
             return true;
@@ -344,20 +345,20 @@ internal static class JqPaths
     }
 }
 
-// Path updates deep-copy containers on the spine before mutation. JsonNode
+// Path updates deep-copy containers on the spine before mutation. JqValue
 // children have one parent; source values and sibling outputs remain independent.
 internal static class JqPathUpdates
 {
-    private sealed record Frame(JqValueSegment Segment, JsonNode Container, int Index, int From, int To);
+    private sealed record Frame(JqValueSegment Segment, JqValue Container, int Index, int From, int To);
 
-    internal static JsonNode? SetPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JsonNode? value, JqContext context) =>
+    internal static JqValue? SetPath(JqValue? root, IReadOnlyList<JqValueSegment> segments, JqValue? value, JqContext context) =>
         UpdatePath(root, segments, value, context, false);
 
     // The caller owns the complete tree and has not exposed it to a consumer.
-    internal static JsonNode? SetOwnedPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JsonNode? value, JqContext context) =>
+    internal static JqValue? SetOwnedPath(JqValue? root, IReadOnlyList<JqValueSegment> segments, JqValue? value, JqContext context) =>
         UpdatePath(root, segments, value, context, true);
 
-    private static JsonNode? UpdatePath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JsonNode? value, JqContext context, bool owned)
+    private static JqValue? UpdatePath(JqValue? root, IReadOnlyList<JqValueSegment> segments, JqValue? value, JqContext context, bool owned)
     {
         ArgumentNullException.ThrowIfNull(segments);
         ArgumentNullException.ThrowIfNull(context);
@@ -368,16 +369,16 @@ internal static class JqPathUpdates
         // Frame objects and geometrically replaced backing slots.
         context.Budget.ReserveBytes(80L * segments.Count);
         var frames = new Stack<Frame>();
-        JsonNode? current = root;
+        JqValue? current = root;
         for (int depth = 0; depth < segments.Count; depth++)
             current = Descend(current, JqPaths.TruncateFractional(JqPaths.UpdateSegment(segments[depth])), frames, context, owned);
-        JsonNode? leaf = context.Runtime.Clone(value);
+        JqValue? leaf = context.Runtime.Clone(value);
         while (frames.TryPop(out Frame? frame))
             leaf = ApplyFrame(frame, leaf, context);
         return leaf;
     }
 
-    private static JsonNode? Descend(JsonNode? current, JqValueSegment segment, Stack<Frame> frames, JqContext context, bool owned)
+    private static JqValue? Descend(JqValue? current, JqValueSegment segment, Stack<Frame> frames, JqContext context, bool owned)
     {
         switch (segment)
         {
@@ -387,14 +388,14 @@ internal static class JqPathUpdates
                     frames.Push(new Frame(segment, NewObject(context), 0, 0, 0));
                     return null;
                 }
-                if (current is JsonObject obj)
+                if (current is JqObject obj)
                 {
-                    frames.Push(new Frame(segment, owned ? obj : (JsonObject)context.Budget.CopyValue(obj, 0), 0, 0, 0));
-                    return obj.TryGetPropertyValue(key.Key, out JsonNode? child) ? child : null;
+                    frames.Push(new Frame(segment, owned ? obj : (JqObject)context.Budget.CopyValue(obj, 0), 0, 0, 0));
+                    return obj.TryGetPropertyValue(key.Key, out JqValue? child) ? child : null;
                 }
                 // Like the reference probe read inside jv_setpath, indexing a
                 // non-object with a key reports the container and key kinds.
-                throw new JqException("Cannot index " + JqRuntime.TypeName(current) + " with string (" + context.Runtime.TruncatedDump(JsonValue.Create(key.Key)) + ")");
+                throw new JqException("Cannot index " + JqRuntime.TypeName(current) + " with string (" + context.Runtime.TruncatedDump(JqScalar.Create(key.Key)) + ")");
             case IndexSegment index:
                 if (index.IsNaN)
                     throw new JqException("Cannot set array element at NaN index");
@@ -407,7 +408,7 @@ internal static class JqPathUpdates
                     frames.Push(new Frame(segment, PaddedArray(null, index.Index, context, owned), (int)index.Index, 0, 0));
                     return null;
                 }
-                if (current is JsonArray arr)
+                if (current is JqArray arr)
                 {
                     long resolved = index.Index < 0 ? arr.Count + index.Index : index.Index;
                     if (resolved < 0)
@@ -423,43 +424,43 @@ internal static class JqPathUpdates
             case SliceSegment slice:
                 if (current is null)
                 {
-                    var fresh = new JsonArray();
+                    var fresh = new JqArray();
                     context.Budget.CheckCancellation();
                     frames.Push(new Frame(segment, fresh, 0, 0, 0));
                     return SliceCopy(fresh, 0, 0, context);
                 }
-                if (current is JsonArray target)
+                if (current is JqArray target)
                 {
                     JqPaths.ResolveSlice(target.Count, slice.Start, slice.End, out int from, out int to);
-                    frames.Push(new Frame(segment, owned ? target : (JsonArray)context.Budget.CopyValue(target, 0), 0, from, to));
+                    frames.Push(new Frame(segment, owned ? target : (JqArray)context.Budget.CopyValue(target, 0), 0, from, to));
                     return SliceCopy(target, from, to, context);
                 }
-                if (current is JsonValue scalar && scalar.TryGetValue<string>(out _))
+                if (current is JqString)
                     throw new JqException("Cannot update string slices");
                 // Like the reference setpath descent, a slice update on any
                 // other scalar fails first in the nested probe read with the
                 // container and key kinds (objects included: the jv_set
                 // fallthrough below is unreachable through jq programs).
-                throw new JqException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.TruncatedDump(slice.ToJson()) + ")");
+                throw new JqException("Cannot index " + JqRuntime.TypeName(current) + " with object (" + context.Runtime.TruncatedDump(slice.ToJson(context.Budget)) + ")");
             case SliceObjectSegment raw:
                 if (current is null)
                 {
                     if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? emptyStart, out double? emptyEnd))
                         throw new JqException("Array/string slice indices must be integers");
-                    var freshRaw = new JsonArray();
+                    var freshRaw = new JqArray();
                     context.Budget.CheckCancellation();
                     frames.Push(new Frame(new SliceSegment(emptyStart, emptyEnd), freshRaw, 0, 0, 0));
                     return SliceCopy(freshRaw, 0, 0, context);
                 }
-                if (current is JsonArray rawTarget)
+                if (current is JqArray rawTarget)
                 {
                     if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? rawStart, out double? rawEnd))
                         throw new JqException("Array/string slice indices must be integers");
                     JqPaths.ResolveSlice(rawTarget.Count, rawStart, rawEnd, out int rawFrom, out int rawTo);
-                    frames.Push(new Frame(new SliceSegment(rawStart, rawEnd), owned ? rawTarget : (JsonArray)context.Budget.CopyValue(rawTarget, 0), 0, rawFrom, rawTo));
+                    frames.Push(new Frame(new SliceSegment(rawStart, rawEnd), owned ? rawTarget : (JqArray)context.Budget.CopyValue(rawTarget, 0), 0, rawFrom, rawTo));
                     return SliceCopy(rawTarget, rawFrom, rawTo, context);
                 }
-                if (current is JsonValue rawScalar && rawScalar.TryGetValue<string>(out _))
+                if (current is JqString)
                 {
                     // The nested probe read runs before the string-slice
                     // rejection, so partial objects fail on their bounds.
@@ -473,30 +474,30 @@ internal static class JqPathUpdates
         }
     }
 
-    private static JsonNode ApplyFrame(Frame frame, JsonNode? leaf, JqContext context)
+    private static JqValue ApplyFrame(Frame frame, JqValue? leaf, JqContext context)
     {
         switch (frame.Segment)
         {
-            case KeySegment key when frame.Container is JsonObject obj:
+            case KeySegment key when frame.Container is JqObject obj:
                 if (!obj.ContainsKey(key.Key)) context.Budget.ReserveObjectItem(leaf);
                 else if (ReferenceEquals(obj[key.Key], leaf)) return obj;
-                obj[key.Key] = context.Runtime.Detach(leaf);
+                obj[key.Key] = leaf;
                 return obj;
-            case IndexSegment when frame.Container is JsonArray arr:
+            case IndexSegment when frame.Container is JqArray arr:
                 if (ReferenceEquals(arr[frame.Index], leaf)) return arr;
-                arr[frame.Index] = context.Runtime.Detach(leaf);
+                arr[frame.Index] = leaf;
                 return arr;
-            case SliceSegment when frame.Container is JsonArray arr:
-                if (leaf is not JsonArray pieces)
+            case SliceSegment when frame.Container is JqArray arr:
+                if (leaf is not JqArray pieces)
                     throw new JqException("A slice of an array can only be assigned another array");
-                var rebuilt = new JsonArray();
+                var rebuilt = new JqArray();
                 context.Budget.CheckCancellation();
                 for (int index = 0; index < frame.From; index++)
                 {
                     context.Budget.ReserveArrayItem(arr[index]);
                     rebuilt.Add(context.Budget.CopyValue(arr[index], 1));
                 }
-                foreach (JsonNode? piece in pieces)
+                foreach (JqValue? piece in pieces)
                 {
                     context.Budget.ReserveArrayItem(piece);
                     rebuilt.Add(context.Budget.CopyValue(piece, 1));
@@ -511,27 +512,27 @@ internal static class JqPathUpdates
                 throw new InvalidOperationException("Mismatched path frame.");
         }
     }
-    private static JsonObject NewObject(JqContext context)
+    private static JqObject NewObject(JqContext context)
     {
         context.Budget.CheckCancellation();
-        return new JsonObject();
+        return new JqObject(context.Budget);
     }
 
     // Pads through the resolved index so frame application always lands
     // in range; every pad element is budget-charged.
-    private static JsonArray PaddedArray(JsonArray? source, long resolved, JqContext context, bool owned)
+    private static JqArray PaddedArray(JqArray? source, long resolved, JqContext context, bool owned)
     {
         long padding = Math.Max(0, resolved + 1 - (source?.Count ?? 0));
         // Admit all additional backing slots before copying or adding any padding.
         // An in-range update still admits its copy, with no padding charge.
         context.Budget.ReserveBytes(checked(24L * padding));
-        JsonArray padded;
+        JqArray padded;
         if (source is not null)
-            padded = owned ? source : (JsonArray)context.Budget.CopyValue(source, 0);
+            padded = owned ? source : (JqArray)context.Budget.CopyValue(source, 0);
         else
         {
             context.Budget.ReserveBytes(64);
-            padded = new JsonArray();
+            padded = new JqArray();
         }
         while (padded.Count <= resolved)
         {
@@ -541,22 +542,22 @@ internal static class JqPathUpdates
         return padded;
     }
 
-    private static JsonArray SliceCopy(JsonArray source, int from, int to, JqContext context)
+    private static JqArray SliceCopy(JqArray source, int from, int to, JqContext context)
     {
         context.Budget.ReserveBytes(64 + 24L * (to - from));
-        var slice = new JsonArray();
+        var slice = new JqArray();
         for (int index = from; index < to; index++)
         {
-            if (source[index] is JsonValue) context.Budget.ReserveBytes(64);
+            if (source[index] is JqScalar) context.Budget.ReserveBytes(64);
             slice.Add(context.Budget.CopyValue(source[index], 1));
         }
         return slice;
     }
 
-    private static JqException SegmentTypeError(JsonNode? current, JqValueSegment segment, JqContext context)
+    private static JqException SegmentTypeError(JqValue? current, JqValueSegment segment, JqContext context)
     {
-        string raw = context.Runtime.TruncatedDump(segment.ToJson());
-        if (current is JsonArray)
+        string raw = context.Runtime.TruncatedDump(segment.ToJson(context.Budget));
+        if (current is JqArray)
             return new JqException("expected a number for indexing an array but got: " + raw);
         return new JqException("expected a string for object key but got: " + raw);
     }
@@ -564,10 +565,10 @@ internal static class JqPathUpdates
 
 internal static class JqPathReads
 {
-    internal static JsonNode? ReadIndex(JsonNode? value, long index, bool isNaN, JqContext context)
+    internal static JqValue? ReadIndex(JqValue? value, long index, bool isNaN, JqContext context)
     {
         if (value is null) return null;
-        if (value is not JsonArray array)
+        if (value is not JqArray array)
             throw new JqException("Cannot index " + TypeName(value) + " with number ("
                 + (isNaN ? "null" : index.ToString(System.Globalization.CultureInfo.InvariantCulture)) + ")");
         if (isNaN) return null;
@@ -575,19 +576,19 @@ internal static class JqPathReads
         return resolved >= 0 && resolved < array.Count ? array[(int)resolved] : null;
     }
 
-    internal static bool TryIndex(JsonNode? value, JsonNode? key, bool optional, JqContext context, out JsonNode? result)
+    internal static bool TryIndex(JqValue? value, JqValue? key, bool optional, JqContext context, out JqValue? result)
     {
         context.Budget.CheckCancellation();
         result = null;
-        if (value is JsonArray array && TryGetArrayIndex(key, out long index))
+        if (value is JqArray array && TryGetArrayIndex(key, out long index))
         {
             long resolved = index < 0 ? array.Count + index : index;
             result = resolved >= 0 && resolved < array.Count ? array[(int)resolved] : null;
         }
-        else if (value is JsonArray && key is JsonValue nan && nan.TryGetValue<double>(out double number) && double.IsNaN(number)) return true;
-        else if (value is JsonArray && key is JsonArray pattern)
+        else if (value is JqArray && key is JqScalar nan && nan.TryGetValue<double>(out double number) && double.IsNaN(number)) return true;
+        else if (value is JqArray && key is JqArray pattern)
             result = context.Runtime.Indices(value, pattern);
-        else if (key is JsonObject slice && (value is JsonArray || TryGetString(value, out _)))
+        else if (key is JqObject slice && (value is JqArray || value is JqString))
         {
             if (!JqPaths.TryGetSliceObjectBounds(slice, out double? lower, out double? upper))
             {
@@ -596,27 +597,27 @@ internal static class JqPathReads
             }
             result = Slice(value, lower, upper, context);
         }
-        else if (value is JsonObject obj && TryGetString(key, out string name))
-            result = obj.TryGetPropertyValue(name, out JsonNode? child) ? child : null;
-        else if (value is null && key is not null && key is not JsonArray
-            && !(key is JsonValue scalar && scalar.TryGetValue<bool>(out _))) return true;
+        else if (value is JqObject obj && key is JqString name)
+            result = obj.TryGetPropertyValue(name, out JqValue? child) ? child : null;
+        else if (value is null && key is not null && key is not JqArray
+            && !(key is JqScalar scalar && scalar.TryGetValue<bool>(out _))) return true;
         else
         {
             if (optional) return false;
-            if (key is JsonObject objectKey && value is not null)
+            if (key is JqObject objectKey && value is not null)
                 throw new JqException("Cannot index " + TypeName(value) + " with object (" + context.Runtime.TruncatedDump(objectKey) + ")");
             throw new JqException("cannot index " + TypeName(value));
         }
         return true;
     }
 
-    internal static bool TrySlice(JsonNode? value, JsonNode? lower, JsonNode? upper, bool optional,
-        JqContext context, out JsonNode? result)
+    internal static bool TrySlice(JqValue? value, JqValue? lower, JqValue? upper, bool optional,
+        JqContext context, out JqValue? result)
     {
         context.Budget.CheckCancellation();
         result = null;
         if (value is null) return true;
-        if (value is JsonArray || TryGetString(value, out _))
+        if (value is JqArray || value is JqString)
         {
             if (!JqPaths.TrySliceBoundValue(lower, out double? start) || !JqPaths.TrySliceBoundValue(upper, out double? end))
             {
@@ -631,7 +632,7 @@ internal static class JqPathReads
             + context.Runtime.TruncatedDump(SliceKey(lower, upper, context)) + ")");
     }
 
-    internal static bool TrySlicePath(JqValuePath pair, JsonNode? lower, JsonNode? upper, bool optional,
+    internal static bool TrySlicePath(JqValuePath pair, JqValue? lower, JqValue? upper, bool optional,
         JqContext context, [NotNullWhen(true)] out JqValuePath? result)
     {
         JqValueSegment Segment() => JqPaths.TrySliceBoundValue(lower, out double? from)
@@ -639,28 +640,27 @@ internal static class JqPathReads
             ? new SliceSegment(from, to) : new InvalidSegment(SliceKey(lower, upper, context));
         if (!pair.Tracked) JqPaths.RequireTracked(pair, Segment(), context);
         result = null;
-        if (!TrySlice(pair.Value, lower, upper, optional, context, out JsonNode? value)) return false;
+        if (!TrySlice(pair.Value, lower, upper, optional, context, out JqValue? value)) return false;
         result = new JqValuePath(JqPaths.Extend(pair.Segments, Segment(), context.Budget), value, true);
         return true;
     }
 
-    internal static JsonObject SliceKey(JsonNode? lower, JsonNode? upper, JqContext context)
+    internal static JqObject SliceKey(JqValue? lower, JqValue? upper, JqContext context)
     {
         context.Budget.ReserveBytes(384);
-        return new JsonObject
-        {
+        return new JqObject(context.Budget) {
             ["start"] = context.Budget.CopyValue(lower, 1),
             ["end"] = context.Budget.CopyValue(upper, 1),
         };
     }
 
-    private static JsonNode? Slice(JsonNode? value, double? lower, double? upper, JqContext context)
+    private static JqValue? Slice(JqValue? value, double? lower, double? upper, JqContext context)
     {
-        if (value is JsonArray array)
+        if (value is JqArray array)
         {
             JqPaths.ResolveSlice(array.Count, lower, upper, out int from, out int to);
             context.Budget.ReserveBytes(64 + 24L * (to - from));
-            var result = new JsonArray();
+            var result = new JqArray();
             for (int index = from; index < to; index++)
             {
                 context.Budget.ReserveArrayItem(array[index]);
@@ -668,29 +668,36 @@ internal static class JqPathReads
             }
             return result;
         }
-        if (TryGetString(value, out string text)) return JsonValue.Create(context.Runtime.SliceString(text, lower, upper));
+        if (value is JqString text) return context.Runtime.SliceString(text, lower, upper);
         if (value is null) return null;
         throw new JqException("Cannot index " + TypeName(value) + " with object ("
             + context.Runtime.TruncatedDump(SliceKey(lower.HasValue ? CreateNumber(lower.Value) : null,
                 upper.HasValue ? CreateNumber(upper.Value) : null, context)) + ")");
     }
 
-    internal static JsonNode? ReadField(JsonNode? value, string key, JqRuntime runtime) => value switch
+    internal static JqValue? ReadField(JqValue? value, string key, JqRuntime runtime, JqBudget budget) => value switch
     {
-        JsonObject obj => obj.TryGetPropertyValue(key, out JsonNode? child) ? child : null,
+        JqObject obj => obj.TryGetPropertyValue(key, out JqValue? child) ? child : null,
         null => null,
         _ => throw new JqException("Cannot index " + JqRuntime.TypeName(value) + " with string ("
-            + runtime.TruncatedDump(JsonValue.Create(key)) + ")")
+            + runtime.TruncatedDump(JqString.FromHost(key.AsSpan(0, Math.Min(30, key.Length)), budget)) + ")")
+    };
+
+    internal static JqValue? ReadField(JqValue? value, JqString key, JqRuntime runtime, JqBudget budget) => value switch
+    {
+        JqObject obj => obj.TryGetPropertyValue(key, out JqValue? child) ? child : null,
+        null => null,
+        _ => throw new JqException("Cannot index " + TypeName(value) + " with string (" + runtime.TruncatedDump(key) + ")")
     };
 
     // Read traversal mirroring value semantics: missing reads null,
     // mistyped containers raise the same errors as ordinary reads.
-    internal static JsonNode? GetPath(JsonNode? root, IReadOnlyList<JqValueSegment> segments, JqContext context)
+    internal static JqValue? GetPath(JqValue? root, IReadOnlyList<JqValueSegment> segments, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(segments);
         ArgumentNullException.ThrowIfNull(context);
         context.Budget.CheckCancellation();
-        JsonNode? current = root;
+        JqValue? current = root;
         foreach (JqValueSegment existing in segments)
         {
             context.Budget.CheckCancellation();
@@ -698,7 +705,7 @@ internal static class JqPathReads
             switch (segment)
             {
                 case KeySegment key:
-                    current = ReadField(current, key.Key, context.Runtime);
+                    current = ReadField(current, key.Key, context.Runtime, context.Budget);
                     break;
                 case IndexSegment index:
                     current = ReadIndex(current, index.Index, index.IsNaN, context);
@@ -710,7 +717,7 @@ internal static class JqPathReads
                     _ = TryIndex(current, raw.Raw, false, context, out current);
                     break;
                 default:
-                    if (segment is InvalidSegment invalid && invalid.Raw is JsonArray pattern && current is JsonArray)
+                    if (segment is InvalidSegment invalid && invalid.Raw is JqArray pattern && current is JqArray)
                     {
                         // Like the reference get, an array key on an array
                         // searches contiguous subsequence positions.
@@ -723,17 +730,17 @@ internal static class JqPathReads
         return current;
     }
 
-    private static JqException MismatchError(JsonNode? current, JqValueSegment segment, JqContext context)
+    private static JqException MismatchError(JqValue? current, JqValueSegment segment, JqContext context)
     {
-        string raw = context.Runtime.TruncatedDump(segment.ToJson());
-        if (current is JsonArray)
+        string raw = context.Runtime.TruncatedDump(segment.ToJson(context.Budget));
+        if (current is JqArray)
             return new JqException("expected a number for indexing an array but got: " + raw);
         return new JqException("expected a string for object key but got: " + raw);
     }
 }
 internal static class JqPathDeletes
 {
-    internal static JsonNode? DeletePaths(JsonNode? root, IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqContext context)
+    internal static JqValue? DeletePaths(JqValue? root, IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqContext context)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(context);
@@ -776,19 +783,19 @@ internal static class JqPathDeletes
                 }
                 else
                 {
-                    JsonNode? child = frame.Read(key);
+                    JqValue? child = frame.Read(key);
                     if (child is not null) Push(child, first, last, frame.Depth + 1, key);
                 }
                 continue;
             }
-            JsonNode? result = frame.Complete();
+            JqValue? result = frame.Complete();
             active--;
             if (active == 0) return result;
             frames[active - 1].Write(frame.Slot ?? throw new InvalidOperationException("Missing deletion slot."), result);
         }
         throw new InvalidOperationException("Deletion left no result.");
 
-        DeleteFrame Push(JsonNode? node, int first, int last, int depth, JqValueSegment? slot)
+        DeleteFrame Push(JqValue? node, int first, int last, int depth, JqValueSegment? slot)
         {
             context.Budget.CheckCancellation();
             if (active == frames.Count)
@@ -835,37 +842,37 @@ internal static class JqPathDeletes
     // Child ranges refer to the one sorted vector; slice views borrow references.
     private sealed class DeleteFrame(JqContext context, JqStorage storage)
     {
-        internal JsonNode? Node;
+        internal JqValue? Node;
         internal int Next;
         internal int Last;
         internal int Depth;
         internal JqValueSegment? Slot;
-        private IList<JsonNode?>? _source;
+        private IList<JqValue?>? _source;
         private int _offset;
         private int _count;
         private bool _slice;
         private bool _written;
-        private List<JsonNode?>? _items;
+        private List<JqValue?>? _items;
         private List<JqValueSegment>? _removals;
-        private Dictionary<string, Change>? _changes;
+        private Dictionary<JqString, Change>? _changes;
         private int _changeCapacity;
         private bool[] _removed = [];
 
         internal bool IsArray => _source is not null;
         internal int Count => _written ? Items.Count : _count;
-        private List<JsonNode?> Items => _items ?? throw new InvalidOperationException("Missing deletion array.");
-        private JsonNode? At(int index) => _written ? Items[index] : _source?[_offset + index];
+        private List<JqValue?> Items => _items ?? throw new InvalidOperationException("Missing deletion array.");
+        private JqValue? At(int index) => _written ? Items[index] : _source?[_offset + index];
 
-        internal void Reset(JsonNode? node, int first, int last, int depth, JqValueSegment? slot)
+        internal void Reset(JqValue? node, int first, int last, int depth, JqValueSegment? slot)
         {
             Node = node;
             Next = first;
             Last = last;
             Depth = depth;
             Slot = slot;
-            _source = node as JsonArray;
+            _source = node as JqArray;
             _offset = 0;
-            _count = (node as JsonArray)?.Count ?? 0;
+            _count = (node as JqArray)?.Count ?? 0;
             _slice = false;
             _written = false;
             _items?.Clear();
@@ -881,12 +888,12 @@ internal static class JqPathDeletes
             _slice = true;
         }
 
-        internal JsonNode? Read(JqValueSegment key)
+        internal JqValue? Read(JqValueSegment key)
         {
             key = JqPaths.TruncateFractional(key);
-            if (Node is JsonObject obj && key is KeySegment name)
+            if (Node is JqObject obj && key is KeySegment name)
                 return _changes is not null && _changes.TryGetValue(name.Key, out Change change) ? change.Value
-                    : obj.TryGetPropertyValue(name.Key, out JsonNode? child) ? child : null;
+                    : obj.TryGetPropertyValue(name.Key, out JqValue? child) ? child : null;
             if (IsArray)
             {
                 if (key is IndexSegment index)
@@ -900,11 +907,11 @@ internal static class JqPathDeletes
             return JqPathReads.GetPath(Node, new[] { key }, context);
         }
 
-        internal void Write(JqValueSegment key, JsonNode? value)
+        internal void Write(JqValueSegment key, JqValue? value)
         {
             context.Budget.CheckCancellation();
             key = JqPaths.TruncateFractional(key);
-            if (Node is JsonObject && key is KeySegment name)
+            if (Node is JqObject && key is KeySegment name)
             {
                 ChangeObject(name.Key, new Change(value, false));
                 return;
@@ -920,7 +927,7 @@ internal static class JqPathDeletes
                 }
                 if (TrySlice(key, out double? start, out double? end))
                 {
-                    if (value is not JsonArray pieces)
+                    if (value is not JqArray pieces)
                         throw new JqException("A slice of an array can only be assigned another array");
                     JqPaths.ResolveSlice(Items.Count, start, end, out int from, out int to);
                     EnsureItems(checked(Items.Count - (to - from) + pieces.Count));
@@ -950,7 +957,7 @@ internal static class JqPathDeletes
             _removals.Add(key);
         }
 
-        internal JsonNode? Complete()
+        internal JqValue? Complete()
         {
             bool changed = _written || _changes is { Count: > 0 };
             if (_removals is { Count: > 0 } removals && Node is not null)
@@ -987,7 +994,7 @@ internal static class JqPathDeletes
                         else throw new JqException("expected a number for indexing an array but got: " + Render(key));
                     }
                 }
-                else if (Node is JsonObject)
+                else if (Node is JqObject)
                 {
                     foreach (JqValueSegment key in removals)
                     {
@@ -1010,38 +1017,38 @@ internal static class JqPathDeletes
             context.Budget.ReserveBytes(64);
             if (IsArray)
             {
-                var result = new JsonArray();
+                var result = new JqArray();
                 for (int index = 0; index < Count; index++)
                 {
                     context.Budget.CheckCancellation();
                     if (_removals is { Count: > 0 } && _removed[index]) continue;
-                    JsonNode? value = At(index);
+                    JqValue? value = At(index);
                     context.Budget.ReserveArrayItem(value);
-                    result.Add(value?.Parent is null ? value : context.Budget.CopyValue(value, 1));
+                    result.Add(value);
                 }
                 return result;
             }
-            if (Node is JsonObject obj)
+            if (Node is JqObject obj)
             {
-                var result = new JsonObject();
+                var result = new JqObject(context.Budget);
                 foreach (var property in obj)
                 {
                     context.Budget.CheckCancellation();
-                    JsonNode? value = property.Value;
+                    JqValue? value = property.Value;
                     if (_changes is not null && _changes.TryGetValue(property.Key, out Change change))
                     {
                         if (change.Removed) continue;
                         value = change.Value;
                     }
                     context.Budget.ReserveObjectItem(value);
-                    result.Add(property.Key, value?.Parent is null ? value : context.Budget.CopyValue(value, 1));
+                    result.Add(property.Key, value);
                 }
                 return result;
             }
             return Node;
         }
 
-        private string Render(JqValueSegment key) => context.Runtime.TruncatedDump(key.ToJson());
+        private string Render(JqValueSegment key) => context.Runtime.TruncatedDump(key.ToJson(context.Budget));
 
         private void EnsureItems(int required)
         {
@@ -1060,9 +1067,9 @@ internal static class JqPathDeletes
             _written = true;
         }
 
-        private void ChangeObject(string key, Change change)
+        private void ChangeObject(JqString key, Change change)
         {
-            if (_changes is null) { storage.ReserveBytes(64, 1); context.Budget.CheckCancellation(); _changes = new(StringComparer.Ordinal); }
+            if (_changes is null) { storage.ReserveBytes(64, 1); context.Budget.CheckCancellation(); _changes = new(context.Budget.StringKeys); }
             if (_changes.Count == _changeCapacity && !_changes.ContainsKey(key))
             {
                 int requested = JqBudget.BufferCapacity((long)_changes.Count + 1, Math.Max(4, 2L * _changeCapacity));
@@ -1076,7 +1083,7 @@ internal static class JqPathDeletes
             _changes[key] = change;
         }
 
-        private readonly record struct Change(JsonNode? Value, bool Removed);
+        private readonly record struct Change(JqValue? Value, bool Removed);
     }
 
     // Reuse jq value ordering for raw segments. Two small private objects adapt
@@ -1084,8 +1091,8 @@ internal static class JqPathDeletes
     private sealed class PathOrder(JqContext context, JqStorage storage) : IComparer<IReadOnlyList<JqValueSegment>>, IDisposable
     {
         private readonly JqComparer _values = new(context.Budget);
-        private JsonObject? _left;
-        private JsonObject? _right;
+        private JqObject? _left;
+        private JqObject? _right;
 
         public int Compare(IReadOnlyList<JqValueSegment>? left, IReadOnlyList<JqValueSegment>? right)
         {
@@ -1099,7 +1106,7 @@ internal static class JqPathDeletes
                 JqValueSegment second = JqPaths.UpdateSegment(right[index]);
                 int order;
                 if (first is IndexSegment a && second is IndexSegment b && !a.IsNaN && !b.IsNaN) order = a.Index.CompareTo(b.Index);
-                else if (first is KeySegment x && second is KeySegment y) order = JqComparer.CompareStrings(x.Key, y.Key, context.Budget.CancellationToken);
+                else if (first is KeySegment x && second is KeySegment y) order = x.Key.Compare(y.Key, context.Budget.CancellationToken);
                 else order = _values.Compare(Value(first, ref _left), Value(second, ref _right));
                 if (order != 0) return order;
             }
@@ -1110,14 +1117,14 @@ internal static class JqPathDeletes
         {
             context.Budget.CheckCancellation();
             if (left is IndexSegment a && right is IndexSegment b) return !a.IsNaN && !b.IsNaN && a.Index == b.Index;
-            if (left is KeySegment x && right is KeySegment y) return x.Key == y.Key;
+            if (left is KeySegment x && right is KeySegment y) return x.Key.ContentEquals(y.Key, context.Budget.CancellationToken);
             return context.Runtime.JsonEquals(Value(left, ref _left), Value(right, ref _right));
         }
 
-        private JsonNode? Value(JqValueSegment segment, ref JsonObject? synthetic)
+        private JqValue? Value(JqValueSegment segment, ref JqObject? synthetic)
         {
-            if (segment is not SliceSegment slice) return segment.ToJson();
-            if (synthetic is null) { storage.ReserveBytes(384, 1); context.Budget.CheckCancellation(); synthetic = new JsonObject(); }
+            if (segment is not SliceSegment slice) return segment.ToJson(context.Budget);
+            if (synthetic is null) { storage.ReserveBytes(384, 1); context.Budget.CheckCancellation(); synthetic = new JqObject(context.Budget); }
             synthetic["start"] = slice.Start is { } start ? JqRuntime.CreateNumber(start) : null;
             synthetic["end"] = slice.End is { } end ? JqRuntime.CreateNumber(end) : null;
             return synthetic;
@@ -1130,7 +1137,7 @@ internal static class JqPathDeletes
 // `path(EXPR)`: enumerates tracked segments as JSON arrays.
 internal sealed class PathBuiltinFilter(JqFilter Paths) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -1148,7 +1155,7 @@ internal sealed class PathBuiltinFilter(JqFilter Paths) : JqFilter
 internal sealed class DelBuiltinFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 {
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -1162,11 +1169,11 @@ internal sealed class DelBuiltinFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 // `getpath(PATHS)`: reads through a path value.
 internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        await foreach (JsonNode? paths in Paths.Evaluate(input, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? paths in Paths.Evaluate(input, context, environment).ConfigureAwait(false))
             yield return JqPathReads.GetPath(input, JqPaths.ParsePathValue(paths, context), context);
     }
 
@@ -1179,10 +1186,10 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
         // keeps tracking with the path argument appended, so path(getpath($p)),
         // getpath($p) = value, and getpath($p) |= update all resolve through $p.
         // Fresh inputs travel untracked and fail at the next path boundary.
-        await foreach (JsonNode? paths in Paths.Evaluate(pair.Value, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? paths in Paths.Evaluate(pair.Value, context, environment).ConfigureAwait(false))
         {
             List<JqValueSegment> segments = JqPaths.ParsePathValue(paths, context);
-            JsonNode? value = JqPathReads.GetPath(pair.Value, segments, context);
+            JqValue? value = JqPathReads.GetPath(pair.Value, segments, context);
             if (!pair.Tracked)
             {
                 yield return pair.WithValue(value, false);
@@ -1200,12 +1207,12 @@ internal sealed class GetpathBuiltinFilter(JqFilter Paths) : JqFilter
 internal sealed class SetpathBuiltinFilter(JqFilter Paths, JqFilter Values) : JqFilter
 {
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        await foreach (JsonNode? value in Values.Evaluate(input, context, environment).ConfigureAwait(false))
-            await foreach (JsonNode? paths in Paths.Evaluate(input, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? value in Values.Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? paths in Paths.Evaluate(input, context, environment).ConfigureAwait(false))
                 yield return JqPathUpdates.SetPath(input, JqPaths.ParsePathValue(paths, context), value, context);
     }
 }
@@ -1214,20 +1221,20 @@ internal sealed class SetpathBuiltinFilter(JqFilter Paths, JqFilter Values) : Jq
 internal sealed class DelpathsBuiltinFilter(JqFilter Paths) : JqFilter
 {
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        await foreach (JsonNode? paths in Paths.Evaluate(input, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? paths in Paths.Evaluate(input, context, environment).ConfigureAwait(false))
         {
-            if (paths is not JsonArray array)
+            if (paths is not JqArray array)
                 throw new JqException("Paths must be specified as an array");
             if (array.Count > JqPaths.MaxPathDepth)
                 throw new JqException("Path too deep");
             var collected = new List<IReadOnlyList<JqValueSegment>>();
-            foreach (JsonNode? element in array)
+            foreach (JqValue? element in array)
             {
-                if (element is not JsonArray)
+                if (element is not JqArray)
                     throw new JqException("Path must be specified as array, not " + JqRuntime.TypeName(element));
                 collected.Add(JqPaths.ParsePathValue(element, context));
             }
@@ -1240,11 +1247,11 @@ internal sealed class DelpathsBuiltinFilter(JqFilter Paths) : JqFilter
 internal sealed class PickFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 {
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        JsonNode? state = null;
+        JqValue? state = null;
         foreach (JqFilter paths in Args)
             foreach (IReadOnlyList<JqValueSegment> segments in await JqPaths.CollectPaths(paths, input, context, environment).ConfigureAwait(false))
                 state = JqPathUpdates.SetPath(state, segments, JqPathReads.GetPath(input, segments, context), context);
@@ -1259,7 +1266,7 @@ internal sealed class PickFilter(IReadOnlyList<JqFilter> Args) : JqFilter
 internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) : JqFilter
 {
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -1269,16 +1276,16 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
             yield return await ModifyLoop(paths, Values, input, context, environment).ConfigureAwait(false);
             yield break;
         }
-        await foreach (JsonNode? value in Values.Evaluate(input, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? value in Values.Evaluate(input, context, environment).ConfigureAwait(false))
         {
-            JsonNode? state = input;
+            JqValue? state = input;
             foreach (IReadOnlyList<JqValueSegment> segments in paths)
             {
                 context.Budget.CheckCancellation();
-                JsonNode? replacement = value;
+                JqValue? replacement = value;
                 if (Op != "=")
                 {
-                    JsonNode? current = JqPathReads.GetPath(state, segments, context);
+                    JqValue? current = JqPathReads.GetPath(state, segments, context);
                     replacement = Op == "//=" ? (Truthy(current) ? current : value)
                         : BinaryFilter.Apply(context, Op switch
                         {
@@ -1293,9 +1300,9 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
     }
 
     [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
-    internal static async ValueTask<JsonNode?> ModifyLoop(IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqFilter update, JsonNode? input, JqContext context, JqEnvironment environment)
+    internal static async ValueTask<JqValue?> ModifyLoop(IReadOnlyList<IReadOnlyList<JqValueSegment>> paths, JqFilter update, JqValue? input, JqContext context, JqEnvironment environment)
     {
-        JsonNode? state = input;
+        JqValue? state = input;
         var deleted = new List<IReadOnlyList<JqValueSegment>>();
         foreach (IReadOnlyList<JqValueSegment> segments in paths)
         {
@@ -1321,7 +1328,7 @@ internal sealed class AssignFilter(string Op, JqFilter Paths, JqFilter Values) :
 internal sealed class ModifyBuiltinFilter(JqFilter Paths, JqFilter Update) : JqFilter
 {
 
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);

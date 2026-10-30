@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -16,13 +15,13 @@ public sealed partial class JqTests
     [InlineData("urid", "dangling")]
     public void Jq_DecoderValidationRejectsLongMalformedTextBeforeOutputAdmission(string format, string position)
     {
-        JsonNode input = JsonValue.Create(MalformedDecoderText(format, position));
+        JqValue input = NativeFixtures.Create(MalformedDecoderText(format, position));
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
-            var error = Assert.Throws<JqException>(() => runtime.Format(format, input));
+            var error = Assert.Throws<JqException>(() => runtime.FormatValue(format, input).GetValue<string>());
             Assert.EndsWith(format == "urid" ? "is not a valid uri encoding"
                 : position == "dangling" ? "trailing base64 byte found" : "is not valid base64 data", error.Message, StringComparison.Ordinal);
             Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 64 * 1024);
@@ -42,7 +41,8 @@ public sealed partial class JqTests
     [InlineData("urid", "dangling")]
     public async Task Jq_DecoderValidationKeepsLongSyntaxErrorsCatchableAndPreservesPrefix(string format, string position)
     {
-        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        // Retain the one native copy of the host-supplied argument.
+        var memory = new BenchmarkMemoryBudget(1024 * 1024 + 64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--arg", "text", MalformedDecoderText(format, position),
             "\"ready\", (try ($text|@" + format + "|length) catch \"caught\")")));
@@ -57,7 +57,7 @@ public sealed partial class JqTests
     [InlineData("urid")]
     public async Task Jq_DecoderValidationStillRefusesNecessaryOutputOutsideHandlers(string format)
     {
-        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(1024 * 1024 + 64 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--arg", "text", new string('A', 1048576),
             "\"ready\", (try ($text|@" + format + "|length) catch \"caught\")")));
@@ -71,14 +71,14 @@ public sealed partial class JqTests
     public void Jq_UriDecoderAdmitsDecodedCapacityAndRefundsScratch()
     {
         const int count = 32768;
-        JsonNode input = JsonValue.Create(string.Concat(Enumerable.Repeat("%61", count)));
+        JqValue input = NativeFixtures.Create(string.Concat(Enumerable.Repeat("%61", count)));
         string expected = new('a', count);
         var memory = new BenchmarkMemoryBudget(3 * count);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
-            Assert.Equal(expected, new JqRuntime(budget).Format("urid", input));
-            Assert.Equal(3 * count, memory.PeakBytes);
-            Assert.Equal(2 * count, memory.ReservedBytes);
+            Assert.Equal(expected, new JqRuntime(budget).FormatValue("urid", input).GetValue<string>());
+            Assert.Equal(80 + 2 * count, memory.PeakBytes);
+            Assert.Equal(80 + count, memory.ReservedBytes);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -88,10 +88,10 @@ public sealed partial class JqTests
     {
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
-        Assert.Equal("é🚀+\0", runtime.Format("urid", JsonValue.Create("é%F0%9F%9A%80+%00")));
-        Assert.Equal("a\uFFFDbA", runtime.Format("urid", JsonValue.Create("a\uD800b%41")));
-        Assert.Equal("\uFFFD", runtime.Format("urid", JsonValue.Create("\uDC00")));
-        Assert.Throws<JqException>(() => runtime.Format("urid", JsonValue.Create("%FF")));
+        Assert.Equal("é🚀+\0", runtime.FormatValue("urid", NativeFixtures.Create("é%F0%9F%9A%80+%00")).GetValue<string>());
+        Assert.Equal("a\uFFFDbA", runtime.FormatValue("urid", NativeFixtures.Create("a\uD800b%41")).GetValue<string>());
+        Assert.Equal("\uFFFD", runtime.FormatValue("urid", NativeFixtures.Create("\uDC00")).GetValue<string>());
+        Assert.Throws<JqException>(() => runtime.FormatValue("urid", NativeFixtures.Create("%FF")).GetValue<string>());
     }
 
     [Theory]

@@ -14,6 +14,12 @@ overlapping executions independent.
 Source identifiers and syntax whitespace use jq's ASCII grammar; quoted data
 retains Unicode. Unicode escapes follow jq surrogate-pair and replacement rules.
 Host UTF-16 strings encode lone surrogates as U+FFFD; input bytes decode strictly.
+Runtime strings and object keys retain owned UTF-8 payloads. Reads and aliases
+share immutable bytes; retained substrings copy only their selected range.
+String operations, interpolation, formatting, date parsing, regex subjects and
+JSON/raw output consume these bytes directly. The current regex provider contract
+still accepts CLR pattern strings and group names; host paths and program source
+also use CLR text.
 
 ## Host I/O
 
@@ -85,10 +91,8 @@ JSON data imports and `--slurpfile` accept one leading UTF-8 BOM; raw file value
 retain it as text.
 Base64 alphabet/quantum and URI percent syntax are checked before admitting
 decoded buffers. Successful decoding refunds scratch after constructing its result.
-`fromjson` refunds its UTF-8 conversion buffer after parsing; decoded values keep
-their own admission.
-`@base64` retires encoding scratch after conversion, reusing bounded record credit;
-encoded text keeps its admission.
+`fromjson` reads the existing UTF-8 payload; decoded values own their admission.
+`@base64` constructs its native result directly.
 
 ## Memory admission
 
@@ -129,8 +133,8 @@ Formatted strings without interpolation reuse decoded constants like ordinary
 string literals.
 Command setup preflights retained bindings, operands, library paths and
 environment entries as constructed.
-Canonical paths borrow their text; relative strings, normalization workspace and
-program source labels admit before construction. Input-path storage remains
+Path requests borrow their text and current directory; constructed lookup strings
+and program source labels admit before construction. Input-path storage remains
 owned through the pending open and ends before advancing to another source.
 
 Coarse owners track executions, records, buffers, results and caches. Object
@@ -198,9 +202,8 @@ steps below 4 KiB and one 4 KiB block above it. Credit is acquired on demand.
 | --- | --- |
 | Outer record | 4 KiB after a safe boundary; retained values stay charged. |
 | Stream cursor | Retained demand plus 256 bytes; 512 after 32 small charges. |
-| Serialization and diagnostic encoding | One returned buffer within 4 KiB after 32 results. |
-| Regex subject | One returned UTF-8 buffer within 4 KiB. |
-| Compiled regex | Two idle patterns; active operations, subjects and results retain their own handles and copied keys. |
+| UTF-8 builders and serialization | One returned buffer within 4 KiB; serialization starts retaining after 32 results. |
+| Compiled regex | Two idle patterns; active operations and results retain their handles and copied keys. |
 
 Cold or oversized storage is refunded; overlapping borrowers keep separate owners.
 

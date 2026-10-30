@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -40,9 +39,9 @@ public sealed partial class JqTests
     public async Task Jq_RangeCancellationStopsAnActiveSequence()
     {
         using var cancellation = new CancellationTokenSource();
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token));
-        var filter = new RangeFilter(new JqFilter[] { new LiteralFilter(JsonValue.Create(1000000)) });
-        await using IAsyncEnumerator<JsonNode?> values = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
+        using var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token));
+        var filter = new RangeFilter(new JqFilter[] { new LiteralFilter(NativeFixtures.Create(1000000)) });
+        await using IAsyncEnumerator<JqValue?> values = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
         Assert.True(await values.MoveNextAsync());
         Assert.Equal(0, values.Current?.GetValue<long>());
         cancellation.Cancel();

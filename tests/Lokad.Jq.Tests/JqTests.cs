@@ -223,7 +223,7 @@ public sealed partial class JqTests
             var tool = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-R", ".")));
 
             Assert.Equal(5, await tool.ExecuteAsync(fileSystem, Utf8RegexAdapter.Instance, CancellationToken.None));
-            Assert.Equal("jq: parse error: Cannot transcode invalid UTF-8 raw input to UTF-16 string.\n", fileSystem.GetOutput(JqFileDescriptor.StdErr));
+            Assert.Equal("jq: parse error: Invalid UTF-8 raw input.\n", fileSystem.GetOutput(JqFileDescriptor.StdErr));
             Assert.Empty(fileSystem.GetOutput(JqFileDescriptor.StdOut));
         }
     }

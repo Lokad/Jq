@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -27,28 +26,28 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_PathIdentityDoesNotTraverseDistinctDeepTrees()
     {
-        JsonNode? left = null;
-        JsonNode? right = null;
+        JqValue? left = null;
+        JqValue? right = null;
         for (int depth = 0; depth < 5000; depth++)
         {
-            left = new JsonArray(left);
-            right = new JsonArray(right);
+            left = new JqArray(left);
+            right = new JqArray(right);
         }
         Assert.True(JqFilter.PathIntact(left, left));
         Assert.False(JqFilter.PathIntact(left, right));
-        Assert.False(JqFilter.PathIntact(JsonValue.Create("same"), JsonValue.Create("same")));
+        Assert.False(JqFilter.PathIntact(NativeFixtures.Create("same"), NativeFixtures.Create("same")));
     }
 
     [Fact]
     public void Jq_PathIdentityPreservesImmediateRepresentations()
     {
         Assert.True(JqFilter.PathIntact(null, null));
-        Assert.True(JqFilter.PathIntact(JsonValue.Create(true), JsonValue.Create(true)));
-        Assert.False(JqFilter.PathIntact(JsonValue.Create(true), JsonValue.Create(1)));
-        Assert.True(JqFilter.PathIntact(JsonValue.Create(1L), JsonValue.Create(1.0)));
-        Assert.False(JqFilter.PathIntact(JsonValue.Create(0L), JsonValue.Create(-0.0)));
-        Assert.True(JqFilter.PathIntact(JsonValue.Create(double.NaN), JsonValue.Create(double.NaN)));
+        Assert.True(JqFilter.PathIntact(NativeFixtures.Create(true), NativeFixtures.Create(true)));
+        Assert.False(JqFilter.PathIntact(NativeFixtures.Create(true), NativeFixtures.Create(1)));
+        Assert.True(JqFilter.PathIntact(NativeFixtures.Create(1L), NativeFixtures.Create(1.0)));
+        Assert.False(JqFilter.PathIntact(NativeFixtures.Create(0L), NativeFixtures.Create(-0.0)));
+        Assert.True(JqFilter.PathIntact(NativeFixtures.Create(double.NaN), NativeFixtures.Create(double.NaN)));
         double otherNaN = BitConverter.Int64BitsToDouble(BitConverter.DoubleToInt64Bits(double.NaN) ^ long.MinValue);
-        Assert.False(JqFilter.PathIntact(JsonValue.Create(double.NaN), JsonValue.Create(otherNaN)));
+        Assert.False(JqFilter.PathIntact(NativeFixtures.Create(double.NaN), NativeFixtures.Create(otherNaN)));
     }
 }

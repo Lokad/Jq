@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -248,7 +247,7 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
         var host = new MockFileSystem();
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
             { Stderr = (host, JqFileDescriptor.StdErr) })
         {
@@ -265,7 +264,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(0);
         using var cancellation = new CancellationTokenSource();
         var host = new MockFileSystem();
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token))
             { Stderr = (host, JqFileDescriptor.StdErr) };
         await context.EmitStderrAsync("");

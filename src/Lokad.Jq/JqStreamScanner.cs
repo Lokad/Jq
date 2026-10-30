@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
@@ -9,17 +8,17 @@ namespace Lokad.Jq;
 // raising a warning; terminal failures still propagate immediately.
 internal readonly record struct StreamScanOutcome(
     int Consumed,
-    JsonNode? Event,
+    JqValue? Event,
     JqSeqResyncException? Error,
     bool DropRest)
 {
     public static StreamScanOutcome NeedsMore(int consumed) =>
         new(consumed, null, null, false);
 
-    public static StreamScanOutcome WithEvent(int consumed, JsonNode? @event) =>
+    public static StreamScanOutcome WithEvent(int consumed, JqValue? @event) =>
         new(consumed, @event, null, false);
 
-    public static StreamScanOutcome WithEvent(int consumed, JsonNode? @event, bool dropRest) =>
+    public static StreamScanOutcome WithEvent(int consumed, JqValue? @event, bool dropRest) =>
         new(consumed, @event, null, dropRest);
 
     public static StreamScanOutcome WithWarning(int consumed, string message) =>
@@ -54,9 +53,9 @@ internal sealed class JqStreamScanner : IDisposable
     {
         public readonly bool IsIndex;
         public readonly long Index;
-        public readonly string? Key;
+        public readonly JqString? Key;
 
-        private Segment(bool isIndex, long index, string? key)
+        private Segment(bool isIndex, long index, JqString? key)
         {
             IsIndex = isIndex;
             Index = index;
@@ -67,16 +66,16 @@ internal sealed class JqStreamScanner : IDisposable
 
         public static Segment AtIndex(long index) => new(true, index, null);
 
-        public static Segment AtKey(string key) => new(false, 0, key);
+        public static Segment AtKey(JqString key) => new(false, 0, key);
 
         public bool IsPending => !IsIndex && Key is null;
     }
 
     private readonly List<Segment> _path = new();
     private LastSeen _lastSeen;
-    private JsonNode? _next;
+    private JqValue? _next;
     private bool _hasNext;
-    private JsonNode? _stashed;
+    private JqValue? _stashed;
     private long _stashedBytes;
     private long _pathKeyBytes;
     private byte[] _token = [];
@@ -101,7 +100,7 @@ internal sealed class JqStreamScanner : IDisposable
         _seqWaiting = seq;
     }
 
-    internal bool TryDrainStash(out JsonNode? @event)
+    internal bool TryDrainStash(out JqValue? @event)
     {
         if (_stashed is not null)
         {
@@ -116,7 +115,7 @@ internal sealed class JqStreamScanner : IDisposable
     // Pending leaves are scalars; close events cache their known flat path
     // size while copying it. No retained DOM requires an accounting walk.
     internal long RetainedValueBytes =>
-        (_next is null ? 0 : 64 + (JqRuntime.TryGetString(_next, out string text) ? 2L * text.Length : 0))
+        (_next is null ? 0 : _next is JqString text ? 80L + text.ByteLength : 64)
         + (_stashed is null ? 0 : _stashedBytes) + _pathKeyBytes;
 
     public void Dispose()
@@ -202,13 +201,13 @@ internal sealed class JqStreamScanner : IDisposable
     // means scanning continues after the delimiter.
     private StreamScanOutcome? FinishLiteral(int consumed)
     {
-        if (!TryDecodeToken(out JsonNode? scalar))
+        if (!TryDecodeToken(out JqValue? scalar))
             return Blame(consumed, TokenStartsWithLiteral(0) ? "Invalid literal" : "Invalid numeric literal");
         _tokenLength = 0;
         string? separator = BindValue(scalar);
         if (separator is not null)
             return Blame(consumed, separator);
-        JsonNode? emitted = CheckDone();
+        JqValue? emitted = CheckDone();
         return emitted is null
             ? null
             : StreamScanOutcome.WithEvent(consumed, emitted);
@@ -216,11 +215,11 @@ internal sealed class JqStreamScanner : IDisposable
 
     private StreamScanOutcome FinishString(int consumed)
     {
-        JsonNode? scalar;
+        JqValue? scalar;
         try
         {
             scalar = _runtime.ReadJsonValue(_token.AsSpan(0, _tokenLength), out int used);
-            if (used != _tokenLength || scalar is not JsonValue)
+            if (used != _tokenLength || scalar is not JqScalar)
                 return Blame(consumed, "Invalid string");
         }
         catch (JqException ex) when (ex is not JqQuotaException)
@@ -240,7 +239,7 @@ internal sealed class JqStreamScanner : IDisposable
         string? separator = BindValue(scalar);
         if (separator is not null)
             return Blame(consumed, separator);
-        JsonNode? emitted = CheckDone();
+        JqValue? emitted = CheckDone();
         return emitted is null
             ? StreamScanOutcome.NeedsMore(consumed)
             : StreamScanOutcome.WithEvent(consumed, emitted);
@@ -248,7 +247,7 @@ internal sealed class JqStreamScanner : IDisposable
 
     // Binds a decoded scalar as the pending value. Returns a separator
     // diagnostic when another value is already pending.
-    private string? BindValue(JsonNode? scalar)
+    private string? BindValue(JqValue? scalar)
     {
         if (_hasNext || _lastSeen == LastSeen.Value)
             return "Expected separator between values";
@@ -259,14 +258,14 @@ internal sealed class JqStreamScanner : IDisposable
     }
 
     // Emits a completed top-level scalar, if any is pending.
-    private JsonNode? CheckDone()
+    private JqValue? CheckDone()
     {
         if (_path.Count == 0 && _hasNext)
         {
-            JsonNode? leaf = _next;
+            JqValue? leaf = _next;
             _next = null;
             _hasNext = false;
-            return LeafEvent(new JsonArray(), leaf);
+            return LeafEvent(new JqArray(), leaf);
         }
         return null;
     }
@@ -300,11 +299,11 @@ internal sealed class JqStreamScanner : IDisposable
                     return Blame(consumed, "':' not as part of an object");
                 if (!_hasNext)
                     return Blame(consumed, "Expected string key before ':'");
-                if (_next is not JsonValue key || !JqRuntime.TryGetString(key, out string? name) || name is null)
+                if (_next is not JqString name)
                     return Blame(consumed, "Object keys must be strings");
                 if (_lastSeen != LastSeen.Value)
                     return Blame(consumed, "':' should follow a key");
-                _pathKeyBytes += 2L * name.Length;
+                _pathKeyBytes += 80L + name.ByteLength;
                 _path[^1] = Segment.AtKey(name);
                 _next = null;
                 _hasNext = false;
@@ -320,9 +319,9 @@ internal sealed class JqStreamScanner : IDisposable
                 {
                     // Separators emit the leaf against the pre-increment path
                     // with no close marker; only container ends stash one.
-                    JsonArray path = CopyPath();
+                    JqArray path = CopyPath();
                     bool haveLeaf = _hasNext;
-                    JsonNode? leaf = _next;
+                    JqValue? leaf = _next;
                     _next = null;
                     _hasNext = false;
                     _path[^1] = Segment.AtIndex(top.Index + 1);
@@ -330,24 +329,24 @@ internal sealed class JqStreamScanner : IDisposable
                     if (haveLeaf)
                     {
                         _budget.CheckCancellation();
-                        return StreamScanOutcome.WithEvent(consumed, new JsonArray { path, leaf });
+                        return StreamScanOutcome.WithEvent(consumed, new JqArray { path, leaf });
                     }
                     return StreamScanOutcome.NeedsMore(consumed);
                 }
                 if (!top.IsPending)
                 {
-                    JsonArray path = CopyPath();
+                    JqArray path = CopyPath();
                     bool haveLeaf = _hasNext;
-                    JsonNode? leaf = _next;
+                    JqValue? leaf = _next;
                     _next = null;
                     _hasNext = false;
-                    _pathKeyBytes -= 2L * (_path[^1].Key?.Length ?? 0);
+                    _pathKeyBytes -= (_path[^1].Key is { } previousKey ? 80L + previousKey.ByteLength : 0);
                     _path[^1] = Segment.Pending();
                     _lastSeen = LastSeen.Comma;
                     if (haveLeaf)
                     {
                         _budget.CheckCancellation();
-                        return StreamScanOutcome.WithEvent(consumed, new JsonArray { path, leaf });
+                        return StreamScanOutcome.WithEvent(consumed, new JqArray { path, leaf });
                     }
                     return StreamScanOutcome.NeedsMore(consumed);
                 }
@@ -378,14 +377,14 @@ internal sealed class JqStreamScanner : IDisposable
         {
             if (!isArray && _path[^1].IsPending)
                 return Blame(consumed, "Objects must consist of key:value pairs");
-            JsonNode? leaf = _next;
+            JqValue? leaf = _next;
             _next = null;
             _hasNext = false;
-            JsonArray path = CopyPath();
+            JqArray path = CopyPath();
             PopPath();
             _lastSeen = _path.Count == 0 ? LastSeen.None : LastSeen.Value;
             _budget.CheckCancellation();
-            var emitted = new JsonArray { path, leaf };
+            var emitted = new JqArray { path, leaf };
             _stashed = StashClose(path);
             return StreamScanOutcome.WithEvent(consumed, emitted);
         }
@@ -402,43 +401,43 @@ internal sealed class JqStreamScanner : IDisposable
                 if (_lastSeen != LastSeen.Value && _lastSeen != LastSeen.OpenObject)
                     return Blame(consumed, "Unmatched '}'");
             }
-            JsonArray path = CopyPath();
+            JqArray path = CopyPath();
             PopPath();
             _lastSeen = _path.Count == 0 ? LastSeen.None : LastSeen.Value;
             _budget.CheckCancellation();
-            return StreamScanOutcome.WithEvent(consumed, new JsonArray { path });
+            return StreamScanOutcome.WithEvent(consumed, new JqArray { path });
         }
         PopPath();
         _lastSeen = _path.Count == 0 ? LastSeen.None : LastSeen.Value;
-        JsonNode? empty = isArray ? (JsonNode?)new JsonArray() : new JsonObject();
+        JqValue? empty = isArray ? (JqValue?)new JqArray() : new JqObject(_budget);
         return StreamScanOutcome.WithEvent(consumed, LeafEvent(CopyPath(), empty));
     }
 
-    private JsonArray StashClose(JsonArray path)
+    private JqArray StashClose(JqArray path)
     {
         _budget.ReserveBytes(88);
-        var snapshot = new JsonArray();
+        var snapshot = new JqArray();
         _budget.ReserveBytes(64 + 88L * path.Count);
         long bytes = 152 + 88L * path.Count;
-        foreach (JsonNode? segment in path)
+        foreach (JqValue? segment in path)
         {
-            if (JqRuntime.TryGetString(segment, out string key)) bytes += 2L * key.Length;
+            if (segment is JqString key) bytes += 80L + key.ByteLength;
             snapshot.Add(_budget.CopyValue(segment, 0));
         }
         _stashedBytes = bytes;
-        return new JsonArray { snapshot };
+        return new JqArray { snapshot };
     }
 
     private void PopPath()
     {
-        _pathKeyBytes -= 2L * (_path[^1].Key?.Length ?? 0);
+        _pathKeyBytes -= (_path[^1].Key is { } previousKey ? 80L + previousKey.ByteLength : 0);
         _path.RemoveAt(_path.Count - 1);
     }
 
-    private JsonArray LeafEvent(JsonArray path, JsonNode? leaf)
+    private JqArray LeafEvent(JqArray path, JqValue? leaf)
     {
         _budget.CheckCancellation();
-        return new JsonArray { path, leaf };
+        return new JqArray { path, leaf };
     }
 
     private void PushIndex(long index)
@@ -453,15 +452,15 @@ internal sealed class JqStreamScanner : IDisposable
         _path.Add(Segment.Pending());
     }
 
-    private JsonArray CopyPath()
+    private JqArray CopyPath()
     {
-        var path = new JsonArray();
+        var path = new JqArray();
         foreach (Segment segment in _path)
         {
             if (segment.IsIndex)
-                path.Add(JsonValue.Create(segment.Index));
-            else if (segment.Key is string key)
-                path.Add(JsonValue.Create(key));
+                path.Add(JqScalar.Create(segment.Index));
+            else if (segment.Key is JqString key)
+                path.Add(JqScalar.Create(key));
             else
                 path.Add(null);
         }
@@ -502,7 +501,7 @@ internal sealed class JqStreamScanner : IDisposable
         string suffixed = resync ? message + " (need RS to resync)" : message;
         _budget.CheckCancellation();
         _budget.ReserveString(suffixed.Length);
-        var errorEvent = new JsonArray { JsonValue.Create(suffixed), CopyPath() };
+        var errorEvent = new JqArray { JqScalar.Create(suffixed, _budget), CopyPath() };
         ResetRecordState();
         if (resync)
             _seqWaiting = true;
@@ -528,19 +527,19 @@ internal sealed class JqStreamScanner : IDisposable
             return TruncatedRecord(consumed, "Truncated value");
         if (_tokenLength > 0)
         {
-            if (!TryDecodeToken(out JsonNode? scalar))
+            if (!TryDecodeToken(out JqValue? scalar))
                 return TruncatedRecord(consumed, TokenStartsWithLiteral(_inString ? 1 : 0)
                     ? "Invalid literal" : "Invalid numeric literal");
             ResetRecordState();
-            return StreamScanOutcome.WithEvent(consumed, LeafEvent(new JsonArray(), scalar));
+            return StreamScanOutcome.WithEvent(consumed, LeafEvent(new JqArray(), scalar));
         }
         if (_hasNext)
         {
-            JsonNode? pending = _next;
+            JqValue? pending = _next;
             _next = null;
             _hasNext = false;
             ResetRecordState();
-            return StreamScanOutcome.WithEvent(consumed, LeafEvent(new JsonArray(), pending));
+            return StreamScanOutcome.WithEvent(consumed, LeafEvent(new JqArray(), pending));
         }
         ResetRecordState();
         return StreamScanOutcome.NeedsMore(consumed);
@@ -549,7 +548,7 @@ internal sealed class JqStreamScanner : IDisposable
     private StreamScanOutcome TruncatedRecord(int consumed, string baseMessage)
     {
         string message = $"{baseMessage} at line {_line}, column {_column}";
-        JsonArray? errorPath = _streamErrors ? CopyPath() : null;
+        JqArray? errorPath = _streamErrors ? CopyPath() : null;
         ResetRecordState();
         // This separator has already started the next record.
         _seqWaiting = false;
@@ -557,19 +556,19 @@ internal sealed class JqStreamScanner : IDisposable
         {
             _budget.CheckCancellation();
             _budget.ReserveString(message.Length);
-            var errorEvent = new JsonArray { JsonValue.Create(message), errorPath };
+            var errorEvent = new JqArray { JqScalar.Create(message, _budget), errorPath };
             return StreamScanOutcome.WithEvent(consumed, errorEvent, dropRest: false);
         }
         return StreamScanOutcome.WithWarning(consumed, message);
     }
 
-    private bool TryDecodeToken(out JsonNode? scalar)
+    private bool TryDecodeToken(out JqValue? scalar)
     {
         scalar = null;
         try
         {
-            JsonNode? decoded = _runtime.ReadJsonValue(_token.AsSpan(0, _tokenLength), out int used);
-            if (used != _tokenLength || decoded is not null and not JsonValue)
+            JqValue? decoded = _runtime.ReadJsonValue(_token.AsSpan(0, _tokenLength), out int used);
+            if (used != _tokenLength || decoded is not null and not JqScalar)
                 return false;
             scalar = decoded;
             return true;
@@ -590,43 +589,43 @@ internal sealed class JqStreamScanner : IDisposable
         if (_inString)
         {
             _eofConcluded = true;
-            JsonArray errorPath = CopyPath();
+            JqArray errorPath = CopyPath();
             ResetRecordState();
             return EofOutcome("Unfinished string", errorPath);
         }
         if (_tokenLength > 0)
         {
-            bool decoded = TryDecodeToken(out JsonNode? scalar);
+            bool decoded = TryDecodeToken(out JqValue? scalar);
             bool literalStart = TokenStartsWithLiteral(0);
             _tokenLength = 0;
             if (!decoded)
             {
-                JsonArray errorPath = CopyPath();
+                JqArray errorPath = CopyPath();
                 ResetRecordState();
                 return EofOutcome(literalStart ? "Invalid literal" : "Invalid numeric literal", errorPath);
             }
             string? separator = BindValue(scalar);
             if (separator is not null)
             {
-                JsonArray errorPath = CopyPath();
+                JqArray errorPath = CopyPath();
                 ResetRecordState();
                 return EofOutcome(separator, errorPath);
             }
             if (_path.Count > 0)
             {
-                JsonArray errorPath = CopyPath();
+                JqArray errorPath = CopyPath();
                 ResetRecordState();
                 return EofOutcome("Unfinished JSON term", errorPath);
             }
-            if (_seq && scalar is JsonValue number
+            if (_seq && scalar is JqScalar number
                 && (number.TryGetValue<long>(out _) || number.TryGetValue<double>(out _))
                 && !_lastWasWs)
             {
-                JsonArray errorPath = CopyPath();
+                JqArray errorPath = CopyPath();
                 ResetRecordState();
                 return EofOutcome("Potentially truncated top-level numeric value", errorPath);
             }
-            JsonNode? emitted = CheckDone();
+            JqValue? emitted = CheckDone();
             ResetRecordState();
             if (emitted is not null)
                 return StreamScanOutcome.WithEvent(0, emitted);
@@ -635,25 +634,25 @@ internal sealed class JqStreamScanner : IDisposable
         if (_path.Count > 0)
         {
             _eofConcluded = true;
-            JsonArray errorPath = CopyPath();
+            JqArray errorPath = CopyPath();
             ResetRecordState();
             return EofOutcome("Unfinished JSON term", errorPath);
         }
         if (_hasNext)
         {
-            JsonNode? pending = _next;
+            JqValue? pending = _next;
             _next = null;
             _hasNext = false;
             _eofConcluded = true;
-            JsonArray pendingPath = CopyPath();
+            JqArray pendingPath = CopyPath();
             ResetRecordState();
-            if (_seq && pending is JsonValue number
+            if (_seq && pending is JqScalar number
                 && (number.TryGetValue<long>(out _) || number.TryGetValue<double>(out _))
                 && !_lastWasWs)
             {
                 return EofOutcome("Potentially truncated top-level numeric value", pendingPath);
             }
-            return StreamScanOutcome.WithEvent(0, LeafEvent(new JsonArray(), pending));
+            return StreamScanOutcome.WithEvent(0, LeafEvent(new JqArray(), pending));
         }
         if (_seq && _seqWaiting)
         {
@@ -677,14 +676,14 @@ internal sealed class JqStreamScanner : IDisposable
     }
 
     // EOF failures retain the live open-container path captured before reset.
-    private StreamScanOutcome EofOutcome(string baseMessage, JsonArray errorPath)
+    private StreamScanOutcome EofOutcome(string baseMessage, JqArray errorPath)
     {
         string message = $"{baseMessage} at EOF at line {_line}, column {_column}";
         if (_streamErrors)
         {
             _budget.CheckCancellation();
             _budget.ReserveString(message.Length);
-            var errorEvent = new JsonArray { JsonValue.Create(message), errorPath };
+            var errorEvent = new JqArray { JqScalar.Create(message, _budget), errorPath };
             return StreamScanOutcome.WithEvent(0, errorEvent, dropRest: false);
         }
         if (_seq)

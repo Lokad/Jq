@@ -1,6 +1,5 @@
 using Lokad.Jq.Benchmarking;
 using System.Globalization;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -84,7 +83,7 @@ public sealed partial class JqTests
         var tokens = Lexer.Tokenize(source, JqProgramSource.Inline, lexicalBudget);
         var memory = new BenchmarkMemoryBudget(8192);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), budget))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), budget))
         {
             var parser = new JqParser(tokens, JqProgramSource.Inline, context.RootEnvironment, budget);
             var failure = Assert.Throws<JqQuotaException>(() => parser.ParsePrefix());
@@ -104,10 +103,10 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
-            var environment = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+            var environment = JqEnvironment.CreateRoot(new Dictionary<string, JqValue?>());
             var tokens = Lexer.Tokenize(source, JqProgramSource.Inline, budget);
             var prefix = new JqParser(tokens, JqProgramSource.Inline, environment, budget).ParsePrefix();
-            Assert.Equal(1000, Assert.IsType<JsonArray>(prefix.Metadata?["data"]).Count);
+            Assert.Equal(1000, Assert.IsType<JqArray>(prefix.Metadata?["data"]).Count);
             long admitted = memory.ReservedBytes;
             var parser = new JqParser(tokens, JqProgramSource.Inline, environment, budget);
             if (module) Assert.Single(parser.ParseDefinitions(prefix.BodyIndex));

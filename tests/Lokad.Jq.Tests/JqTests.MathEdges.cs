@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -38,10 +37,10 @@ public sealed partial class JqTests
     [InlineData("expm1")]
     public void Jq_MathTinyInputsAndZeroSignsDoNotRoundAway(string name)
     {
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
+        using var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         foreach (double value in new[] { -0.0, 0.0, double.Epsilon, -double.Epsilon, 1e-20, -1e-20 })
         {
-            Assert.True(JqMath.TryEvaluate(context, name, [], JsonValue.Create(value), out JsonNode? result));
+            Assert.True(JqMath.TryEvaluate(context, name, [], NativeFixtures.Create(value), out JqValue? result));
             Assert.Equal(BitConverter.DoubleToInt64Bits(value), BitConverter.DoubleToInt64Bits(JqRuntime.Number(result)));
         }
     }
@@ -53,8 +52,8 @@ public sealed partial class JqTests
     [InlineData(10.0, 2.088487583762545e-45)]
     public void Jq_MathErfcTailKeepsTheExistingApproximationWithoutSubtractionLoss(double value, double reference)
     {
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
-        Assert.True(JqMath.TryEvaluate(context, "erfc", [], JsonValue.Create(value), out JsonNode? result));
+        using var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
+        Assert.True(JqMath.TryEvaluate(context, "erfc", [], NativeFixtures.Create(value), out JqValue? result));
         // The existing approximation is deliberately qualified, not libm exact.
         Assert.InRange(JqRuntime.Number(result), reference * 0.9, reference * 1.1);
     }

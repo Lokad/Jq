@@ -143,7 +143,7 @@ public sealed partial class JqTests
         host.BeforeByteAppend = () =>
         {
             Assert.Single(host.ClosedDescriptors);
-            Assert.True(memory.ReservedBytes >= 2 * value.Length);
+            Assert.True(memory.ReservedBytes >= 80 + value.Length);
         };
 
         Assert.Equal(7, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));

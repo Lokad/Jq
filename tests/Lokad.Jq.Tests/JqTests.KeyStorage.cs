@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -12,16 +11,15 @@ public sealed partial class JqTests
     {
         string[] inserted = ["😀", "\ue000", "z", "a", "é", "𐀀"];
         string[] expected = sorted ? ["a", "z", "é", "\ue000", "𐀀", "😀"] : inserted;
-        var input = new JsonObject();
-        foreach (string name in inserted) input.Add(name, new JsonArray(1));
+        var input = new JqObject(NativeFixtures.Budget());
+        foreach (string name in inserted) input.Add(name, new JqArray(1));
         var root = new BenchmarkMemoryBudget(4096);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
-            var output = Assert.IsType<JsonArray>(new JqRuntime(budget).Keys(input, sorted));
+            var output = Assert.IsType<JqArray>(new JqRuntime(budget).Keys(input, sorted));
             Assert.Equal(expected, output.Select(item => item?.GetValue<string>()));
-            output[0] = "changed";
-            Assert.Equal(inserted, input.Select(property => property.Key));
-            Assert.All(input, property => Assert.Same(input, property.Value?.Parent));
+            output[0] = NativeFixtures.Create("changed");
+            Assert.Equal(inserted, input.Select(property => property.Key.GetValue<string>()));
         }
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -39,7 +37,7 @@ public sealed partial class JqTests
             if (sorted)
                 Assert.True(Assert.Throws<JqQuotaException>(() => runtime.Keys(input, true)).IsMemoryAdmission);
             else
-                Assert.Equal(64, Assert.IsType<JsonArray>(runtime.Keys(input, false)).Count);
+                Assert.Equal(64, Assert.IsType<JqArray>(runtime.Keys(input, false)).Count);
             Assert.Equal(64, input.Count);
             Assert.Equal(64 + 88 * 64, root.ReservedBytes);
         }

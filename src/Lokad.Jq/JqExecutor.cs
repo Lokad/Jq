@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Lokad.Jq.Helpers;
@@ -84,7 +83,8 @@ internal static class JqExecutor
         // Inputs never read report <unknown>; line numbers count the newlines
         // consumed through the failing value, so values on unterminated tails
         // report one past the reference fgets-based count.
-        static IReadOnlyList<string> RenderUncaughtError(JqContext context, Exception exception)
+        static async Task<JqAppendResult?> WriteUncaughtErrorAsync(IJqHost host, JqInvocation invocation,
+            JqContext context, Exception exception, IMemoryBudget? memoryBudget, CancellationToken cancellationToken)
         {
             var parts = new List<string> { "jq: error (at ", context.InputFilename ?? "<unknown>" };
             if (context.InputFilename is not null)
@@ -92,25 +92,25 @@ internal static class JqExecutor
                 parts.Add(":");
                 parts.Add(context.InputLineNumber.ToString(CultureInfo.InvariantCulture));
             }
-            if (exception is JqErrorException user
-                && JqRuntime.TryGetString(user.Payload, out string text))
+            if (exception is JqErrorException { Payload: JqString text })
             {
                 parts.Add("): ");
-                parts.Add(text);
+                return await JqDiagnosticWriter.TryWriteAsync(host, invocation.StdErr, parts,
+                    text.Utf8, true, memoryBudget, cancellationToken).ConfigureAwait(false);
             }
             else if (exception is JqErrorException userPayload)
             {
                 parts.Add(") (not a string): ");
-                parts.Add(userPayload.Payload is null
-                    ? "null"
-                    : context.Runtime.ToJqString(userPayload.Payload));
+                using var rendered = context.Runtime.SerializeUtf8(userPayload.Payload, false, null, false);
+                return await JqDiagnosticWriter.TryWriteAsync(host, invocation.StdErr, parts,
+                    rendered.Value, true, memoryBudget, cancellationToken).ConfigureAwait(false);
             }
             else
             {
                 parts.Add("): ");
                 parts.Add(exception.Message);
             }
-            return parts;
+            return await WriteErrorAsync(host, invocation, parts, memoryBudget, cancellationToken).ConfigureAwait(false);
         }
 
         var stage = 2;
@@ -167,7 +167,7 @@ internal static class JqExecutor
                         {
                             sawOutput = true;
                             lastFalseNull = output is null
-                                || (output is JsonValue negative && negative.TryGetValue<bool>(out bool flag) && !flag);
+                                || (output is JqScalar negative && negative.TryGetValue<bool>(out bool flag) && !flag);
                             ReadOnlyMemory<byte> rendered = outputRenderer.Render(output);
                             var appended = await JqHostExtensions.GuardedAppendAsync(host, invocation.StdOut, rendered, cancellationToken).ConfigureAwait(false);
                             if (!appended.CanAcceptMore)
@@ -181,7 +181,7 @@ internal static class JqExecutor
                     catch (Exception exception) when (JqErrors.IsCatchable(exception))
                     {
                         cursor.RecordFailure();
-                        if (await WriteErrorAsync(host, invocation, RenderUncaughtError(context, exception),
+                        if (await WriteUncaughtErrorAsync(host, invocation, context, exception,
                             memoryScope, cancellationToken).ConfigureAwait(false) is not { CanAcceptMore: true })
                         {
                             unwindError = exception;
@@ -214,14 +214,24 @@ internal static class JqExecutor
         }
         catch (JqHaltException ex)
         {
-            // Immediate termination: pending outputs and remaining inputs
-            // are abandoned. String payloads render raw; anything else was
-            // already shaped at the throw site.
-            if (ex.StderrText is not null)
+            // The record owner outlives this catch and any pending byte borrow.
+            try
             {
-                if (await JqDiagnosticWriter.TryWriteAsync(host, invocation.StdErr, [ex.StderrText],
-                    false, memoryScope, cancellationToken).ConfigureAwait(false) is null)
-                    return 5;
+                if (ex.Payload is JqString text)
+                    await JqHostExtensions.GuardedAppendAsync(host, invocation.StdErr, text.Utf8,
+                        cancellationToken).ConfigureAwait(false);
+                else if (ex.Payload is not null)
+                {
+                    using var rendered = context.Runtime.SerializeLine(ex.Payload);
+                    await JqHostExtensions.GuardedAppendAsync(host, invocation.StdErr, rendered.Value,
+                        cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (JqQuotaException refusal)
+            {
+                await JqDiagnosticWriter.WriteQuotaAsync(host, invocation.StdErr, refusal.Message,
+                    memoryScope, cancellationToken).ConfigureAwait(false);
+                return 5;
             }
             return context.InputCursor?.HasOpenFailures == true ? 2 : ex.ExitCode;
         }
@@ -267,7 +277,7 @@ internal static class JqExecutor
                 cancellationToken).ConfigureAwait(false) is not null ? stage : 5;
         }
 
-        static async IAsyncEnumerable<JsonNode?> OuterInputsAsync(
+        static async IAsyncEnumerable<JqValue?> OuterInputsAsync(
             JqInputCursor cursor, JqInvocation invocation, JqContext context)
         {
             ArgumentNullException.ThrowIfNull(cursor);
@@ -282,7 +292,7 @@ internal static class JqExecutor
             {
                 while (true)
                 {
-                    (bool HasValue, JsonNode? Value) pulled;
+                    (bool HasValue, JqValue? Value) pulled;
                     try
                     {
                         pulled = await cursor.PullAsync().ConfigureAwait(false);
@@ -304,26 +314,32 @@ internal static class JqExecutor
             }
             if (invocation.RawInput)
             {
-                var rawSlurped = new StringBuilder();
+                using var rawSlurped = new JqJsonBuffer(context.Budget);
                 while (true)
                 {
-                    (bool hasValue, string line, bool terminated) =
+                    (JqString? line, bool terminated) =
                         await cursor.PullRawSegmentAsync().ConfigureAwait(false);
-                    if (!hasValue)
+                    if (line is null)
                         break;
-                    context.Budget.Append(rawSlurped, line.AsSpan());
-                    if (terminated)
-                        context.Budget.Append(rawSlurped, "\n".AsSpan());
+                    int length = JqBudget.BufferCapacity((long)line.ByteLength + (terminated ? 1 : 0), 0);
+                    JqBudget.BufferCapacity((long)rawSlurped.WrittenMemory.Length + length, 0);
+                    if (length != 0)
+                    {
+                        Span<byte> target = rawSlurped.GetSpan(length);
+                        line.Utf8.Span.CopyTo(target);
+                        if (terminated) target[line.ByteLength] = (byte)'\n';
+                        rawSlurped.Advance(length);
+                    }
                 }
                 context.InputFilename = cursor.LastName;
                 context.InputLineNumber = cursor.LastLine;
-                yield return JsonValue.Create(context.Budget.Finish(rawSlurped));
+                yield return JqString.FromUtf8(rawSlurped.WrittenMemory.Span, context.Budget);
                 yield break;
             }
-            var slurped = new JsonArray();
+            var slurped = new JqArray();
             while (true)
             {
-                (bool HasValue, JsonNode? Value) pulled;
+                (bool HasValue, JqValue? Value) pulled;
                 try
                 {
                     pulled = await cursor.PullAsync().ConfigureAwait(false);

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Helpers;
 
 namespace Lokad.Jq;
@@ -28,7 +27,7 @@ internal sealed class JqInvocation
     public bool BuildConfiguration { get; init; }
     public string? Filter { get; init; }
     public JqPathRequest? FilterFile { get; init; }
-    public Dictionary<string, JsonNode?> Variables { get; init; } = new(StringComparer.Ordinal);
+    public Dictionary<string, JqValue?> Variables { get; init; } = new(StringComparer.Ordinal);
     public IReadOnlyList<string> InputFiles { get; init; } = [];
     public string? Error { get; init; }
     public JqClock? Clock { get; init; }

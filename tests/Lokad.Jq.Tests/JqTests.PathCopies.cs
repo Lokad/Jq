@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -14,19 +13,19 @@ public sealed partial class JqTests
     [InlineData("fromstream($events[])")]
     public async Task Jq_PathWritesCopyBorrowedReplacementsAtOneBoundary(string source)
     {
-        var value = new JsonArray();
+        var value = new JqArray();
         for (int index = 0; index < 1000; index++) value.Add(index);
-        var variables = new Dictionary<string, JsonNode?>
+        var variables = new Dictionary<string, JqValue?>
         {
             ["value"] = value,
-            ["events"] = new JsonArray(new JsonArray(new JsonArray(), value.DeepClone()))
+            ["events"] = new JqArray(new JqArray(new JqArray(), value.DeepClone()))
         };
         using var lexical = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var root = new BenchmarkMemoryBudget(100000);
         using (var context = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             JqFilter filter = new JqParser(source, JqProgramSource.Inline, context.RootEnvironment, lexical).Parse();
-            var result = Assert.IsType<JsonArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
+            var result = Assert.IsType<JqArray>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(1000, result.Count);
             Assert.NotSame(value, result);
             Assert.Equal(999, result[999]?.GetValue<int>());
@@ -90,12 +89,12 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GetpathBorrowsLargeValuesAndAdmitsOnlyPathConstruction()
     {
-        var value = new JsonArray();
+        var value = new JqArray();
         for (int index = 0; index < 10000; index++) value.Add(index);
-        JsonNode input = new JsonObject { ["payload"] = value };
+        JqValue input = new JqObject(NativeFixtures.Budget()) { ["payload"] = value };
         var root = new BenchmarkMemoryBudget(64);
         using var cancellation = new CancellationTokenSource();
-        var variables = new Dictionary<string, JsonNode?> { ["path"] = new JsonArray("payload") };
+        var variables = new Dictionary<string, JqValue?> { ["path"] = new JqArray(NativeFixtures.Create("payload")) };
         using (var context = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
         {
             var filter = new GetpathBuiltinFilter(new VariableFilter("path"));
@@ -112,13 +111,13 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_GetpathCopiesArraySliceOnceAndKeepsSourceIndependent()
     {
-        JsonNode input = new JsonArray(new JsonObject { ["x"] = 1 }, new JsonObject { ["x"] = 2 });
-        var variables = new Dictionary<string, JsonNode?>
+        JqValue input = new JqArray(new JqObject(NativeFixtures.Budget()) { ["x"] = 1 }, new JqObject(NativeFixtures.Budget()) { ["x"] = 2 });
+        var variables = new Dictionary<string, JqValue?>
         {
-            ["path"] = new JsonArray(new JsonObject { ["start"] = 0, ["end"] = 1 })
+            ["path"] = new JqArray(new JqObject(NativeFixtures.Budget()) { ["start"] = 0, ["end"] = 1 })
         };
         using var context = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
-        var result = Assert.IsType<JsonArray>(await new GetpathBuiltinFilter(new VariableFilter("path"))
+        var result = Assert.IsType<JqArray>(await new GetpathBuiltinFilter(new VariableFilter("path"))
             .Evaluate(input, context, context.RootEnvironment).SingleAsync());
         Assert.Single(result);
         result[0]?["x"] = 9;

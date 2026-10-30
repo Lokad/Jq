@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Text;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using Lokad.Jq.Helpers;
@@ -8,7 +9,7 @@ namespace Lokad.Jq;
 
 // Native immutable string payload. Construction belongs to the existing budget
 // region; aliases share bytes, while a retained slice owns only its selected data.
-internal sealed class JqString
+internal sealed partial class JqString : JqScalar
 {
     private readonly ReadOnlyMemory<byte> _utf8;
     private int _hash;
@@ -24,21 +25,50 @@ internal sealed class JqString
     internal int ByteLength => _utf8.Length;
     internal int ScalarLength { get; }
 
+    internal override JsonValueKind GetValueKind() => JsonValueKind.String;
+    internal override bool TryGetValue<T>([MaybeNullWhen(false)] out T value)
+    {
+        value = default;
+        return false;
+    }
+    internal override JqScalar Copy() => new JqString(_utf8, ScalarLength);
+    internal string ToHost(JqBudget budget)
+    {
+        budget.ReserveString(Encoding.UTF8.GetCharCount(_utf8.Span));
+        budget.CheckCancellation();
+        string text = Utf8Text.Decode(_utf8);
+        budget.CheckCancellation();
+        return text;
+    }
+
     internal static JqString FromUtf8(ReadOnlySpan<byte> utf8, JqBudget budget)
     {
         int scalars = CountScalars(utf8, budget.CancellationToken);
         return Copy(utf8, scalars, budget);
     }
 
+    internal static JqString Create<T>(int length, T state, SpanAction<byte, T> fill, JqBudget budget)
+    {
+        JqBudget.BufferCapacity(length, 0);
+        budget.ReserveBytes(80L + length);
+        budget.CheckCancellation();
+        byte[] bytes = new byte[length];
+        fill(bytes, state);
+        int scalars = CountScalars(bytes, budget.CancellationToken);
+        return new JqString(bytes, scalars);
+    }
+
     // Only explicit host/.NET boundaries use UTF-16. Lone surrogates follow the
     // existing host policy and become U+FFFD during this single conversion.
-    internal static JqString FromHost(string text, JqBudget budget)
+    internal static JqString FromHost(string text, JqBudget budget) => FromHost(text.AsSpan(), budget);
+
+    internal static JqString FromHost(ReadOnlySpan<char> text, JqBudget budget)
     {
         int length = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, budget.CancellationToken), 0);
         budget.ReserveBytes(80L + length);
         budget.CheckCancellation();
         byte[] bytes = new byte[length];
-        Utf8Text.Encode(text, bytes);
+        Encoding.UTF8.GetBytes(text, bytes);
         int scalars = CountScalars(bytes, budget.CancellationToken);
         return new JqString(bytes, scalars);
     }
@@ -137,12 +167,15 @@ internal sealed class JqString
     }
 
     internal static JqString FromScalars(IReadOnlyList<int> points, JqBudget budget)
+        => FromScalars(points, static point => point, budget);
+
+    internal static JqString FromScalars<T>(IReadOnlyList<T> points, Func<T, int> select, JqBudget budget)
     {
         long needed = 0;
         for (int index = 0; index < points.Count; index++)
         {
             if ((index & 1023) == 0) budget.CheckCancellation();
-            needed += Scalar(points[index]).Utf8SequenceLength;
+            needed += Scalar(select(points[index])).Utf8SequenceLength;
         }
         int length = JqBudget.BufferCapacity(needed, 0);
         budget.ReserveBytes(80L + length);
@@ -152,7 +185,7 @@ internal sealed class JqString
         for (int index = 0; index < points.Count; index++)
         {
             if ((index & 1023) == 0) budget.CheckCancellation();
-            offset += Scalar(points[index]).EncodeToUtf8(bytes.AsSpan(offset));
+            offset += Scalar(select(points[index])).EncodeToUtf8(bytes.AsSpan(offset));
         }
         budget.CheckCancellation();
         return new JqString(bytes, points.Count);
@@ -214,6 +247,64 @@ internal sealed class JqString
         return found < 0 ? -1 : start + CountScalars(_utf8.Span[offset..found], cancellationToken);
     }
 
+    internal int LastIndexOf(JqString needle, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (needle.ByteLength == 0) return ScalarLength;
+        int last = ByteLength - needle.ByteLength;
+        while (last >= 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int first = Math.Max(0, last - 65535);
+            int found = _utf8.Span.Slice(first, last - first + needle.ByteLength).LastIndexOf(needle._utf8.Span);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (found >= 0) return CountScalars(_utf8.Span[..(first + found)], cancellationToken);
+            last = first - 1;
+        }
+        return -1;
+    }
+
+    internal IEnumerable<int> MatchingIndices(JqString needle, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (needle.ByteLength == 0) yield break;
+        int position = 0, scalar = 0;
+        while (true)
+        {
+            int found = Find(needle, position, cancellationToken);
+            if (found < 0) yield break;
+            scalar += CountScalars(_utf8.Span[position..found], cancellationToken);
+            yield return scalar++;
+            position = Advance(_utf8.Span, found, 1, cancellationToken);
+        }
+    }
+
+    internal JqString SliceBytes(int from, int to, JqBudget budget) => from == 0 && to == ByteLength
+        ? CloneHeader(budget) : Copy(_utf8.Span[from..to], CountScalars(_utf8.Span[from..to], budget.CancellationToken), budget);
+
+    internal JqString Repeat(int count, JqBudget budget)
+    {
+        int length = JqBudget.BufferCapacity((long)ByteLength * count, 0);
+        if (count == 1) return CloneHeader(budget);
+        budget.ReserveBytes(80L + length);
+        budget.CheckCancellation();
+        byte[] bytes = new byte[length];
+        if (length != 0)
+        {
+            _utf8.Span.CopyTo(bytes);
+            int written = ByteLength;
+            while (written < length)
+            {
+                budget.CheckCancellation();
+                int copy = Math.Min(written, length - written);
+                bytes.AsSpan(0, copy).CopyTo(bytes.AsSpan(written));
+                written += copy;
+            }
+        }
+        budget.CheckCancellation();
+        return new JqString(bytes, checked(ScalarLength * count));
+    }
+
     internal JqString AsciiCase(bool lower, JqBudget budget)
     {
         budget.CheckCancellation();
@@ -267,8 +358,8 @@ internal sealed class JqString
         for (int offset = 0; offset < ByteLength;)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            int length = Math.Min(4096, ByteLength - offset);
-            hash.AddBytes(_utf8.Span.Slice(offset, length));
+            Rune.DecodeFromUtf8(_utf8.Span[offset..], out Rune rune, out int length);
+            hash.Add(rune.Value);
             offset += length;
         }
         _hash = hash.ToHashCode();
@@ -276,7 +367,24 @@ internal sealed class JqString
         return _hash;
     }
 
-    internal void WriteTo(Utf8JsonWriter writer) => writer.WriteStringValue(_utf8.Span);
+    internal bool ContentEqualsHost(string text, CancellationToken cancellationToken)
+    {
+        ReadOnlySpan<char> remaining = text;
+        int offset = 0;
+        while (offset < ByteLength)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (remaining.IsEmpty) return false;
+            Rune.DecodeFromUtf16(remaining, out Rune host, out int chars);
+            Rune.DecodeFromUtf8(_utf8.Span[offset..], out Rune native, out int bytes);
+            if (host.Value != native.Value) return false;
+            remaining = remaining[chars..];
+            offset += bytes;
+        }
+        return remaining.IsEmpty;
+    }
+
+    internal override void WriteTo(Utf8JsonWriter writer) => writer.WriteStringValue(_utf8.Span);
 
     internal int ByteOffset(int scalarOffset, CancellationToken cancellationToken)
     {

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -93,12 +92,12 @@ public sealed partial class JqTests
     {
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None);
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
+        using var context = new JqContext(new Dictionary<string, JqValue?>(), budget);
         var parser = new JqParser(operation + "(1; error(\"x\" * 8192))", JqProgramSource.Inline, context.RootEnvironment, budget);
         var filter = parser.Parse();
         long compilation = memory.ReservedBytes;
         var error = await Assert.ThrowsAsync<JqErrorException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).ToArrayAsync());
-        Assert.True(memory.ReservedBytes >= compilation + 2 * 8192);
+        Assert.True(memory.ReservedBytes >= compilation + 80 + 8192);
         Assert.Equal(new string('x', 8192), error.Payload?.GetValue<string>());
         budget.Dispose();
         Assert.Equal(0, memory.ReservedBytes);

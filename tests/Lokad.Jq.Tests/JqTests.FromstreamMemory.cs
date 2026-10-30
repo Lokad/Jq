@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -8,16 +7,16 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_FromstreamBuildsPrivateArrayWithoutCopyingEarlierElements()
     {
-        var events = new JsonArray();
-        for (int i = 0; i < 2000; i++) events.Add(new JsonArray(new JsonArray(JsonValue.Create(i)), null));
-        events.Add(new JsonArray(new JsonArray(JsonValue.Create(1999))));
+        var events = new JqArray();
+        for (int i = 0; i < 2000; i++) events.Add(new JqArray(new JqArray(NativeFixtures.Create(i)), null));
+        events.Add(new JqArray(new JqArray(NativeFixtures.Create(1999))));
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var memory = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             var filter = new FromstreamFilter(new IteratorFilter(new IdentityFilter(), false));
-            var result = Assert.IsType<JsonArray>(await filter.Evaluate(events, context, context.RootEnvironment).SingleAsync());
+            var result = Assert.IsType<JqArray>(await filter.Evaluate(events, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(2000, result.Count);
             Assert.All(result, Assert.Null);
             Assert.InRange(memory.Counts.Reservations + memory.Counts.Resizes, 1, 200);

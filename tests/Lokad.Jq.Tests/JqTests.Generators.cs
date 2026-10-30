@@ -269,12 +269,12 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_ConsumerStopHaltsGeneratorsPromptly()
     {
-        var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
+        var variables = new Dictionary<string, JqValue?>();
         using var cancellation = new CancellationTokenSource();
         var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
         using var context = new JqContext(variables, budget);
         JqFilter filter = new JqParser("(range(0;1000000), 0) + (0, 0)", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
-        await using IAsyncEnumerator<System.Text.Json.Nodes.JsonNode?> results = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
+        await using IAsyncEnumerator<JqValue?> results = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
 
         Assert.True(await results.MoveNextAsync());
         cancellation.Cancel();

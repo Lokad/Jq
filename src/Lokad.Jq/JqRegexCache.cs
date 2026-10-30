@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Lokad.Jq.Helpers;
 
 namespace Lokad.Jq;
 
@@ -9,8 +8,6 @@ internal sealed class JqRegexCache : IDisposable
 {
     private readonly JqBudget _budget;
     private bool _disposed;
-    private const int MaximumIdleBytes = 4096;
-    private SubjectMemory? _idleSubject;
     private Pattern? _idlePattern;
     private Pattern? _olderIdlePattern;
     private readonly Dictionary<(string Pattern, JqRegexCompileOptions Options), Pattern> _patterns = new();
@@ -77,26 +74,6 @@ internal sealed class JqRegexCache : IDisposable
         }
     }
 
-    internal JqMemoryValue<ReadOnlyMemory<byte>> EncodeSubject(string text) => EncodeSubject(text, null);
-
-    internal JqMemoryValue<ReadOnlyMemory<byte>> EncodeSubject(string text, Pattern? pattern)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        _budget.CheckCancellation();
-        SubjectMemory memory = _idleSubject ?? new SubjectMemory(this, _budget.MemoryBudget);
-        _idleSubject = null;
-        memory.Begin(pattern);
-        try
-        {
-            return new JqMemoryValue<ReadOnlyMemory<byte>>(memory.Encode(text), memory);
-        }
-        catch
-        {
-            memory.Reject();
-            throw;
-        }
-    }
-
     internal JqRegexMatch Match(Pattern pattern, ReadOnlyMemory<byte> input,
         int start, JqRegexMatchOptions options)
     {
@@ -152,24 +129,12 @@ internal sealed class JqRegexCache : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _idleSubject?.Destroy();
-        _idleSubject = null;
         RetireOlderIdlePattern();
         if (_idlePattern is { } idle)
         {
             _idlePattern = null;
             Retire(idle);
         }
-    }
-
-    private void Return(SubjectMemory memory, bool keep)
-    {
-        if (!keep || _disposed || memory.Capacity > MaximumIdleBytes)
-            memory.Destroy();
-        else if (_idleSubject is null)
-            _idleSubject = memory;
-        else
-            memory.Destroy();
     }
 
     private void Return(Pattern pattern)
@@ -198,7 +163,7 @@ internal sealed class JqRegexCache : IDisposable
         pattern.Keys.Dispose();
     }
 
-    // Each operation, subject and result holds its own borrow. Only the last
+    // Each operation and result holds its own borrow. Only the last
     // two returned idle patterns are reusable; active entries are never evicted.
     internal sealed class Pattern(JqRegexCache cache, string text, JqRegexCompileOptions options,
         IJqCompiledRegex compiled, JqMemoryReservation keys) : IDisposable
@@ -209,75 +174,6 @@ internal sealed class JqRegexCache : IDisposable
         internal JqMemoryReservation Keys { get; } = keys;
         internal int Borrowers { get; set; }
         public void Dispose() => cache.Return(this);
-    }
-
-    // Keep one encoded subject within 4 KiB. Nested subjects have separate
-    // owners; disposal waits for borrowers instead of refunding early.
-    private sealed class SubjectMemory(JqRegexCache cache, IMemoryBudget? budget) : IDisposable
-    {
-        private readonly JqMemoryReservation _memory = new(budget);
-        private byte[] _buffer = [];
-        private bool _leased;
-        private Pattern? _pattern;
-        internal long Capacity => _memory.LastAdmittedBytes;
-
-        internal void Begin(Pattern? pattern)
-        {
-            _leased = true;
-            _pattern = pattern;
-            if (pattern is not null) pattern.Borrowers++;
-        }
-
-        internal ReadOnlyMemory<byte> Encode(string text)
-        {
-            int length = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, cache._budget.CancellationToken), 0);
-            if (_memory.LastAdmittedBytes == 0 || length > _buffer.Length)
-            {
-                long previous = _memory.LastAdmittedBytes;
-                int oldCapacity = _buffer.Length;
-                // Keep optional growth within the existing idle-owner ceiling.
-                // Large subjects and the first allocation retain exact capacity.
-                int capacity = oldCapacity != 0 && length <= MaximumIdleBytes - 64
-                    ? Math.Max(length, Math.Min(MaximumIdleBytes - 64, oldCapacity * 2)) : length;
-                _memory.Resize(64L + oldCapacity + capacity);
-                cache._budget.CheckCancellation();
-                try { _buffer = new byte[capacity]; }
-                catch { _memory.Resize(previous); throw; }
-                if (oldCapacity != 0) _memory.Resize(64L + capacity);
-            }
-            cache._budget.CheckCancellation();
-            int written = Utf8Text.Encode(text, _buffer);
-            return _buffer.AsMemory(0, written);
-        }
-
-        public void Dispose()
-        {
-            if (!_leased) return;
-            _leased = false;
-            cache.Return(this, true);
-            ReleasePattern();
-        }
-
-        internal void Reject()
-        {
-            if (!_leased) return;
-            _leased = false;
-            cache.Return(this, false);
-            ReleasePattern();
-        }
-
-        private void ReleasePattern()
-        {
-            Pattern? pattern = _pattern;
-            _pattern = null;
-            pattern?.Dispose();
-        }
-
-        internal void Destroy()
-        {
-            _buffer = [];
-            _memory.Dispose();
-        }
     }
 
     private sealed class MatchLifetime(Pattern pattern, IDisposable? owner) : IDisposable

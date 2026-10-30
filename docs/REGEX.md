@@ -52,7 +52,7 @@ scalar-based offsets and lengths, unmatched capture nulls, and numbered capture
 order are retained. Duplicate names fold in numbered order, last wins, including
 nulls for non-participating groups.
 `JqRegexCapture` carries only participation and absolute UTF-8 byte bounds,
-including slot zero. Jq projects scalar and UTF-16 positions lazily through one
+including slot zero. Jq projects scalar positions lazily through one
 sparse index per operation; overlapping captures and lookbehind reuse it.
 Ranges must end on Unicode boundaries. ASCII prefixes need no index storage.
 
@@ -73,9 +73,10 @@ execution settings and default match timeout.
 Providers own syntax validation and admission for compiled patterns, workspace
 and capture storage. Detailed searches return actual captures with an optional
 provider owner, disposed after consumption. Compiled handles outlive their active
-results and subjects. Two idle compiled patterns are reused; completed one-use
-patterns are retired. Jq admits its own copied cache keys, encoded subjects, match/scan JSON
-values, lists and substitution builders. Regex splitting advances through scalar
+results. Two idle compiled patterns are reused; completed one-use patterns are
+retired. Native subject bytes stay borrowed and funded through matching. Jq admits
+its copied cache keys, result values, lists and UTF-8 substitution builders.
+Regex splitting advances through scalar
 boundaries. Retained Jq buffers stay charged; every refusal terminates the command.
 Reuse and structural ceilings are described in
 [runtime memory rules](RUNTIME.md#memory-admission).

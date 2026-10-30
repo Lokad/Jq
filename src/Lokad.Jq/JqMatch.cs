@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json.Nodes;
 using static Lokad.Jq.JqRuntime;
 
 namespace Lokad.Jq;
@@ -11,64 +10,62 @@ namespace Lokad.Jq;
 // like the reference, which builds one array per call.
 internal static class JqMatch
 {
-    internal static bool Test(JqContext context, JsonNode? input, JsonNode? patternNode, JsonNode? flagsNode)
+    internal static bool Test(JqContext context, JqValue? input, JqValue? patternNode, JqValue? flagsNode)
     {
-        string text = RequireText(context, input);
+        JqString text = RequireText(context, input);
         string pattern = RequirePattern(context, patternNode);
         JqRegexOptions options = JqRegexOptions.ParseOrThrow(RequireModifiers(context, flagsNode));
         using var patternLease = context.Regexes.Rent(pattern, options.Pattern);
         var regex = patternLease.Value;
-        using var subject = context.Regexes.EncodeSubject(text, regex);
-        return context.Regexes.IsMatch(regex, subject.Value, options.Match);
+        return context.Regexes.IsMatch(regex, text.Utf8, options.Match);
     }
 
-    internal static List<JsonNode> Search(JqContext context, JsonNode? input, JsonNode? patternNode, JsonNode? modifiersNode)
+    internal static List<JqValue> Search(JqContext context, JqValue? input, JqValue? patternNode, JqValue? modifiersNode)
     {
         ArgumentNullException.ThrowIfNull(context);
-        string text = RequireText(context, input);
+        JqString text = RequireText(context, input);
         string pattern = RequirePattern(context, patternNode);
         return SearchText(context, text, pattern, RequireModifiers(context, modifiersNode), Projection.Match);
     }
 
-    internal static string RequirePattern(JqContext context, JsonNode? patternNode)
+    internal static string RequirePattern(JqContext context, JqValue? patternNode)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (!TryGetString(patternNode, out string? pattern) || pattern is null)
+        if (!context.Runtime.TryGetString(patternNode, out string? pattern) || pattern is null)
             throw new JqException(TypeName(patternNode) + " (" + context.Runtime.TruncatedDump(patternNode) + ") is not a string");
         return pattern;
     }
 
-    internal static string RequireText(JqContext context, JsonNode? input)
+    internal static JqString RequireText(JqContext context, JqValue? input)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (!TryGetString(input, out string? text) || text is null)
+        if (input is not JqString text)
             throw new JqException(TypeName(input) + " (" + context.Runtime.TruncatedDump(input) + ") cannot be matched, as it is not a string");
         return text;
     }
 
-    internal static string RequireModifiers(JqContext context, JsonNode? modifiersNode)
+    internal static string RequireModifiers(JqContext context, JqValue? modifiersNode)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (modifiersNode is null)
             return string.Empty;
-        if (TryGetString(modifiersNode, out string? flags) && flags is not null)
+        if (context.Runtime.TryGetString(modifiersNode, out string? flags) && flags is not null)
             return flags;
         throw new JqException(TypeName(modifiersNode) + " (" + context.Runtime.TruncatedDump(modifiersNode) + ") is not a string");
     }
 
     private enum Projection { Match, Scan, Split }
 
-    private static List<JsonNode> SearchText(JqContext context, string text, string pattern, string modifiers, Projection projection)
+    private static List<JqValue> SearchText(JqContext context, JqString text, string pattern, string modifiers, Projection projection)
     {
         JqRegexOptions options = JqRegexOptions.ParseOrThrow(modifiers);
         bool global = modifiers.Contains('g');
         using var patternLease = context.Regexes.Rent(pattern, options.Pattern);
         var compiled = patternLease.Value;
         var names = projection == Projection.Match ? JqRegexCache.GetGroupNames(compiled) : null;
-        using var ownedSubject = context.Regexes.EncodeSubject(text, compiled);
-        ReadOnlyMemory<byte> subject = ownedSubject.Value;
+        ReadOnlyMemory<byte> subject = text.Utf8;
         context.Budget.ReserveMetadata(32, 1);
-        var results = new List<JsonNode>();
+        var results = new List<JqValue>();
         using var coordinates = new JqRegexCoordinates(subject, context.Budget);
         int previousSplitEnd = 0;
         int start = 0;
@@ -77,8 +74,8 @@ internal static class JqMatch
             using var match = context.Regexes.Match(compiled, subject, start, options.Match);
             if (!match.Success) break;
             context.Budget.CheckCancellation();
-            int utf16Start = coordinates.At(match.Value.StartOffsetInBytes).Utf16;
-            int utf16End = coordinates.At(match.Value.EndOffsetInBytes).Utf16;
+            int byteStart = coordinates.At(match.Value.StartOffsetInBytes).Byte;
+            int byteEnd = coordinates.At(match.Value.EndOffsetInBytes).Byte;
             switch (projection)
             {
                 case Projection.Match:
@@ -90,23 +87,23 @@ internal static class JqMatch
                     AddResult(ScanMatch(match));
                     break;
                 case Projection.Split:
-                    AddResult(Slice(previousSplitEnd, utf16Start));
-                    previousSplitEnd = utf16End;
+                    AddResult(Slice(previousSplitEnd, byteStart));
+                    previousSplitEnd = byteEnd;
                     break;
             }
             if (!global) break;
-            if (utf16End == utf16Start)
+            if (byteEnd == byteStart)
             {
-                if (utf16End == text.Length) break;
+                if (byteEnd == text.ByteLength) break;
                 start = coordinates.AfterEmpty(match.Value.EndOffsetInBytes);
             }
             else start = match.Value.EndOffsetInBytes;
             if (start > subject.Length) break;
         }
-        if (projection == Projection.Split) AddResult(Slice(previousSplitEnd, text.Length));
+        if (projection == Projection.Split) AddResult(Slice(previousSplitEnd, text.ByteLength));
         return results;
 
-        void AddResult(JsonNode value)
+        void AddResult(JqValue value)
         {
             if (results.Count == results.Capacity)
             {
@@ -119,45 +116,40 @@ internal static class JqMatch
             results.Add(value);
         }
 
-        JsonNode ScanMatch(JqRegexMatch match)
+        JqValue ScanMatch(JqRegexMatch match)
         {
             int captures = match.CaptureSlotCount - 1;
-            if (captures == 0) return Slice(coordinates.At(match.Value.StartOffsetInBytes).Utf16, coordinates.At(match.Value.EndOffsetInBytes).Utf16);
-            context.Budget.ReserveMetadata(64 + 88L * captures, (int)Math.Min(32, 1L + captures));
-            var row = new JsonArray();
+            if (captures == 0) return Slice(coordinates.At(match.Value.StartOffsetInBytes).Byte, coordinates.At(match.Value.EndOffsetInBytes).Byte);
+            context.Budget.ReserveMetadata(64 + 24L * captures, (int)Math.Min(32, 1L + captures));
+            var row = new JqArray();
             for (int index = 1; index <= captures; index++)
             {
                 context.Budget.CheckCancellation();
                 if (!match.TryGetGroup(index, out JqRegexCapture group)) break;
-                row.Add(group.Success ? JsonValue.Create(CopyString(coordinates.At(group.StartOffsetInBytes).Utf16, coordinates.At(group.EndOffsetInBytes).Utf16)) : null);
+                row.Add(group.Success ? CopyString(coordinates.At(group.StartOffsetInBytes).Byte, coordinates.At(group.EndOffsetInBytes).Byte) : null);
             }
             return row;
         }
 
-        JsonNode Slice(int from, int to)
+        JqValue Slice(int from, int to)
         {
-            context.Budget.ReserveMetadata(64, 1);
-            return JsonValue.Create(CopyString(from, to));
+            return CopyString(from, to);
         }
 
-        string CopyString(int from, int to)
-        {
-            if (from == 0 && to == text.Length) return text;
-            context.Budget.ReserveString(to - from);
-            return text.Substring(from, to - from);
-        }
+        JqString CopyString(int from, int to) => text.SliceBytes(from, to, context.Budget);
+
     }
 
     // Named-capture fold for sub/gsub replacements: numbered groups in
     // order with last-wins, including null for non-participating groups,
     // mirroring `def sub`'s reduce over .captures in builtin.jq. Duplicate
     // names (enabled via PCRE2_DUPNAMES) fold the same way.
-    internal static JsonObject FoldNamedCaptures(JqContext context, string text, JqRegexMatch match, IReadOnlyDictionary<int, string> names, int captureCount, JqRegexCoordinates coordinates)
+    internal static JqObject FoldNamedCaptures(JqContext context, JqString text, JqRegexMatch match, IReadOnlyDictionary<int, string> names, int captureCount, JqRegexCoordinates coordinates)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(names);
         context.Budget.ReserveMetadata(64 + 224L * names.Count, (int)Math.Min(32, 1L + 2L * names.Count));
-        var captures = new JsonObject();
+        var captures = new JqObject(context.Budget);
         context.Budget.CheckCancellation();
         for (int index = 1; index <= captureCount; index++)
         {
@@ -170,9 +162,7 @@ internal static class JqMatch
             {
                 var from = coordinates.At(group.StartOffsetInBytes);
                 var to = coordinates.At(group.EndOffsetInBytes);
-                context.Budget.ReserveString(to.Utf16 - from.Utf16);
-                string value = text.Substring(from.Utf16, to.Utf16 - from.Utf16);
-                captures[name] = JsonValue.Create(value);
+                captures[name] = text.SliceBytes(from.Byte, to.Byte, context.Budget);
             }
             else
             {
@@ -182,7 +172,7 @@ internal static class JqMatch
         return captures;
     }
 
-    private static JsonObject BuildMatch(JqContext context, string text, JqRegexMatch match, IReadOnlyDictionary<int, string> names, int captureCount, JqRegexCoordinates coordinates)
+    private static JqObject BuildMatch(JqContext context, JqString text, JqRegexMatch match, IReadOnlyDictionary<int, string> names, int captureCount, JqRegexCoordinates coordinates)
     {
         // Retained DOM headers, dictionaries, scalar wrappers and capture slots;
         // payload copies are admitted separately below. Keep this construction
@@ -190,42 +180,39 @@ internal static class JqMatch
         context.Budget.ReserveMetadata(704 + 728L * captureCount, (int)Math.Min(32, 5L + 5L * captureCount));
         var matchStart = coordinates.At(match.Value.StartOffsetInBytes);
         var matchEnd = coordinates.At(match.Value.EndOffsetInBytes);
-        context.Budget.ReserveString(matchEnd.Utf16 - matchStart.Utf16);
-        string whole = text.Substring(matchStart.Utf16, matchEnd.Utf16 - matchStart.Utf16);
+        JqString whole = text.SliceBytes(matchStart.Byte, matchEnd.Byte, context.Budget);
         int offset = matchStart.Scalar;
         int end = matchEnd.Scalar;
-        var result = new JsonObject
-        {
-            ["offset"] = JsonValue.Create(offset),
-            ["length"] = JsonValue.Create(end - offset),
-            ["string"] = JsonValue.Create(whole),
+        var result = new JqObject(context.Budget) {
+            ["offset"] = JqScalar.Create(offset),
+            ["length"] = JqScalar.Create(end - offset),
+            ["string"] = whole,
         };
-        var captures = new JsonArray();
+        var captures = new JqArray();
         for (int index = 1; index <= captureCount; index++)
         {
             if (!match.TryGetGroup(index, out JqRegexCapture group))
                 break;
             context.Budget.CheckCancellation();
-            var capture = new JsonObject();
+            var capture = new JqObject(context.Budget);
             if (!group.Success)
             {
-                capture["offset"] = JsonValue.Create(-1);
-                capture["length"] = JsonValue.Create(0);
+                capture["offset"] = JqScalar.Create(-1);
+                capture["length"] = JqScalar.Create(0);
                 capture["string"] = null;
             }
             else
             {
                 var from = coordinates.At(group.StartOffsetInBytes);
                 var to = coordinates.At(group.EndOffsetInBytes);
-                context.Budget.ReserveString(to.Utf16 - from.Utf16);
-                string value = text.Substring(from.Utf16, to.Utf16 - from.Utf16);
-                capture["offset"] = JsonValue.Create(from.Scalar);
-                capture["length"] = JsonValue.Create(to.Scalar - from.Scalar);
-                capture["string"] = JsonValue.Create(value);
+                JqString value = text.SliceBytes(from.Byte, to.Byte, context.Budget);
+                capture["offset"] = JqScalar.Create(from.Scalar);
+                capture["length"] = JqScalar.Create(to.Scalar - from.Scalar);
+                capture["string"] = value;
             }
             if (names.TryGetValue(index, out string? name))
             {
-                capture["name"] = JsonValue.Create(name);
+                capture["name"] = JqScalar.Create(name, context.Budget);
             }
             else
             {
@@ -237,20 +224,18 @@ internal static class JqMatch
         return result;
     }
 
-    internal static JsonObject ToNamedObject(JqContext context, JsonObject match)
+    internal static JqObject ToNamedObject(JqContext context, JqObject match)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(match);
         context.Budget.ReserveMetadata(64, 1);
-        var result = new JsonObject();
-        if (match["captures"] is JsonArray captures)
+        var result = new JqObject(context.Budget);
+        if (match["captures"] is JqArray captures)
         {
-            foreach (JsonNode? item in captures)
+            foreach (JqValue? item in captures)
             {
-                if (item is JsonObject capture
-                    && capture["name"] is JsonValue nameValue
-                    && nameValue.TryGetValue<string>(out string? name)
-                    && name is not null)
+                if (item is JqObject capture
+                    && capture["name"] is JqString name)
                 {
                     context.Budget.CheckCancellation();
                     context.Budget.ReserveMetadata(224, 2);
@@ -261,10 +246,10 @@ internal static class JqMatch
         return result;
     }
 
-    internal static void SplitArgument(JqContext context, JsonNode? value, out JsonNode? pattern, out JsonNode? modifiers)
+    internal static void SplitArgument(JqContext context, JqValue? value, out JqValue? pattern, out JqValue? modifiers)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (value is JsonArray array)
+        if (value is JqArray array)
         {
             if (array.Count > 1)
             {
@@ -279,7 +264,7 @@ internal static class JqMatch
                 return;
             }
         }
-        else if (TryGetString(value, out string? text) && text is not null)
+        else if (context.Runtime.TryGetString(value, out string? text) && text is not null)
         {
             pattern = value;
             modifiers = null;
@@ -287,21 +272,21 @@ internal static class JqMatch
         }
         string message = TypeName(value) + " not a string or array";
         context.Budget.ReserveString(message.Length);
-        throw new JqErrorException(JsonValue.Create(message));
+        throw new JqErrorException(JqScalar.Create(message, context.Budget));
     }
 
-    internal static List<JsonNode> Scan(JqContext context, JsonNode? input, JsonNode? patternNode, JsonNode? flagsNode)
+    internal static List<JqValue> Scan(JqContext context, JqValue? input, JqValue? patternNode, JqValue? flagsNode)
     {
-        string text = RequireText(context, input);
+        JqString text = RequireText(context, input);
         string pattern = RequirePattern(context, patternNode);
         string flags = RequireModifiers(context, flagsNode);
         if (flags.Length != 0) context.Budget.ReserveString(1L + flags.Length);
         return SearchText(context, text, pattern, "g" + flags, Projection.Scan);
     }
 
-    internal static List<JsonNode> Split(JqContext context, JsonNode? input, JsonNode? patternNode, JsonNode? flagsNode)
+    internal static List<JqValue> Split(JqContext context, JqValue? input, JqValue? patternNode, JqValue? flagsNode)
     {
-        string text = RequireText(context, input);
+        JqString text = RequireText(context, input);
         string pattern = RequirePattern(context, patternNode);
         string flags = RequireModifiers(context, flagsNode);
         if (flags.Length != 0) context.Budget.ReserveString(1L + flags.Length);

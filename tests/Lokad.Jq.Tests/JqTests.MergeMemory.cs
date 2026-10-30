@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -10,16 +9,16 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_ObjectMergesCopySelectedBranchesOnly(bool recursive)
     {
-        var discarded = new JsonArray();
+        var discarded = new JqArray();
         for (int index = 0; index < 10000; index++) discarded.Add(index);
-        var left = new JsonObject { ["drop"] = discarded, ["keep"] = 1 };
-        var right = new JsonObject { ["drop"] = 0 };
+        var left = new JqObject(NativeFixtures.Budget()) { ["drop"] = discarded, ["keep"] = 1 };
+        var right = new JqObject(NativeFixtures.Budget()) { ["drop"] = 0 };
         var root = new BenchmarkMemoryBudget(4096);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
-            var result = Assert.IsType<JsonObject>(recursive ? runtime.Multiply(left, right) : runtime.Add(left, right));
-            Assert.Equal(new[] { "drop", "keep" }, result.Select(property => property.Key));
+            var result = Assert.IsType<JqObject>(recursive ? runtime.Multiply(left, right) : runtime.Add(left, right));
+            Assert.Equal(new[] { "drop", "keep" }, result.Select(property => property.Key.GetValue<string>()));
             Assert.Equal(0, result["drop"]?.GetValue<int>());
             Assert.Equal(1, result["keep"]?.GetValue<int>());
             Assert.Equal(10000, discarded.Count);
@@ -32,22 +31,22 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_RecursiveMergeCopiesTheFinalDeepBranchOnce()
     {
-        var data = new JsonArray();
+        var data = new JqArray();
         for (int index = 0; index < 1000; index++) data.Add(index);
-        JsonObject left = new() { ["data"] = data };
-        JsonObject right = new();
+        JqObject left = new(NativeFixtures.Budget()) { ["data"] = data };
+        JqObject right = new(NativeFixtures.Budget());
         for (int index = 1; index < 24; index++)
         {
-            left = new JsonObject { ["child"] = left };
-            right = new JsonObject { ["child"] = right };
+            left = new JqObject(NativeFixtures.Budget()) { ["child"] = left };
+            right = new JqObject(NativeFixtures.Budget()) { ["child"] = right };
         }
         var root = new BenchmarkMemoryBudget(100000);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
-            var result = Assert.IsType<JsonObject>(new JqRuntime(budget).Multiply(left, right));
-            JsonObject leaf = result;
-            for (int index = 1; index < 24; index++) leaf = Assert.IsType<JsonObject>(leaf["child"]);
-            var copied = Assert.IsType<JsonArray>(leaf["data"]);
+            var result = Assert.IsType<JqObject>(new JqRuntime(budget).Multiply(left, right));
+            JqObject leaf = result;
+            for (int index = 1; index < 24; index++) leaf = Assert.IsType<JqObject>(leaf["child"]);
+            var copied = Assert.IsType<JqArray>(leaf["data"]);
             Assert.Equal(1000, copied.Count);
             copied[0] = -1;
             Assert.Equal(0, data[0]?.GetValue<int>());
@@ -74,7 +73,9 @@ public sealed partial class JqTests
         IMemoryReservation? pressure = null;
         host.BeforeByteAppend = () =>
         {
-            if (pressure is null) Assert.True(root.TryReserve(limit - root.ReservedBytes - 4096, out pressure));
+            // The raw prefix does not warm JSON rendering. Allow its first
+            // 256-byte writer buffer in addition to one coarse value block.
+            if (pressure is null) Assert.True(root.TryReserve(limit - root.ReservedBytes - 4096 - 256, out pressure));
         };
         Assert.Equal(retain ? 5 : 0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
         Assert.Equal(retain ? "ready\n" : "ready\n1\n", host.GetOutput(JqFileDescriptor.StdOut));
@@ -105,17 +106,17 @@ public sealed partial class JqTests
     [InlineData(65)]
     public void Jq_MergeRetainsSharedDepthAndCancellationChecks(int depth)
     {
-        JsonObject left = new() { ["x"] = 1 };
-        JsonObject right = new();
+        JqObject left = new(NativeFixtures.Budget()) { ["x"] = 1 };
+        JqObject right = new(NativeFixtures.Budget());
         for (int index = 1; index < depth; index++)
         {
-            left = new JsonObject { ["child"] = left };
-            right = new JsonObject { ["child"] = right };
+            left = new JqObject(NativeFixtures.Budget()) { ["child"] = left };
+            right = new JqObject(NativeFixtures.Budget()) { ["child"] = right };
         }
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
         var runtime = new JqRuntime(budget);
-        if (depth == 64) Assert.IsType<JsonObject>(runtime.Multiply(left, right));
+        if (depth == 64) Assert.IsType<JqObject>(runtime.Multiply(left, right));
         else Assert.Equal("value nesting limit exceeded", Assert.Throws<JqQuotaException>(() => runtime.Multiply(left, right)).Message);
         cancellation.Cancel();
         Assert.Throws<OperationCanceledException>(() => runtime.Multiply(left, right));

@@ -1,16 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
 // An explicit `error` or `error(message)` failure. The payload, not the
 // message, is what `catch` handlers observe. The executor renders uncaught
 // payloads; borrowing keeps their identity and existing storage ownership.
-internal sealed class JqErrorException(JsonNode? payload) : JqException("error")
+internal sealed class JqErrorException(JqValue? payload) : JqException("error")
 {
-    internal JsonNode? Payload { get; } = payload;
+    internal JqValue? Payload { get; } = payload;
 }
 
 // A catchable sequence parse failure. The cursor retains its resynchronization
@@ -25,13 +24,13 @@ internal sealed class JqOutputClosedException(int exitCode) : Exception("output 
 }
 
 // `halt` or `halt_error[(code)]`: immediate termination that user code can
-// never observe or catch. The stderr text is rendered once at the throw
-// site (strings raw, other values as JSON) so the executor only writes.
-internal sealed class JqHaltException(int ExitCode, string? StderrText) : Exception("halt")
+// never observe or catch. Borrow the funded payload through terminal output;
+// the executor writes strings directly and serializes other values as JSON.
+internal sealed class JqHaltException(int exitCode, JqValue? payload) : Exception("halt")
 {
-    internal int ExitCode { get; } = ExitCode;
+    internal int ExitCode { get; } = exitCode;
 
-    internal string? StderrText { get; } = StderrText;
+    internal JqValue? Payload { get; } = payload;
 }
 
 // `break $label`: abandons the current computation up to the matching
@@ -48,7 +47,7 @@ internal sealed class JqBreakException(JqEnvironment target) : JqException("brea
 // host, halt, and tail-call signals always propagate.
 internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
@@ -57,7 +56,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
         while (true)
         {
             bool moved;
-            JsonNode? failure = null;
+            JqValue? failure = null;
             bool faulted = false;
             try
             {
@@ -75,7 +74,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
             if (faulted)
             {
                 if (Handler is JqFilter handler)
-                    await foreach (JsonNode? value in handler.Evaluate(failure, context, environment).ConfigureAwait(false))
+                    await foreach (JqValue? value in handler.Evaluate(failure, context, environment).ConfigureAwait(false))
                         yield return value;
                 yield break;
             }
@@ -104,7 +103,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
                 if (Handler is not null)
                 {
                     faulted = true;
-                    JsonNode? payload = JqErrors.Payload(exception, context.Budget);
+                    JqValue? payload = JqErrors.Payload(exception, context.Budget);
                     failure = TrackResult(pair, payload);
                 }
             }
@@ -128,7 +127,7 @@ internal sealed class TryFilter(JqFilter Body, JqFilter? Handler) : JqFilter
 // nothing. Non-matching breaks propagate to outer labels.
 internal sealed class LabelFilter(object Label, JqFilter Body) : JqFilter
 {
-    protected override IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment) =>
+    protected override IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment) =>
         Run(context, environment, scope => Body.Evaluate(input, context, scope));
 
     protected override IAsyncEnumerable<JqValuePath> EvaluatePathsCore(JqValuePath pair, JqContext context, JqEnvironment environment) =>
@@ -153,8 +152,8 @@ internal sealed class LabelFilter(object Label, JqFilter Body) : JqFilter
                 bool moved;
                 try { moved = await results.MoveNextAsync().ConfigureAwait(false); }
                 catch (JqBreakException broken) when (ReferenceEquals(broken.Target, scope)) { yield break; }
-                catch (JqErrorException error) when (error.Payload is JsonObject { Count: 1 } payload
-                    && payload.TryGetPropertyValue("__jq", out JsonNode? id)
+                catch (JqErrorException error) when (error.Payload is JqObject { Count: 1 } payload
+                    && payload.TryGetPropertyValue("__jq", out JqValue? id)
                     && id?.GetValueKind() == JsonValueKind.Number && JqRuntime.Number(id) == scope.LabelId)
                 { yield break; }
                 if (!moved) yield break;
@@ -171,7 +170,7 @@ internal sealed class LabelFilter(object Label, JqFilter Body) : JqFilter
 // itself; unknown labels are rejected at parse time.
 internal sealed class BreakFilter(object Label) : JqFilter
 {
-    protected override IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);

@@ -2,6 +2,12 @@
 
 ## 0.3.0 — Unreleased
 
+- Use internal UTF-8 strings and object keys throughout evaluation, JSON/raw I/O,
+  string primitives, interpolation, formats, date parsing and regex subjects.
+  Remove the production JsonNode dependency and subject transcoding buffers.
+  Native error/halt payloads retain their ownership through pending writes.
+- Encode only final environment values, preserving first key order and last-wins
+  duplicates. Preserve bounded buffer reuse and terminal admission refusal.
 - Breaking: `JqRegexCapture` contains participation and UTF-8 byte bounds only.
   Providers no longer supply UTF-16 coordinates. Jq lazily projects byte ranges
   through a shared subject index for scalar offsets and string extraction.

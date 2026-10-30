@@ -33,7 +33,7 @@ public sealed partial class JqTests
         static async Task<long> Measure(bool stream)
         {
             using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
-            using var context = new JqContext(new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(), budget);
+            using var context = new JqContext(new Dictionary<string, JqValue?>(), budget);
             var invocation = new JqInvocation { RawInput = true, Stream = stream };
             var host = new MockFileSystem();
             for (int i = 0; i < 100; i++)

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 namespace Lokad.Jq.Tests;
 
@@ -86,7 +85,7 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_CompilerSeedingStopsBeforeUnadmittedOrCanceledCopies(bool cancel)
     {
-        var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        var env = JqEnvironment.CreateRoot(new Dictionary<string, JqValue?>());
         for (int i = 0; i < 100000; i++)
             env = env.ExtendFunction(new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
         using var compiler = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
@@ -110,14 +109,14 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_CompilerSeedsNearestFunctionsWithAmortizedAdmission()
     {
-        var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        var env = JqEnvironment.CreateRoot(new Dictionary<string, JqValue?>());
         for (int i = 0; i < 1000; i++)
             env = env.ExtendFunction(new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
         env = env.ExtendFunction(new JqFunctionDefinition("f0", [new JqFunctionParameter("x", true)], new VariableFilter("x")));
-        env = env.ExtendFunction(new JqFunctionDefinition("f0", [], new LiteralFilter(JsonValue.Create(42))));
+        env = env.ExtendFunction(new JqFunctionDefinition("f0", [], new LiteralFilter(NativeFixtures.Create(42))));
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var memory = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             var filter = new JqParser("f0 + f0(1)", JqProgramSource.Inline, env, context.Budget).Parse();
@@ -130,17 +129,17 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_InterpolationBorrowsWideVisibleScopes()
     {
-        var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        var env = JqEnvironment.CreateRoot(new Dictionary<string, JqValue?>());
         for (int i = 0; i < 10000; i++)
             env = env.ExtendFunction(new JqFunctionDefinition("f" + i, [], new IdentityFilter()));
         var root = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         var memory = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             string source = "\"" + string.Concat(Enumerable.Repeat("\\(f0)", 20)) + "\"";
             var filter = new JqParser(source, JqProgramSource.Inline, env, context.Budget).Parse();
-            Assert.Equal(new string('1', 20), context.Runtime.ToJqString(await filter.Evaluate(JsonValue.Create(1), context, env).SingleAsync()));
+            Assert.Equal(new string('1', 20), context.Runtime.ToJqString(await filter.Evaluate(NativeFixtures.Create(1), context, env).SingleAsync()));
             Assert.True(root.PeakBytes < 2 * 1024 * 1024);
         }
         Assert.Equal(0, root.ReservedBytes);

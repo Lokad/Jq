@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -17,7 +16,7 @@ public sealed partial class JqTests
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
-            var values = new List<JsonNode?>();
+            var values = new List<JqValue?>();
             for (int index = 0; index < 32; index++)
             {
                 values.Add(runtime.ParseJson(text));
@@ -135,16 +134,16 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("try ($text|fromjson) catch \"caught\"")]
     [InlineData("($text|fromjson)?")]
-    public async Task Jq_JsonScratchRefusalRemainsTerminalAndRetainsEarlierOutput(string operation)
+    public async Task Jq_FromJsonBorrowsNativeInputWithoutConversionScratch(string operation)
     {
-        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(96 * 1024);
         var host = new MockFileSystem();
         string text = "null" + new string(' ', 65532);
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "--arg", "text", text,
             "\"ready\", (" + operation + ")")));
-        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
-        Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
+        Assert.Equal("ready\nnull\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Equal(0, memory.ReservedBytes);
         Assert.Equal(0, memory.ActiveScopes);
     }

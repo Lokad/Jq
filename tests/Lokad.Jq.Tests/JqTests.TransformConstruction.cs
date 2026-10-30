@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -10,18 +9,22 @@ public sealed partial class JqTests
     [InlineData("ascii_upcase")]
     [InlineData("html")]
     [InlineData("uri")]
-    public void Jq_TransformsBorrowUnchangedPayloadsWithoutAdmission(string operation)
+    public void Jq_TransformsBorrowUnchangedPayloadsInFreshAdmittedHeaders(string operation)
     {
         string text = new('0', 131072);
-        JsonNode input = JsonValue.Create(text);
-        var memory = new BenchmarkMemoryBudget(0);
+        JqValue input = NativeFixtures.Create(text);
+        var memory = new BenchmarkMemoryBudget(64);
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token);
         var runtime = new JqRuntime(budget);
-        Assert.Same(text, Transform(runtime, operation, input));
+        JqString result = operation.StartsWith("ascii_", StringComparison.Ordinal)
+            ? runtime.AsciiCase(input, operation == "ascii_downcase") : runtime.FormatValue(operation, input);
+        Assert.NotSame(input, result);
+        Assert.Equal(Assert.IsType<JqString>(input).Utf8, result.Utf8);
+        Assert.Equal(64, memory.ReservedBytes);
         cancellation.Cancel();
         Assert.ThrowsAny<OperationCanceledException>(() => Transform(runtime, operation, input));
-        Assert.Equal(0, memory.ReservedBytes);
+        Assert.Equal(64, memory.ReservedBytes);
     }
 
     [Theory]
@@ -32,15 +35,15 @@ public sealed partial class JqTests
     public void Jq_TransformsAdmitOnlyTheChangedResult(string operation, char changed, string ending)
     {
         string text = new string('0', 32767) + changed;
-        JsonNode input = JsonValue.Create(text);
+        JqValue input = NativeFixtures.Create(text);
         var memory = new BenchmarkMemoryBudget(80 * 1024);
         var counted = new CountingMemoryBudget(memory);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
             Assert.Equal(new string('0', 32767) + ending, Transform(new JqRuntime(budget), operation, input));
-            Assert.Equal(2 * (32767 + ending.Length), memory.PeakBytes);
+            Assert.Equal(80 + 32767 + ending.Length, memory.PeakBytes);
             Assert.Equal(1, counted.Counts.Reservations + counted.Counts.Resizes);
-            Assert.Equal(text, JqRuntime.String(input));
+            Assert.Equal(text, input.GetValue<string>());
         }
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -52,7 +55,7 @@ public sealed partial class JqTests
     [InlineData("uri", ' ')]
     public void Jq_TransformsCancelAfterAdmissionBeforeAllocatingOutput(string operation, char ch)
     {
-        JsonNode input = JsonValue.Create(new string(ch, 131072));
+        JqValue input = NativeFixtures.Create(new string(ch, 131072));
         var memory = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var callback = new AdmissionCallbackBudget(memory, cancellation.Cancel);
@@ -73,7 +76,7 @@ public sealed partial class JqTests
     [InlineData("uri", ' ')]
     public void Jq_TransformsRefuseActualOutputBeforeAllocation(string operation, char ch)
     {
-        JsonNode input = JsonValue.Create(new string(ch, 131072));
+        JqValue input = NativeFixtures.Create(new string(ch, 131072));
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
@@ -93,7 +96,7 @@ public sealed partial class JqTests
     {
         string text = new string('x', prefix) + "🚀\uD800\0";
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
-        Assert.Equal(new string('x', prefix) + "%F0%9F%9A%80%EF%BF%BD%00", new JqRuntime(budget).Format("uri", JsonValue.Create(text)));
+        Assert.Equal(new string('x', prefix) + "%F0%9F%9A%80%EF%BF%BD%00", new JqRuntime(budget).FormatValue("uri", NativeFixtures.Create(text)).GetValue<string>());
     }
 
     [Theory]
@@ -152,6 +155,6 @@ public sealed partial class JqTests
         Assert.Equal(0, memory.ReservedBytes);
     }
 
-    private static string Transform(JqRuntime runtime, string operation, JsonNode input) =>
-        operation.StartsWith("ascii_", StringComparison.Ordinal) ? runtime.AsciiCase(input, operation == "ascii_downcase") : runtime.Format(operation, input);
+    private static string Transform(JqRuntime runtime, string operation, JqValue input) =>
+        operation.StartsWith("ascii_", StringComparison.Ordinal) ? runtime.AsciiCase(input, operation == "ascii_downcase").GetValue<string>() : runtime.FormatValue(operation, input).GetValue<string>();
 }

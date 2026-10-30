@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -15,14 +14,14 @@ public sealed partial class JqTests
     public void Jq_OperandPreviewUsesBoundedStorage(string kind)
     {
         string large = new('x', 100000);
-        JsonNode value = kind switch
+        JqValue value = kind switch
         {
-            "array" => new JsonArray(large),
-            "key" => new JsonObject { [large] = 1 },
-            "suffix" => new JsonObject { ["a"] = new string('p', 32), ["z"] = large },
-            "unicode" => JsonValue.Create(new string('\u20ac', 100000)),
-            "escape" => JsonValue.Create(new string('\n', 100000)),
-            _ => JsonValue.Create(large)
+            "array" => new JqArray(NativeFixtures.Create(large)),
+            "key" => new JqObject(NativeFixtures.Budget()) { [large] = 1 },
+            "suffix" => new JqObject(NativeFixtures.Budget()) { ["a"] = NativeFixtures.Create(new string('p', 32)), ["z"] = NativeFixtures.Create(large )},
+            "unicode" => NativeFixtures.Create(new string('\u20ac', 100000)),
+            "escape" => NativeFixtures.Create(new string('\n', 100000)),
+            _ => NativeFixtures.Create(large)
         };
         string expected = kind switch
         {
@@ -51,7 +50,7 @@ public sealed partial class JqTests
     public void Jq_OperandPreviewKeepsCompleteShortValues(string json, string expected)
     {
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
-        Assert.Equal(expected, new JqRuntime(budget).TruncatedDump(JsonNode.Parse(json)));
+        Assert.Equal(expected, new JqRuntime(budget).TruncatedDump(NativeFixtures.Parse(json)));
     }
 
     [Theory]
@@ -78,7 +77,7 @@ public sealed partial class JqTests
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
         if (!duringAdmission) cancellation.Cancel();
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
-            Assert.Throws<OperationCanceledException>(() => new JqRuntime(budget).TruncatedDump(new JsonArray(1)));
+            Assert.Throws<OperationCanceledException>(() => new JqRuntime(budget).TruncatedDump(new JqArray(1)));
         Assert.Equal(0, root.ReservedBytes);
     }
 
@@ -87,7 +86,7 @@ public sealed partial class JqTests
     {
         var root = new BenchmarkMemoryBudget(0);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
-            Assert.True(Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).TruncatedDump(JsonValue.Create("x"))).IsMemoryAdmission);
+            Assert.True(Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).TruncatedDump(NativeFixtures.Create("x"))).IsMemoryAdmission);
         Assert.Equal(0, root.ReservedBytes);
     }
 }

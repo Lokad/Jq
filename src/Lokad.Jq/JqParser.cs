@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
@@ -48,7 +47,7 @@ internal sealed class JqParser(
 
     // Validate metadata/imports before dependency loading; retain the position
     // where parsing resumes with the linked environment.
-    internal (JsonObject? Metadata, IReadOnlyList<JqModuleImport> Imports, int BodyIndex) ParsePrefix()
+    internal (JqObject? Metadata, IReadOnlyList<JqModuleImport> Imports, int BodyIndex) ParsePrefix()
     {
         _budget.CheckCancellation();
         if (Peek() is { Kind: TokenKind.Identifier, Text: "module" or "import" or "include" })
@@ -59,7 +58,7 @@ internal sealed class JqParser(
     }
 
     // Inspect library syntax without resolving dependencies or callable names.
-    internal (JsonObject? Metadata, IReadOnlyList<JqModuleImport> Imports, IReadOnlyList<JqFunctionDefinition> Definitions) InspectLibrary()
+    internal (JqObject? Metadata, IReadOnlyList<JqModuleImport> Imports, IReadOnlyList<JqFunctionDefinition> Definitions) InspectLibrary()
     {
         _inspectLibrary = true;
         var (metadata, imports, bodyIndex) = ParsePrefix();
@@ -103,16 +102,16 @@ internal sealed class JqParser(
         return definitions;
     }
 
-    private JsonObject? ParseModuleHeader()
+    private JqObject? ParseModuleHeader()
     {
         if (!MatchIdentifier("module"))
             return null;
         var metaSpan = Peek().Span;
         JqFilter metadata = ParseQuery();
         Expect(";");
-        if (!TryGetConstant(metadata, out JsonNode? value))
+        if (!TryGetConstant(metadata, out JqValue? value))
             throw Error("Module metadata must be constant", metaSpan);
-        if (value is not JsonObject obj)
+        if (value is not JqObject obj)
             throw Error("Module metadata must be an object", metaSpan);
         return obj;
     }
@@ -154,21 +153,21 @@ internal sealed class JqParser(
                 alias = aliasToken.Text;
             }
         }
-        JsonObject? metadata = null;
+        JqObject? metadata = null;
         if (Match(";"))
             return new JqModuleImport(relPath, alias, isData, metadata);
         var metaSpan = Peek().Span;
         JqFilter metaFilter = ParseQuery();
         Expect(";");
-        if (!TryGetConstant(metaFilter, out JsonNode? metaValue))
+        if (!TryGetConstant(metaFilter, out JqValue? metaValue))
             throw Error("Module metadata must be constant", metaSpan);
-        if (metaValue is not JsonObject metaObj)
+        if (metaValue is not JqObject metaObj)
             throw Error("Module metadata must be an object", metaSpan);
         metadata = metaObj;
         return new JqModuleImport(relPath, alias, isData, metadata);
     }
 
-    private bool TryGetConstant(JqFilter filter, out JsonNode? value)
+    private bool TryGetConstant(JqFilter filter, out JqValue? value)
     {
         // Build each private constant once. A shared pending stack flattens
         // comma generators without sizing every nested array to the program.
@@ -178,7 +177,7 @@ internal sealed class JqParser(
         int stackCapacity = 0;
         return Build(filter, 0, out value);
 
-        bool Build(JqFilter node, int depth, out JsonNode? built)
+        bool Build(JqFilter node, int depth, out JqValue? built)
         {
             _budget.CheckCancellation();
             built = null;
@@ -191,7 +190,7 @@ internal sealed class JqParser(
             {
                 JqRecursion.CheckDepth(depth + 1, "value nesting limit exceeded");
                 _budget.ReserveBytes(64);
-                var result = new JsonArray();
+                var result = new JqArray();
                 int boundary = pending.Count;
                 Push(array.Item);
                 while (pending.Count > boundary)
@@ -204,7 +203,7 @@ internal sealed class JqParser(
                         Push(comma.Left);
                         continue;
                     }
-                    if (!Build(current, depth + 1, out JsonNode? child)) return false;
+                    if (!Build(current, depth + 1, out JqValue? child)) return false;
                     _budget.ReserveArrayItem(child);
                     result.Add(child);
                 }
@@ -215,12 +214,12 @@ internal sealed class JqParser(
             {
                 JqRecursion.CheckDepth(depth + 1, "value nesting limit exceeded");
                 _budget.ReserveBytes(64);
-                var result = new JsonObject();
+                var result = new JqObject(_budget);
                 foreach (ObjectProperty property in obj.Properties)
                 {
                     _budget.CheckCancellation();
                     if (property.StaticKey is null || property.KeyFilter is not null
-                        || !Build(property.Value, depth + 1, out JsonNode? child)) return false;
+                        || !Build(property.Value, depth + 1, out JqValue? child)) return false;
                     _budget.ReserveObjectItem(child);
                     result[property.StaticKey] = child;
                 }
@@ -648,8 +647,8 @@ internal sealed class JqParser(
         {
             var name = Expect(TokenKind.Identifier);
             if (Match(":"))
-                return new ObjectPatternProperty(new LiteralFilter(JsonValue.Create(name.Text)), new AliasPattern(name.Text, ParsePattern()));
-            return new ObjectPatternProperty(new LiteralFilter(JsonValue.Create(name.Text)), new VariablePattern(name.Text));
+                return new ObjectPatternProperty(new LiteralFilter(JqScalar.Create(name.Text, _budget)), new AliasPattern(name.Text, ParsePattern()));
+            return new ObjectPatternProperty(new LiteralFilter(JqScalar.Create(name.Text, _budget)), new VariablePattern(name.Text));
         }
         JqFilter key;
         if (Peek() is { Kind: TokenKind.Symbol, Text: "(" })
@@ -691,9 +690,9 @@ internal sealed class JqParser(
         // literals evaluate like computed keys and fail staged instead.
         if (key is not LiteralFilter literal)
             return;
-        if (literal.Value is JsonValue scalar && scalar.TryGetValue<string>(out _))
+        if (literal.Value is JqString)
             return;
-        if (literal.Value is JsonObject || literal.Value is JsonArray)
+        if (literal.Value is JqObject || literal.Value is JqArray)
             return;
         string text = new JqRuntime(_budget).ToJqString(literal.Value);
         throw Error($"Cannot use {JqRuntime.TypeName(literal.Value)} ({text}) as object key", span);
@@ -803,13 +802,13 @@ internal sealed class JqParser(
                 {
                     var name = Next().Text;
                     var optional = Match("?");
-                    filter = FieldFilter.Create(filter, name, optional);
+                    filter = FieldFilter.Create(filter, JqString.FromHost(name, _budget), optional);
                 }
                 else if (Peek().Kind == TokenKind.String)
                 {
                     var name = Lexer.DecodeLiterals(Next().Text, _budget);
                     var optional = Match("?");
-                    filter = FieldFilter.Create(filter, name, optional);
+                    filter = FieldFilter.Create(filter, JqString.FromHost(name, _budget), optional);
                 }
                 else if (Match("["))
                 {
@@ -885,9 +884,9 @@ internal sealed class JqParser(
                 return new RecursiveDescentFilter();
             var identity = new IdentityFilter();
             if (Peek().Kind == TokenKind.FieldName)
-            return FieldFilter.Create(identity, Lexer.DecodeLiterals(Next().Text, _budget), Match("?"));
+            return FieldFilter.Create(identity, JqString.FromHost(Lexer.DecodeLiterals(Next().Text, _budget), _budget), Match("?"));
             if (Peek().Kind == TokenKind.String)
-                return FieldFilter.Create(identity, Lexer.DecodeLiterals(Next().Text, _budget), Match("?"));
+                return FieldFilter.Create(identity, JqString.FromHost(Lexer.DecodeLiterals(Next().Text, _budget), _budget), Match("?"));
             if (Match("["))
                 return ParseBracket(identity);
             return identity;
@@ -916,7 +915,7 @@ internal sealed class JqParser(
         if (Match("["))
         {
             if (Match("]"))
-                return new LiteralFilter(new JsonArray());
+                return new LiteralFilter(new JqArray());
             var item = ParseQuery();
             Expect("]");
             return new ArrayFilter(item);
@@ -983,18 +982,18 @@ internal sealed class JqParser(
             // zero stays a double so it renders with its sign.
             if (long.TryParse(token.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long whole)
                 && (whole != 0 || !token.Text.StartsWith("-", StringComparison.Ordinal)))
-                return new LiteralFilter(JsonValue.Create(whole));
+                return new LiteralFilter(JqScalar.Create(whole));
             if (!double.TryParse(token.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
                 throw Error($"invalid number {token.Text}", token.Span);
-            return new LiteralFilter(JsonValue.Create(value));
+            return new LiteralFilter(JqScalar.Create(value));
         }
         if (token.Kind == TokenKind.String)
             return StringFilterFor(token, null);
         if (token.Kind == TokenKind.Identifier)
         {
             if (token.Text == "null") return new LiteralFilter(null);
-            if (token.Text == "true") return new LiteralFilter(JsonValue.Create(true));
-            if (token.Text == "false") return new LiteralFilter(JsonValue.Create(false));
+            if (token.Text == "true") return new LiteralFilter(JqScalar.Create(true));
+            if (token.Text == "false") return new LiteralFilter(JqScalar.Create(false));
             if (Match("("))
                 return ParseFunction(token.Text, token.Span);
             return CreateFunction(token.Text, [], token.Span);
@@ -1006,7 +1005,7 @@ internal sealed class JqParser(
     {
         var properties = new List<ObjectProperty>();
         if (Match("}"))
-            return new LiteralFilter(new JsonObject());
+            return new LiteralFilter(new JqObject(_budget));
         do
         {
             if (Peek() is { Kind: TokenKind.Symbol, Text: "$" })
@@ -1028,7 +1027,7 @@ internal sealed class JqParser(
                 if (Match(":"))
                     properties.Add(new ObjectProperty(null, valueFilter, ParseDictValue()));
                 else
-                    properties.Add(new ObjectProperty(name.Text == "__loc__" ? "__loc__" : name.Text, null, valueFilter));
+                    properties.Add(new ObjectProperty(JqString.FromHost(name.Text == "__loc__" ? "__loc__" : name.Text, _budget), null, valueFilter));
             }
             else if (Peek() is { Kind: TokenKind.Symbol, Text: "(" })
             {
@@ -1051,7 +1050,7 @@ internal sealed class JqParser(
                     bool isDynamic = KeyFilterForIsDynamic(keyToken);
                     properties.Add(isDynamic
                         ? new ObjectProperty(null, StringFilterFor(keyToken, null), ParseDictValue())
-                        : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text, _budget), null, ParseDictValue()));
+                        : new ObjectProperty(JqString.FromHost(Lexer.DecodeLiterals(keyToken.Text, _budget), _budget), null, ParseDictValue()));
                 }
                 else if (keyToken.Kind == TokenKind.String)
                 {
@@ -1060,11 +1059,11 @@ internal sealed class JqParser(
                     bool interpolated = KeyFilterForIsDynamic(keyToken);
                     properties.Add(interpolated
                         ? new ObjectProperty(null, StringFilterFor(keyToken, null), IndexFilter.Create(new IdentityFilter(), StringFilterFor(keyToken, null), false))
-                        : new ObjectProperty(Lexer.DecodeLiterals(keyToken.Text, _budget), null, FieldFilter.Create(new IdentityFilter(), Lexer.DecodeLiterals(keyToken.Text, _budget), true)));
+                        : new ObjectProperty(JqString.FromHost(Lexer.DecodeLiterals(keyToken.Text, _budget), _budget), null, FieldFilter.Create(new IdentityFilter(), JqString.FromHost(Lexer.DecodeLiterals(keyToken.Text, _budget), _budget), true)));
                 }
                 else
                 {
-                    properties.Add(new ObjectProperty(keyToken.Text, null, FieldFilter.Create(new IdentityFilter(), keyToken.Text, true)));
+                    properties.Add(new ObjectProperty(JqString.FromHost(keyToken.Text, _budget), null, FieldFilter.Create(new IdentityFilter(), JqString.FromHost(keyToken.Text, _budget), true)));
                 }
             }
         } while (Match(","));
@@ -1074,7 +1073,7 @@ internal sealed class JqParser(
 
     private JqFilter StringFilterFor(Token token, string? format) => Lexer.ContainsInterpolation(token.Text)
         ? new InterpolatedStringFilter(token.Text, format, token.Span, _programSource, ParseInterpolationPiece, _budget)
-        : new LiteralFilter(JsonValue.Create(Lexer.DecodeLiterals(token.Text, _budget)));
+        : new LiteralFilter(JqScalar.Create(Lexer.DecodeLiterals(token.Text, _budget), _budget));
 
     private static bool KeyFilterForIsDynamic(Token token) => token.Kind == TokenKind.String && Lexer.ContainsInterpolation(token.Text);
 
@@ -1266,7 +1265,7 @@ internal sealed class JqParser(
 
         if (name == "first" && args.Count == 0)
         {
-            return IndexFilter.Create(new IdentityFilter(), new LiteralFilter(JsonValue.Create(0)), false);
+            return IndexFilter.Create(new IdentityFilter(), new LiteralFilter(JqScalar.Create(0)), false);
         }
 
         if (name == "first")
@@ -1276,7 +1275,7 @@ internal sealed class JqParser(
 
         if (name == "last" && args.Count == 0)
         {
-            return IndexFilter.Create(new IdentityFilter(), new LiteralFilter(JsonValue.Create(-1)), false);
+            return IndexFilter.Create(new IdentityFilter(), new LiteralFilter(JqScalar.Create(-1)), false);
         }
 
         if (name == "last")

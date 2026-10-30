@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -33,12 +32,12 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_DeletionRefusesBeforeBuildingDeepAncestorState()
     {
-        JsonNode value = new JsonArray((JsonNode?)null);
-        for (int index = 1; index < 5000; index++) value = new JsonArray(value);
+        JqValue value = new JqArray((JqValue?)null);
+        for (int index = 1; index < 5000; index++) value = new JqArray(value);
         IReadOnlyList<JqValueSegment> path = Enumerable.Range(0, 5000).Select(_ => (JqValueSegment)new IndexSegment(0, false)).ToArray();
         var root = new BenchmarkMemoryBudget(0);
         var counted = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
         {
             long before = GC.GetAllocatedBytesForCurrentThread();
             Assert.True(Assert.Throws<JqQuotaException>(() => JqPathDeletes.DeletePaths(value, new[] { path }, context)).IsMemoryAdmission);
@@ -54,8 +53,8 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
-            Assert.ThrowsAny<OperationCanceledException>(() => JqPathDeletes.DeletePaths(new JsonArray(0, 1),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
+            Assert.ThrowsAny<OperationCanceledException>(() => JqPathDeletes.DeletePaths(new JqArray(0, 1),
                 new IReadOnlyList<JqValueSegment>[] { new JqValueSegment[] { new IndexSegment(0, false) }, new JqValueSegment[] { new IndexSegment(1, false) } }, context));
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -111,13 +110,13 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_PathParsingBorrowsIgnoredSliceFieldsWithoutTraversal()
     {
-        var payload = new JsonArray();
+        var payload = new JqArray();
         for (int index = 0; index < 100000; index++) payload.Add(index);
-        var slice = new JsonObject { ["start"] = 0, ["end"] = 1, ["unused"] = payload };
+        var slice = new JqObject(NativeFixtures.Budget()) { ["start"] = 0, ["end"] = 1, ["unused"] = payload };
         var root = new BenchmarkMemoryBudget(128);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            var paths = JqPaths.ParsePathValue(new JsonArray(slice), context);
+            var paths = JqPaths.ParsePathValue(new JqArray(slice), context);
             Assert.Same(slice, Assert.IsType<SliceObjectSegment>(Assert.Single(paths)).Raw);
             Assert.Equal(64, root.ReservedBytes);
         }

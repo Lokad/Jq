@@ -1,7 +1,6 @@
 using Lokad.Jq.Benchmarking;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -11,7 +10,7 @@ public sealed partial class JqTests
     public async Task Jq_LongObjectComparisonStreamReusesBoundedAllowance()
     {
         var obj = WideObject(128);
-        string record = new JsonObject { ["left"] = obj, ["right"] = obj.DeepClone() }.ToJsonString() + "\n";
+        string record = new JqObject(NativeFixtures.Budget()) { ["left"] = obj, ["right"] = obj.DeepClone() }.ToJsonString() + "\n";
         const int count = 300;
         var root = new BenchmarkMemoryBudget(128 * 1024);
         var host = new MockFileSystem();
@@ -33,7 +32,7 @@ public sealed partial class JqTests
         const long limit = 8 * 1024 * 1024;
         var root = new BenchmarkMemoryBudget(limit);
         var obj = WideObject(1000);
-        var input = new JsonObject { ["left"] = new JsonArray(obj, obj.DeepClone()), ["right"] = new JsonArray(obj.DeepClone(), obj.DeepClone()) };
+        var input = new JqObject(NativeFixtures.Budget()) { ["left"] = new JqArray(obj, obj.DeepClone()), ["right"] = new JqArray(obj.DeepClone(), obj.DeepClone()) };
         var host = new MockFileSystem();
         host.AddFile("/input", input.ToJsonString());
         host.AddFile("/later", "0");
@@ -102,9 +101,9 @@ public sealed partial class JqTests
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
         using (var comparer = new JqComparer(budget))
         {
-            JsonNode?[] source = [WideObject(16), WideObject(16)];
+            JqValue?[] source = [WideObject(16), WideObject(16)];
             var exception = Record.Exception(() => JqComparer.OrderBy(source,
-                static node => node, (IComparer<JsonNode?>)comparer).ToArray());
+                static node => node, (IComparer<JqValue?>)comparer).ToArray());
             switch (failure)
             {
                 case "refusal": Assert.True(Assert.IsType<JqQuotaException>(exception).IsMemoryAdmission); break;
@@ -141,17 +140,17 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
         var runtime = new JqRuntime(budget);
-        var array = new JsonArray(1, 2, 3);
+        var array = new JqArray(1, 2, 3);
         cancellation.Cancel();
         Assert.Throws<OperationCanceledException>(() => runtime.Compare(array, array));
-        Assert.Throws<OperationCanceledException>(() => runtime.Compare(JsonValue.Create("abc"), JsonValue.Create("abc")));
+        Assert.Throws<OperationCanceledException>(() => runtime.Compare(NativeFixtures.Create("abc"), NativeFixtures.Create("abc")));
         Assert.Throws<OperationCanceledException>(() => runtime.MinMax(array, false));
         Assert.Throws<OperationCanceledException>(() => JqComparer.CompareStrings("abc", "abc", cancellation.Token));
     }
 
-    private static JsonObject WideObject(int count)
+    private static JqObject WideObject(int count)
     {
-        var obj = new JsonObject();
+        var obj = new JqObject(NativeFixtures.Budget());
         for (int index = 0; index < count; index++) obj["k" + index.ToString("D5", CultureInfo.InvariantCulture)] = index;
         return obj;
     }

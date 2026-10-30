@@ -1,16 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json.Nodes;
 using System.Runtime.CompilerServices;
 using Lokad.Jq.Helpers;
 
 namespace Lokad.Jq;
 
 internal sealed class JqContext(
-    IReadOnlyDictionary<string, JsonNode?> variables,
+    IReadOnlyDictionary<string, JqValue?> variables,
     JqBudget budget) : IDisposable
 {
-    public IReadOnlyDictionary<string, JsonNode?> Variables { get; } = variables;
+    public IReadOnlyDictionary<string, JqValue?> Variables { get; } = variables;
     public JqEnvironment RootEnvironment { get; } = JqEnvironment.CreateRoot(variables);
     public JqBudget Budget { get; } = budget;
     public JqRuntime Runtime { get; } = new(budget);
@@ -59,7 +58,7 @@ internal sealed class JqContext(
             await EmitStderrAsync(ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
             return;
         }
-        JqJsonBuffer buffer = Budget.RentSerializationBuffer();
+        JqJsonBuffer buffer = Budget.RentUtf8Buffer();
         IDisposable owner;
         try
         {

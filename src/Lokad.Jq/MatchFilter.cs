@@ -1,27 +1,26 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
 internal sealed class MatchFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         if (args.Count == 1)
         {
-            await foreach (JsonNode? value in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? value in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
             {
-                JqMatch.SplitArgument(context, value, out JsonNode? pattern, out JsonNode? modifiers);
-                foreach (JsonNode match in JqMatch.Search(context, input, pattern, modifiers))
+                JqMatch.SplitArgument(context, value, out JqValue? pattern, out JqValue? modifiers);
+                foreach (JqValue match in JqMatch.Search(context, input, pattern, modifiers))
                     yield return match;
             }
             yield break;
         }
         // jq evaluates the flags stream before the pattern stream.
-        await foreach (JsonNode? flags in args[1].Evaluate(input, context, environment).ConfigureAwait(false))
-            await foreach (JsonNode? pattern in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
-                foreach (JsonNode match in JqMatch.Search(context, input, pattern, flags))
+        await foreach (JqValue? flags in args[1].Evaluate(input, context, environment).ConfigureAwait(false))
+            await foreach (JqValue? pattern in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
+                foreach (JqValue match in JqMatch.Search(context, input, pattern, flags))
                     yield return match;
     }
 }
@@ -29,26 +28,26 @@ internal sealed class MatchFilter(IReadOnlyList<JqFilter> args) : JqFilter
 // _match_impl(regex; modifiers; testmode): upstream test flag is exact-true for boolean path, otherwise array path.
 internal sealed class MatchImplFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
-        await foreach (JsonNode? testmode in args[2].Evaluate(input, context, environment).ConfigureAwait(false))
-        await foreach (JsonNode? modifiers in args[1].Evaluate(input, context, environment).ConfigureAwait(false))
-        await foreach (JsonNode? pattern in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? testmode in args[2].Evaluate(input, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? modifiers in args[1].Evaluate(input, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? pattern in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
         {
-            bool isTest = testmode is JsonValue testValue && testValue.TryGetValue<bool>(out bool flag) && flag;
+            bool isTest = testmode is JqScalar testValue && testValue.TryGetValue<bool>(out bool flag) && flag;
             if (isTest)
             {
-                yield return JsonValue.Create(JqMatch.Test(context, input, pattern, modifiers));
+                yield return JqScalar.Create(JqMatch.Test(context, input, pattern, modifiers));
             }
             else
             {
-                List<JsonNode> matches = JqMatch.Search(context, input, pattern, modifiers);
+                List<JqValue> matches = JqMatch.Search(context, input, pattern, modifiers);
                 context.Budget.ReserveMetadata(64 + 24L * matches.Count, 1);
-                var array = new JsonArray();
+                var array = new JqArray();
                 context.Budget.CheckCancellation();
-                foreach (JsonNode match in matches)
+                foreach (JqValue match in matches)
                 {
                     context.Budget.CheckCancellation();
                     array.Add(match);

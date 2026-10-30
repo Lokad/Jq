@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -8,14 +7,14 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_AddExtendsItsPrivateObjectWithoutCopyingHistory()
     {
-        var fragments = new JsonArray();
+        var fragments = new JqArray();
         for (int index = 0; index < 1024; index++)
-            fragments.Add(new JsonObject { ["k" + index] = index });
+            fragments.Add(new JqObject(NativeFixtures.Budget()) { ["k" + index] = index });
         var root = new BenchmarkMemoryBudget(256 * 1024);
         var counted = new CountingMemoryBudget(root);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
-            var result = Assert.IsType<JsonObject>(await new JqRuntime(budget).AddValues(fragments.ToAsyncEnumerable()));
+            var result = Assert.IsType<JqObject>(await new JqRuntime(budget).AddValues(fragments.ToAsyncEnumerable()));
             Assert.Equal(1024, result.Count);
             for (int index = 0; index < result.Count; index++)
             {
@@ -33,15 +32,15 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_AddBuildsStringsWithoutRepeatedPrefixesAndBorrowsSingleValues()
     {
-        JsonNode text = JsonValue.Create("x");
-        JsonNode obj = new JsonObject { ["a"] = 1 };
+        JqValue text = NativeFixtures.Create("x");
+        JqValue obj = new JqObject(NativeFixtures.Budget()) { ["a"] = 1 };
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
-            Assert.Same(text, await runtime.AddValues((new JsonNode?[] { null, text, null }).ToAsyncEnumerable()));
-            Assert.Same(obj, await runtime.AddValues((new JsonNode?[] { obj, null }).ToAsyncEnumerable()));
-            JsonNode? result = await runtime.AddValues(Enumerable.Repeat<JsonNode?>(text, 10000).ToAsyncEnumerable());
+            Assert.Same(text, await runtime.AddValues((new JqValue?[] { null, text, null }).ToAsyncEnumerable()));
+            Assert.Same(obj, await runtime.AddValues((new JqValue?[] { obj, null }).ToAsyncEnumerable()));
+            JqValue? result = await runtime.AddValues(Enumerable.Repeat<JqValue?>(text, 10000).ToAsyncEnumerable());
             Assert.Equal(new string('x', 10000), result?.GetValue<string>());
         }
         Assert.Equal(0, root.ReservedBytes);
@@ -71,7 +70,7 @@ public sealed partial class JqTests
     [InlineData(true, true)]
     public async Task Jq_AddObjectStringGrowthPreflightsAndCancels(bool strings, bool cancel)
     {
-        JsonNode fragment = strings ? JsonValue.Create("xxxxxxxxxxxxxxxx") : new JsonObject { ["a"] = 1 };
+        JqValue fragment = strings ? NativeFixtures.Create("xxxxxxxxxxxxxxxx") : new JqObject(NativeFixtures.Budget()) { ["a"] = 1 };
         var root = new BenchmarkMemoryBudget(1024);
         using var cancellation = new CancellationTokenSource();
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token))
@@ -83,7 +82,7 @@ public sealed partial class JqTests
         }
         Assert.Equal(0, root.ReservedBytes);
 
-        IEnumerable<JsonNode?> Generate()
+        IEnumerable<JqValue?> Generate()
         {
             for (int index = 0; index < 100; index++)
             {
@@ -113,14 +112,14 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_AddPrivateObjectChecksCopiedValueDepth()
     {
-        JsonNode deep = JsonValue.Create(0);
-        for (int depth = 0; depth < 64; depth++) deep = new JsonArray(deep);
-        var source = new JsonObject { ["a"] = deep };
+        JqValue deep = NativeFixtures.Create(0);
+        for (int depth = 0; depth < 64; depth++) deep = new JqArray(deep);
+        var source = new JqObject(NativeFixtures.Budget()) { ["a"] = deep };
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var error = await Assert.ThrowsAsync<JqQuotaException>(async () => await new JqRuntime(budget).AddValues(
-(new JsonNode?[] { new JsonObject(), new JsonObject(), source }).ToAsyncEnumerable()));
+(new JqValue?[] { new JqObject(NativeFixtures.Budget()), new JqObject(NativeFixtures.Budget()), source }).ToAsyncEnumerable()));
             Assert.False(error.IsMemoryAdmission);
             Assert.Equal("value nesting limit exceeded", error.Message);
             Assert.Same(deep, source["a"]);

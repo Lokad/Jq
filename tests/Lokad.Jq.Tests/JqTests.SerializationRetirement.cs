@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -101,8 +100,8 @@ public sealed partial class JqTests
             var runtime = new JqRuntime(budget);
             if (warm)
                 for (int index = 0; index < 32; index++)
-                    using (runtime.SerializeUtf8(JsonValue.Create(0), false, null, false)) { }
-            var input = new JsonArray();
+                    using (runtime.SerializeUtf8(NativeFixtures.Create(0), false, null, false)) { }
+            var input = new JqArray();
             for (int index = 0; index < 10000; index++) input.Add(index);
             using (var result = runtime.SerializeUtf8(input, false, null, false))
             {

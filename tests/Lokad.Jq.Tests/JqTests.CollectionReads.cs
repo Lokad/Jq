@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -48,7 +47,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_CollectionObjectReadsCancelBetweenValuesAndPreflightCopies()
     {
-        var source = new JsonObject { ["a"] = new JsonObject { ["key"] = "x", ["value"] = new string('x', 4096) } };
+        var source = new JqObject(NativeFixtures.Budget()) { ["a"] = new JqObject(NativeFixtures.Budget()) { ["key"] = NativeFixtures.Create("x"), ["value"] = NativeFixtures.Create(new string('x', 4096) )} };
         var root = new BenchmarkMemoryBudget(0);
         using var cancellation = new CancellationTokenSource();
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token))
@@ -57,8 +56,8 @@ public sealed partial class JqTests
             Assert.True(Assert.Throws<JqQuotaException>(() => runtime.FromEntries(source)).IsMemoryAdmission);
             cancellation.Cancel();
             Assert.Throws<OperationCanceledException>(() => runtime.FromEntries(source));
-            Assert.Throws<OperationCanceledException>(() => runtime.Join(source, JsonValue.Create(",")));
-            Assert.Throws<OperationCanceledException>(() => runtime.Join(new JsonObject(), JsonValue.Create(",")));
+            Assert.Throws<OperationCanceledException>(() => runtime.Join(source, NativeFixtures.Create(",")));
+            Assert.Throws<OperationCanceledException>(() => runtime.Join(new JqObject(NativeFixtures.Budget()), NativeFixtures.Create(",")));
         }
         Assert.Equal(4096, source["a"]?["value"]?.GetValue<string>().Length);
         Assert.Equal(0, root.ReservedBytes);

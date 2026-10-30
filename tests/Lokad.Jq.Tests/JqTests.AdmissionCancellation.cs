@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -19,9 +18,10 @@ public sealed partial class JqTests
     public void Jq_AdmissionCancellationStopsConstructionAfterSuccessfulAdmission(string operation)
     {
         const int length = 65536;
-        JsonNode text = JsonValue.Create(new string('x', length));
+        string hostText = new('x', length);
+        JqValue text = NativeFixtures.Create(hostText);
         var builder = operation == "finish" ? new StringBuilder(new string('x', length)) : new StringBuilder();
-        var points = new JsonArray();
+        var points = new JqArray();
         if (operation == "implode") for (int index = 0; index < length; index++) points.Add(65);
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var cancellation = new CancellationTokenSource();
@@ -41,12 +41,12 @@ public sealed partial class JqTests
                 switch (operation)
                 {
                     case "add": _ = runtime.Add(text, text); break;
-                    case "repeat-one": _ = runtime.Multiply(JsonValue.Create("x"), JsonValue.Create(length)); break;
-                    case "repeat-many": _ = runtime.Multiply(text, JsonValue.Create(2)); break;
-                    case "append": budget.Append(builder, text.GetValue<string>()); break;
+                    case "repeat-one": _ = runtime.Multiply(NativeFixtures.Create("x"), NativeFixtures.Create(length)); break;
+                    case "repeat-many": _ = runtime.Multiply(text, NativeFixtures.Create(2)); break;
+                    case "append": budget.Append(builder, hostText); break;
                     case "finish": _ = budget.Finish(builder); break;
                     case "implode": _ = runtime.Implode(points); break;
-                    case "parse-json": _ = runtime.ParseJson(text.GetValue<string>()); break;
+                    case "parse-json": _ = runtime.ParseJson(hostText); break;
                     case "metadata": budget.ReserveMetadata(2 * length, 1); break;
                     case "scope": scope.Reserve(2 * length, 1); break;
                     default: throw new InvalidOperationException("Unknown construction test.");
@@ -104,19 +104,18 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_AdmissionCancellationStopsBorrowedRegexSubjectEncoding()
+    public void Jq_AdmissionCancellationStopsHostStringEncoding()
     {
         string text = new('x', 65536);
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         using var cancellation = new CancellationTokenSource();
         var hooked = new AdmissionCallbackBudget(memory, cancellation.Cancel);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, hooked, cancellation.Token))
-        using (var regexes = new JqRegexCache(budget))
         {
             long before = GC.GetAllocatedBytesForCurrentThread();
-            Assert.Throws<OperationCanceledException>(() => regexes.EncodeSubject(text));
+            Assert.Throws<OperationCanceledException>(() => JqString.FromHost(text, budget));
             Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 32 * 1024);
-            Assert.Equal(0, memory.ReservedBytes);
+            Assert.Equal(80 + text.Length, memory.ReservedBytes);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -124,7 +123,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_AdmissionCancellationStopsObjectComparisonScratchAllocation()
     {
-        var input = new JsonObject();
+        var input = new JqObject(NativeFixtures.Budget());
         for (int index = 0; index < 8192; index++) input.Add("key" + index, 0);
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         using var cancellation = new CancellationTokenSource();
@@ -183,15 +182,23 @@ public sealed partial class JqTests
     {
         var memory = new BenchmarkMemoryBudget(16 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
+        bool armed = false;
         var hooked = new AdmissionCallbackBudget(memory, () =>
         {
-            if (memory.ReservedBytes >= 1024 * 1024) cancellation.Cancel();
+            if (armed && memory.ReservedBytes >= 1024 * 1024) cancellation.Cancel();
         });
         var host = new MockFileSystem();
+        long before = 0;
+        host.BeforeByteAppend = () =>
+        {
+            if (host.AppendCallCount != 0) return;
+            before = GC.GetAllocatedBytesForCurrentThread();
+            armed = true;
+        };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "--arg", "text", new string('x', 1024 * 1024),
             "\"ready\", (" + expression + ")")));
-        long before = GC.GetAllocatedBytesForCurrentThread();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command.ExecuteAsync(host, Utf8RegexAdapter.Instance, hooked, cancellation.Token));
+        Assert.True(armed);
         Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 256 * 1024);
         Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));

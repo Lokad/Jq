@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -33,8 +32,8 @@ public sealed partial class JqTests
     [InlineData("[{}]", "[{\"x\":null}]")]
     public void Jq_ContainmentObservesCancellationWithoutScalarComparisons(string input, string needle)
     {
-        JsonNode? container = JsonNode.Parse(input);
-        JsonNode? contained = JsonNode.Parse(needle);
+        JqValue? container = NativeFixtures.Parse(input);
+        JqValue? contained = NativeFixtures.Parse(needle);
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
         var runtime = new JqRuntime(budget);
@@ -45,14 +44,14 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_ContainmentDoesNotAllocatePerCandidate()
     {
-        var haystack = new JsonArray();
-        var needles = new JsonArray();
+        var haystack = new JqArray();
+        var needles = new JqArray();
         for (int index = 0; index < 1000; index++)
         {
-            haystack.Add(new JsonObject());
-            needles.Add(new JsonObject { ["x"] = new JsonObject() });
+            haystack.Add(new JqObject(NativeFixtures.Budget()));
+            needles.Add(new JqObject(NativeFixtures.Budget()) { ["x"] = new JqObject(NativeFixtures.Budget()) });
         }
-        haystack.Add(new JsonObject { ["x"] = new JsonObject() });
+        haystack.Add(new JqObject(NativeFixtures.Budget()) { ["x"] = new JqObject(NativeFixtures.Budget()) });
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         Assert.True(runtime.Contains(haystack, needles));

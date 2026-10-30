@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -10,13 +9,13 @@ public sealed partial class JqTests
     [InlineData(true)]
     public void Jq_SortingBorrowsItsSourceAndAdmitsOnlyNecessaryWorkspace(bool unique)
     {
-        var input = new JsonArray();
-        for (int index = 0; index < 10000; index++) input.Add((JsonNode?)null);
+        var input = new JqArray();
+        for (int index = 0; index < 10000; index++) input.Add((JqValue?)null);
         var root = new BenchmarkMemoryBudget(600 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
-            var output = Assert.IsType<JsonArray>(unique ? runtime.UniqueArray(input) : runtime.SortArray(input));
+            var output = Assert.IsType<JqArray>(unique ? runtime.UniqueArray(input) : runtime.SortArray(input));
             Assert.Equal(unique ? 1 : 10000, output.Count);
             Assert.All(output, Assert.Null);
             output[0] = 1;
@@ -28,14 +27,14 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_SortingPreservesStableNumericTiesAndTheirStorage()
     {
-        var input = new JsonArray(JsonValue.Create(-0.0), JsonValue.Create(0.0), JsonValue.Create(0L));
+        var input = new JqArray(NativeFixtures.Create(-0.0), NativeFixtures.Create(0.0), NativeFixtures.Create(0L));
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
-        JsonArray output = runtime.SortArray(input);
+        JqArray output = runtime.SortArray(input);
         Assert.Equal(BitConverter.DoubleToInt64Bits(-0.0), BitConverter.DoubleToInt64Bits(output[0]?.GetValue<double>() ?? 1));
         Assert.Equal(BitConverter.DoubleToInt64Bits(0.0), BitConverter.DoubleToInt64Bits(output[1]?.GetValue<double>() ?? 1));
         Assert.Equal(0L, output[2]?.GetValue<long>());
-        var unique = Assert.IsType<JsonArray>(runtime.UniqueArray(input));
+        var unique = Assert.IsType<JqArray>(runtime.UniqueArray(input));
         Assert.Single(unique);
         Assert.Equal(BitConverter.DoubleToInt64Bits(-0.0), BitConverter.DoubleToInt64Bits(unique[0]?.GetValue<double>() ?? 1));
     }
@@ -43,9 +42,9 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_UniqueKeepsEveryNanAndItsEstablishedOrdering()
     {
-        var input = new JsonArray(JsonValue.Create(double.NaN), null, JsonValue.Create(double.NaN), JsonValue.Create(false), JsonValue.Create(0));
+        var input = new JqArray(NativeFixtures.Create(double.NaN), null, NativeFixtures.Create(double.NaN), NativeFixtures.Create(false), NativeFixtures.Create(0));
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
-        var output = Assert.IsType<JsonArray>(new JqRuntime(budget).UniqueArray(input));
+        var output = Assert.IsType<JqArray>(new JqRuntime(budget).UniqueArray(input));
         Assert.Equal(5, output.Count);
         Assert.Null(output[0]);
         Assert.True(double.IsNaN(output[1]?.GetValue<double>() ?? 0));

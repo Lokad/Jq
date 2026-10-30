@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
@@ -21,12 +20,12 @@ internal sealed partial class JqRuntime
         private readonly List<Frame> _frames = new();
         private JsonReaderState _state = new(Options);
         private InputPrefix _prefix;
-        private JsonNode? _root;
+        private JqValue? _root;
         private JsonReaderState _propertyState;
         private bool _propertyConsumesComma;
         private PendingToken _pending;
 
-        private readonly record struct Frame(JsonNode Container, string? Key);
+        private readonly record struct Frame(JqValue Container, JqString? Key);
 
         internal int ContainerDepth => _frames.Count;
 
@@ -39,7 +38,7 @@ internal sealed partial class JqRuntime
             _pending = default;
         }
 
-        internal bool TryRead(ReadOnlySpan<byte> source, bool isFinal, out JsonNode? value, out int consumed)
+        internal bool TryRead(ReadOnlySpan<byte> source, bool isFinal, out JqValue? value, out int consumed)
         {
             value = null;
             consumed = 0;
@@ -54,7 +53,7 @@ internal sealed partial class JqRuntime
                 && (isFinal || end < source.Length))
             {
                 budget.ReserveValueNode();
-                value = JsonValue.Create(number);
+                value = JqScalar.Create(number);
                 consumed = end;
                 Reset();
                 return true;
@@ -71,7 +70,7 @@ internal sealed partial class JqRuntime
                     runtime.ReadToken(ref reader, source, ref consumedBase, _prefix,
                         propertyValue ? _propertyState : checkpointState,
                         propertyValue ? _propertyConsumesComma : previous == JsonTokenType.StartArray,
-                        out bool hasToken, out JsonNode? nonFinite);
+                        out bool hasToken, out JqValue? nonFinite);
                     if (!hasToken) break;
                     budget.CheckCancellation();
                     if (nonFinite is not null)
@@ -91,14 +90,14 @@ internal sealed partial class JqRuntime
                                     budget.CheckCancellation();
                                     _frames.Capacity = capacity;
                                 }
-                                JsonNode container = reader.TokenType == JsonTokenType.StartArray
-                                    ? new JsonArray() : new JsonObject();
+                                JqValue container = reader.TokenType == JsonTokenType.StartArray
+                                    ? new JqArray() : new JqObject(budget);
                                 Attach(container);
                                 _frames.Add(new Frame(container, null));
                                 break;
                             case JsonTokenType.PropertyName:
                                 Frame frame = _frames[^1];
-                                _frames[^1] = frame with { Key = runtime.ReadAdmittedString(ref reader) };
+                                _frames[^1] = frame with { Key = JqString.FromJson(ref reader, budget) };
                                 _propertyState = checkpointState;
                                 _propertyConsumesComma = previous == JsonTokenType.StartObject;
                                 break;
@@ -135,11 +134,11 @@ internal sealed partial class JqRuntime
             }
             throw new JqException("truncated JSON value");
 
-            void Attach(JsonNode? node)
+            void Attach(JqValue? node)
             {
                 if (_frames.Count == 0)
                     _root = node;
-                else if (_frames[^1].Container is JsonArray array)
+                else if (_frames[^1].Container is JqArray array)
                 {
                     budget.ReserveBytes(24);
                     array.Add(node);
@@ -147,7 +146,7 @@ internal sealed partial class JqRuntime
                 else
                 {
                     Frame frame = _frames[^1];
-                    if (frame.Container is not JsonObject obj || frame.Key is not string key)
+                    if (frame.Container is not JqObject obj || frame.Key is not JqString key)
                         throw new System.InvalidOperationException("Expected a JSON object property.");
                     budget.ReserveBytes(96);
                     obj[key] = node;

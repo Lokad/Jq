@@ -11,14 +11,14 @@ internal sealed class JqRegexCoordinates(ReadOnlyMemory<byte> subject, JqBudget 
     private Position _furthest;
     private int _asciiPrefix;
 
-    internal readonly record struct Position(int Byte, int Utf16, int Scalar);
+    internal readonly record struct Position(int Byte, int Scalar);
 
     internal Position At(int target)
     {
         budget.CheckCancellation();
         if ((uint)target > (uint)subject.Length)
             throw new JqHostFailureException("regex capture is outside its subject", null);
-        if (target <= _asciiPrefix) return new Position(target, target, target);
+        if (target <= _asciiPrefix) return new Position(target, target);
         Position position;
         if (target >= _furthest.Byte)
         {
@@ -35,7 +35,7 @@ internal sealed class JqRegexCoordinates(ReadOnlyMemory<byte> subject, JqBudget 
                 if (_checkpoints[middle].Byte <= target) low = middle + 1;
                 else high = middle;
             }
-            position = low == 0 ? new Position(_asciiPrefix, _asciiPrefix, _asciiPrefix) : _checkpoints[low - 1];
+            position = low == 0 ? new Position(_asciiPrefix, _asciiPrefix) : _checkpoints[low - 1];
             Advance(ref position, target, false);
         }
         return position;
@@ -53,7 +53,7 @@ internal sealed class JqRegexCoordinates(ReadOnlyMemory<byte> subject, JqBudget 
             int width = Width(first);
             if (position.Byte + width > target || (first & 0xc0) == 0x80)
                 throw new JqHostFailureException("regex capture splits a UTF-8 scalar", null);
-            position = new Position(position.Byte + width, position.Utf16 + (width == 4 ? 2 : 1), position.Scalar + 1);
+            position = new Position(position.Byte + width, position.Scalar + 1);
             if (extend)
             {
                 if (first < 128 && _asciiPrefix == position.Byte - 1) _asciiPrefix = position.Byte;
@@ -71,10 +71,10 @@ internal sealed class JqRegexCoordinates(ReadOnlyMemory<byte> subject, JqBudget 
         {
             int previous = _checkpoints.Capacity;
             int capacity = JqBudget.BufferCapacity((long)_checkpoints.Count + 1, Math.Max(4, 2L * previous));
-            _memory.Resize(64L + 12L * (previous + capacity));
+            _memory.Resize(64L + 8L * (previous + capacity));
             budget.CheckCancellation();
             _checkpoints.EnsureCapacity(capacity);
-            if (previous != 0) _memory.Resize(64L + 12L * capacity);
+            if (previous != 0) _memory.Resize(64L + 8L * capacity);
         }
         _checkpoints.Add(position);
     }

@@ -1,7 +1,6 @@
 using System;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Helpers;
 
 namespace Lokad.Jq;
@@ -18,9 +17,9 @@ internal sealed partial class JqRuntime
         private byte[] _rawBuffer = [];
         private readonly JqMemoryReservation _rawMemory = new(budget.MemoryBudget);
 
-        internal ReadOnlyMemory<byte> Render(JsonNode? node)
+        internal ReadOnlyMemory<byte> Render(JqValue? node)
         {
-            if (invocation.RawOutput && TryGetString(node, out var text))
+            if (invocation.RawOutput && node is JqString text)
                 return RenderRaw(text);
             JqJsonBuffer buffer = _buffer ??= new JqJsonBuffer(budget);
             Utf8JsonWriter writer = _writer ??= new Utf8JsonWriter(buffer,
@@ -50,19 +49,21 @@ internal sealed partial class JqRuntime
             return buffer.WrittenMemory;
         }
 
-        private ReadOnlyMemory<byte> RenderRaw(string text)
+        private ReadOnlyMemory<byte> RenderRaw(JqString text)
         {
-            if (invocation.RawOutput0 && text.Contains((char)0))
+            if (invocation.RawOutput0 && text.Utf8.Span.Contains((byte)0))
                 throw new JqException("Cannot dump a string containing NUL with --raw-output0 option");
             byte? terminator = invocation.RawOutput0 ? (byte)0 : invocation.JoinOutput ? null : (byte)'\n';
-            int length = JqBudget.BufferCapacity(Utf8Text.GetByteCount(text, budget.CancellationToken) + (terminator.HasValue ? 1 : 0), 0);
+            if (terminator is null) return text.Utf8;
+            int length = JqBudget.BufferCapacity((long)text.ByteLength + 1, 0);
             budget.CheckCancellation();
             if (_rawBuffer.Length < length)
             {
                 int capacity = JqBudget.BufferCapacity(length, 2L * _rawBuffer.Length);
                 _rawMemory.ReplaceBuffer(ref _rawBuffer, capacity, budget.CancellationToken);
             }
-            int written = Utf8Text.Encode(text, _rawBuffer);
+            text.Utf8.Span.CopyTo(_rawBuffer);
+            int written = text.ByteLength;
             if (terminator is byte ending)
                 _rawBuffer[written] = ending;
             return _rawBuffer.AsMemory(0, length);

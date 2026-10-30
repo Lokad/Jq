@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -29,10 +28,10 @@ public sealed partial class JqTests
     [InlineData("_unique_by_impl", 1)]
     public async Task Jq_PrecomputedKeysDoNotCopyPairInventories(string operation, int count)
     {
-        var source = new JsonArray();
-        for (int index = 0; index < 100000; index++) source.Add((JsonNode?)null);
+        var source = new JqArray();
+        for (int index = 0; index < 100000; index++) source.Add((JqValue?)null);
         var root = new BenchmarkMemoryBudget(6 * 1024 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             JqFilter filter = operation switch
             {
@@ -40,9 +39,9 @@ public sealed partial class JqTests
                 "_group_by_impl" => new GroupByImplFilter(new IdentityFilter()),
                 _ => new UniqueByImplFilter(new IdentityFilter())
             };
-            var output = Assert.IsType<JsonArray>(await filter.Evaluate(source, context, context.RootEnvironment).SingleAsync());
+            var output = Assert.IsType<JqArray>(await filter.Evaluate(source, context, context.RootEnvironment).SingleAsync());
             Assert.Equal(count, output.Count);
-            if (operation == "_group_by_impl") Assert.Equal(100000, Assert.IsType<JsonArray>(output[0]).Count);
+            if (operation == "_group_by_impl") Assert.Equal(100000, Assert.IsType<JqArray>(output[0]).Count);
             Assert.Equal(100000, source.Count);
         }
         Assert.Equal(0, root.ReservedBytes);
@@ -54,20 +53,19 @@ public sealed partial class JqTests
     [InlineData("_unique_by_impl")]
     public async Task Jq_PrecomputedKeysConstructIndependentOutputs(string operation)
     {
-        var source = new JsonArray(new JsonArray(2), new JsonArray(1));
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
+        var source = new JqArray(new JqArray(2), new JqArray(1));
+        using var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         JqFilter filter = operation switch
         {
             "_sort_by_impl" => new SortByImplFilter(new IdentityFilter()),
             "_group_by_impl" => new GroupByImplFilter(new IdentityFilter()),
             _ => new UniqueByImplFilter(new IdentityFilter())
         };
-        var output = Assert.IsType<JsonArray>(await filter.Evaluate(source, context, context.RootEnvironment).SingleAsync());
-        var first = Assert.IsType<JsonArray>(operation == "_group_by_impl" ? output[0]?[0] : output[0]);
+        var output = Assert.IsType<JqArray>(await filter.Evaluate(source, context, context.RootEnvironment).SingleAsync());
+        var first = Assert.IsType<JqArray>(operation == "_group_by_impl" ? output[0]?[0] : output[0]);
         Assert.NotSame(source[1], first);
         first[0] = 9;
         Assert.Equal(1, source[1]?[0]?.GetValue<int>());
-        Assert.Same(source, source[1]?.Parent);
     }
 
     [Theory]
@@ -76,12 +74,12 @@ public sealed partial class JqTests
     [InlineData("_unique_by_impl")]
     public async Task Jq_PrecomputedKeysPropagateCancellationFromSortComparison(string operation)
     {
-        var source = new JsonArray(new JsonObject { ["a"] = 2 }, new JsonObject { ["a"] = 1 });
+        var source = new JqArray(new JqObject(NativeFixtures.Budget()) { ["a"] = 2 }, new JqObject(NativeFixtures.Budget()) { ["a"] = 1 });
         var root = new BenchmarkMemoryBudget(64 * 1024);
         using var cancellation = new CancellationTokenSource();
         int admissions = 0;
         var memory = new AdmissionCallbackBudget(root, () => { if (++admissions == 2) cancellation.Cancel(); });
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
         {
             JqFilter filter = operation switch
             {

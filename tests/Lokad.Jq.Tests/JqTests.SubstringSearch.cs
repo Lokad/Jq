@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -31,17 +30,17 @@ public sealed partial class JqTests
     public void Jq_StringSearchLongNeedlesVerifyPrefixesAndConvertOffsets(int length)
     {
         string needle = new string('a', length / 2) + "b" + new string('a', length - length / 2 - 1);
-        var text = JsonValue.Create("🚀" + needle + "x" + needle + "!");
-        var key = JsonValue.Create(needle);
+        var text = NativeFixtures.Create("🚀" + needle + "x" + needle + "!");
+        var key = NativeFixtures.Create(needle);
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
-        var found = Assert.IsType<JsonArray>(runtime.Indices(text, key));
+        var found = Assert.IsType<JqArray>(runtime.Indices(text, key));
         Assert.Equal(2, found.Count);
         Assert.Equal(1, found[0]?.GetValue<int>());
         Assert.Equal(length + 2, found[1]?.GetValue<int>());
         Assert.Equal(1, runtime.Index(text, key, false)?.GetValue<int>());
         Assert.Equal(length + 2, runtime.Index(text, key, true)?.GetValue<int>());
-        var miss = JsonValue.Create(needle.Replace('b', 'c'));
+        var miss = NativeFixtures.Create(needle.Replace('b', 'c'));
         Assert.Null(runtime.Index(miss, key, false));
         Assert.Null(runtime.Index(miss, key, true));
     }
@@ -53,8 +52,8 @@ public sealed partial class JqTests
     {
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
-        var input = JsonValue.Create(new string('a', 262144));
-        var needle = JsonValue.Create(new string('a', 16384) + "b");
+        var input = NativeFixtures.Create(new string('a', 262144));
+        var needle = NativeFixtures.Create(new string('a', 16384) + "b");
         for (int i = 0; i < 100; i++) runtime.Index(input, needle, last);
         long before = GC.GetAllocatedBytesForCurrentThread();
         for (int i = 0; i < 100; i++)
@@ -69,13 +68,13 @@ public sealed partial class JqTests
     public void Jq_StringSearchLongNeedleMissKeepsTheWholePattern(int size, int length)
     {
         string fragment = new string('a', length / 4) + "b" + new string('a', length - length / 4 - 1);
-        var input = JsonValue.Create(new string('a', size));
-        var needle = JsonValue.Create(fragment);
+        var input = NativeFixtures.Create(new string('a', size));
+        var needle = NativeFixtures.Create(fragment);
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         Assert.Null(runtime.Index(input, needle, false));
         Assert.Null(runtime.Index(input, needle, true));
-        Assert.Empty(Assert.IsType<JsonArray>(runtime.Indices(input, needle)));
+        Assert.Empty(Assert.IsType<JqArray>(runtime.Indices(input, needle)));
     }
 
     [Fact]
@@ -85,8 +84,8 @@ public sealed partial class JqTests
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
-            var input = JsonValue.Create(fragment + "aaa");
-            var needle = JsonValue.Create(fragment);
+            var input = NativeFixtures.Create(fragment + "aaa");
+            var needle = NativeFixtures.Create(fragment);
             Assert.Equal("[0,1,2,3]", runtime.Indices(input, needle).ToJsonString());
             Assert.Equal(3, runtime.Index(input, needle, true)?.GetValue<int>());
         }
@@ -97,8 +96,8 @@ public sealed partial class JqTests
         {
             var runtime = new JqRuntime(budget);
             Assert.ThrowsAny<OperationCanceledException>(() => runtime.Indices(
-                JsonValue.Create(fragment + "b" + new string('a', 262144)), JsonValue.Create(fragment)));
-            Assert.ThrowsAny<OperationCanceledException>(() => runtime.Index(JsonValue.Create(fragment), JsonValue.Create(fragment), true));
+                NativeFixtures.Create(fragment + "b" + new string('a', 262144)), NativeFixtures.Create(fragment)));
+            Assert.ThrowsAny<OperationCanceledException>(() => runtime.Index(NativeFixtures.Create(fragment), NativeFixtures.Create(fragment), true));
         }
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -113,8 +112,8 @@ public sealed partial class JqTests
         {
             var runtime = new JqRuntime(budget);
             Assert.ThrowsAny<OperationCanceledException>(() =>
-                runtime.Indices(JsonValue.Create(new string('a', 65536)), JsonValue.Create("aa")));
-            Assert.ThrowsAny<OperationCanceledException>(() => runtime.Index(JsonValue.Create("a"), JsonValue.Create("a"), true));
+                runtime.Indices(NativeFixtures.Create(new string('a', 65536)), NativeFixtures.Create("aa")));
+            Assert.ThrowsAny<OperationCanceledException>(() => runtime.Index(NativeFixtures.Create("a"), NativeFixtures.Create("a"), true));
         }
         Assert.Equal(0, root.ReservedBytes);
     }

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -10,11 +9,11 @@ public sealed partial class JqTests
     [InlineData(false)]
     public async Task Jq_DateCopiesAndCaughtFailuresAdmitBeforeConstruction(bool suffix)
     {
-        var variables = new Dictionary<string, JsonNode?>();
+        var variables = new Dictionary<string, JqValue?>();
         using var compiler = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
         var filter = new JqParser("try strptime(\"%Y-%m-%d\") catch length", JqProgramSource.Inline,
             compiler.RootEnvironment, compiler.Budget).Parse();
-        JsonValue input = JsonValue.Create(suffix ? "2024-01-02" + new string(' ', 100000) : new string('x', 100000));
+        JqScalar input = NativeFixtures.Create(suffix ? "2024-01-02" + new string(' ', 100000) : new string('x', 100000));
         var memory = new BenchmarkMemoryBudget(0);
         using (var context = new JqContext(variables, new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
@@ -22,7 +21,6 @@ public sealed partial class JqTests
             Assert.True(failure.IsMemoryAdmission);
         }
         Assert.Equal(0, memory.ReservedBytes);
-        Assert.Null(input.Parent);
     }
 
     [Theory]
@@ -63,11 +61,11 @@ public sealed partial class JqTests
         string format = shape switch { "literal" => text, "spaces" => "%n", _ => "%Z" };
         using var cancellation = new CancellationTokenSource();
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
         {
             cancellation.Cancel();
-            Assert.Throws<OperationCanceledException>(() => JqTime.Strptime(context, JsonValue.Create(text), JsonValue.Create(format)));
+            Assert.Throws<OperationCanceledException>(() => JqTime.Strptime(context, NativeFixtures.Create(text), NativeFixtures.Create(format)));
         }
         Assert.Equal(0, memory.ReservedBytes);
     }

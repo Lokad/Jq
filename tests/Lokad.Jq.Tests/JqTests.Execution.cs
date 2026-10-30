@@ -282,9 +282,9 @@ public sealed partial class JqTests
         var value = runtime.ReadJsonValue(input, out int consumed);
         Assert.Equal(input.Length, consumed);
         if (objectKey)
-            Assert.Equal(expected, Assert.Single(Assert.IsType<System.Text.Json.Nodes.JsonObject>(value)).Key);
+            Assert.Equal(expected, Assert.Single(Assert.IsType<JqObject>(value)).Key.GetValue<string>());
         else
-            Assert.Equal(expected, Assert.IsAssignableFrom<System.Text.Json.Nodes.JsonValue>(value).GetValue<string>());
+            Assert.Equal(expected, Assert.IsAssignableFrom<JqScalar>(value).GetValue<string>());
 
         Assert.InRange(memory.ReservedBytes, 2L * expected.Length, 1024);
         budget.Dispose();

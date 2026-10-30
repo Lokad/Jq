@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -13,7 +12,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
-            string diagnostic = new JqRuntime(budget).TruncatedDump(JsonValue.Create(new string('x', 10000)));
+            string diagnostic = new JqRuntime(budget).TruncatedDump(NativeFixtures.Create(new string('x', 10000)));
             Assert.Equal("\"" + new string('x', 24) + "...\"", diagnostic);
             Assert.InRange(memory.ReservedBytes, 2L * diagnostic.Length, 256);
         }
@@ -26,9 +25,9 @@ public sealed partial class JqTests
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
         Assert.Equal("\"" + new string('\u00e9', 12) + "...\"",
-            runtime.TruncatedDump(JsonValue.Create(new string('\u00e9', 14))));
+            runtime.TruncatedDump(NativeFixtures.Create(new string('\u00e9', 14))));
         Assert.Equal("\"\\ud83d\\ude80\\ud83d\\ude80...\"",
-            runtime.TruncatedDump(JsonValue.Create(string.Concat(Enumerable.Repeat("\U0001f680", 10)))));
+            runtime.TruncatedDump(NativeFixtures.Create(string.Concat(Enumerable.Repeat("\U0001f680", 10)))));
     }
 
     [Theory]
@@ -37,17 +36,16 @@ public sealed partial class JqTests
     public void Jq_RawPathDiagnosticsBorrowWhileMaterializedPathsRemainIndependent(bool slice)
     {
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
-        var items = new JsonArray(1, 2);
-        JsonNode raw = slice ? new JsonObject { ["start"] = items } : items;
-        var owner = new JsonObject { ["key"] = raw };
-        JqValueSegment segment = slice ? new SliceObjectSegment((JsonObject)raw) : new InvalidSegment(raw);
+        var items = new JqArray(1, 2);
+        JqValue raw = slice ? new JqObject(NativeFixtures.Budget()) { ["start"] = items } : items;
+        var owner = new JqObject(NativeFixtures.Budget()) { ["key"] = raw };
+        JqValueSegment segment = slice ? new SliceObjectSegment((JqObject)raw) : new InvalidSegment(raw);
         var runtime = new JqRuntime(budget);
 
         Assert.Equal(slice ? "{\"start\":[1,2]}" : "[1,2]",
-            runtime.Serialize(segment.ToJson(), false, null, false));
-        Assert.Same(owner, raw.Parent);
-        var materialized = Assert.IsType<JsonArray>(JqPaths.PathToJson([segment], budget));
-        var copiedItems = Assert.IsType<JsonArray>(slice ? materialized[0]?["start"] : materialized[0]);
+            runtime.Serialize(segment.ToJson(budget), false, null, false));
+        var materialized = Assert.IsType<JqArray>(JqPaths.PathToJson([segment], budget));
+        var copiedItems = Assert.IsType<JqArray>(slice ? materialized[0]?["start"] : materialized[0]);
         copiedItems[0] = 9;
         Assert.Equal(1, items[0]?.GetValue<int>());
     }
@@ -56,9 +54,9 @@ public sealed partial class JqTests
     public void Jq_SortedNonFiniteOutputBorrowsItsInputWithinSmallAdmission()
     {
         var memory = new BenchmarkMemoryBudget(16 * 1024);
-        var items = new JsonArray(double.NaN, double.PositiveInfinity, double.NegativeInfinity);
+        var items = new JqArray(double.NaN, double.PositiveInfinity, double.NegativeInfinity);
         for (int index = 3; index < 1000; index++) items.Add(index);
-        var input = new JsonObject { ["z"] = items, ["a"] = "kept" };
+        var input = new JqObject(NativeFixtures.Budget()) { ["z"] = items, ["a"] = NativeFixtures.Create("kept" )};
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             using var result = new JqRuntime(budget).SerializeUtf8(input, false, null, false, true);
@@ -73,7 +71,7 @@ public sealed partial class JqTests
             Assert.True(double.IsNaN(items[0]?.GetValue<double>() ?? 0));
             Assert.True(double.IsPositiveInfinity(items[1]?.GetValue<double>() ?? 0));
             Assert.True(double.IsNegativeInfinity(items[2]?.GetValue<double>() ?? 0));
-            Assert.Equal(new[] { "z", "a" }, input.Select(property => property.Key));
+            Assert.Equal(new[] { "z", "a" }, input.Select(property => property.Key.GetValue<string>()));
         }
         Assert.Equal(0, memory.ReservedBytes);
     }

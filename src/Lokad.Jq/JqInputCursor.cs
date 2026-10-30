@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Lokad.Jq.Helpers;
@@ -116,7 +115,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     // Async pull for outer iteration. Returns false when every source is
     // exhausted; otherwise sets filename/line state and returns the value.
-    internal async Task<(bool HasValue, JsonNode? Value)> PullAsync()
+    internal async Task<(bool HasValue, JqValue? Value)> PullAsync()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         try
@@ -144,7 +143,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         && exception is not JqHostFailureException
         && exception is not JqSeqResyncException;
 
-    private async Task<(bool HasValue, JsonNode? Value)> PullJsonAsync()
+    private async Task<(bool HasValue, JqValue? Value)> PullJsonAsync()
     {
         while (true)
         {
@@ -155,7 +154,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 if (!await ReadMoreAsync().ConfigureAwait(false)) return (false, null);
                 continue;
             }
-            JsonNode? value;
+            JqValue? value;
             int consumed;
             int valueStartLine = _newlines;
             bool valueHasLineFeed = false;
@@ -196,18 +195,16 @@ internal sealed class JqInputCursor : IAsyncDisposable
         }
     }
 
-    private async Task<(bool HasValue, JsonNode? Value)> PullRawAsync()
+    private async Task<(bool HasValue, JqValue? Value)> PullRawAsync()
     {
-        (bool hasValue, string text, _) = await PullRawSegmentAsync().ConfigureAwait(false);
-        if (!hasValue)
-            return (false, null);
-        return (true, JsonValue.Create(text));
+        (JqString? text, _) = await PullRawSegmentAsync().ConfigureAwait(false);
+        return (text is not null, text);
     }
 
     // Raw segment pull for slurp aggregation: lines report whether a
     // line-feed terminator was present so slurp reconstitutes exact bytes
     // (LF-only splits, CR kept as data) instead of rejoining blindly.
-    internal async Task<(bool HasValue, string Text, bool Terminated)> PullRawSegmentAsync()
+    internal async Task<(JqString? Text, bool Terminated)> PullRawSegmentAsync()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         int scanned = 0;
@@ -215,7 +212,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         {
             _budget.CheckCancellation();
             if (!_active && !await ActivateNextAsync().ConfigureAwait(false))
-                return (false, string.Empty, false);
+                return (null, false);
             int relativeNewline = _buffer.AsSpan(_start + scanned, _count - scanned).IndexOf((byte)'\n');
             int newline = relativeNewline < 0 ? -1 : _start + scanned + relativeNewline;
             if (newline >= 0)
@@ -223,13 +220,12 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 int length = newline - _start;
                 ReadOnlyMemory<byte> line = _buffer.AsMemory(_start, length);
                 _budget.CheckCancellation();
-                _budget.ReserveString(Encoding.UTF8.GetCharCount(line.Span));
-                string text = DecodeRawSegment(line);
+                JqString text = DecodeRawSegment(line);
                 _start = newline + 1;
                 _count -= length + 1;
                 SetPosition(1 + _newlines);
                 _newlines++;
-                return (true, text, true);
+                return (text, true);
             }
             if (_eof)
             {
@@ -241,12 +237,11 @@ internal sealed class JqInputCursor : IAsyncDisposable
                 }
                 ReadOnlyMemory<byte> tail = _buffer.AsMemory(_start, _count);
                 _budget.CheckCancellation();
-                _budget.ReserveString(Encoding.UTF8.GetCharCount(tail.Span));
-                string tailText = DecodeRawSegment(tail);
+                JqString tailText = DecodeRawSegment(tail);
                 _start += _count;
                 _count = 0;
                 SetPosition(1 + _newlines);
-                return (true, tailText, false);
+                return (tailText, false);
             }
             scanned = _count;
             await FillAsync().ConfigureAwait(false);
@@ -255,15 +250,15 @@ internal sealed class JqInputCursor : IAsyncDisposable
 
     // Invalid bytes are malformed input (staged exit 5 like invalid JSON),
     // never a bare decoder failure leaking the stage number.
-    private static string DecodeRawSegment(ReadOnlyMemory<byte> segment)
+    private JqString DecodeRawSegment(ReadOnlyMemory<byte> segment)
     {
         try
         {
-            return Utf8Text.Decode(segment);
+            return JqString.FromUtf8(segment.Span, _budget);
         }
-        catch (DecoderFallbackException)
+        catch (JqException exception) when (exception is not JqQuotaException)
         {
-            throw new JqInputException("parse error: Cannot transcode invalid UTF-8 raw input to UTF-16 string.", 5);
+            throw new JqInputException("parse error: Invalid UTF-8 raw input.", 5);
         }
     }
 
@@ -478,7 +473,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
     private static bool IsSeqWhitespace(byte b) =>
         b == (byte)32 || b == (byte)9 || b == (byte)10 || b == (byte)13;
 
-    private async Task<(bool HasValue, JsonNode? Value)> PullSeqAsync()
+    private async Task<(bool HasValue, JqValue? Value)> PullSeqAsync()
     {
         // A pull finishes or abandons its tree before yielding. Unlike stream
         // events, sequence values need no owner beyond the current outer record.
@@ -535,7 +530,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
                     && IsCompleteSeqLiteral(_buffer.AsSpan(_start, length));
                 int consumed = 0;
                 if ((!bareLiteral || _inputEof) && reader.TryRead(_buffer.AsSpan(_start, length),
-                    _inputEof && bareLiteral, out JsonNode? value, out consumed))
+                    _inputEof && bareLiteral, out JqValue? value, out consumed))
                 {
                     Advance(consumed);
                     SetPosition(1 + _newlines);
@@ -677,7 +672,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         }
     }
 
-    private async Task<(bool HasValue, JsonNode? Value)> PullStreamAsync()
+    private async Task<(bool HasValue, JqValue? Value)> PullStreamAsync()
     {
         ArgumentNullException.ThrowIfNull(_retainedValues);
         using var storage = _budget.UseStorage(_retainedValues);
@@ -685,7 +680,7 @@ internal sealed class JqInputCursor : IAsyncDisposable
         while (true)
         {
             _budget.CheckCancellation();
-            if (_scanner.TryDrainStash(out JsonNode? stashed))
+            if (_scanner.TryDrainStash(out JqValue? stashed))
             {
                 SetPosition(1 + _newlines);
                 return (true, stashed);

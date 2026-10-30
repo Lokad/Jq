@@ -38,8 +38,8 @@ public sealed partial class JqTests
         using var budget = new JqBudget(engine, root, CancellationToken.None);
         using var cache = new JqRegexCache(budget);
         using var outer = cache.Rent("outer", JqRegexCompileOptions.None);
-        using var subject = cache.EncodeSubject("x", outer.Value);
-        var match = cache.Match(outer.Value, subject.Value, 0, JqRegexMatchOptions.None);
+        ReadOnlyMemory<byte> subject = "x"u8.ToArray();
+        var match = cache.Match(outer.Value, subject, 0, JqRegexMatchOptions.None);
         var copy = match;
         for (int index = 0; index < 1000; index++)
         {
@@ -52,7 +52,6 @@ public sealed partial class JqTests
         Assert.Equal(3, engine.PeakLive);
         outer.Dispose();
         outer.Dispose();
-        subject.Dispose();
         cache.Dispose();
         Assert.Equal(1000, engine.Disposals);
         Assert.True(match.Success);

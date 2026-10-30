@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -17,7 +16,7 @@ public sealed partial class JqTests
         {
             budget.BeginRecord();
             var runtime = new JqRuntime(budget);
-            JsonNode input = JsonValue.Create(new string('é', 100));
+            JqValue input = NativeFixtures.Create(new string('é', 100));
             byte[] expected = Encoding.UTF8.GetBytes("\"" + (ascii ? string.Concat(Enumerable.Repeat("\\u00e9", 100)) : new string('é', 100)) + "\"");
             for (int index = 0; index < 32; index++)
             {
@@ -85,8 +84,8 @@ public sealed partial class JqTests
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
-            JsonNode small = JsonValue.Create("a");
-            JsonNode large = JsonValue.Create(new string('a', 1194));
+            JqValue small = NativeFixtures.Create("a");
+            JqValue large = NativeFixtures.Create(new string('a', 1194));
             byte[] expected = Encoding.UTF8.GetBytes("\"" + new string('a', 1194) + "\"");
             for (int i = 0; i < 32; i++)
             {
@@ -116,15 +115,17 @@ public sealed partial class JqTests
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 32; i++)
         {
-            using var warm = runtime.SerializeUtf8(JsonValue.Create("a"), false, null, false);
+            using var warm = runtime.SerializeUtf8(NativeFixtures.Create("a"), false, null, false);
         }
         Assert.True(0 < root.ReservedBytes && root.ReservedBytes < 4096);
+        // Native UTF-8 input needs 4059 bytes of final writer capacity here;
+        // the idle 256-byte array must overlap that replacement during growth.
         var failure = Assert.Throws<JqQuotaException>(() =>
-            runtime.SerializeUtf8(JsonValue.Create(new string('a', 1194)), false, null, false));
+            runtime.SerializeUtf8(NativeFixtures.Create(new string('a', 3800)), false, null, false));
         Assert.True(failure.IsMemoryAdmission);
         Assert.Equal("memory budget exceeded", failure.Message);
         Assert.Equal(0, root.ReservedBytes);
-        using (var next = runtime.SerializeUtf8(JsonValue.Create("a"), false, null, false))
+        using (var next = runtime.SerializeUtf8(NativeFixtures.Create("a"), false, null, false))
             Assert.Equal("\"a\""u8.ToArray(), next.Value.ToArray());
     }
 
@@ -138,9 +139,9 @@ public sealed partial class JqTests
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 32; i++)
         {
-            using var warm = runtime.SerializeUtf8(JsonValue.Create("a"), false, null, false);
+            using var warm = runtime.SerializeUtf8(NativeFixtures.Create("a"), false, null, false);
         }
-        var result = runtime.SerializeUtf8(JsonValue.Create(new string('a', 1194)), false, null, false);
+        var result = runtime.SerializeUtf8(NativeFixtures.Create(new string('a', 1194)), false, null, false);
         long active = root.ReservedBytes;
         MemoryCallCounts handedOff = memory.Counts;
         result.Dispose();
@@ -175,16 +176,16 @@ public sealed partial class JqTests
             var runtime = new JqRuntime(budget);
             for (int i = 0; i < 32; i++)
             {
-                using var warm = runtime.SerializeUtf8(JsonValue.Create("a"), false, null, false);
+                using var warm = runtime.SerializeUtf8(NativeFixtures.Create("a"), false, null, false);
             }
             string text = new('é', 100);
             string escaped = ascii ? string.Concat(Enumerable.Repeat("\\u00e9", 100)) : text;
             string expected = pretty
                 ? "[\n" + (tabs ? "\t" : "  ") + "\"" + escaped + "\"\n]"
                 : "[\"" + escaped + "\"]";
-            using var result = runtime.SerializeUtf8(new JsonArray(JsonValue.Create(text)), ascii, pretty ? 2 : null, tabs);
+            using var result = runtime.SerializeUtf8(new JqArray(NativeFixtures.Create(text)), ascii, pretty ? 2 : null, tabs);
             Assert.Equal(Encoding.UTF8.GetBytes(expected), result.Value.ToArray());
-            using var overlapping = runtime.SerializeUtf8(JsonValue.Create("next"), false, null, false);
+            using var overlapping = runtime.SerializeUtf8(NativeFixtures.Create("next"), false, null, false);
             Assert.Equal("\"next\""u8.ToArray(), overlapping.Value.ToArray());
             Assert.Equal(Encoding.UTF8.GetBytes(expected), result.Value.ToArray());
         }
@@ -199,7 +200,7 @@ public sealed partial class JqTests
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 10; i++)
         {
-            using (var result = runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false))
+            using (var result = runtime.SerializeUtf8(NativeFixtures.Create("x"), false, null, false))
                 Assert.Equal("\"x\""u8.ToArray(), result.Value.ToArray());
             Assert.Equal(0, memory.ReservedBytes);
         }
@@ -213,15 +214,15 @@ public sealed partial class JqTests
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 64; i++)
         {
-            using var warm = runtime.SerializeUtf8(JsonValue.Create("warm"), false, null, false);
+            using var warm = runtime.SerializeUtf8(NativeFixtures.Create("warm"), false, null, false);
         }
-        using var first = runtime.SerializeUtf8(JsonValue.Create("one"), false, null, false);
+        using var first = runtime.SerializeUtf8(NativeFixtures.Create("one"), false, null, false);
         long one = memory.ReservedBytes;
-        using var second = runtime.SerializeUtf8(JsonValue.Create("two"), false, null, false);
+        using var second = runtime.SerializeUtf8(NativeFixtures.Create("two"), false, null, false);
         Assert.True(memory.ReservedBytes > one);
         Assert.Equal("\"one\""u8.ToArray(), first.Value.ToArray());
         first.Dispose();
-        using (var third = runtime.SerializeUtf8(JsonValue.Create("three"), false, null, false))
+        using (var third = runtime.SerializeUtf8(NativeFixtures.Create("three"), false, null, false))
         {
             first.Dispose(); // A stale owner cannot return the reused backing storage.
             Assert.Equal("\"three\""u8.ToArray(), third.Value.ToArray());
@@ -230,7 +231,7 @@ public sealed partial class JqTests
         budget.Dispose();
         Assert.Equal(one, memory.ReservedBytes);
         Assert.Equal("\"two\""u8.ToArray(), second.Value.ToArray());
-        Assert.Throws<ObjectDisposedException>(() => runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false));
+        Assert.Throws<ObjectDisposedException>(() => runtime.SerializeUtf8(NativeFixtures.Create("x"), false, null, false));
         second.Dispose();
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -243,17 +244,17 @@ public sealed partial class JqTests
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 64; i++)
         {
-            using var warm = runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false);
+            using var warm = runtime.SerializeUtf8(NativeFixtures.Create("x"), false, null, false);
         }
-        using (var large = runtime.SerializeUtf8(JsonValue.Create(new string('x', 5000)), false, null, false))
+        using (var large = runtime.SerializeUtf8(NativeFixtures.Create(new string('x', 5000)), false, null, false))
             Assert.Equal(5002, large.Value.Length);
         Assert.Equal(0, memory.ReservedBytes);
         Assert.True(memory.TryReserve(32 * 1024 - 512, out var pressure));
         using (pressure)
         {
-            using (var small = runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false))
+            using (var small = runtime.SerializeUtf8(NativeFixtures.Create("x"), false, null, false))
                 Assert.Equal("\"x\""u8.ToArray(), small.Value.ToArray());
-            Assert.Throws<JqQuotaException>(() => runtime.SerializeUtf8(JsonValue.Create(new string('x', 1000)), false, null, false));
+            Assert.Throws<JqQuotaException>(() => runtime.SerializeUtf8(NativeFixtures.Create(new string('x', 1000)), false, null, false));
             Assert.Equal(pressure.Bytes, memory.ReservedBytes);
         }
         Assert.Equal(0, memory.ReservedBytes);
@@ -268,16 +269,16 @@ public sealed partial class JqTests
         var runtime = new JqRuntime(budget);
         for (int i = 0; i < 64; i++)
         {
-            using var warm = runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false);
+            using var warm = runtime.SerializeUtf8(NativeFixtures.Create("x"), false, null, false);
         }
         Assert.True(memory.ReservedBytes > 0);
         for (int i = 0; i < 1000; i++)
         {
-            using var result = runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false);
+            using var result = runtime.SerializeUtf8(NativeFixtures.Create("x"), false, null, false);
             Assert.InRange(memory.ReservedBytes, 1, 4096);
         }
         cancellation.Cancel();
-        Assert.Throws<OperationCanceledException>(() => runtime.SerializeUtf8(JsonValue.Create("x"), false, null, false));
+        Assert.Throws<OperationCanceledException>(() => runtime.SerializeUtf8(NativeFixtures.Create("x"), false, null, false));
         budget.Dispose();
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -287,7 +288,9 @@ public sealed partial class JqTests
     [InlineData(1000)]
     public async Task Jq_GovernedRepeatedSerializationReusesOnlyReturnedBuffers(int count)
     {
-        var root = new BenchmarkMemoryBudget(64 * 1024);
+        // Generated native value headers remain conservatively owned by this
+        // single input record; returned serialization buffers remain reusable.
+        var root = new BenchmarkMemoryBudget(64 * 1024 + 80L * count);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "range(" + count + ") | \"x\" | tojson")));

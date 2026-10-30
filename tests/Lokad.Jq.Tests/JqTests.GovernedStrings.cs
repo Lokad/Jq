@@ -1,5 +1,4 @@
 using Lokad.Jq.Benchmarking;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -83,8 +82,8 @@ public sealed partial class JqTests
     {
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, cancellation.Token);
-        using var context = new JqContext(new Dictionary<string, JsonNode?>(), budget);
-        var node = JsonValue.Create("borrowed");
+        using var context = new JqContext(new Dictionary<string, JqValue?>(), budget);
+        var node = NativeFixtures.Create("borrowed");
         cancellation.Cancel();
         await Assert.ThrowsAsync<OperationCanceledException>(async () => await new IdentityFilter().Evaluate(node, context, context.RootEnvironment).ToArrayAsync());
     }

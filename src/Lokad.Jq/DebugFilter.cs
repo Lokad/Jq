@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
@@ -8,7 +7,7 @@ namespace Lokad.Jq;
 // Await each host write before advancing the message producer.
 internal sealed class DebugFilter(IReadOnlyList<JqFilter> args) : JqFilter
 {
-    protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+    protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         if (args.Count == 0)
         {
@@ -16,12 +15,12 @@ internal sealed class DebugFilter(IReadOnlyList<JqFilter> args) : JqFilter
             yield return input;
             yield break;
         }
-        await foreach (JsonNode? message in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
+        await foreach (JqValue? message in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
             await EmitDebugAsync(context, message).ConfigureAwait(false);
         yield return input;
     }
 
-    private static async ValueTask EmitDebugAsync(JqContext context, JsonNode? value)
+    private static async ValueTask EmitDebugAsync(JqContext context, JqValue? value)
     {
         using var bytes = context.Runtime.SerializeDebug(value, context.AsciiOutput, context.SortKeys);
         await context.EmitStderrAsync(bytes.Value).ConfigureAwait(false);

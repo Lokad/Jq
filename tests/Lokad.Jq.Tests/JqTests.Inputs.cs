@@ -216,7 +216,8 @@ public sealed partial class JqTests
 
             Assert.Equal(5, exit);
             Assert.Equal("", stdout);
-            Assert.Contains("jq: parse error: Cannot transcode invalid UTF-8", stderr);
+            Assert.Contains(args.Contains("-R") ? "jq: parse error: Invalid UTF-8 raw input."
+                : "Cannot transcode invalid UTF-8", stderr);
         }
     }
 

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -27,16 +26,16 @@ public sealed partial class JqTests
     public async Task Jq_ObjectWorkspaceEndsWithoutRefundingRetainedOutput()
     {
         ObjectProperty[] properties = Enumerable.Range(0, 1000)
-            .Select(i => new ObjectProperty("k" + i, null, new LiteralFilter(null))).ToArray();
+            .Select(i => new ObjectProperty(NativeFixtures.Create("k" + i), null, new LiteralFilter(null))).ToArray();
         var filter = new ObjectFilter(properties);
         var root = new BenchmarkMemoryBudget(1024 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             context.Budget.BeginRecord();
             var results = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
             Assert.True(await results.MoveNextAsync());
-            var output = Assert.IsType<JsonObject>(results.Current);
+            var output = Assert.IsType<JqObject>(results.Current);
             long pending = root.ReservedBytes;
             await results.DisposeAsync();
             Assert.InRange(root.ReservedBytes, 96000, pending - 64000);

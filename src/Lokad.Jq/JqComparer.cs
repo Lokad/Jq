@@ -1,27 +1,26 @@
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
 // One ordering operation reuses its scratch. Recursive object comparisons need
 // separate key buffers at each live depth; no input or sorted-key cache survives.
-internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
-    IComparer<IReadOnlyList<JsonNode?>>, IDisposable
+internal sealed class JqComparer(JqBudget budget) : IComparer<JqValue?>,
+    IComparer<IReadOnlyList<JqValue?>>, IDisposable
 {
     private KeyStorage? _keys;
 
-    public int Compare(JsonNode? left, JsonNode? right) => CompareValue(left, right, 0, budget, ref _keys);
+    public int Compare(JqValue? left, JqValue? right) => CompareValue(left, right, 0, budget, ref _keys);
 
-    int IComparer<IReadOnlyList<JsonNode?>>.Compare(IReadOnlyList<JsonNode?>? left, IReadOnlyList<JsonNode?>? right)
+    int IComparer<IReadOnlyList<JqValue?>>.Compare(IReadOnlyList<JqValue?>? left, IReadOnlyList<JqValue?>? right)
     {
         ArgumentNullException.ThrowIfNull(left);
         ArgumentNullException.ThrowIfNull(right);
         return CompareKeys(left, right);
     }
 
-    internal int CompareKeys(IReadOnlyList<JsonNode?> left, IReadOnlyList<JsonNode?> right)
+    internal int CompareKeys(IReadOnlyList<JqValue?> left, IReadOnlyList<JqValue?> right)
     {
         budget.CheckCancellation();
         int shared = Math.Min(left.Count, right.Count);
@@ -33,7 +32,7 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
         return left.Count.CompareTo(right.Count);
     }
 
-    internal IEnumerable<string> OrderKeys(JsonObject obj, int depth)
+    internal IEnumerable<JqString> OrderKeys(JqObject obj, int depth)
     {
         _keys ??= new KeyStorage(budget);
         KeyBuffers buffers = _keys.Get(depth, obj.Count, 0);
@@ -49,7 +48,7 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
             for (index = 0; index < obj.Count; index++)
             {
                 budget.CheckCancellation();
-                string key = buffers.Left[index];
+                JqString key = buffers.Left[index];
                 yield return key;
             }
         }
@@ -57,28 +56,28 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
     }
 
     // Scalar/array comparisons allocate no owner unless object scratch is needed.
-    internal static int CompareValues(JsonNode? left, JsonNode? right, JqBudget budget)
+    internal static int CompareValues(JqValue? left, JqValue? right, JqBudget budget)
     {
         KeyStorage? keys = null;
         try { return CompareValue(left, right, 0, budget, ref keys); }
         finally { keys?.Dispose(); }
     }
 
-    private static int CompareValue(JsonNode? left, JsonNode? right, int depth, JqBudget budget, ref KeyStorage? keys)
+    private static int CompareValue(JqValue? left, JqValue? right, int depth, JqBudget budget, ref KeyStorage? keys)
     {
         budget.CheckCancellation();
         JqRecursion.CheckValueDepth(left, depth);
         JqRecursion.CheckValueDepth(right, depth);
         // String ordering needs only the payloads. Avoid classifying them and
         // then probing the same scalar values again during every comparison.
-        if (JqRuntime.TryGetString(left, out string first) && JqRuntime.TryGetString(right, out string second))
-            return CompareStrings(first, second, budget.CancellationToken);
+        if (left is JqString first && right is JqString second)
+            return first.Compare(second, budget.CancellationToken);
         int leftRank = Rank(left, out double leftNumber);
         int rightRank = Rank(right, out double rightNumber);
         if (leftRank != rightRank) return leftRank.CompareTo(rightRank);
         if (leftRank == 0) return (left is null ? 0 : 1).CompareTo(right is null ? 0 : 1);
         if (leftRank == 3) return leftNumber.CompareTo(rightNumber);
-        if (left is JsonArray leftArray && right is JsonArray rightArray)
+        if (left is JqArray leftArray && right is JqArray rightArray)
         {
             int shared = Math.Min(leftArray.Count, rightArray.Count);
             for (int index = 0; index < shared; index++)
@@ -88,7 +87,7 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
             }
             return leftArray.Count.CompareTo(rightArray.Count);
         }
-        if (left is JsonObject leftObject && right is JsonObject rightObject)
+        if (left is JqObject leftObject && right is JqObject rightObject)
         {
             keys ??= new KeyStorage(budget);
             KeyBuffers buffers = keys.Get(depth, leftObject.Count, rightObject.Count);
@@ -111,13 +110,13 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
                 int shared = Math.Min(leftObject.Count, rightObject.Count);
                 for (index = 0; index < shared; index++)
                 {
-                    int order = CompareStrings(buffers.Left[index], buffers.Right[index], budget.CancellationToken);
+                    int order = buffers.Left[index].Compare(buffers.Right[index], budget.CancellationToken);
                     if (order != 0) return order;
                 }
                 if (leftObject.Count != rightObject.Count) return leftObject.Count.CompareTo(rightObject.Count);
                 for (index = 0; index < leftObject.Count; index++)
                 {
-                    string key = buffers.Left[index];
+                    JqString key = buffers.Left[index];
                     int order = CompareValue(leftObject[key], rightObject[key], depth + 1, budget, ref keys);
                     if (order != 0) return order;
                 }
@@ -129,11 +128,10 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
                 Array.Clear(buffers.Right, 0, rightObject.Count);
             }
         }
-        if (leftRank != 4) return 0;
-        return CompareStrings(JqRuntime.String(left), JqRuntime.String(right), budget.CancellationToken);
+        return 0;
     }
 
-    private static int Rank(JsonNode? node, out double number)
+    private static int Rank(JqValue? node, out double number)
     {
         number = 0;
         switch (node?.GetValueKind() ?? JsonValueKind.Null)
@@ -223,16 +221,16 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
 
     private sealed class KeyBuffers
     {
-        internal string[] Left = [];
-        internal string[] Right = [];
+        internal JqString[] Left = [];
+        internal JqString[] Right = [];
     }
 
     private sealed class KeyStorage(JqBudget budget) : IDisposable
     {
         private readonly List<KeyBuffers> _levels = [];
         private readonly JqMemoryReservation _memory = new(budget.MemoryBudget);
-        internal IComparer<string> StringOrder { get; } = Comparer<string>.Create(
-            (left, right) => CompareStrings(left, right, budget.CancellationToken));
+        internal IComparer<JqString> StringOrder { get; } = Comparer<JqString>.Create(
+            (left, right) => left.Compare(right, budget.CancellationToken));
 
         internal KeyBuffers Get(int depth, int leftCount, int rightCount)
         {
@@ -243,7 +241,7 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
             return buffers;
         }
 
-        private void Grow(ref string[] buffer, int count)
+        private void Grow(ref JqString[] buffer, int count)
         {
             if (count <= buffer.Length) return;
             budget.CheckCancellation();
@@ -252,7 +250,7 @@ internal sealed class JqComparer(JqBudget budget) : IComparer<JsonNode?>,
             _memory.Resize(checked(previous + (long)capacity * IntPtr.Size));
             budget.CheckCancellation();
             int oldLength = buffer.Length;
-            try { buffer = new string[capacity]; }
+            try { buffer = new JqString[capacity]; }
             catch { _memory.Resize(previous); throw; }
             if (oldLength != 0) _memory.Resize(previous + (long)(capacity - oldLength) * IntPtr.Size);
         }

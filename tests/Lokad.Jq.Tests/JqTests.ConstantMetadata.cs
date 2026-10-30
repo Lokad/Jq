@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -83,7 +82,7 @@ public sealed partial class JqTests
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token))
         {
             var parser = new JqParser(tokens, JqProgramSource.Inline,
-                JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>()), budget);
+                JqEnvironment.CreateRoot(new Dictionary<string, JqValue?>()), budget);
             if (cancel) Assert.ThrowsAny<OperationCanceledException>(() => parser.ParsePrefix());
             else Assert.True(Assert.Throws<JqQuotaException>(() => parser.ParsePrefix()).IsMemoryAdmission);
         }

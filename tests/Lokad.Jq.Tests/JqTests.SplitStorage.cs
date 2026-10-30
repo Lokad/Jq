@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -11,17 +10,16 @@ public sealed partial class JqTests
     public void Jq_SplitMissingDelimiterBorrowsPayloadButKeepsFreshWrappers(bool longer)
     {
         string text = new('x', 131072);
-        JsonNode input = JsonValue.Create(text);
-        JsonNode separator = JsonValue.Create(longer ? new string('z', text.Length + 1) : "z");
+        JqValue input = NativeFixtures.Create(text);
+        JqValue separator = NativeFixtures.Create(longer ? new string('z', text.Length + 1) : "z");
         var root = new BenchmarkMemoryBudget(256);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
         {
-            var result = Assert.IsType<JsonArray>(new JqRuntime(budget).Split(input, separator));
+            var result = Assert.IsType<JqArray>(new JqRuntime(budget).Split(input, separator));
             Assert.Single(result);
             Assert.NotSame(input, result[0]);
-            Assert.Same(text, result[0]?.GetValue<string>());
-            Assert.Null(input.Parent);
-            Assert.Equal(88, root.PeakBytes);
+            Assert.Equal(Assert.IsType<JqString>(input).Utf8, Assert.IsType<JqString>(result[0]).Utf8);
+            Assert.Equal(152, root.PeakBytes);
         }
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -34,7 +32,7 @@ public sealed partial class JqTests
     public async Task Jq_SplitOnlyAdmitsActualSubstringCopies(string expression, bool copies)
     {
         string text = copies ? new string('x', 65536) + "a" + new string('x', 65536) : new string('x', 131072);
-        var root = new BenchmarkMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(256 * 1024);
         var host = new MockFileSystem();
         using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq",
             ["-nr", "--arg", "text", text, "\"ready\", ($text | (try (" + expression + " | length) catch \"caught\"))"], []);
@@ -54,27 +52,27 @@ public sealed partial class JqTests
         string left = new('x', prefix);
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         var runtime = new JqRuntime(budget);
-        var result = runtime.Split(JsonValue.Create(left + "🚀xy🚀xyend"), JsonValue.Create("🚀xy"));
-        Assert.Equal(new[] { left, "", "end" }, result.AsArray().Select(part => part?.GetValue<string>()));
-        Assert.Equal("[\"\",\"\",\"a\"]", runtime.Split(JsonValue.Create("aaaaa"), JsonValue.Create("aa")).ToJsonString());
+        var result = runtime.Split(NativeFixtures.Create(left + "🚀xy🚀xyend"), NativeFixtures.Create("🚀xy"));
+        Assert.Equal(new[] { left, "", "end" }, Assert.IsType<JqArray>(result).Select(part => part?.GetValue<string>()));
+        Assert.Equal("[\"\",\"\",\"a\"]", runtime.Split(NativeFixtures.Create("aaaaa"), NativeFixtures.Create("aa")).ToJsonString());
     }
 
     [Fact]
     public void Jq_SplitNearMissKeepsTheExistingPayloadAndObservesAdmissionCancellation()
     {
         string text = new('a', 262144);
-        JsonNode input = JsonValue.Create(text);
-        JsonNode delimiter = JsonValue.Create("b" + new string('a', 65536));
+        JqValue input = NativeFixtures.Create(text);
+        JqValue delimiter = NativeFixtures.Create("b" + new string('a', 65536));
         var root = new BenchmarkMemoryBudget(256);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None))
-            Assert.Same(text, new JqRuntime(budget).Split(input, delimiter)[0]?.GetValue<string>());
+            Assert.Equal(Assert.IsType<JqString>(input).Utf8,
+                Assert.IsType<JqString>(new JqRuntime(budget).Split(input, delimiter)[0]).Utf8);
         Assert.Equal(0, root.ReservedBytes);
         using var cancellation = new CancellationTokenSource();
         var memory = new AdmissionCallbackBudget(root, cancellation.Cancel);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token))
             Assert.ThrowsAny<OperationCanceledException>(() => new JqRuntime(budget).Split(input, delimiter));
         Assert.Equal(0, root.ReservedBytes);
-        Assert.Null(input.Parent);
     }
 
     [Theory]

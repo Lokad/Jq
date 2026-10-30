@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -32,7 +31,7 @@ public sealed partial class JqTests
         if (cancel) cancellation.Cancel();
         var root = new BenchmarkMemoryBudget(0);
         var memory = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
         {
             Func<Task> evaluate = paths

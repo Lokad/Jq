@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -10,12 +9,12 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_TostreamBorrowsWideContainersBeforeItsFirstEvent(bool objects)
     {
-        JsonNode input = WideNullContainer(objects);
+        JqValue input = WideNullContainer(objects);
         var root = new BenchmarkMemoryBudget(4096);
         var counted = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
         {
-            JsonNode? output = await new TostreamFilter().Evaluate(input, context, context.RootEnvironment).FirstAsync();
+            JqValue? output = await new TostreamFilter().Evaluate(input, context, context.RootEnvironment).FirstAsync();
             Assert.Equal(objects ? "[[\"k0\"],null]" : "[[0],null]", output?.ToJsonString());
             Assert.InRange(counted.Counts.Reservations + counted.Counts.Resizes, 1, 5);
             Assert.InRange(root.ReservedBytes, 1, 4096);
@@ -26,10 +25,10 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_TostreamAdmitsDeepDescentBeforeConstructingFrames()
     {
-        JsonNode? input = null;
-        for (int depth = 0; depth < 5000; depth++) input = new JsonArray(input);
+        JqValue? input = null;
+        for (int depth = 0; depth < 5000; depth++) input = new JqArray(input);
         var root = new BenchmarkMemoryBudget(0);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             long before = GC.GetAllocatedBytesForCurrentThread();
             var failure = await Assert.ThrowsAsync<JqQuotaException>(async () => await new TostreamFilter().Evaluate(input, context, context.RootEnvironment).FirstAsync());
@@ -39,10 +38,10 @@ public sealed partial class JqTests
         Assert.Equal(0, root.ReservedBytes);
 
         root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            var output = Assert.IsType<JsonArray>(await new TostreamFilter().Evaluate(input, context, context.RootEnvironment).FirstAsync());
-            var path = Assert.IsType<JsonArray>(output[0]);
+            var output = Assert.IsType<JqArray>(await new TostreamFilter().Evaluate(input, context, context.RootEnvironment).FirstAsync());
+            var path = Assert.IsType<JqArray>(output[0]);
             Assert.Equal(5000, path.Count);
             Assert.All(path, segment => Assert.Equal(0L, segment?.GetValue<long>()));
             Assert.Null(output[1]);
@@ -53,12 +52,12 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_TostreamCancelsWhileDescendingAndRefundsItsCursors()
     {
-        JsonNode? input = null;
-        for (int depth = 0; depth < 5000; depth++) input = new JsonArray(input);
+        JqValue? input = null;
+        for (int depth = 0; depth < 5000; depth++) input = new JqArray(input);
         var root = new BenchmarkMemoryBudget(2 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
         var budget = new AdmissionCallbackBudget(root, cancellation.Cancel);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, budget, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, budget, cancellation.Token)))
             await Assert.ThrowsAsync<OperationCanceledException>(async () => await new TostreamFilter().Evaluate(input, context, context.RootEnvironment).FirstAsync());
         Assert.Equal(0, root.ReservedBytes);
     }
@@ -71,15 +70,15 @@ public sealed partial class JqTests
     [InlineData("{}", "[[[],{}]]")]
     public async Task Jq_TostreamPreservesClosePathsAndIndependentEvents(string json, string expected)
     {
-        JsonNode? input = JsonNode.Parse(json);
+        JqValue? input = NativeFixtures.Parse(json);
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            JsonNode?[] values = await new TostreamFilter().Evaluate(input, context, context.RootEnvironment).ToArrayAsync();
-            var output = new JsonArray(values);
+            JqValue?[] values = await new TostreamFilter().Evaluate(input, context, context.RootEnvironment).ToArrayAsync();
+            var output = new JqArray(values);
             Assert.Equal(expected, output.ToJsonString());
-            var first = Assert.IsType<JsonArray>(output[0]);
-            Assert.IsType<JsonArray>(first[0]).Add("changed");
+            var first = Assert.IsType<JqArray>(output[0]);
+            Assert.IsType<JqArray>(first[0]).Add(NativeFixtures.Create("changed"));
             Assert.Equal(json, input?.ToJsonString() ?? "null");
             for (int index = 1; index < output.Count; index++)
                 Assert.DoesNotContain("changed", output[index]?.ToJsonString() ?? "null", StringComparison.Ordinal);

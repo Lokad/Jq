@@ -1,5 +1,4 @@
 using Lokad.Jq;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -254,21 +253,21 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_RepeatedEvaluationYieldsIndependentValues()
     {
-        var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
+        var variables = new Dictionary<string, JqValue?>();
         var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         using var context = new JqContext(variables, budget);
         JqFilter filter = new JqParser("{\"a\":[1]}", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
 
-        List<System.Text.Json.Nodes.JsonNode?> first = await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync();
-        List<System.Text.Json.Nodes.JsonNode?> second = await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync();
+        List<JqValue?> first = await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync();
+        List<JqValue?> second = await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync();
 
         Assert.Single(first);
         Assert.Single(second);
         Assert.NotSame(first[0], second[0]);
-        JsonObject firstObject = Assert.IsType<JsonObject>(first[0]);
+        JqObject firstObject = Assert.IsType<JqObject>(first[0]);
         firstObject.Add("b", 2);
         Assert.Equal("{\"a\":[1],\"b\":2}", firstObject.ToJsonString());
-        JsonObject secondObject = Assert.IsType<JsonObject>(second[0]);
+        JqObject secondObject = Assert.IsType<JqObject>(second[0]);
         Assert.Equal("{\"a\":[1]}", secondObject.ToJsonString());
     }
 
@@ -279,11 +278,11 @@ public sealed partial class JqTests
         try
         {
             System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
-            var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
+            var variables = new Dictionary<string, JqValue?>();
             var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
             using var context = new JqContext(variables, budget);
             JqFilter filter = new JqParser("1.5 + 2.5", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();
-            List<System.Text.Json.Nodes.JsonNode?> results = await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync();
+            List<JqValue?> results = await filter.Evaluate(null, context, context.RootEnvironment).ToListAsync();
 
             Assert.Single(results);
             Assert.Equal(4.0, JqRuntime.Number(results[0]));

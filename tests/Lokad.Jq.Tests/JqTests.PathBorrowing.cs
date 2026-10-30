@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -11,10 +10,10 @@ public sealed partial class JqTests
     public async Task Jq_PathVariableReadsBorrowWithoutAdmissionAndStillCancel(bool currentValue)
     {
         var memory = new BenchmarkMemoryBudget(0);
-        var value = new JsonArray();
+        var value = new JqArray();
         for (int index = 0; index < 5000; index++) value.Add(index);
         using var cancellation = new CancellationTokenSource();
-        using var context = new JqContext(new Dictionary<string, JsonNode?> { ["value"] = value },
+        using var context = new JqContext(new Dictionary<string, JqValue?> { ["value"] = value },
             new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token));
         var filter = new VariableFilter("value");
         await using var paths = filter.EvaluatePaths(new JqValuePath([], currentValue ? value : null, true),

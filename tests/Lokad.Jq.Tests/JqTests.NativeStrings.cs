@@ -7,6 +7,142 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Fact]
+    public void Jq_NativeNumberParsingAvoidsWholeValueUtf16()
+    {
+        byte[] bytes = new byte[1024 * 1024];
+        bytes.AsSpan().Fill((byte)'0');
+        using var budget = new JqBudget(CancellationToken.None);
+        JqString input = JqString.FromUtf8(bytes, budget);
+        var runtime = new JqRuntime(budget);
+        _ = runtime.ToJsonNumber(NativeFixtures.Create("0"));
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        JqValue result = runtime.ToJsonNumber(input);
+        Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 8192);
+        Assert.Equal(0, JqRuntime.Number(result));
+    }
+
+    [Fact]
+    public async Task Jq_NativeInterpolationAllocatesOnlyItsUtf8Result()
+    {
+        byte[] bytes = new byte[1024 * 1024];
+        bytes.AsSpan().Fill((byte)'x');
+        using var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(CancellationToken.None));
+        JqString input = JqString.FromUtf8(bytes, context.Budget);
+        var filter = new JqParser("\"pre\\(.)post\"", JqProgramSource.Inline, context.RootEnvironment, context.Budget).Parse();
+        _ = await filter.Evaluate(NativeFixtures.Create("warm"), context, context.RootEnvironment).SingleAsync();
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        var output = Assert.IsType<JqString>(await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync());
+        Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, bytes.Length, bytes.Length + 32 * 1024);
+        Assert.Equal(bytes.Length + 7, output.ByteLength);
+        Assert.True(output.Utf8.Span.StartsWith("pre"u8));
+        Assert.True(output.Utf8.Span.EndsWith("post"u8));
+        Assert.True(output.Utf8.Span.Slice(3, bytes.Length).SequenceEqual(bytes));
+    }
+
+    [Fact]
+    public async Task Jq_NativeRegexReplacementBorrowsAnUnchangedLargeSubject()
+    {
+        byte[] bytes = new byte[1024 * 1024];
+        bytes.AsSpan().Fill((byte)'x');
+        using var context = new JqContext(new Dictionary<string, JqValue?>(),
+            new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None));
+        JqString input = JqString.FromUtf8(bytes, context.Budget);
+        var filter = new GsubFilter([new LiteralFilter(NativeFixtures.Create("z")), new LiteralFilter(NativeFixtures.Create("y"))], false);
+        _ = await filter.Evaluate(NativeFixtures.Create("warm"), context, context.RootEnvironment).SingleAsync();
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        var output = Assert.IsType<JqString>(await filter.Evaluate(input, context, context.RootEnvironment).SingleAsync());
+        Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 32 * 1024);
+        Assert.NotSame(input, output);
+        Assert.Equal(input.Utf8, output.Utf8);
+    }
+
+    [Theory]
+    [InlineData("base64")]
+    [InlineData("uri")]
+    [InlineData("html")]
+    public void Jq_NativeFormatsAllocateTheirResultWithoutUtf16Input(string format)
+    {
+        byte[] bytes = new byte[128 * 1024];
+        bytes.AsSpan().Fill((byte)'x');
+        bytes[^1] = (byte)'&';
+        using var budget = new JqBudget(CancellationToken.None);
+        JqString input = JqString.FromUtf8(bytes, budget);
+        var runtime = new JqRuntime(budget);
+        _ = runtime.FormatValue(format, NativeFixtures.Create("x"));
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        JqString output = runtime.FormatValue(format, input);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.InRange(allocated, output.ByteLength, output.ByteLength + 8192);
+        Assert.Equal(bytes.Length, input.ByteLength);
+        if (format == "uri") Assert.True(output.Utf8.Span.EndsWith("%26"u8));
+        if (format == "html") Assert.True(output.Utf8.Span.EndsWith("&amp;"u8));
+        if (format == "base64") Assert.Equal(Convert.ToBase64String(bytes), output.GetValue<string>());
+    }
+
+    [Fact]
+    public void Jq_NativeRegexTestBorrowsItsLargeSubject()
+    {
+        byte[] bytes = new byte[1024 * 1024];
+        bytes.AsSpan().Fill((byte)'x');
+        using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
+        using var context = new JqContext(new Dictionary<string, JqValue?>(), budget);
+        JqString subject = JqString.FromUtf8(bytes, budget);
+        JqString pattern = JqString.FromUtf8("x"u8, budget);
+        Assert.True(JqMatch.Test(context, subject, pattern, null));
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        Assert.True(JqMatch.Test(context, subject, pattern, null));
+        Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 32 * 1024);
+    }
+
+    [Theory]
+    [InlineData("/w==")]
+    [InlineData("wIA=")]
+    [InlineData("4oI=")]
+    [InlineData("8J+A")]
+    public void Jq_NativeBase64ReplacementMatchesTheDeclaredUtf8Policy(string encoded)
+    {
+        byte[] bytes = Convert.FromBase64String(encoded);
+        using var budget = new JqBudget(CancellationToken.None);
+        var result = new JqRuntime(budget).FormatValue("base64d", NativeFixtures.Create(encoded));
+        Assert.Equal(Encoding.UTF8.GetString(bytes), result.GetValue<string>());
+    }
+
+    [Fact]
+    public void Jq_NativeJsonFieldAndJoinedOutputAvoidWholeValueUtf16()
+    {
+        const int length = 1024 * 1024;
+        byte[] prefix = "{\"\\u00e9\":\""u8.ToArray();
+        byte[] suffix = "é🚀é\"}"u8.ToArray();
+        byte[] input = new byte[prefix.Length + length + suffix.Length];
+        prefix.CopyTo(input, 0);
+        input.AsSpan(prefix.Length, length).Fill((byte)'a');
+        suffix.CopyTo(input, prefix.Length + length);
+        using var budget = new JqBudget(CancellationToken.None);
+        using var context = new JqContext(new Dictionary<string, JqValue?>(), budget);
+        var reader = new JqRuntime.InputReader(context.Runtime, budget);
+        var filter = Assert.IsAssignableFrom<SingleValueFilter>(FieldFilter.Create(new IdentityFilter(), NativeFixtures.Create("é"), false));
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        Assert.True(reader.TryRead(input, true, out JqValue? root, out int consumed));
+        JqValue? selected = filter.ReadValue(root, context, context.RootEnvironment);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.Equal(input.Length, consumed);
+        var text = Assert.IsType<JqString>(selected);
+        Assert.Equal(length + 4, text.ScalarLength);
+        Assert.InRange(allocated, length, length + 32 * 1024);
+        input.AsSpan().Clear();
+        Assert.Equal((byte)'a', text.Utf8.Span[0]);
+        Assert.True(text.Utf8.Span.EndsWith("é🚀é"u8));
+
+        using var output = new JqRuntime.OutputRenderer(context.Runtime, budget,
+            new JqInvocation { RawOutput = true, JoinOutput = true });
+        before = GC.GetAllocatedBytesForCurrentThread();
+        ReadOnlyMemory<byte> rendered = output.Render(text);
+        Assert.Equal(text.Utf8, rendered);
+        Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 4096);
+    }
+
     [Theory]
     [InlineData("\"ascii\"", "ascii", 5)]
     [InlineData("\"aé🚀é\"", "aé🚀é", 5)]

@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -13,14 +12,14 @@ public sealed partial class JqTests
     {
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         var counted = new CountingMemoryBudget(memory);
-        JsonNode input = JsonValue.Create(new string('x', length));
+        JqValue input = NativeFixtures.Create(new string('x', length));
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
             for (int record = 0; record < 2500; record++)
             {
                 budget.BeginRecord();
-                Assert.Equal(4 * ((length + 2) / 3), runtime.Format("base64", input).Length);
+                Assert.Equal(4 * ((length + 2) / 3), runtime.FormatValue("base64", input).GetValue<string>().Length);
             }
             Assert.InRange(counted.Counts.Reservations + counted.Counts.Resizes, 1, 8);
             Assert.InRange(memory.PeakBytes, 1, 256);
@@ -36,7 +35,7 @@ public sealed partial class JqTests
     [InlineData(2)]
     [InlineData(3)]
     [InlineData(65536)]
-    public void Jq_Base64ScratchRetainsOnlyTheEncodedOutputAfterConversion(int length)
+    public void Jq_Base64EncodingAdmitsOnlyItsNativeOutput(int length)
     {
         string text = new('x', length);
         string expected = Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
@@ -44,12 +43,12 @@ public sealed partial class JqTests
         var counted = new CountingMemoryBudget(memory);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None))
         {
-            string encoded = new JqRuntime(budget).Format("base64", JsonValue.Create(text));
+            string encoded = new JqRuntime(budget).FormatValue("base64", NativeFixtures.Create(text)).GetValue<string>();
             Assert.Equal(expected, encoded);
-            Assert.Equal(2L * expected.Length, memory.ReservedBytes);
-            Assert.Equal(2L * expected.Length + length, memory.PeakBytes);
-            Assert.Equal(length == 0 ? 0 : 2, counted.Counts.Reservations + counted.Counts.Resizes);
-            Assert.Equal(length == 0 ? 0 : 1, counted.Counts.ReservationDisposals);
+            Assert.Equal(80L + expected.Length, memory.ReservedBytes);
+            Assert.Equal(80L + expected.Length, memory.PeakBytes);
+            Assert.Equal(1, counted.Counts.Reservations + counted.Counts.Resizes);
+            Assert.Equal(0, counted.Counts.ReservationDisposals);
         }
         Assert.Equal(0, memory.ReservedBytes);
         Assert.Equal(counted.Counts.Reservations, counted.Counts.ReservationDisposals);
@@ -67,22 +66,23 @@ public sealed partial class JqTests
         if (text == "lone-surrogate") text = new string((char)0xD800, 1);
         var memory = new BenchmarkMemoryBudget(16 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
-            Assert.Equal(expected, new JqRuntime(budget).Format("base64", JsonValue.Create(text)));
+            Assert.Equal(expected, new JqRuntime(budget).FormatValue("base64", NativeFixtures.Create(text)).GetValue<string>());
         Assert.Equal(0, memory.ReservedBytes);
     }
 
     [Theory]
-    [InlineData(174767, 0)]
-    [InlineData(240303, 174768)]
-    public void Jq_Base64ScratchPreflightsOutputAndRealOverlapBeforeEncoding(long allowance, long retained)
+    [InlineData(87463, false, 0)]
+    [InlineData(153079, true, 65616)]
+    public void Jq_Base64PreflightsNativeOutputAndOwnedInputOverlap(long allowance, bool ownInput, long retained)
     {
-        JsonNode input = JsonValue.Create(new string('x', 65536));
         var memory = new BenchmarkMemoryBudget(allowance);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
+            JqValue input = ownInput ? JqString.FromHost(new string('x', 65536), budget)
+                : NativeFixtures.Create(new string('x', 65536));
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
-            var failure = Assert.Throws<JqQuotaException>(() => runtime.Format("base64", input));
+            var failure = Assert.Throws<JqQuotaException>(() => runtime.FormatValue("base64", input).GetValue<string>());
             Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 32 * 1024);
             Assert.True(failure.IsMemoryAdmission);
             Assert.Equal(retained, memory.ReservedBytes);
@@ -91,21 +91,20 @@ public sealed partial class JqTests
     }
 
     [Fact]
-    public void Jq_Base64ScratchObservesCancellationAfterDirectScratchAdmission()
+    public void Jq_Base64ObservesCancellationAfterNativeOutputAdmission()
     {
-        JsonNode input = JsonValue.Create(new string('x', 65536));
+        JqValue input = NativeFixtures.Create(new string('x', 65536));
         var memory = new BenchmarkMemoryBudget(1024 * 1024);
         using var cancellation = new CancellationTokenSource();
-        int calls = 0;
-        var hooked = new AdmissionCallbackBudget(memory, () => { if (++calls == 2) cancellation.Cancel(); });
+        var hooked = new AdmissionCallbackBudget(memory, cancellation.Cancel);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, hooked, cancellation.Token))
         {
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
-            var failure = Assert.Throws<OperationCanceledException>(() => runtime.Format("base64", input));
+            var failure = Assert.Throws<OperationCanceledException>(() => runtime.FormatValue("base64", input).GetValue<string>());
             Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 32 * 1024);
             Assert.Equal(cancellation.Token, failure.CancellationToken);
-            Assert.Equal(174768, memory.ReservedBytes);
+            Assert.Equal(87464, memory.ReservedBytes);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }
@@ -144,8 +143,8 @@ public sealed partial class JqTests
     [Theory]
     [InlineData("try ($text|@base64) catch \"caught\"", 4096)]
     [InlineData("($text|@base64)?", 4096)]
-    [InlineData("try ($text|@base64) catch \"caught\"", 200000)]
-    [InlineData("($text|@base64)?", 200000)]
+    [InlineData("try ($text|@base64) catch \"caught\"", 87463)]
+    [InlineData("($text|@base64)?", 87463)]
     public async Task Jq_Base64ScratchRefusalPreservesEarlierOutputAndBypassesHandlers(string operation, long remaining)
     {
         const long limit = 512 * 1024;

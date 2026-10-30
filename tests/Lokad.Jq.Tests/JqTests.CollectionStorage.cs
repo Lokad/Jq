@@ -1,5 +1,4 @@
 using Lokad.Jq.Benchmarking;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq.Tests;
 
@@ -8,23 +7,22 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_UniqueCopiesOnlyRetainedTreesAndLeavesInputIndependent()
     {
-        var input = new JsonArray();
+        var input = new JqArray();
         for (int index = 0; index < 100; index++)
         {
-            var item = new JsonArray();
+            var item = new JqArray();
             for (int value = 0; value < 1000; value++) item.Add(value);
             input.Add(item);
         }
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
-            var output = Assert.IsType<JsonArray>(new JqRuntime(budget).UniqueArray(input));
+            var output = Assert.IsType<JqArray>(new JqRuntime(budget).UniqueArray(input));
             Assert.Single(output);
-            Assert.True(JsonNode.DeepEquals(input[0], output[0]));
+            Assert.True(NativeFixtures.DeepEquals(input[0], output[0]));
             Assert.NotSame(input[0], output[0]);
             Assert.Equal(100, input.Count);
-            Assert.All(input, item => Assert.Same(input, item?.Parent));
-            Assert.IsType<JsonArray>(output[0])[0] = -1;
+            Assert.IsType<JqArray>(output[0])[0] = -1;
             Assert.Equal(0, input[0]?[0]?.GetValue<int>());
         }
         Assert.Equal(0, memory.ReservedBytes);

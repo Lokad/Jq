@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
@@ -11,7 +10,7 @@ internal sealed class JqTreeCursor(JqBudget budget) : IDisposable
 
     internal int Count => _frames.Count;
 
-    internal void Push(JsonNode container)
+    internal void Push(JqValue container)
     {
         budget.CheckCancellation();
         if (_frames.Count == _frames.Capacity)
@@ -27,7 +26,7 @@ internal sealed class JqTreeCursor(JqBudget budget) : IDisposable
         _frames.Add(new Frame(container));
     }
 
-    internal bool TryNext(out JsonNode? child)
+    internal bool TryNext(out JqValue? child)
     {
         budget.CheckCancellation();
         Frame frame = _frames[^1];
@@ -55,16 +54,16 @@ internal sealed class JqTreeCursor(JqBudget budget) : IDisposable
         {
             budget.CheckCancellation();
             Frame frame = _frames[index];
-            path.Add(frame.Segment);
+            path.Add(frame.GetSegment(budget));
             _frames[index] = frame;
         }
         return path;
     }
 
-    internal JsonArray CopyJsonPath()
+    internal JqArray CopyJsonPath()
     {
         budget.ReserveBytes(64 + 88L * _frames.Count);
-        var path = new JsonArray();
+        var path = new JqArray();
         foreach (Frame frame in _frames)
         {
             budget.CheckCancellation();
@@ -81,30 +80,30 @@ internal sealed class JqTreeCursor(JqBudget budget) : IDisposable
 
     private struct Frame : IDisposable
     {
-        private readonly JsonNode _container;
-        private readonly IEnumerator<KeyValuePair<string, JsonNode?>>? _properties;
+        private readonly JqValue _container;
+        private readonly IEnumerator<KeyValuePair<JqString, JqValue?>>? _properties;
         private int _index;
-        private string? _key;
+        private JqString? _key;
         private JqValueSegment? _segment;
 
-        internal Frame(JsonNode container)
+        internal Frame(JqValue container)
         {
             _container = container;
-            _properties = container is JsonObject obj ? obj.GetEnumerator() : null;
+            _properties = container is JqObject obj ? obj.GetEnumerator() : null;
             _index = -1;
             _key = null;
             _segment = null;
         }
 
-        internal JqValueSegment Segment => _segment ??= _key is { } key
+        internal JqValueSegment GetSegment(JqBudget budget) => _segment ??= _key is { } key
             ? new KeySegment(key) : new IndexSegment(_index, false);
 
-        internal JsonNode PathValue() => _key is { } key
-            ? JsonValue.Create(key) : JsonValue.Create((long)_index);
+        internal JqValue PathValue() => _key is { } key
+            ? JqScalar.Create(key) : JqScalar.Create((long)_index);
 
-        internal bool TryNext(out JsonNode? child)
+        internal bool TryNext(out JqValue? child)
         {
-            if (_container is JsonArray array && _index + 1 < array.Count)
+            if (_container is JqArray array && _index + 1 < array.Count)
             {
                 _segment = null;
                 child = array[++_index];

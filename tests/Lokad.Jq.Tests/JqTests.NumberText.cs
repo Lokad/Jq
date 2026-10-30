@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -38,7 +37,7 @@ public sealed partial class JqTests
     public void Jq_NumberTextRejectsInvalidGrammarWithoutFallbackAcceptance(string text)
     {
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
-        Assert.Throws<JqException>(() => new JqRuntime(budget).ToJsonNumber(JsonValue.Create(text)));
+        Assert.Throws<JqException>(() => new JqRuntime(budget).ToJsonNumber(NativeFixtures.Create(text)));
     }
 
     [Fact]
@@ -50,15 +49,15 @@ public sealed partial class JqTests
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
             using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
             var runtime = new JqRuntime(budget);
-            Assert.Equal(0.5, JqRuntime.Number(runtime.ToJsonNumber(JsonValue.Create("+.5"))));
-            Assert.Equal(100, JqRuntime.Number(runtime.ToJsonNumber(JsonValue.Create("001E2"))));
-            var integer = Assert.IsAssignableFrom<JsonValue>(runtime.ToJsonNumber(JsonValue.Create("9007199254740993")));
+            Assert.Equal(0.5, JqRuntime.Number(runtime.ToJsonNumber(NativeFixtures.Create("+.5"))));
+            Assert.Equal(100, JqRuntime.Number(runtime.ToJsonNumber(NativeFixtures.Create("001E2"))));
+            var integer = Assert.IsAssignableFrom<JqScalar>(runtime.ToJsonNumber(NativeFixtures.Create("9007199254740993")));
             Assert.True(integer.TryGetValue<long>(out long exact));
             Assert.Equal(9007199254740993, exact);
-            Assert.True(double.IsNaN(JqRuntime.Number(runtime.ToJsonNumber(JsonValue.Create("+NaN")))));
-            Assert.Equal(double.NegativeInfinity, JqRuntime.Number(runtime.ToJsonNumber(JsonValue.Create("-INFINITY"))));
-            Assert.Throws<JqException>(() => runtime.ToJsonNumber(JsonValue.Create("1,5")));
-            JsonNode numeric = JsonValue.Create(-0.0);
+            Assert.True(double.IsNaN(JqRuntime.Number(runtime.ToJsonNumber(NativeFixtures.Create("+NaN")))));
+            Assert.Equal(double.NegativeInfinity, JqRuntime.Number(runtime.ToJsonNumber(NativeFixtures.Create("-INFINITY"))));
+            Assert.Throws<JqException>(() => runtime.ToJsonNumber(NativeFixtures.Create("1,5")));
+            JqValue numeric = NativeFixtures.Create(-0.0);
             Assert.Same(numeric, runtime.ToJsonNumber(numeric));
         }
         finally { CultureInfo.CurrentCulture = previous; }
@@ -72,8 +71,8 @@ public sealed partial class JqTests
     public void Jq_NumberTextChecksCancellationBeforeParsingOrReturningExistingValues(string kind)
     {
         string zeros = new('0', 1024 * 1024);
-        JsonNode input = kind == "numeric" ? JsonValue.Create(-0.0)
-            : JsonValue.Create(kind == "fraction" ? "0." + zeros : kind == "exponent" ? "0e" + zeros : zeros);
+        JqValue input = kind == "numeric" ? NativeFixtures.Create(-0.0)
+            : NativeFixtures.Create(kind == "fraction" ? "0." + zeros : kind == "exponent" ? "0e" + zeros : zeros);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var memory = new BenchmarkMemoryBudget(0);

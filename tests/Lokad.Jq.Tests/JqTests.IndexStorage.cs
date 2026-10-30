@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -12,14 +11,15 @@ public sealed partial class JqTests
     public async Task Jq_IndexBorrowsKeyPayloadAndAdmitsOnlyItsConstruction(int length)
     {
         string key = new('k', length);
-        var row = new JsonObject { ["value"] = 7 };
+        JqString nativeKey = NativeFixtures.Create(key);
+        var row = new JqObject(NativeFixtures.Budget()) { ["value"] = 7 };
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            var filter = new SqlIndexFilter(new LiteralFilter(row), new LiteralFilter(JsonValue.Create(key)));
-            var result = Assert.IsType<JsonObject>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
-            Assert.Same(key, Assert.Single(result).Key);
-            var copied = Assert.IsType<JsonObject>(result[key]);
+            var filter = new SqlIndexFilter(new LiteralFilter(row), new LiteralFilter(nativeKey));
+            var result = Assert.IsType<JqObject>(await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
+            Assert.Equal(nativeKey.Utf8, Assert.Single(result).Key.Utf8);
+            var copied = Assert.IsType<JqObject>(result[key]);
             Assert.NotSame(row, copied);
             copied["value"] = 9;
             Assert.Equal(7, row["value"]?.GetValue<int>());
@@ -35,7 +35,8 @@ public sealed partial class JqTests
     [InlineData("[{key:$key,value:0}]|from_entries|length")]
     public async Task Jq_IndexLongBorrowedKeysCompleteUnderSharedAdmission(string expression)
     {
-        var root = new BenchmarkMemoryBudget(64 * 1024);
+        // The command owns one UTF-8 copy of its borrowed host argument.
+        var root = new BenchmarkMemoryBudget(256 * 1024);
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nc", "--arg", "key", new string('k', 131072), expression)));
         Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, root, CancellationToken.None));
@@ -68,7 +69,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_IndexNewSerializedKeysStillRequireAdmissionAndCloseOwnedInput()
     {
-        var root = new BenchmarkMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(256 * 1024);
         var host = new MockFileSystem();
         host.AddFile("/input", "null\n");
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-c", "--arg", "key", new string('k', 131072),
@@ -84,12 +85,12 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_IndexCopiedRowsStillRequireAdmission()
     {
-        var row = new JsonArray();
+        var row = new JqArray();
         for (int index = 0; index < 6000; index++) row.Add(index);
         var root = new BenchmarkMemoryBudget(64 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            var filter = new SqlIndexFilter(new LiteralFilter(row), new LiteralFilter(JsonValue.Create("key")));
+            var filter = new SqlIndexFilter(new LiteralFilter(row), new LiteralFilter(NativeFixtures.Create("key")));
             var failure = await Assert.ThrowsAsync<JqQuotaException>(async () => await filter.Evaluate(null, context, context.RootEnvironment).SingleAsync());
             Assert.True(failure.IsMemoryAdmission);
             Assert.Equal(6000, row.Count);
@@ -121,7 +122,7 @@ public sealed partial class JqTests
     public async Task Jq_IndexLongKeysKeepOuterStreamsBoundedAndStopOnClosure(bool close)
     {
         const int records = 2500;
-        var root = new BenchmarkMemoryBudget(64 * 1024);
+        var root = new BenchmarkMemoryBudget(256 * 1024);
         var host = new MockFileSystem { AppendRemainsOpen = !close };
         host.AddFile("/input", string.Concat(Enumerable.Repeat("0\n", records)));
         host.AddFile("/later", "");

@@ -1,5 +1,4 @@
 using System;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
@@ -10,7 +9,7 @@ internal sealed record JqModuleImport(
     string RelPath,
     string? Alias,
     bool IsData,
-    JsonObject? Metadata)
+    JqObject? Metadata)
 {
     internal bool IsInclude => Alias is null && !IsData;
 
@@ -20,7 +19,7 @@ internal sealed record JqModuleImport(
         {
             if (Metadata is null)
                 return false;
-            if (Metadata.TryGetPropertyValue("optional", out JsonNode? value) && value is JsonValue scalar)
+            if (Metadata.TryGetPropertyValue("optional", out JqValue? value) && value is JqScalar scalar)
             {
                 if (scalar.TryGetValue<bool>(out bool flag))
                     return flag;
@@ -35,7 +34,7 @@ internal sealed record JqModuleImport(
         {
             if (Metadata is null)
                 return false;
-            if (Metadata.TryGetPropertyValue("raw", out JsonNode? value) && value is JsonValue scalar)
+            if (Metadata.TryGetPropertyValue("raw", out JqValue? value) && value is JqScalar scalar)
             {
                 if (scalar.TryGetValue<bool>(out bool flag))
                     return flag;

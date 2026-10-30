@@ -18,13 +18,12 @@ public sealed partial class JqTests
         Assert.Equal(20128, memory.ReservedBytes);
         using (var same = cache.Rent(new string(text.AsSpan()), JqRegexCompileOptions.None)) Assert.Same(pattern, same.Value);
         Assert.Equal(1, engine.Compilations);
-        using var subject = cache.EncodeSubject("x", pattern);
-        Assert.True(cache.IsMatch(pattern, subject.Value, JqRegexMatchOptions.None));
+        ReadOnlyMemory<byte> subject = "x"u8.ToArray();
+        Assert.True(cache.IsMatch(pattern, subject, JqRegexMatchOptions.None));
         cache.Dispose();
-        patternLease.Dispose();
-        Assert.Equal(20128 + 65, memory.ReservedBytes);
+        Assert.Equal(20128, memory.ReservedBytes);
         Assert.Equal(0, engine.Disposals);
-        subject.Dispose();
+        patternLease.Dispose();
         Assert.Equal(1, engine.Disposals);
         Assert.Equal(0, memory.ReservedBytes);
     }

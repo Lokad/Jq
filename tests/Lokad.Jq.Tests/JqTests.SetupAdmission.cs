@@ -4,6 +4,22 @@ namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
+    [Fact]
+    public async Task Jq_EnvironmentEncodesOnlyFinalValuesAndPreservesFirstKeyOrder()
+    {
+        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        using var invocation = JqCommandInvocation.CreateWithStandardDescriptors("jq",
+            ["-nc", "[$ENV|keys_unsorted, .[]]"],
+            [new("λ", new string('x', 1024 * 1024)), new("keep", "earlier"),
+                new("λ", "😀"), new("keep", "last")]);
+        var host = new MockFileSystem();
+        var command = Assert.IsType<Jq>(Jq.TryParse(invocation));
+        Assert.Equal(0, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
+        Assert.Equal("[[\"λ\",\"keep\"],\"\\ud83d\\ude00\",\"last\"]\n", host.GetOutput(JqFileDescriptor.StdOut));
+        Assert.Empty(host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(0, memory.ReservedBytes);
+    }
+
     [Theory]
     [InlineData("information-tail", false)]
     [InlineData("information-tail", true)]
@@ -89,9 +105,9 @@ public sealed partial class JqTests
         Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Empty(host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
-        // Full retained storage also refuses diagnostic allocation; the
-        // immutable emergency diagnostic must still report terminal status 5.
-        Assert.Equal(2, memory.Counts.Refusals);
+        // A temporary environment index refunds on failure, allowing the
+        // diagnostic. Other full retained owners require emergency output.
+        Assert.Equal(kind == "environment" ? 1 : 2, memory.Counts.Refusals);
         Assert.Equal(0, memory.Counts.BytesReads);
         Assert.Equal(0, memory.Counts.SameSizeResizes);
         Assert.Equal(0, host.ReadBytesCallCount);

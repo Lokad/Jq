@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -60,16 +59,16 @@ public sealed partial class JqTests
         using var cancellation = new CancellationTokenSource();
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token);
         var runtime = new JqRuntime(budget);
-        var array = new JsonArray(1);
-        var obj = new JsonObject { ["a"] = 1 };
-        Assert.Same(array, runtime.Add(array, new JsonArray()));
-        Assert.Same(obj, runtime.Add(obj, new JsonObject()));
-        Assert.Same(obj, runtime.Multiply(obj, new JsonObject()));
+        var array = new JqArray(1);
+        var obj = new JqObject(NativeFixtures.Budget()) { ["a"] = 1 };
+        Assert.Same(array, runtime.Add(array, new JqArray()));
+        Assert.Same(obj, runtime.Add(obj, new JqObject(NativeFixtures.Budget())));
+        Assert.Same(obj, runtime.Multiply(obj, new JqObject(NativeFixtures.Budget())));
         Assert.Equal(0, root.ReservedBytes);
-        Assert.NotSame(array, runtime.Add(new JsonArray(), array));
-        Assert.NotSame(obj, runtime.Add(new JsonObject(), obj));
+        Assert.NotSame(array, runtime.Add(new JqArray(), array));
+        Assert.NotSame(obj, runtime.Add(new JqObject(NativeFixtures.Budget()), obj));
         cancellation.Cancel();
-        Assert.ThrowsAny<OperationCanceledException>(() => runtime.Multiply(obj, new JsonObject()));
-        Assert.ThrowsAny<OperationCanceledException>(() => runtime.TrimAffix(JsonValue.Create("a"), JsonValue.Create(""), true, false));
+        Assert.ThrowsAny<OperationCanceledException>(() => runtime.Multiply(obj, new JqObject(NativeFixtures.Budget())));
+        Assert.ThrowsAny<OperationCanceledException>(() => runtime.TrimAffix(NativeFixtures.Create("a"), NativeFixtures.Create(""), true, false));
     }
 }

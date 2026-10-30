@@ -4,8 +4,8 @@ Target: jq 1.8.2. Compatibility is incomplete: an implemented inventory row mean
 usable behavior with focused tests, not full upstream conformance. Current totals
 are 95 implemented rows, eight intentionally different and one partial (regex).
 
-The runtime uses UTF-8 I/O, Unicode-scalar string operations and `JsonNode` values
-with C# null representing JSON null. Objects preserve insertion order and resolve
+Strings and object keys use UTF-8 storage; indexing counts Unicode scalars.
+C# null represents JSON null. Objects preserve insertion order and resolve
 duplicate keys last-wins. Bindings, value parameters and pass-through operations
 retain aliases, including named arguments and their `$ARGS.named` entries,
 `getpath` and selected extrema. Updates rebuild

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -93,12 +92,12 @@ public sealed partial class JqTests
     {
         var source = new TraversalSourceFilter(static () => { });
         JqFilter filter = kind == 0 ? new RecurseFilter(source, null)
-            : kind == 1 ? new WhileFilter(new LiteralFilter(JsonValue.Create(true)), source)
+            : kind == 1 ? new WhileFilter(new LiteralFilter(NativeFixtures.Create(true)), source)
             : new UntilFilter(new TraversalNullFilter(), source);
         var root = new BenchmarkMemoryBudget(16 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
-            Assert.Equal(kind == 2 ? 1 : 2, await filter.Evaluate(kind == 2 ? JsonValue.Create(0) : null, context, context.RootEnvironment)
+            Assert.Equal(kind == 2 ? 1 : 2, await filter.Evaluate(kind == 2 ? NativeFixtures.Create(0) : null, context, context.RootEnvironment)
                 .Take(kind == 2 ? 1 : 2).CountAsync());
             Assert.Equal(1, source.Pulls);
             Assert.Equal(1, source.Disposals);
@@ -113,9 +112,9 @@ public sealed partial class JqTests
         int calls = 0;
         var source = new TraversalSourceFilter(() => { if (++calls == 10) cancellation.Cancel(); });
         var root = new BenchmarkMemoryBudget(16 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
         {
-            var filter = new RecurseFilter(source, new LiteralFilter(JsonValue.Create(false)));
+            var filter = new RecurseFilter(source, new LiteralFilter(NativeFixtures.Create(false)));
             await using var outputs = filter.Evaluate(null, context, context.RootEnvironment).GetAsyncEnumerator();
             Assert.True(await outputs.MoveNextAsync());
             await Assert.ThrowsAsync<OperationCanceledException>(async () => await outputs.MoveNextAsync());
@@ -219,9 +218,9 @@ public sealed partial class JqTests
 
     private sealed class TraversalNullFilter : JqFilter
     {
-        protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+        protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
         {
-            yield return JsonValue.Create(input is null);
+            yield return NativeFixtures.Create(input is null);
         }
     }
 
@@ -237,10 +236,10 @@ public sealed partial class JqTests
         var language = new JqException("language");
         var body = new TraversalFailureFilter(primaryTerminal ? terminal : language, primaryTerminal ? language : terminal);
         var root = new BenchmarkMemoryBudget(16 * 1024);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var filter = new RecurseFilter(body, null);
-            Exception? thrown = await Record.ExceptionAsync(async () => await filter.Evaluate(JsonValue.Create(0), context, context.RootEnvironment).ToListAsync());
+            Exception? thrown = await Record.ExceptionAsync(async () => await filter.Evaluate(NativeFixtures.Create(0), context, context.RootEnvironment).ToListAsync());
             Assert.Same(terminal, thrown);
             Assert.Equal(1, body.Disposals);
         }
@@ -250,7 +249,7 @@ public sealed partial class JqTests
     private sealed class TraversalFailureFilter(Exception primary, Exception cleanup) : JqFilter
     {
         public int Disposals { get; private set; }
-        protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+        protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
         {
             if (input is null) throw primary;
             try { yield return null; }
@@ -266,7 +265,7 @@ public sealed partial class JqTests
     {
         public int Pulls { get; private set; }
         public int Disposals { get; private set; }
-        protected override async IAsyncEnumerable<JsonNode?> EvaluateCore(JsonNode? input, JqContext context, JqEnvironment environment)
+        protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
         {
             try
             {

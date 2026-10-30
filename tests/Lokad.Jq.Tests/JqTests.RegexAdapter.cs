@@ -90,11 +90,10 @@ public sealed partial class JqTests
         using var cache = new JqRegexCache(budget);
         using var patternLease = cache.Rent("x", JqRegexCompileOptions.None);
         var pattern = patternLease.Value;
-        using var subject = cache.EncodeSubject("x", pattern);
-        var match = cache.Match(pattern, subject.Value, 0, JqRegexMatchOptions.None);
+        ReadOnlyMemory<byte> subject = "x"u8.ToArray();
+        var match = cache.Match(pattern, subject, 0, JqRegexMatchOptions.None);
         cache.Dispose();
         patternLease.Dispose();
-        subject.Dispose();
         Assert.Equal(0, engine.Disposed);
         Assert.True(memory.ReservedBytes > 0);
         Assert.True(match.Success);

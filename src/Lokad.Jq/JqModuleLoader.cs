@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -49,7 +48,7 @@ internal sealed class JqModuleLoader(
             throw new JqException(validation);
         if (import.IsData)
         {
-            JsonNode? data = await TryLoadDataAsync(import, importerDir, cancellationToken).ConfigureAwait(false);
+            JqValue? data = await TryLoadDataAsync(import, importerDir, cancellationToken).ConfigureAwait(false);
             if (data is null)
                 return env;
             string alias = import.Alias ?? string.Empty;
@@ -133,7 +132,7 @@ internal sealed class JqModuleLoader(
         throw new JqException("module not found: " + import.RelPath);
     }
 
-    private async Task<JsonNode?> TryLoadDataAsync(
+    private async Task<JqValue?> TryLoadDataAsync(
         JqModuleImport import,
         string importerDir,
         CancellationToken cancellationToken)
@@ -162,19 +161,16 @@ internal sealed class JqModuleLoader(
         ReadOnlyMemory<byte> content = ownedContent.Content;
         if (import.IsRaw)
         {
-            budget.ReserveString(Encoding.UTF8.GetCharCount(content.Span));
-            string rawText;
             try
             {
-                rawText = Helpers.Utf8Text.Decode(content);
+                return JqString.FromUtf8(content.Span, budget);
             }
-            catch (Exception ex) when (ex is ArgumentException or DecoderFallbackException)
+            catch (JqException ex) when (ex is not JqQuotaException)
             {
                 if (import.IsOptional)
                     return null;
                 throw new JqException("error loading data file " + location + ": " + ex.Message);
             }
-            return JsonValue.Create(rawText);
         }
         try
         {
@@ -283,11 +279,11 @@ internal sealed class JqModuleLoader(
 
         IEnumerable<string> SearchDirs()
         {
-            if (import.Metadata is not null && import.Metadata.TryGetPropertyValue("search", out JsonNode? search))
+            if (import.Metadata is not null && import.Metadata.TryGetPropertyValue("search", out JqValue? search))
             {
-                if (search is JsonArray array)
+                if (search is JqArray array)
                 {
-                    foreach (JsonNode? item in array)
+                    foreach (JqValue? item in array)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         if (Resolve(item) is string dir) yield return dir;
@@ -307,11 +303,11 @@ internal sealed class JqModuleLoader(
             }
         }
 
-        string? Resolve(JsonNode? node)
+        string? Resolve(JqValue? node)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (node is not JsonValue scalar || !scalar.TryGetValue<string>(out string? entry)
-                || entry.Length == 0) return null;
+            if (node is not JqString text || text.ByteLength == 0) return null;
+            string entry = text.ToHost(budget);
             if (entry.StartsWith("~/", StringComparison.Ordinal) || entry == "~"
                 || entry.StartsWith("$ORIGIN/", StringComparison.Ordinal) || entry == "$ORIGIN") return null;
             return JqPathResolution.Combine(importerDir, entry, budget);
@@ -347,7 +343,7 @@ internal sealed class JqModuleLoader(
         return content;
     }
 
-    internal async Task<JsonObject> GetModuleMetadataAsync(string relPath, CancellationToken cancellationToken)
+    internal async Task<JqObject> GetModuleMetadataAsync(string relPath, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(relPath);
         string? validation = JqModulePathValidation.Validate(relPath, budget);
@@ -378,30 +374,30 @@ internal sealed class JqModuleLoader(
         { throw new JqException("error loading module " + path + ": " + exception.Message); }
     }
 
-    private JsonObject BuildMetadataObject(JsonObject? metadata, IReadOnlyList<JqModuleImport> imports,
+    private JqObject BuildMetadataObject(JqObject? metadata, IReadOnlyList<JqModuleImport> imports,
         IReadOnlyList<JqFunctionDefinition> definitions)
     {
         budget.ReserveBytes(192);
-        JsonObject baseObject = metadata is not null
-            ? (JsonObject)budget.CopyValue(metadata, 0)
-            : new JsonObject();
-        var deps = new JsonArray();
+        JqObject baseObject = metadata is not null
+            ? (JqObject)budget.CopyValue(metadata, 0)
+            : new JqObject(budget);
+        var deps = new JqArray();
         foreach (JqModuleImport import in imports)
         {
             budget.CheckCancellation();
             budget.ReserveBytes(64 + 160 * 3);
-            JsonObject dep = import.Metadata is not null
-                ? (JsonObject)budget.CopyValue(import.Metadata, 2)
-                : new JsonObject();
-            dep["relpath"] = JsonValue.Create(import.RelPath);
+            JqObject dep = import.Metadata is not null
+                ? (JqObject)budget.CopyValue(import.Metadata, 2)
+                : new JqObject(budget);
+            dep["relpath"] = JqScalar.Create(import.RelPath, budget);
             if (import.Alias is not null)
-                dep["as"] = JsonValue.Create(import.Alias);
-            dep["is_data"] = JsonValue.Create(import.IsData);
+                dep["as"] = JqScalar.Create(import.Alias, budget);
+            dep["is_data"] = JqScalar.Create(import.IsData);
             budget.CheckCancellation();
             budget.ReserveString(import.RelPath.Length + (import.Alias?.Length ?? 0) + 16);
             deps.Add(dep);
         }
-        var defs = new JsonArray();
+        var defs = new JqArray();
         foreach (JqFunctionDefinition definition in definitions)
         {
             budget.CheckCancellation();
@@ -409,7 +405,7 @@ internal sealed class JqModuleLoader(
             string entry = definition.Name + "/" + definition.Arity.ToString(System.Globalization.CultureInfo.InvariantCulture);
             budget.CheckCancellation();
             budget.ReserveString(entry.Length);
-            defs.Add(JsonValue.Create(entry));
+            defs.Add(JqScalar.Create(entry, budget));
         }
         baseObject["deps"] = deps;
         baseObject["defs"] = defs;

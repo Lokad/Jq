@@ -44,11 +44,11 @@ public sealed partial class JqTests
             var invocation = await JqCommandLineParser.ParseAsync(host, arguments, JqPath.Root, JqFileDescriptor.StdIn,
                 JqFileDescriptor.StdOut, JqFileDescriptor.StdErr, [], null, budget);
             Assert.Null(invocation.Error);
-            var args = Assert.IsType<System.Text.Json.Nodes.JsonObject>(invocation.Variables["ARGS"]);
-            var named = Assert.IsType<System.Text.Json.Nodes.JsonObject>(args["named"]);
+            var args = Assert.IsType<JqObject>(invocation.Variables["ARGS"]);
+            var named = Assert.IsType<JqObject>(args["named"]);
             Assert.Equal(5000, named.Count);
             Assert.Equal(Enumerable.Range(0, 5000).Select(index => "v" + index.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-                named.Select(binding => binding.Key));
+                named.Select(binding => binding.Key.GetValue<string>()));
             Assert.Equal(5000, host.ClosedDescriptors.Count);
         }
         Assert.Equal(0, memory.ReservedBytes);

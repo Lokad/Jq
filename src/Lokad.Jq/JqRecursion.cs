@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
@@ -13,9 +12,9 @@ internal static class JqRecursion
     }
 
     // Containers consume a level; scalar leaves at the boundary remain valid.
-    internal static void CheckValueDepth(JsonNode? value, int depth)
+    internal static void CheckValueDepth(JqValue? value, int depth)
     {
-        if (depth > MaximumDepth || depth == MaximumDepth && value is JsonArray or JsonObject)
+        if (depth > MaximumDepth || depth == MaximumDepth && value is JqArray or JqObject)
             throw new JqQuotaException("value nesting limit exceeded");
     }
 }

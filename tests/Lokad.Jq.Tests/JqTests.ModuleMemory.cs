@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -12,7 +11,7 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(allowance);
         var host = new MockFileSystem();
         host.AddFile("/lib/m.jq", string.Concat(Enumerable.Range(0, 1000).Select(i => "def f" + i + ":" + i + ";")));
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
@@ -37,7 +36,7 @@ public sealed partial class JqTests
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
         host.AddFile("/lib/m.jq", string.Concat(Enumerable.Range(0, 1000).Select(i => "def f" + i + ":" + i + ";")));
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
@@ -56,7 +55,7 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_ModuleExportCollectionObservesCancellation()
     {
-        var env = JqEnvironment.CreateRoot(new Dictionary<string, JsonNode?>());
+        var env = JqEnvironment.CreateRoot(new Dictionary<string, JqValue?>());
         var definition = new JqFunctionDefinition("f", [], new IdentityFilter());
         for (int i = 0; i < 10000; i++) env = env.ExtendFunction(definition);
         using var cancellation = new CancellationTokenSource();
@@ -72,8 +71,8 @@ public sealed partial class JqTests
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var host = new MockFileSystem();
         host.AddFile("/lib/m.jq", "def f: 42;");
-        var metadata = new JsonObject { ["search"] = new JsonArray("/lib", new string('x', 1000000)) };
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        var metadata = new JqObject(NativeFixtures.Budget()) { ["search"] = new JqArray(NativeFixtures.Create("/lib"), NativeFixtures.Create(new string('x', 1000000))) };
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], JqPath.Root);
@@ -88,13 +87,13 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_NullModuleSearchScansWithoutCopyingOrUsingDefaults()
     {
-        var search = new JsonArray();
-        for (int i = 0; i < 100000; i++) search.Add((JsonNode?)null);
-        var metadata = new JsonObject { ["optional"] = true, ["search"] = search };
+        var search = new JqArray();
+        for (int i = 0; i < 100000; i++) search.Add((JqValue?)null);
+        var metadata = new JqObject(NativeFixtures.Budget()) { ["optional"] = true, ["search"] = search };
         var root = new BenchmarkMemoryBudget(0);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
@@ -114,16 +113,16 @@ public sealed partial class JqTests
     [InlineData(true)]
     public async Task Jq_ModuleResolutionObservesCancellationBeforeScanning(bool path)
     {
-        var search = new JsonArray();
-        for (int i = 0; i < 100000; i++) search.Add("subdir");
+        var search = new JqArray();
+        for (int i = 0; i < 100000; i++) search.Add(NativeFixtures.Create("subdir"));
         var import = path
             ? new JqModuleImport(string.Join('/', Enumerable.Repeat("a/b", 100000)), null, false, null)
-            : new JqModuleImport("missing", null, false, new JsonObject { ["search"] = search });
+            : new JqModuleImport("missing", null, false, new JqObject(NativeFixtures.Budget()) { ["search"] = search });
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var root = new BenchmarkMemoryBudget(0);
         var memory = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, cancellation.Token)))
         {
             var host = new MockFileSystem();
@@ -141,13 +140,13 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_ModuleSearchPreflightsBeforeResolvingDirectories()
     {
-        var search = new JsonArray();
-        for (int i = 0; i < 100000; i++) search.Add("subdir");
-        var import = new JqModuleImport("missing", null, false, new JsonObject { ["search"] = search });
+        var search = new JqArray();
+        for (int i = 0; i < 100000; i++) search.Add(NativeFixtures.Create("subdir"));
+        var import = new JqModuleImport("missing", null, false, new JqObject(NativeFixtures.Budget()) { ["search"] = search });
         var root = new BenchmarkMemoryBudget(0);
         var memory = new CountingMemoryBudget(root);
         var host = new MockFileSystem();
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], JqPath.Root);
@@ -169,7 +168,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(allowance);
         var host = new MockFileSystem();
         host.AddFile("/lib/m.jq", "def f:42;" + new string(' ', 1024 * 1024));
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
@@ -199,14 +198,14 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var host = new MockFileSystem();
         host.AddFile("/second/m.jq", "def f:2;");
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, [], JqPath.Root);
-            var first = new JqModuleImport("m", null, false, new JsonObject { ["search"] = "/second" });
+            var first = new JqModuleImport("m", null, false, new JqObject(NativeFixtures.Budget()) { ["search"] = NativeFixtures.Create("/second" )});
             _ = await loader.LoadMainImportsAsync([first], "/", CancellationToken.None);
             host.AddFile("/first/m.jq", "def f:1;");
-            var second = new JqModuleImport("m", null, false, new JsonObject { ["search"] = new JsonArray("/first", "/second") });
+            var second = new JqModuleImport("m", null, false, new JqObject(NativeFixtures.Budget()) { ["search"] = new JqArray(NativeFixtures.Create("/first"), NativeFixtures.Create("/second")) });
             var env = await loader.LoadMainImportsAsync([second], "/", CancellationToken.None);
             Assert.Equal(1, JqRuntime.Number(await new UserCallFilter("f", 0, []).Evaluate(null, context, env).SingleAsync()));
             Assert.Equal(2, host.ReadBytesCallCount);
@@ -221,7 +220,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var host = new MockFileSystem();
         host.AddFile("/lib/m.json", "1");
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
@@ -245,7 +244,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var host = new MockFileSystem();
         host.AddFile("/lib/m.jq", "def f:42;");
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);
@@ -266,7 +265,7 @@ public sealed partial class JqTests
         var root = new BenchmarkMemoryBudget(1024 * 1024);
         var host = new MockFileSystem { CloseFailure = new JqOperationError(JqOperationErrorKind.TransportFailure, "storage unavailable") };
         host.AddFile("/lib/m.jq", "def f:42;");
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(),
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(),
             new JqBudget(Utf8RegexAdapter.Instance, root, CancellationToken.None)))
         {
             var loader = new JqModuleLoader(host, context.Budget, context.Runtime, context.RootEnvironment, ["/lib"], JqPath.Root);

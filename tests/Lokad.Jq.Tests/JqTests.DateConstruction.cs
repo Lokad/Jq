@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -56,15 +55,15 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_DateConstructionDispatchesBorrowedDirectivesWithoutTemporaryStrings()
     {
-        JsonNode input = JsonValue.Create(string.Concat(Enumerable.Repeat("1970", 10000)));
-        JsonNode format = JsonValue.Create(string.Concat(Enumerable.Repeat("%Y", 10000)));
+        JqValue input = NativeFixtures.Create(string.Concat(Enumerable.Repeat("1970", 10000)));
+        JqValue format = NativeFixtures.Create(string.Concat(Enumerable.Repeat("%Y", 10000)));
         var memory = new BenchmarkMemoryBudget(64 * 1024);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), budget))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), budget))
         {
-            _ = JqTime.Strptime(context, JsonValue.Create("1970"), JsonValue.Create("%Y"));
+            _ = JqTime.Strptime(context, NativeFixtures.Create("1970"), NativeFixtures.Create("%Y"));
             long before = GC.GetAllocatedBytesForCurrentThread();
-            JsonNode value = JqTime.Strptime(context, input, format);
+            JqValue value = JqTime.Strptime(context, input, format);
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
             Assert.Equal("[1970,0,0,0,0,0,8,367]", value.ToJsonString());
             Assert.InRange(allocated, 0, 8192);

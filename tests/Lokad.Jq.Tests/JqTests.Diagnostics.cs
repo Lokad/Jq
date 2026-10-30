@@ -460,7 +460,7 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_RuntimeTypeErrorHasDiagnostic()
     {
-        var variables = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>();
+        var variables = new Dictionary<string, JqValue?>();
         var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
         using var context = new JqContext(variables, budget);
         JqFilter filter = new JqParser("1 | .foo", JqProgramSource.Inline, context.RootEnvironment, budget).Parse();

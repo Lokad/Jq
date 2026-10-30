@@ -173,19 +173,30 @@ public sealed partial class JqTests
         Assert.Equal(0, memory.ReservedBytes);
     }
 
-    [Fact]
-    public async Task Jq_GovernedHaltPayloadRefusalReturnsResourceStatusInsteadOfHaltCode()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jq_GovernedHaltBorrowsNativeTextAndRefusesUnfundedSerialization(bool serialize)
     {
-        var memory = new BenchmarkMemoryBudget(16 * 1024);
+        const long limit = 128 * 1024;
+        var memory = new BenchmarkMemoryBudget(limit);
         var host = new MockFileSystem();
         string payload = new('x', 20000);
+        IMemoryReservation? pressure = null;
+        host.BeforeByteAppend = () =>
+        {
+            if (pressure is null) Assert.True(memory.TryReserve(limit - memory.ReservedBytes - 4096, out pressure));
+        };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-n", "-r",
-            "--arg", "payload", payload, "\"prefix\", ($payload | halt_error(7))")));
+            "--arg", "payload", payload, "\"prefix\", ($payload | " + (serialize ? "[.] | " : "") + "halt_error(7))")));
 
-        Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
+        Assert.Equal(serialize ? 5 : 7, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
         Assert.Equal("prefix\n", host.GetOutput(JqFileDescriptor.StdOut));
-        Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
+        Assert.Equal(serialize ? "jq: memory budget exceeded\n" : payload, host.GetOutput(JqFileDescriptor.StdErr));
         Assert.Empty(host.ClosedDescriptors);
+        Assert.NotNull(pressure);
+        Assert.Equal(pressure.Bytes, memory.ReservedBytes);
+        pressure.Dispose();
         Assert.Equal(0, memory.ReservedBytes);
     }
 

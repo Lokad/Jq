@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -29,7 +28,7 @@ public sealed partial class JqTests
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
             var runtime = new JqRuntime(budget);
-            var failure = Assert.Throws<JqException>(() => runtime.Format(name, new JsonArray()));
+            var failure = Assert.Throws<JqException>(() => runtime.FormatValue(name, new JqArray()).GetValue<string>());
             Assert.Equal(name + " is not a valid format", failure.Message);
             Assert.True(memory.ReservedBytes >= 2L * failure.Message.Length);
         }
@@ -43,12 +42,14 @@ public sealed partial class JqTests
     [InlineData(1048576, "format($name)?")]
     public async Task Jq_FormatDiagnosticsRefusalPreventsLargeCopiesAndPreservesPrefix(int length, string operation)
     {
-        var memory = new BenchmarkMemoryBudget(64 * 1024);
+        var memory = new BenchmarkMemoryBudget(length + 32 * 1024);
         var host = new MockFileSystem();
+        long before = 0;
+        host.BeforeByteAppend = () => { if (host.AppendCallCount == 0) before = GC.GetAllocatedBytesForCurrentThread(); };
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "--arg", "name", new string('z', length),
             "\"ready\", (" + operation + ")")));
-        long before = GC.GetAllocatedBytesForCurrentThread();
         Assert.Equal(5, await command.ExecuteAsync(host, Utf8RegexAdapter.Instance, memory, CancellationToken.None));
+        Assert.True(before > 0);
         Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 256 * 1024);
         Assert.Equal("ready\n", host.GetOutput(JqFileDescriptor.StdOut));
         Assert.Equal("jq: memory budget exceeded\n", host.GetOutput(JqFileDescriptor.StdErr));
@@ -67,7 +68,7 @@ public sealed partial class JqTests
         {
             var runtime = new JqRuntime(budget);
             long before = GC.GetAllocatedBytesForCurrentThread();
-            var failure = Assert.Throws<OperationCanceledException>(() => runtime.Format(name, null));
+            var failure = Assert.Throws<OperationCanceledException>(() => runtime.FormatValue(name, null).GetValue<string>());
             Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 32 * 1024);
             Assert.Equal(cancellation.Token, failure.CancellationToken);
         }
@@ -82,7 +83,7 @@ public sealed partial class JqTests
         var hooked = new AdmissionCallbackBudget(memory, cancellation.Cancel);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, hooked, cancellation.Token))
         {
-            var failure = Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).Format("missing", null));
+            var failure = Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).FormatValue("missing", null).GetValue<string>());
             Assert.True(failure.IsMemoryAdmission);
             Assert.True(cancellation.IsCancellationRequested);
         }
@@ -114,7 +115,7 @@ public sealed partial class JqTests
             for (int record = 0; record < 2500; record++)
             {
                 budget.BeginRecord();
-                Assert.Equal("missing is not a valid format", Assert.Throws<JqException>(() => runtime.Format("missing", null)).Message);
+                Assert.Equal("missing is not a valid format", Assert.Throws<JqException>(() => runtime.FormatValue("missing", null).GetValue<string>()).Message);
             }
             Assert.InRange(counted.Counts.Reservations + counted.Counts.Resizes, 1, 8);
         }

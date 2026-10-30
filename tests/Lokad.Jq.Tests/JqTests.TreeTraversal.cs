@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -12,10 +11,10 @@ public sealed partial class JqTests
     [InlineData(true, true)]
     public async Task Jq_DescentBorrowsWideChildrenWithinSmallAdmission(bool objects, bool paths)
     {
-        JsonNode input = WideNullContainer(objects);
+        JqValue input = WideNullContainer(objects);
         var root = new BenchmarkMemoryBudget(4096);
         var counted = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
         {
             var filter = new RecursiveDescentFilter();
             if (paths)
@@ -28,7 +27,7 @@ public sealed partial class JqTests
             }
             else
             {
-                JsonNode?[] values = await filter.Evaluate(input, context, context.RootEnvironment).Take(2).ToArrayAsync();
+                JqValue?[] values = await filter.Evaluate(input, context, context.RootEnvironment).Take(2).ToArrayAsync();
                 Assert.Equal(2, values.Length);
                 Assert.Same(input, values[0]);
                 Assert.Null(values[1]);
@@ -46,10 +45,10 @@ public sealed partial class JqTests
     [InlineData(true, true)]
     public async Task Jq_DescentRefusesBeforeBufferingSiblings(bool objects, bool paths)
     {
-        JsonNode input = WideNullContainer(objects);
+        JqValue input = WideNullContainer(objects);
         var root = new BenchmarkMemoryBudget(0);
         var counted = new CountingMemoryBudget(root);
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, counted, CancellationToken.None)))
         {
             var filter = new RecursiveDescentFilter();
             await using IAsyncEnumerator<object?> values = paths
@@ -68,16 +67,16 @@ public sealed partial class JqTests
     [Fact]
     public async Task Jq_DescentTraversesDeepValuesAndCancelsWithOpenCursors()
     {
-        JsonNode? input = null;
-        for (int depth = 0; depth < 5000; depth++) input = new JsonArray(input);
+        JqValue? input = null;
+        for (int depth = 0; depth < 5000; depth++) input = new JqArray(input);
         var root = new BenchmarkMemoryBudget(4 * 1024 * 1024);
         using var cancellation = new CancellationTokenSource();
-        using (var context = new JqContext(new Dictionary<string, JsonNode?>(), new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
+        using (var context = new JqContext(new Dictionary<string, JqValue?>(), new JqBudget(Utf8RegexAdapter.Instance, root, cancellation.Token)))
         {
             var filter = new RecursiveDescentFilter();
             Assert.Equal(5001, await filter.Evaluate(input, context, context.RootEnvironment).CountAsync());
             Assert.Equal(0, root.ReservedBytes);
-            await using IAsyncEnumerator<JsonNode?> values = filter.Evaluate(input, context, context.RootEnvironment).GetAsyncEnumerator();
+            await using IAsyncEnumerator<JqValue?> values = filter.Evaluate(input, context, context.RootEnvironment).GetAsyncEnumerator();
             Assert.True(await values.MoveNextAsync());
             Assert.True(await values.MoveNextAsync());
             Assert.True(root.ReservedBytes > 0);
@@ -144,16 +143,16 @@ public sealed partial class JqTests
         }
     }
 
-    private static JsonNode WideNullContainer(bool objects)
+    private static JqValue WideNullContainer(bool objects)
     {
         if (objects)
         {
-            var obj = new JsonObject();
+            var obj = new JqObject(NativeFixtures.Budget());
             for (int index = 0; index < 100000; index++) obj.Add("k" + index, null);
             return obj;
         }
-        var array = new JsonArray();
-        for (int index = 0; index < 100000; index++) array.Add((JsonNode?)null);
+        var array = new JqArray();
+        for (int index = 0; index < 100000; index++) array.Add((JqValue?)null);
         return array;
     }
 }

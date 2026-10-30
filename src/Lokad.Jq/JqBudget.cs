@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Text.Json.Nodes;
 using System.Threading;
 
 namespace Lokad.Jq;
@@ -13,16 +12,19 @@ namespace Lokad.Jq;
 /// </summary>
 internal sealed class JqBudget : IDisposable
 {
-    private const int MaximumIdleSerializationBytes = 4096;
+    private const int MaximumIdleUtf8Bytes = 4096;
     private readonly CancellationToken _cancellationToken;
     private int _recursionDepth;
     private readonly JqStorage _executionStorage;
     private JqStorage _storage;
     private JqStorage? _recordStorage;
     private readonly List<JqStorage> _persistentStorageOwners = [];
-    private JqJsonBuffer? _serializationBuffer;
+    private JqJsonBuffer? _utf8Buffer;
     private int _serializedResults;
     private bool _disposed;
+    private JqStringKeys? _stringKeys;
+
+    internal JqStringKeys StringKeys => _stringKeys ??= new JqStringKeys(this);
 
     internal JqBudget(CancellationToken cancellationToken)
         : this(null, null, cancellationToken) { }
@@ -56,11 +58,11 @@ internal sealed class JqBudget : IDisposable
         return (int)Math.Min(Array.MaxLength, Math.Max(required, preferred));
     }
 
-    internal JqJsonBuffer RentSerializationBuffer()
+    internal JqJsonBuffer RentUtf8Buffer()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        JqJsonBuffer buffer = _serializationBuffer ?? new JqJsonBuffer(this);
-        _serializationBuffer = null;
+        JqJsonBuffer buffer = _utf8Buffer ?? new JqJsonBuffer(this);
+        _utf8Buffer = null;
         try { buffer.Reset(); return buffer; }
         catch { buffer.Dispose(); throw; }
     }
@@ -74,10 +76,16 @@ internal sealed class JqBudget : IDisposable
         // Cold one-off results retain their existing immediate refund behavior.
         if (_serializedResults < 32) return buffer;
         // Retain at most one small returned buffer after repeated results.
-        return new SerializationReturn(this, buffer);
+        return new Utf8BufferReturn(this, buffer);
     }
 
-    private sealed class SerializationReturn(JqBudget budget, JqJsonBuffer buffer) : IDisposable
+    internal JqMemoryValue<JqJsonBuffer> RentUtf8Builder()
+    {
+        JqJsonBuffer buffer = RentUtf8Buffer();
+        return new JqMemoryValue<JqJsonBuffer>(buffer, new Utf8BufferReturn(this, buffer));
+    }
+
+    private sealed class Utf8BufferReturn(JqBudget budget, JqJsonBuffer buffer) : IDisposable
     {
         private bool _returned;
 
@@ -85,9 +93,10 @@ internal sealed class JqBudget : IDisposable
         {
             if (_returned) return;
             _returned = true;
-            if (!budget._disposed && budget._serializationBuffer is null
-                && buffer.AdmittedBytes <= MaximumIdleSerializationBytes)
-                budget._serializationBuffer = buffer;
+            if (!budget._disposed) buffer.ReleaseReplacedStorage();
+            if (!budget._disposed && budget._utf8Buffer is null
+                && buffer.AdmittedBytes <= MaximumIdleUtf8Bytes)
+                budget._utf8Buffer = buffer;
             else
                 buffer.Dispose();
         }
@@ -157,45 +166,45 @@ internal sealed class JqBudget : IDisposable
     // wrappers are untracked; container clones account for all stored wrappers
     // and backing slots, without charging borrowed strings a second time.
     [return: NotNullIfNotNull(nameof(value))]
-    internal JsonNode? CopyValue(JsonNode? value, int depth)
+    internal JqValue? CopyValue(JqValue? value, int depth)
     {
         CheckCancellation();
         JqRecursion.CheckValueDepth(value, depth);
-        if (value is JsonArray array)
+        if (value is JqArray array)
         {
             ReserveBytes(64 + 24L * array.Count);
-            var copy = new JsonArray();
-            foreach (JsonNode? child in array)
+            var copy = new JqArray();
+            foreach (JqValue? child in array)
             {
-                if (child is JsonValue) ReserveBytes(64);
+                if (child is JqScalar) ReserveBytes(64);
                 copy.Add(CopyValue(child, depth + 1));
             }
             return copy;
         }
-        if (value is JsonObject obj)
+        if (value is JqObject obj)
         {
             ReserveBytes(64 + 96L * obj.Count);
-            var copy = new JsonObject();
+            var copy = new JqObject(this);
             foreach (var entry in obj)
             {
-                if (entry.Value is JsonValue) ReserveBytes(64);
+                if (entry.Value is JqScalar) ReserveBytes(64);
                 copy.Add(entry.Key, CopyValue(entry.Value, depth + 1));
             }
             return copy;
         }
-        return value?.DeepClone();
+        return value is JqScalar scalar ? scalar.Copy() : null;
     }
 
-    internal void ReserveArrayItem(JsonNode? value) => ReserveBytes(value is JsonValue ? 88 : 24);
+    internal void ReserveArrayItem(JqValue? value) => ReserveBytes(value is JqScalar ? 88 : 24);
 
-    internal void ReserveObjectItem(JsonNode? value) => ReserveBytes(value is JsonValue ? 160 : 96);
+    internal void ReserveObjectItem(JqValue? value) => ReserveBytes(value is JqScalar ? 160 : 96);
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        _serializationBuffer?.Dispose();
-        _serializationBuffer = null;
+        _utf8Buffer?.Dispose();
+        _utf8Buffer = null;
         foreach (JqStorage owner in _persistentStorageOwners) owner.Dispose();
         _persistentStorageOwners.Clear();
         _recordStorage?.Dispose();

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json.Nodes;
 using System.Threading;
 using Lokad.Jq.Helpers;
 
@@ -49,8 +48,8 @@ internal static class JqCommandLineParser
             budget.ReserveMetadata(512, 8);
             var parsed = new Options();
             var format = OutputFormat.Default;
-            var variables = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
-            var positionalArguments = new JsonArray();
+            var variables = new Dictionary<string, JqValue?>(StringComparer.Ordinal);
+            var positionalArguments = new JqArray();
             var operands = new List<string>();
             var libraryPaths = new List<string>();
             string? program = null;
@@ -74,7 +73,7 @@ internal static class JqCommandLineParser
                     else
                     {
                         budget.ReserveMetadata(jsonArguments ? 24 : 88, 1);
-                        if (!jsonArguments) positionalArguments.Add(JsonValue.Create(argument));
+                        if (!jsonArguments) positionalArguments.Add(JqScalar.Create(argument, budget));
                         else
                         {
                             try { positionalArguments.Add(runtime.ParseJson(argument)); }
@@ -105,8 +104,7 @@ internal static class JqCommandLineParser
                             using var content = await host.ReadFileAsync(resolved, budget, budget.CancellationToken).ConfigureAwait(false);
                             if (option == "rawfile")
                             {
-                                budget.ReserveString(System.Text.Encoding.UTF8.GetCharCount(content.Content.Span));
-                                variables[name] = JsonValue.Create(Utf8Text.Decode(content.Content));
+                                variables[name] = JqString.FromUtf8(content.Content.Span, budget);
                             }
                             else variables[name] = runtime.ReadJsonArray(content.Content.Span, 0);
                         }
@@ -171,10 +169,10 @@ internal static class JqCommandLineParser
                 libraryDirs.Add(JqPathResolution.CreateRequest(library, currentDirectory, budget));
             }
 
-            // ARGS owns argument parent links; the variable table borrows them.
+            // ARGS owns argument values; the variable table borrows them.
             budget.ReserveMetadata(512, 8);
-            var namedArguments = new JsonObject();
-            var argsObject = new JsonObject { ["positional"] = positionalArguments, ["named"] = namedArguments };
+            var namedArguments = new JqObject(budget);
+            var argsObject = new JqObject(budget) { ["positional"] = positionalArguments, ["named"] = namedArguments };
             foreach (var (key, value) in variables)
             {
                 budget.CheckCancellation();
@@ -182,12 +180,27 @@ internal static class JqCommandLineParser
             }
             variables["ARGS"] = argsObject;
             // Intrinsic bindings stay separate from named arguments in ARGS.
-            var environmentObject = new JsonObject();
-            foreach (JqEnvironmentVariable variable in environment)
+            var environmentObject = new JqObject(budget);
+            using (var environmentStorage = new JqStorage(budget.MemoryBudget))
             {
-                budget.CheckCancellation();
-                if (!environmentObject.ContainsKey(variable.Name)) budget.ReserveMetadata(160, 2);
-                environmentObject[variable.Name] = JsonValue.Create(variable.Value);
+                // Select winners before encoding: duplicate names retain their
+                // first position and last value, without constructing discarded
+                // payloads. This temporary table borrows the host's names.
+                var lastEntries = new Dictionary<string, int>(StringComparer.Ordinal);
+                for (int index = 0; index < environment.Count; index++)
+                {
+                    budget.CheckCancellation();
+                    string name = environment[index].Name;
+                    if (!lastEntries.ContainsKey(name)) environmentStorage.ReserveBytes(96, 1);
+                    lastEntries[name] = index;
+                }
+                foreach (JqEnvironmentVariable variable in environment)
+                {
+                    budget.CheckCancellation();
+                    if (!lastEntries.Remove(variable.Name, out int last)) continue;
+                    budget.ReserveMetadata(160, 2);
+                    environmentObject[variable.Name] = JqString.FromHost(environment[last].Value, budget);
+                }
             }
             variables["ENV"] = environmentObject;
 
@@ -253,7 +266,7 @@ internal static class JqCommandLineParser
                         string variable = args[++position];
                         string value = args[++position];
                         if (!TryBindName(variable)) break;
-                        if (name.SequenceEqual("arg")) variables[variable] = JsonValue.Create(value);
+                        if (name.SequenceEqual("arg")) variables[variable] = JqScalar.Create(value, budget);
                         else
                         {
                             try { variables[variable] = runtime.ParseJson(value); }

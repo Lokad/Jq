@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json.Nodes;
 
 namespace Lokad.Jq;
 
@@ -18,21 +17,21 @@ namespace Lokad.Jq;
 // mutable cells or statics, and recursion resolves through the same path.
 internal sealed class JqEnvironment
 {
-    private readonly IReadOnlyDictionary<string, JsonNode?> _root;
+    private readonly IReadOnlyDictionary<string, JqValue?> _root;
     private readonly JqEnvironment? _parent;
     private readonly string? _name;
-    private readonly JsonNode? _value;
+    private readonly JqValue? _value;
     private readonly JqFilterClosure? _filter;
     private readonly JqUserClosure? _closure;
     private readonly JqEnvironment? _moduleScope;
     private readonly object? _label;
 
-    private JqEnvironment(IReadOnlyDictionary<string, JsonNode?> root)
+    private JqEnvironment(IReadOnlyDictionary<string, JqValue?> root)
     {
         _root = root ?? throw new ArgumentNullException(nameof(root));
     }
 
-    private JqEnvironment(JqEnvironment parent, string name, JsonNode? value)
+    private JqEnvironment(JqEnvironment parent, string name, JqValue? value)
     {
         ArgumentNullException.ThrowIfNull(parent);
         ArgumentNullException.ThrowIfNull(name);
@@ -74,7 +73,7 @@ internal sealed class JqEnvironment
         _moduleScope = moduleScope;
     }
 
-    internal static JqEnvironment CreateRoot(IReadOnlyDictionary<string, JsonNode?> variables) =>
+    internal static JqEnvironment CreateRoot(IReadOnlyDictionary<string, JqValue?> variables) =>
         new(variables);
 
     private JqEnvironment(JqEnvironment parent, object label, uint labelId)
@@ -101,7 +100,7 @@ internal sealed class JqEnvironment
         return false;
     }
 
-    internal JqEnvironment Extend(string name, JsonNode? value) =>
+    internal JqEnvironment Extend(string name, JqValue? value) =>
         new(this, name, value);
 
     internal JqEnvironment ExtendFilter(string name, JqFilterClosure filter) =>
@@ -127,7 +126,7 @@ internal sealed class JqEnvironment
     internal JqEnvironment ExtendClosure(string name, JqUserClosure closure) =>
         new(this, name, closure);
 
-    internal bool TryGetValue(string name, out JsonNode? value)
+    internal bool TryGetValue(string name, out JqValue? value)
     {
         JqEnvironment? scope = this;
         while (scope is not null)

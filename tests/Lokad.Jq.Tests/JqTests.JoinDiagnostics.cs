@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Lokad.Jq.Benchmarking;
 
 namespace Lokad.Jq.Tests;
@@ -38,7 +37,7 @@ public sealed partial class JqTests
     {
         string text = string.Concat(Enumerable.Repeat(unit, count));
         using var budget = new JqBudget(Utf8RegexAdapter.Instance, CancellationToken.None);
-        string preview = new JqRuntime(budget).TruncatedDump(JsonValue.Create(text));
+        string preview = new JqRuntime(budget).TruncatedDump(NativeFixtures.Create(text));
         var host = new MockFileSystem();
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-nr", "--arg", "text", text,
             "try ([$text,{}]|join(\"\")) catch .")));
@@ -78,7 +77,7 @@ public sealed partial class JqTests
     {
         var host = new MockFileSystem();
         host.AddFile("/records", "0\n");
-        var memory = new BenchmarkMemoryBudget(successfulOutput ? 96 * 1024 : 32 * 1024);
+        var memory = new BenchmarkMemoryBudget(successfulOutput ? 96 * 1024 : 64 * 1024);
         string expression = successfulOutput ? "[$text]|join(\"\")" : "[$text,{}]|join(\"\")";
         var command = Assert.IsType<Jq>(Jq.TryParse(BuildInvocation("jq", "-r", "--arg", "text", new string('x', 32768),
             "\"ready\", (try (" + expression + ") catch \"caught\")", "/records")));
@@ -93,13 +92,14 @@ public sealed partial class JqTests
     [Fact]
     public void Jq_JoinDiagnosticsDoNotRecoverFromPreviewAdmissionRefusal()
     {
-        var input = new JsonArray(JsonValue.Create(new string('x', 16384)), new JsonObject());
-        var memory = new BenchmarkMemoryBudget(32768);
+        var input = new JqArray(NativeFixtures.Create(new string('x', 16384)), new JqObject(NativeFixtures.Budget()));
+        var memory = new BenchmarkMemoryBudget(16384);
         using (var budget = new JqBudget(Utf8RegexAdapter.Instance, memory, CancellationToken.None))
         {
-            var error = Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).Join(input, JsonValue.Create("")));
+            var error = Assert.Throws<JqQuotaException>(() => new JqRuntime(budget).Join(input, NativeFixtures.Create("")));
             Assert.True(error.IsMemoryAdmission);
-            Assert.Equal(32768, memory.ReservedBytes);
+            Assert.Equal(16384, memory.PeakBytes);
+            Assert.Equal(0, memory.ReservedBytes);
         }
         Assert.Equal(0, memory.ReservedBytes);
     }
