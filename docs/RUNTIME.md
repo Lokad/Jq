@@ -8,7 +8,7 @@ through `IJqHost`, using the supplied cancellation token and optional shared
 and `ARGS` values stay in `$ARGS.named`; intrinsic `$ENV` and `env` use the host
 snapshot. Selected `--rawfile`/`--slurpfile` values load in option order, before
 later information switches, argument errors and program-file loading; duplicate
-names keep the first binding. Updates copy borrowed branches, keeping reused and
+names keep the first binding. Updates copy modified containers, keeping reused and
 overlapping executions independent.
 
 Source identifiers and syntax whitespace use jq's ASCII grammar; quoted data
@@ -145,8 +145,8 @@ escaping errors retain their charge. Other construction within one record can
 remain conservatively charged, so a long loop may refuse despite a bounded live
 set.
 
-Reads and pass-through results borrow existing values. Writes copy borrowed
-branches; private accumulators such as `add` and `fromstream` update their owned
+Reads and pass-through results borrow existing values. Path writes copy modified
+containers and retain unchanged funded branches; private `add`/`fromstream` accumulators update owned
 containers directly. Array collectors adopt newly constructed private containers
 and copy borrowed or uncertain values, checking destination depth before attachment.
 Emitted stream values stay independent of later updates.

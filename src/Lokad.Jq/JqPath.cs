@@ -345,8 +345,9 @@ internal static class JqPaths
     }
 }
 
-// Path updates deep-copy containers on the spine before mutation. JqValue
-// children have one parent; source values and sibling outputs remain independent.
+// Copy only the containers on the modified spine. Unchanged children remain
+// borrowed from the funded input; every later write copies its own spine too.
+// The owned streaming builder is separate: none of its tree has escaped.
 internal static class JqPathUpdates
 {
     private sealed record Frame(JqValueSegment Segment, JqValue Container, int Index, int From, int To);
@@ -390,7 +391,7 @@ internal static class JqPathUpdates
                 }
                 if (current is JqObject obj)
                 {
-                    frames.Push(new Frame(segment, owned ? obj : (JqObject)context.Budget.CopyValue(obj, 0), 0, 0, 0));
+                    frames.Push(new Frame(segment, owned ? obj : CopyContainer(obj, context.Budget), 0, 0, 0));
                     return obj.TryGetPropertyValue(key.Key, out JqValue? child) ? child : null;
                 }
                 // Like the reference probe read inside jv_setpath, indexing a
@@ -432,7 +433,7 @@ internal static class JqPathUpdates
                 if (current is JqArray target)
                 {
                     JqPaths.ResolveSlice(target.Count, slice.Start, slice.End, out int from, out int to);
-                    frames.Push(new Frame(segment, owned ? target : (JqArray)context.Budget.CopyValue(target, 0), 0, from, to));
+                    frames.Push(new Frame(segment, owned ? target : CopyContainer(target, context.Budget), 0, from, to));
                     return SliceCopy(target, from, to, context);
                 }
                 if (current is JqString)
@@ -457,7 +458,7 @@ internal static class JqPathUpdates
                     if (!JqPaths.TryGetSliceObjectBounds(raw.Raw, out double? rawStart, out double? rawEnd))
                         throw new JqException("Array/string slice indices must be integers");
                     JqPaths.ResolveSlice(rawTarget.Count, rawStart, rawEnd, out int rawFrom, out int rawTo);
-                    frames.Push(new Frame(new SliceSegment(rawStart, rawEnd), owned ? rawTarget : (JqArray)context.Budget.CopyValue(rawTarget, 0), 0, rawFrom, rawTo));
+                    frames.Push(new Frame(new SliceSegment(rawStart, rawEnd), owned ? rawTarget : CopyContainer(rawTarget, context.Budget), 0, rawFrom, rawTo));
                     return SliceCopy(rawTarget, rawFrom, rawTo, context);
                 }
                 if (current is JqString)
@@ -472,6 +473,32 @@ internal static class JqPathUpdates
             default:
                 throw SegmentTypeError(current, segment, context);
         }
+    }
+
+    // Inputs and siblings retain their existing storage owner. Charge only the
+    // new header/entry slots; no child wrapper or subtree is allocated here.
+    private static JqValue CopyContainer(JqValue source, JqBudget budget)
+    {
+        if (source is JqObject obj)
+        {
+            budget.ReserveBytes(64 + 96L * obj.Count);
+            var copy = new JqObject(budget);
+            foreach (var entry in obj)
+            {
+                budget.CheckCancellation();
+                copy.Add(entry.Key, entry.Value);
+            }
+            return copy;
+        }
+        var array = (JqArray)source;
+        budget.ReserveBytes(64 + 24L * array.Count);
+        var result = new JqArray();
+        foreach (JqValue? child in array)
+        {
+            budget.CheckCancellation();
+            result.Add(child);
+        }
+        return result;
     }
 
     private static JqValue ApplyFrame(Frame frame, JqValue? leaf, JqContext context)
@@ -528,7 +555,7 @@ internal static class JqPathUpdates
         context.Budget.ReserveBytes(checked(24L * padding));
         JqArray padded;
         if (source is not null)
-            padded = owned ? source : (JqArray)context.Budget.CopyValue(source, 0);
+            padded = owned ? source : (JqArray)CopyContainer(source, context.Budget);
         else
         {
             context.Budget.ReserveBytes(64);

@@ -8,8 +8,8 @@ Strings and object keys use UTF-8 storage; indexing counts Unicode scalars.
 C# null represents JSON null. Objects preserve insertion order and resolve
 duplicate keys last-wins. Bindings, value parameters and pass-through operations
 retain aliases, including named arguments and their `$ARGS.named` entries,
-`getpath` and selected extrema. Updates rebuild
-containers while preserving the tested path rules and independent source values.
+`getpath` and selected extrema. Path updates copy modified containers and preserve
+unchanged branch identity, tested path rules and independent source values.
 All I/O, modules, environment, clock and timezone inputs come from the embedding host.
 Named `ENV` and `ARGS` arguments remain in `$ARGS.named`; intrinsic bindings retain
 their meaning, including when those named values come from files.

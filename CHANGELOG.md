@@ -2,6 +2,8 @@
 
 ## 0.3.0 — Unreleased
 
+- Copy only containers on a modified path, preserving unchanged branch identity
+  and independent source values instead of recursively duplicating each ancestor.
 - Breaking: compiled regex handles expose actual capture counts and UTF-8 names,
   and prepare subjects with reusable cursors. Each operation receives its current
   cancellation token. Cursor results are borrowed; `RetainCurrent` keeps independent
