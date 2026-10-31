@@ -18,6 +18,9 @@ overlapping matches.
 Quoted field names support interpolation with the same key evaluation and path
 rules as bracket access.
 Literal split and string division use nonoverlapping separators.
+Object-pattern key expressions use their enclosing lexical bindings, including
+nested patterns and reductions. Destructuring inside `path(...)` can still differ
+in path-state error handling.
 Loops preserve depth-first condition multiplicity, effects and lazy termination.
 `combinations(n)` collects all count-filter results before generating one product,
 including empty count streams and late failures.

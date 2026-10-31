@@ -246,7 +246,7 @@ internal sealed class AsFilter(
         for (int index = 0; index < alternatives.Count && !completed; index++)
         {
             bool isLast = index == alternatives.Count - 1;
-            var scopes = Match(alternatives[index], bound, prebound, context, storage, 1).GetAsyncEnumerator();
+            var scopes = Match(alternatives[index], bound, prebound, environment, context, storage, 1).GetAsyncEnumerator();
             await using var scopesLifetime = scopes.ConfigureAwait(false);
             while (true)
             {
@@ -307,7 +307,7 @@ internal sealed class AsFilter(
         return environment;
     }
 
-    private static async IAsyncEnumerable<JqEnvironment> Match(BindingPattern pattern, JqValue? value, JqEnvironment scope, JqContext context, JqScopeStorage storage, int depth)
+    private static async IAsyncEnumerable<JqEnvironment> Match(BindingPattern pattern, JqValue? value, JqEnvironment scope, JqEnvironment keyScope, JqContext context, JqScopeStorage storage, int depth)
     {
         context.Budget.CheckCancellation();
         JqRecursion.CheckDepth(depth, "pattern nesting limit exceeded");
@@ -323,14 +323,14 @@ internal sealed class AsFilter(
                 try
                 {
                     JqEnvironment aliased = scope.Extend(alias.Name, value);
-                    await foreach (JqEnvironment inner in Match(alias.Inner, value, aliased, context, storage, depth + 1).ConfigureAwait(false))
+                    await foreach (JqEnvironment inner in Match(alias.Inner, value, aliased, keyScope, context, storage, depth + 1).ConfigureAwait(false))
                         yield return inner;
                 }
                 finally { storage.Release(128); }
                 break;
             case ArrayPattern array:
                 await foreach (JqEnvironment bound in (MatchSequence(array.Items.Count, scope, context, storage,
-                    (index, current) => Match(array.Items[index], JqPathReads.ReadIndex(value, index, false, context), current, context, storage, depth + 1))).ConfigureAwait(false))
+                    (index, current) => Match(array.Items[index], JqPathReads.ReadIndex(value, index, false, context), current, keyScope, context, storage, depth + 1))).ConfigureAwait(false))
                     yield return bound;
                 break;
             case ObjectPattern obj:
@@ -344,12 +344,15 @@ internal sealed class AsFilter(
 
         async IAsyncEnumerable<JqEnvironment> MatchProperty(ObjectPatternProperty property, JqEnvironment current)
         {
-            await foreach (JqValue? keyValue in property.Key.Evaluate(value, context, current).ConfigureAwait(false))
+            // Key expressions are compiled in the enclosing lexical scope.
+            // Provisional nulls and earlier bindings in this pattern apply to
+            // the body, not to keys in the same destructuring operation.
+            await foreach (JqValue? keyValue in property.Key.Evaluate(value, context, keyScope).ConfigureAwait(false))
             {
                 if (keyValue is not JqString key)
                     throw new JqException($"Cannot use {TypeName(keyValue)} ({context.Runtime.TruncatedDump(keyValue)}) as object key");
                 JqValue? field = JqPathReads.ReadField(value, key, context.Runtime, context.Budget);
-                await foreach (JqEnvironment bound in Match(property.Value, field, current, context, storage, depth + 1).ConfigureAwait(false))
+                await foreach (JqEnvironment bound in Match(property.Value, field, current, keyScope, context, storage, depth + 1).ConfigureAwait(false))
                     yield return bound;
             }
         }
@@ -420,7 +423,7 @@ internal sealed class AsFilter(
             for (int index = 0; index < alternatives.Count && !completed; index++)
             {
                 bool isLast = index == alternatives.Count - 1;
-                var results = RunPathAlternative(alternatives[index], bound, prebound, pair, context, storage).GetAsyncEnumerator();
+                var results = RunPathAlternative(alternatives[index], bound, prebound, environment, pair, context, storage).GetAsyncEnumerator();
                 await using var resultsLifetime = results.ConfigureAwait(false);
                 while (true)
                 {
@@ -446,9 +449,9 @@ internal sealed class AsFilter(
         }
     }
 
-    private async IAsyncEnumerable<JqValuePath> RunPathAlternative(BindingPattern alternative, JqValue? bound, JqEnvironment prebound, JqValuePath pair, JqContext context, JqScopeStorage storage)
+    private async IAsyncEnumerable<JqValuePath> RunPathAlternative(BindingPattern alternative, JqValue? bound, JqEnvironment prebound, JqEnvironment keyScope, JqValuePath pair, JqContext context, JqScopeStorage storage)
     {
-        await foreach (JqEnvironment scope in Match(alternative, bound, prebound, context, storage, 1).ConfigureAwait(false))
+        await foreach (JqEnvironment scope in Match(alternative, bound, prebound, keyScope, context, storage, 1).ConfigureAwait(false))
             await foreach (JqValuePath next in body.EvaluatePaths(pair, context, scope).ConfigureAwait(false))
                 yield return next;
     }
