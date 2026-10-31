@@ -88,8 +88,6 @@ cannot become targets through equal contents.
   Recursive calls with active handlers, optional suppression or labels retain
   their scopes and use the evaluation depth safeguard. Direct filter forwarding
   stays flat; composite captured-filter chains retain the depth guard.
-- **Bindings:** object-pattern key expressions can see provisional null bindings
-  when the pattern shadows an outer variable used by its key expression.
 - **Other edges:** NaN `range` bounds yield no values. One/two-argument range requires
   numbers; three-argument range follows jq comparison and addition.
   Date composites use fixed C-locale expansions; native locale spellings can differ.
