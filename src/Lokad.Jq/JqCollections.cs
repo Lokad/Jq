@@ -8,18 +8,20 @@ namespace Lokad.Jq;
 // `map(f)`: collects every f-output per element into a new array.
 internal sealed class MapFilter(JqFilter Body) : JqFilter
 {
+    internal override bool ConstructsFreshContainer => true;
 
     protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
+        context.Budget.ReserveBytes(64);
         var result = new JqArray();
-        context.Budget.CheckCancellation();
+        bool fresh = Body.ConstructsFreshContainer;
         foreach (JqValue? element in IteratorFilter.ReadValues(input, false, context.Budget))
             await foreach (JqValue? value in Body.Evaluate(element, context, environment).ConfigureAwait(false))
             {
                 context.Budget.ReserveArrayItem(value);
-                result.Add(context.Budget.CopyValue(value, 1));
+                result.Add(context.Budget.CollectValue(value, 1, fresh));
             }
         yield return result;
     }
@@ -30,15 +32,17 @@ internal sealed class MapFilter(JqFilter Body) : JqFilter
 // keep their keys; anything else follows iteration errors.
 internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
 {
+    internal override bool ConstructsFreshContainer => true;
 
     protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
+        bool fresh = Body.ConstructsFreshContainer;
         if (input is JqArray array)
         {
+            context.Budget.ReserveBytes(64);
             var result = new JqArray();
-            context.Budget.CheckCancellation();
             foreach (JqValue? element in array)
             {
                 var outputs = Body.Evaluate(element, context, environment).GetAsyncEnumerator();
@@ -46,7 +50,7 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
                 if (await outputs.MoveNextAsync().ConfigureAwait(false))
                 {
                     context.Budget.ReserveArrayItem(outputs.Current);
-                    result.Add(context.Budget.CopyValue(outputs.Current, 1));
+                    result.Add(context.Budget.CollectValue(outputs.Current, 1, fresh));
                 }
             }
             yield return result;
@@ -54,8 +58,8 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
         }
         if (input is JqObject obj)
         {
+            context.Budget.ReserveBytes(64);
             var result = new JqObject(context.Budget);
-            context.Budget.CheckCancellation();
             foreach (var property in obj)
             {
                 var outputs = Body.Evaluate(property.Value, context, environment).GetAsyncEnumerator();
@@ -63,7 +67,7 @@ internal sealed class MapValuesFilter(JqFilter Body) : JqFilter
                 if (await outputs.MoveNextAsync().ConfigureAwait(false))
                 {
                     context.Budget.ReserveObjectItem(outputs.Current);
-                    result.Add(property.Key, context.Budget.CopyValue(outputs.Current, 1));
+                    result.Add(property.Key, context.Budget.CollectValue(outputs.Current, 1, fresh));
                 }
             }
             yield return result;

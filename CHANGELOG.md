@@ -2,6 +2,9 @@
 
 ## 0.3.0 — Unreleased
 
+- Let `map` and `map_values` adopt private fresh body results with the same
+  destination-depth checks as array collection. Admit fresh map roots before
+  exposure and preserve copying for borrowed results.
 - Read pure single-value pipeline leaves directly through their existing guards,
   avoiding per-record cursors while preserving asynchronous host operations.
 - Resolve object-pattern key expressions in the enclosing lexical scope, preserving

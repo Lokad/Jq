@@ -1290,24 +1290,9 @@ internal sealed class ArrayFilter(JqFilter item) : JqFilter
         await foreach (var value in item.Evaluate(input, context, environment).ConfigureAwait(false))
         {
             context.Budget.ReserveBytes(value is JqScalar ? 88 : 24);
-            if (fresh && value is JqArray or JqObject)
-            {
-                CheckDepth(value, 1, context.Budget);
-                array.Add(value);
-            }
-            else array.Add(context.Runtime.Clone(value, 1));
+            array.Add(context.Budget.CollectValue(value, 1, fresh));
         }
         yield return array;
-
-        static void CheckDepth(JqValue? value, int depth, JqBudget budget)
-        {
-            budget.CheckCancellation();
-            JqRecursion.CheckValueDepth(value, depth);
-            if (value is JqArray elements)
-                foreach (JqValue? element in elements) CheckDepth(element, depth + 1, budget);
-            else if (value is JqObject properties)
-                foreach (var property in properties) CheckDepth(property.Value, depth + 1, budget);
-        }
     }
 }
 

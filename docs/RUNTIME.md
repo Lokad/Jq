@@ -18,7 +18,7 @@ Runtime strings and object keys retain owned UTF-8 payloads. Reads and aliases
 share immutable bytes; retained substrings copy only their selected range.
 Literal decoding, string operations, interpolation, formatting, date parsing,
 regex patterns/subjects/flags and JSON/raw output consume these bytes directly.
-Regex group names, host paths and program source use CLR text.
+Regex group names also use UTF-8; host paths and program source use CLR text.
 
 ## Host I/O
 
@@ -147,7 +147,7 @@ set.
 
 Reads and pass-through results borrow existing values. Path writes copy modified
 containers and retain unchanged funded branches; private `add`/`fromstream` accumulators update owned
-containers directly. Array collectors adopt newly constructed private containers
+containers directly. Collectors adopt newly constructed private containers
 and copy borrowed or uncertain values, checking destination depth before attachment.
 Emitted stream values stay independent of later updates.
 Right-empty container operations and empty-affix trims borrow unchanged results.

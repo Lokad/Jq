@@ -198,6 +198,31 @@ internal sealed class JqBudget : IDisposable
 
     internal void ReserveObjectItem(JqValue? value) => ReserveBytes(value is JqScalar ? 160 : 96);
 
+    // The producer guarantees a fresh container has not escaped through a
+    // binding or another result. Its construction is already funded. Borrowed
+    // values keep their existing copying boundary; attachment checks the depth
+    // of adopted children just as copying does, before the container is exposed.
+    [return: NotNullIfNotNull(nameof(value))]
+    internal JqValue? CollectValue(JqValue? value, int depth, bool freshContainer)
+    {
+        if (freshContainer && value is JqArray or JqObject)
+        {
+            CheckDepth(value, depth);
+            return value;
+        }
+        return CopyValue(value, depth);
+
+        void CheckDepth(JqValue? child, int level)
+        {
+            CheckCancellation();
+            JqRecursion.CheckValueDepth(child, level);
+            if (child is JqArray array)
+                foreach (JqValue? element in array) CheckDepth(element, level + 1);
+            else if (child is JqObject obj)
+                foreach (var property in obj) CheckDepth(property.Value, level + 1);
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
