@@ -1700,6 +1700,15 @@ internal sealed class IfFilter(
 
         async IAsyncEnumerable<JqValue?> RunBranch(int index)
         {
+            // Pure falsy conditions need no suspended branch frame. Keep their
+            // fallthrough iterative; generator conditions retain distribution.
+            while (index < branches.Count && branches[index].Condition is SingleValueFilter single)
+            {
+                if (!JqPredicateFold.EvaluateSingle(single, input, context, environment)) { index++; continue; }
+                await foreach (JqValue? value in branches[index].Then.Evaluate(input, context, environment).ConfigureAwait(false))
+                    yield return value;
+                yield break;
+            }
             if (index >= branches.Count)
             {
                 await foreach (var value in otherwise.Evaluate(input, context, environment).ConfigureAwait(false))
@@ -1732,6 +1741,13 @@ internal sealed class IfFilter(
 
         async IAsyncEnumerable<JqValuePath> RunBranchPaths(int index)
         {
+            while (index < branches.Count && branches[index].Condition is SingleValueFilter single)
+            {
+                if (!JqPredicateFold.EvaluateSingle(single, pair.Value, context, environment)) { index++; continue; }
+                await foreach (JqValuePath next in branches[index].Then.EvaluatePaths(pair, context, environment).ConfigureAwait(false))
+                    yield return next;
+                yield break;
+            }
             if (index >= branches.Count)
             {
                 await foreach (JqValuePath next in otherwise.EvaluatePaths(pair, context, environment).ConfigureAwait(false))
@@ -1780,6 +1796,11 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
 
         if (name == "select")
         {
+            if (args[0] is SingleValueFilter single)
+            {
+                if (JqPredicateFold.EvaluateSingle(single, input, context, environment)) yield return input;
+                yield break;
+            }
             // Predicates can yield multiple results; consume them without buffering.
             await foreach (var value in args[0].Evaluate(input, context, environment).ConfigureAwait(false))
                 if (Truthy(value))
@@ -2061,6 +2082,11 @@ internal sealed class FunctionFilter(string name, IReadOnlyList<JqFilter> args) 
         ArgumentNullException.ThrowIfNull(environment);
         if (name == "select")
         {
+            if (args[0] is SingleValueFilter single)
+            {
+                if (JqPredicateFold.EvaluateSingle(single, pair.Value, context, environment)) yield return pair;
+                yield break;
+            }
             // Predicates run in value mode; surviving pairs keep paths.
             await foreach (JqValue? probe in args[0].Evaluate(pair.Value, context, environment).ConfigureAwait(false))
                 if (Truthy(probe))

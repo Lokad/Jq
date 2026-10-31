@@ -2,6 +2,8 @@
 
 ## 0.3.0 — Unreleased
 
+- Release completed pure `if`/`select` condition temporaries before running branches,
+  keeping long same-record loops bounded while retaining aliases and error payloads.
 - Batch pure single-variable binding prefixes in the existing evaluator, preserving
   sequential shadowing and asynchronous bodies while reducing continuation layers.
 - Let `map` and `map_values` adopt private fresh body results with the same

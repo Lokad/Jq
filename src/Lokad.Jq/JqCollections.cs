@@ -942,12 +942,30 @@ internal sealed class AllFilter(JqFilter Generator, JqFilter Condition) : JqFilt
 // checkpoint; its temporary demand ends after the enumerator is disposed.
 internal static class JqPredicateFold
 {
+    // Pure single-value reads leave no suspended iterator or result borrower.
+    // Only truthiness escapes. Failures bypass reconciliation so their payloads
+    // retain admission; source values and persistent storage precede the checkpoint.
+    internal static bool EvaluateSingle(SingleValueFilter condition, JqValue? input,
+        JqContext context, JqEnvironment environment)
+    {
+        JqStorage? storage = context.Budget.TemporaryStorage;
+        long before = storage?.UsedBytes ?? 0;
+        bool result = Truthy(condition.ReadValue(input, context, environment));
+        if (storage is not null) storage.DiscardBytes(storage.UsedBytes - before);
+        return result;
+    }
+
     [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
     internal static async ValueTask<bool> Evaluate(JqFilter generator, JqFilter condition, JqValue? input,
         JqContext context, JqEnvironment environment, bool all)
     {
         await foreach (JqValue? generated in generator.Evaluate(input, context, environment).ConfigureAwait(false))
         {
+            if (condition is SingleValueFilter single)
+            {
+                if (EvaluateSingle(single, generated, context, environment) != all) return !all;
+                continue;
+            }
             JqStorage? storage = context.Budget.TemporaryStorage;
             long before = storage?.UsedBytes ?? 0;
             bool decided = false;

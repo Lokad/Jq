@@ -140,8 +140,9 @@ owned through the pending open and ends before advancing to another source.
 Coarse owners track executions, records, buffers, results and caches. Object
 construction workspace ends with enumeration; constant metadata builds private
 children once and releases traversal scratch. Completed temporary work reconciles
-demand at proven lifetime boundaries; shared values and
-escaping errors retain their charge. Other construction within one record can
+demand at proven lifetime boundaries; proven pure condition reads release their
+temporaries before branching. Shared values and escaping errors retain their
+charge. Other construction within one record can
 remain conservatively charged, so a long loop may refuse despite a bounded live
 set.
 
