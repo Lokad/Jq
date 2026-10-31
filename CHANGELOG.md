@@ -2,6 +2,11 @@
 
 ## 0.3.0 — Unreleased
 
+- Breaking: compiled regex handles expose actual capture counts and UTF-8 names,
+  and prepare subjects with reusable cursors. Each operation receives its current
+  cancellation token. Cursor results are borrowed; `RetainCurrent` keeps independent
+  capture ownership through asynchronous suspension. Producer-package qualification
+  remains pending; the PCRE2 0.4 semantic bridge is development tooling only.
 - Construct date mismatch errors directly in UTF-8, retaining complete payloads
   without converting input and format strings to CLR text.
 - Reuse the bounded UTF-8 builder pool for repeated `join` calls while keeping

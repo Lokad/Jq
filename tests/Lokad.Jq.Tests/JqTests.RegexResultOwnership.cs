@@ -16,7 +16,7 @@ public sealed partial class JqTests
         var pattern = patternLease.Value;
         long compiled = memory.ReservedBytes;
         ReadOnlyMemory<byte> subject = "x"u8.ToArray();
-        var match = cache.Match(pattern, subject, 0, JqRegexMatchOptions.None);
+        var match = RegexTestOperations.Match(cache, pattern, subject, 0, JqRegexMatchOptions.None);
         var copy = match;
         Assert.Equal(compiled + 32, memory.ReservedBytes);
 
@@ -73,18 +73,19 @@ public sealed partial class JqTests
         }
 
         private sealed class Compiled(OwnedResultRegexEngine engine, IMemoryBudget budget,
-            IMemoryReservation memory) : IJqCompiledRegex
+            IMemoryReservation memory) : SpanRegexCompatibility
         {
             private bool _disposed;
-            public IReadOnlyDictionary<int, string> GroupNames { get; } = new Dictionary<int, string>();
+            public override int CaptureCount => 0;
+            public override IReadOnlyList<JqRegexGroupName> GroupNames => [];
 
-            public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
+            public override bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 return input.SequenceEqual("x"u8);
             }
 
-            public JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+            public override JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
                 CancellationToken cancellationToken)
             {
                 if (start != 0 || !IsMatch(input, options, cancellationToken)) return default;
@@ -100,7 +101,7 @@ public sealed partial class JqTests
                 catch { owner.Dispose(); throw; }
             }
 
-            public void Dispose()
+            public override void Dispose()
             {
                 if (_disposed) return;
                 _disposed = true;

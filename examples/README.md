@@ -1,13 +1,12 @@
 # Regex adapter example
 
-Compile [RegexAdapterExample.cs](RegexAdapterExample.cs) and
-[Utf8RegexAdapter.cs](Utf8RegexAdapter.cs) into an application referencing
-`Lokad.Jq` and `Lokad.Utf8Regex.Pcre2` 0.4.0. Supply an `IJqHost` and your shared
-`IMemoryBudget`, then call:
+Compile [RegexAdapterExample.cs](RegexAdapterExample.cs) into an application
+referencing `Lokad.Jq`. Supply an `IJqHost`, your shared `IMemoryBudget` and an
+`IJqRegexEngine` adapter:
 
 ```csharp
 await RegexAdapterExample.RunAsync(host, memoryBudget,
-    Utf8RegexAdapter.Instance, cancellationToken);
+    regexEngine, cancellationToken);
 ```
 
 Feed UTF-8 JSON `"é item-42"` to standard input. Standard output is:
@@ -16,25 +15,17 @@ Feed UTF-8 JSON `"é item-42"` to standard input. Standard output is:
 [true,{"offset":2,"length":7,"id":"42"},{"id":"42"}]
 ```
 
-This exercises the adapter's boolean and detailed searches, named captures and
-Unicode-scalar jq offsets. All I/O stays with the host. The invocation is disposed
-after execution, including pending output and descriptor cleanup.
+The example exercises boolean matching, named captures and Unicode-scalar offsets.
+All I/O stays with the host; the application owns the borrowed engine. Jq owns
+compiled handles until their subjects, cursors and retained results finish.
 
-The application compiles and owns the provider adapter.
-The `Lokad.Jq` package supplies only the contracts; it has no provider dependency
-or implicit regex engine. Without injection, executed regex operations report
-`regex engine is not configured`.
-Pass another `IJqRegexEngine` in the same call to use your provider. Engines are
-borrowed; Jq disposes compiled handles after their final borrowers finish.
-An adapter forwards the compilation budget and cancellation token to its
-provider, retains the complete subject and absolute search offsets, and transfers
-capture ownership through `JqRegexMatch`. Syntax errors return `false` from
-`TryCompile`; refused admission throws `JqRegexResourceException` with
-`IsMemoryAdmission = true`. Cancellation propagates.
-Patterns arrive as immutable UTF-8 memory owned by Jq through compiled-handle
-disposal; forward their span to the provider's byte-pattern compile overload.
+Adapters expose actual capture counts and UTF-8 names, prepare the complete subject,
+and return cursors with absolute byte ranges. Forward the shared budget and each
+call's cancellation token into the provider. `Current` is borrowed until the next
+advance; `RetainCurrent` supplies independent result ownership. Follow the
+[regex contract](../docs/REGEX.md) for admission, empty-match progression and errors.
 
-The example's Utf8Regex 0.4.0 provider observes cancellation during compilation and
-matching. Its internal storage remains outside the host's shared memory budget.
-See [regex behavior](../docs/REGEX.md) for the capture contract and limitations.
-Tests and the isolated package check compile and execute this exact example source.
+The package has no provider dependency or implicit engine. The repository's
+temporary PCRE2 0.4 semantic bridge is development tooling, pending qualification
+against the producer's prepared-subject and shared-admission APIs. Tests and the
+isolated package check compile and execute this application example.

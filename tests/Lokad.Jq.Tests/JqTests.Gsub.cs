@@ -129,9 +129,9 @@ public sealed partial class JqTests
         var pattern = patternLease.Value;
         for (int i = 0; i < 100; i++)
         {
-            using var match = regexes.Match(pattern, "x"u8.ToArray(), 0, JqRegexMatchOptions.None);
+            using var match = RegexTestOperations.Match(regexes, pattern, "x"u8.ToArray(), 0, JqRegexMatchOptions.None);
             Assert.True(match.Success);
-            Assert.True(regexes.IsMatch(pattern, "x"u8.ToArray(), JqRegexMatchOptions.None));
+            Assert.True(RegexTestOperations.IsMatch(regexes, pattern, "x"u8.ToArray(), JqRegexMatchOptions.None));
         }
     }
 

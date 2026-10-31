@@ -1,4 +1,5 @@
 using Lokad.Jq.Examples;
+using Lokad.Jq.Testing;
 using Lokad.Jq.Benchmarking;
 using Lokad.Jq;
 using System.Text;
@@ -110,7 +111,7 @@ foreach (string filter in new[] { "try @bogus catch .", "try format(\"bogus\") c
     var host = new SmokeHost();
     host.SetInput("\"é item-42\"");
     var memory = new BenchmarkMemoryBudget(128 * 1024);
-    Check("regex example against package", await Lokad.Jq.Examples.RegexAdapterExample.RunAsync(
+    Check("regex example against package", await RegexAdapterExample.RunAsync(
         host, memory, Utf8RegexAdapter.Instance, CancellationToken.None) == 0
         && host.Output(JqFileDescriptor.StdOut) == "[true,{\"offset\":2,\"length\":7,\"id\":\"42\"},{\"id\":\"42\"}]\n"
         && host.Output(JqFileDescriptor.StdErr) == "" && memory.ReservedBytes == 0 && memory.ActiveScopes == 0);
@@ -1193,16 +1194,17 @@ sealed class SmokeCooperatingRegex(CancellationTokenSource cancellation) : IJqRe
     }
 
     private sealed class Compiled(SmokeCooperatingRegex owner, IMemoryBudget budget, IMemoryReservation memory,
-        CancellationTokenSource cancellation) : IJqCompiledRegex
+        CancellationTokenSource cancellation) : SpanRegexCompatibility
     {
-        public IReadOnlyDictionary<int, string> GroupNames { get; } = new Dictionary<int, string>();
-        public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
+        public override int CaptureCount => 0;
+        public override IReadOnlyList<JqRegexGroupName> GroupNames => [];
+        public override bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
         {
             if (owner.CancelOnSearch) cancellation.Cancel();
             cancellationToken.ThrowIfCancellationRequested();
             return input.SequenceEqual("x"u8);
         }
-        public JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+        public override JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
             CancellationToken cancellationToken)
         {
             if (start != 0 || !IsMatch(input, options, cancellationToken)) return default;
@@ -1211,7 +1213,7 @@ sealed class SmokeCooperatingRegex(CancellationTokenSource cancellation) : IJqRe
             JqRegexCapture[] captures = [new(true, 0, 1)];
             return new JqRegexMatch(captures, resultMemory);
         }
-        public void Dispose() { memory.Dispose(); owner.Disposed = true; }
+        public override void Dispose() { memory.Dispose(); owner.Disposed = true; }
     }
 }
 

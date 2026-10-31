@@ -87,49 +87,51 @@ internal sealed class JqRegexCache : IDisposable
         }
     }
 
-    internal JqRegexMatch Match(Pattern pattern, ReadOnlyMemory<byte> input,
-        int start, JqRegexMatchOptions options)
+    // Transfers an explicit byte-owner lease, including on failure. A null
+    // owner borrows the runtime's funded record through all operation borrowers.
+    // Native immutable bytes enter directly, without encoding or copying.
+    internal SubjectLease Prepare(Pattern pattern, ReadOnlyMemory<byte> bytes, IDisposable? owner)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        _budget.CheckCancellation();
-        JqRegexMatch match = default;
+        IJqRegexSubject? subject = null;
         bool retained = false;
         try
         {
-            try { match = pattern.Compiled.Match(input.Span, start, options, _budget.CancellationToken); }
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            try
+            {
+                _budget.CheckCancellation();
+                subject = pattern.Compiled.Prepare(bytes, _budget.MemoryBudget, _budget.CancellationToken);
+            }
             catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
-            { throw new JqHostFailureException("regex matching violated its contract", exception); }
+            { throw new JqHostFailureException("regex preparation violated its contract", exception); }
             _budget.CheckCancellation();
-            var lifetime = new MatchLifetime(pattern, match.Owner);
+            var lease = new SubjectLease(subject, bytes, owner, pattern);
             pattern.Borrowers++;
             retained = true;
-            return new JqRegexMatch(match.Captures, lifetime);
+            return lease;
         }
         catch (JqRegexResourceException exception) { throw Terminal(exception); }
-        catch (NotSupportedException exception)
+        catch (NotSupportedException exception) { throw new JqException("unsupported regex: " + exception.Message); }
+        finally
         {
-            throw new JqException("unsupported regex: " + exception.Message);
+            if (!retained)
+            {
+                try { subject?.Dispose(); }
+                finally { owner?.Dispose(); }
+            }
         }
-        finally { if (!retained) match.Dispose(); }
     }
 
-    internal bool IsMatch(Pattern pattern, ReadOnlyMemory<byte> input, JqRegexMatchOptions options)
+    internal static int GetCaptureCount(Pattern pattern)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        _budget.CheckCancellation();
-        bool matched;
-        try { matched = pattern.Compiled.IsMatch(input.Span, options, _budget.CancellationToken); }
-        catch (JqRegexResourceException exception) { throw Terminal(exception); }
-        catch (NotSupportedException ex) { throw new JqException($"unsupported regex: {ex.Message}"); }
+        try { return pattern.Compiled.CaptureCount; }
         catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
-        { throw new JqHostFailureException("regex matching violated its contract", exception); }
-        _budget.CheckCancellation();
-        return matched;
+        { throw new JqHostFailureException("regex metadata violated its contract", exception); }
     }
 
-    internal static IReadOnlyDictionary<int, string> GetGroupNames(Pattern pattern)
+    internal static IReadOnlyDictionary<int, ReadOnlyMemory<byte>> GetGroupNames(Pattern pattern)
     {
-        try { return pattern.Compiled.GroupNames; }
+        try { return pattern.GroupNames(); }
         catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
         { throw new JqHostFailureException("regex metadata violated its contract", exception); }
     }
@@ -178,7 +180,7 @@ internal sealed class JqRegexCache : IDisposable
 
     internal readonly struct PatternKey(ReadOnlyMemory<byte> utf8, JqRegexCompileOptions options, int hash) : IEquatable<PatternKey>
     {
-        private ReadOnlyMemory<byte> Utf8 { get; } = utf8;
+        internal ReadOnlyMemory<byte> Utf8 { get; } = utf8;
         private JqRegexCompileOptions Options { get; } = options;
         public bool Equals(PatternKey other) => Options == other.Options && Utf8.Span.SequenceEqual(other.Utf8.Span);
         public override bool Equals(object? other) => other is PatternKey key && Equals(key);
@@ -190,14 +192,162 @@ internal sealed class JqRegexCache : IDisposable
     internal sealed class Pattern(JqRegexCache cache, PatternKey key,
         IJqCompiledRegex compiled, JqMemoryReservation keys) : IDisposable
     {
+        private IReadOnlyDictionary<int, ReadOnlyMemory<byte>>? _names;
         internal PatternKey Key { get; } = key;
         internal IJqCompiledRegex Compiled { get; } = compiled;
         internal JqMemoryReservation Keys { get; } = keys;
         internal int Borrowers { get; set; }
+        internal IReadOnlyDictionary<int, ReadOnlyMemory<byte>> GroupNames()
+        {
+            if (_names is { } existing) return existing;
+            var entries = Compiled.GroupNames;
+            Keys.Resize(192L + Key.Utf8.Length + 64L * entries.Count);
+            cache._budget.CheckCancellation();
+            var names = new Dictionary<int, ReadOnlyMemory<byte>>(entries.Count);
+            foreach (var entry in entries)
+            {
+                cache._budget.CheckCancellation();
+                names.Add(entry.GroupNumber, entry.NameUtf8);
+            }
+            _names = names;
+            return names;
+        }
+
         public void Dispose() => cache.Return(this);
     }
 
-    private sealed class MatchLifetime(Pattern pattern, IDisposable? owner) : IDisposable
+    // One operation retains funded native bytes and its program borrow. Active
+    // cursors and retained results extend that ownership through suspension.
+    internal sealed class SubjectLease(IJqRegexSubject subject,
+        ReadOnlyMemory<byte> bytes, IDisposable? owner, Pattern pattern) : IJqRegexSubject
+    {
+        private int _borrowers = 1;
+        private bool _disposed;
+
+        internal ReadOnlyMemory<byte> Bytes => bytes;
+
+        internal void Hold() => _borrowers++;
+
+        internal void Release()
+        {
+            if (--_borrowers != 0) return;
+            try { subject.Dispose(); }
+            finally
+            {
+                try { owner?.Dispose(); }
+                finally { pattern.Dispose(); }
+            }
+        }
+
+        public bool IsMatch(JqRegexMatchOptions options, CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                bool result = subject.IsMatch(options, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                return result;
+            }
+            catch (JqRegexResourceException exception) { throw Terminal(exception); }
+            catch (NotSupportedException exception) { throw new JqException("unsupported regex: " + exception.Message); }
+            catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
+            { throw new JqHostFailureException("regex matching violated its contract", exception); }
+        }
+
+        public IJqRegexCursor CreateCursor(JqRegexMatchOptions options, CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            cancellationToken.ThrowIfCancellationRequested();
+            IJqRegexCursor? cursor = null;
+            bool retained = false;
+            try
+            {
+                cursor = subject.CreateCursor(options, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                var lease = new CursorLease(this, cursor);
+                Hold();
+                retained = true;
+                return lease;
+            }
+            catch (JqRegexResourceException exception) { throw Terminal(exception); }
+            catch (NotSupportedException exception) { throw new JqException("unsupported regex: " + exception.Message); }
+            catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
+            { throw new JqHostFailureException("regex cursor creation violated its contract", exception); }
+            finally { if (!retained) cursor?.Dispose(); }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Release();
+        }
+    }
+
+    private sealed class CursorLease(SubjectLease subject, IJqRegexCursor cursor) : IJqRegexCursor
+    {
+        private bool _disposed;
+
+        public bool MoveNext(CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                bool result = cursor.MoveNext(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                return result;
+            }
+            catch (JqRegexResourceException exception) { throw Terminal(exception); }
+            catch (NotSupportedException exception) { throw new JqException("unsupported regex: " + exception.Message); }
+            catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
+            { throw new JqHostFailureException("regex cursor advancement violated its contract", exception); }
+        }
+
+        public JqRegexMatch Current
+        {
+            get
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                try { return cursor.Current; }
+                catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
+                { throw new JqHostFailureException("regex capture access violated its contract", exception); }
+            }
+        }
+
+        public JqRegexMatch RetainCurrent(CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            cancellationToken.ThrowIfCancellationRequested();
+            JqRegexMatch match = default;
+            bool retained = false;
+            try
+            {
+                match = cursor.RetainCurrent(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                var lifetime = new MatchLifetime(subject, match.Owner);
+                subject.Hold();
+                retained = true;
+                return new JqRegexMatch(match.Captures, lifetime);
+            }
+            catch (JqRegexResourceException exception) { throw Terminal(exception); }
+            catch (NotSupportedException exception) { throw new JqException("unsupported regex: " + exception.Message); }
+            catch (Exception exception) when (JqErrors.IsCatchableClr(exception))
+            { throw new JqHostFailureException("regex result retention violated its contract", exception); }
+            finally { if (!retained) match.Dispose(); }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            try { cursor.Dispose(); }
+            finally { subject.Release(); }
+        }
+    }
+
+    private sealed class MatchLifetime(SubjectLease subject, IDisposable? owner) : IDisposable
     {
         private bool _disposed;
 
@@ -206,7 +356,7 @@ internal sealed class JqRegexCache : IDisposable
             if (_disposed) return;
             _disposed = true;
             try { owner?.Dispose(); }
-            finally { pattern.Dispose(); }
+            finally { subject.Release(); }
         }
     }
 }

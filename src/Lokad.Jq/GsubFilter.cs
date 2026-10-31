@@ -20,42 +20,39 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
             bool stopFirst = !options.Global;
             using var patternLease = context.Regexes.Rent(JqMatch.RequirePattern(context, pattern).Utf8, options.Pattern);
             var regex = patternLease.Value;
-            ReadOnlyMemory<byte> subject = text.Utf8;
+            int captureCount = JqRegexCache.GetCaptureCount(regex);
+            using var ownedSubject = context.Regexes.Prepare(regex, text.Utf8, null);
+            ReadOnlyMemory<byte> subject = ownedSubject.Bytes;
+            using var cursor = ownedSubject.CreateCursor(options.Match, context.Budget.CancellationToken);
             using var coordinates = new JqRegexCoordinates(subject, context.Budget);
-            var matchOptions = options.Match;
             // jq aligns replacement streams by their result index across successive matches.
             context.Budget.ReserveMetadata(32, 1);
             var results = new List<JqMemoryValue<JqJsonBuffer>>();
             var previous = 0;
-            var start = 0;
             try
             {
-                while (start <= subject.Length)
+                while (cursor.MoveNext(context.Budget.CancellationToken))
                 {
-                    int end, endByte, gapLength;
-                    bool isEmpty;
+                    int end, gapLength;
                     var gapStart = previous;
                     JqStorage? storage = context.Budget.TemporaryStorage;
                     JqObject captures;
                     long captureDemand;
-                    using (var match = context.Regexes.Match(regex, subject, start, matchOptions))
                     {
-                        if (!match.Success) break;
+                        var match = cursor.Current;
                         context.Budget.CheckCancellation();
                         end = coordinates.At(match.Value.EndOffsetInBytes).Byte;
                         int matchStart = coordinates.At(match.Value.StartOffsetInBytes).Byte;
-                        endByte = match.Value.EndOffsetInBytes;
-                        isEmpty = endByte == match.Value.StartOffsetInBytes;
                         if (matchStart < previous || end < matchStart)
                             throw new JqException("gsub requires non-overlapping forward matches");
                         gapLength = matchStart - previous;
                         long captureBefore = storage?.UsedBytes ?? 0;
-                        captures = JqMatch.FoldNamedCaptures(context, text, match, JqRegexCache.GetGroupNames(regex), match.CaptureSlotCount - 1, coordinates);
+                        captures = JqMatch.FoldNamedCaptures(context, text, match, JqRegexCache.GetGroupNames(regex), captureCount, coordinates);
                         captureDemand = storage is null ? 0 : storage.UsedBytes - captureBefore;
                     }
 
-                    // Positions and capture strings have been copied. Release the
-                    // provider result before evaluating nested replacements.
+                    // Capture data is copied before suspension. Do not read the
+                    // borrowed current view during nested replacement evaluation.
                     var index = 0;
                     long bodyBefore = storage?.UsedBytes ?? 0;
                     long retainedBuilderDemand = 0;
@@ -89,12 +86,6 @@ internal sealed class GsubFilter(IReadOnlyList<JqFilter> args, bool firstOnly) :
                     if (storage is not null)
                         storage.DiscardBytes(captureDemand + storage.UsedBytes - bodyBefore - retainedBuilderDemand);
                     previous = end;
-                    start = endByte;
-                    if (isEmpty)
-                    {
-                        if (end == text.ByteLength) break;
-                        start = coordinates.AfterEmpty(endByte);
-                    }
                     if (stopFirst) break;
                 }
 

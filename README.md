@@ -77,7 +77,7 @@ The script also supports symbol, hosted-source and caller-supplied corpus checks
 
 Compatibility with upstream jq is incomplete; Lokad.Jq is not yet a drop-in
 replacement. Regex syntax follows the application's selected provider; the
-optional example adapts `Lokad.Utf8Regex.Pcre2`. See [regex behavior](docs/REGEX.md).
+example shows explicit adapter injection. See [regex behavior](docs/REGEX.md).
 
 - [Compatibility](docs/COMPATIBILITY.md): feature inventory, tests, supported scope and differences.
 - [Regex behavior](docs/REGEX.md): engine syntax, flags, captures and cancellation boundaries.

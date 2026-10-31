@@ -141,8 +141,8 @@ public sealed partial class JqTests
         cancellation.Cancel();
         var error = Assert.Throws<OperationCanceledException>(() =>
         {
-            if (detailed) regexes.Match(pattern, "x"u8.ToArray(), 0, JqRegexMatchOptions.None);
-            else regexes.IsMatch(pattern, "x"u8.ToArray(), JqRegexMatchOptions.None);
+            if (detailed) RegexTestOperations.Match(regexes, pattern, "x"u8.ToArray(), 0, JqRegexMatchOptions.None);
+            else RegexTestOperations.IsMatch(regexes, pattern, "x"u8.ToArray(), JqRegexMatchOptions.None);
         });
         Assert.Equal(cancellation.Token, error.CancellationToken);
     }

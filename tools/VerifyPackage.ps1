@@ -74,7 +74,7 @@ foreach ($framework in $TargetFramework) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Program.cs') -Destination (Join-Path $verificationRoot 'Program.cs')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PackageSmoke/Symbols.cs') -Destination (Join-Path $verificationRoot 'Symbols.cs')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../examples/RegexAdapterExample.cs') -Destination (Join-Path $verificationRoot 'RegexAdapterExample.cs')
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../examples/Utf8RegexAdapter.cs') -Destination (Join-Path $verificationRoot 'Utf8RegexAdapter.cs')
+    Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'RegexCompatibility') -Filter '*.cs' | Copy-Item -Destination $verificationRoot
     # Reuse the development-only host contract; no governor enters the package.
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../benchmarks/Lokad.Jq.Benchmarks/BenchmarkMemoryBudget.cs') -Destination (Join-Path $verificationRoot 'BenchmarkMemoryBudget.cs')
     $feed = [Security.SecurityElement]::Escape([IO.Path]::GetDirectoryName($packageFile))
@@ -131,7 +131,7 @@ foreach ($framework in $TargetFramework) {
             }
         } finally { $regexArchive.Dispose() }
     }
-    Write-Host 'Adapted consumer: application -> Lokad.Jq + Lokad.Utf8Regex.Pcre2 0.4.0 -> Lokad.Utf8Regex 0.4.0; no native assets.'
+    Write-Host 'Semantic consumer (temporary PCRE2 0.4 bridge): Lokad.Jq + Lokad.Utf8Regex.Pcre2 -> Lokad.Utf8Regex; no native assets.'
     Invoke-DotNet (@('restore', $project, '--locked-mode', '--configfile', $configuration) + $isolation)
     Invoke-DotNet (@('run', '--project', $project, '-c', 'Release', '--no-restore') + $isolation)
     if ($SymbolPackagePath) {

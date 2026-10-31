@@ -1,95 +1,71 @@
 # Regex behavior
 
-Pass a borrowed `IJqRegexEngine` directly to `ExecuteAsync`. The core package
-contains the provider-neutral contracts and jq result handling. The application
-owns the provider implementation and its dependencies.
+Pass a borrowed `IJqRegexEngine` to `ExecuteAsync`. The application owns its
+implementation and dependencies; the core package has no implicit provider.
+Without injection an executed regex operation reports the catchable error
+`regex engine is not configured`. Unused branches remain lazy.
+See the [application example](../examples/README.md).
 
-Without an adapter, ordinary filters work and an executed regex operation reports
-the catchable error `regex engine is not configured`. Unused regex branches stay
-lazy. There is no implicit provider.
+## Adapter contract
 
-See the [application example](../examples/README.md) for explicit injection,
-named captures and Unicode offsets.
+`TryCompile` receives immutable UTF-8 pattern bytes owned by Jq through compiled
+handle disposal, the shared memory budget and the active cancellation token.
+Compiled handles expose actual numbered capture counts (excluding slot zero)
+and immutable UTF-8 capture names. Providers own syntax validation, execution
+bounds and admission for their programs, workspace and results.
 
-The adapter receives the active cancellation token and borrowed shared memory
-budget for compilation. Compiled handles receive the token on boolean and detailed
-searches. The host owns the engine; Jq owns
-compiled handles until all subject/result borrowers finish. Implementations must
-cooperate inside their own operations, admit substantial internal storage before
-allocation, and surface refusal as terminal `JqRegexResourceException`.
+`Prepare` borrows complete, immutable, already-funded subject bytes. The subject
+provides boolean `IsMatch` and reusable cursors. Every operation and cursor advance
+receives its current token; creation tokens must not govern later calls. Searches
+preserve full-input anchors and lookbehind and report absolute UTF-8 byte bounds.
 
-`TryCompile` receives immutable `ReadOnlyMemory<byte>` pattern bytes owned by Jq
-through handle disposal. Cache lookups compare UTF-8 content and compile options;
-the adapter compiles these bytes directly through the provider's native overload.
+Cursor `Current` is borrowed until the next advance or disposal. `RetainCurrent`
+returns independent ranges with an optional idempotent owner. Subjects, programs
+and subject bytes outlive all their borrowers, including asynchronous suspension.
+After an empty match, advance one Unicode scalar immediately; an empty match at
+the end is final. Do not retry a nonempty alternative at the same position.
 
-The optional [Utf8RegexAdapter](../examples/Utf8RegexAdapter.cs) source uses managed
-`Lokad.Utf8Regex.Pcre2` 0.4.0 and its matching core package. It compiles into the
-application, alongside explicit provider references. Other adapters choose their
-syntax while preserving
-complete-subject context, absolute offsets and the capture contract.
+Jq admits its cache keys, result values and substitution builders. Two idle compiled
+patterns are reusable. Refused provider admission throws `JqRegexResourceException`
+with `IsMemoryAdmission = true` and terminates the command with status 5, outside
+`try`/`?`. Other provider resource exhaustion is also terminal. Syntax/unsupported
+errors return `false` from compilation. Cancellation propagates as
+`OperationCanceledException`. See [memory admission](RUNTIME.md#memory-admission).
 
-## Example adapter flags and syntax
+## jq results and modifiers
+
+`test` uses the boolean primitive. Detailed operations construct jq results from
+capture participation and byte ranges, projecting offsets and lengths to Unicode
+scalars through a shared sparse index. Ranges must end on scalar boundaries.
+Unmatched captures are null; duplicate names fold in numbered order, last wins.
+`scan` and regex splitting construct strings without retaining match metadata.
+Substitution cursors remain live across asynchronous jq replacement filters.
 
 | Flag | Behavior |
 | --- | --- |
-| `g` | Global matching; `gsub`, `scan` and regex splitting are global already. |
-| `i` | PCRE2 caseless matching. |
-| `m` | PCRE2 multiline anchors. |
-| `s` | PCRE2 dot matches newlines. |
-| `p` | Both multiline anchors and dot matching newlines. |
-| `x` | PCRE2 extended syntax. |
-| `n` | Reject empty matches through `NotEmpty`. |
-| `l` | Unsupported; reported as a catchable language error. |
+| `g` | Global matching; `gsub`, `scan` and regex splitting are already global. |
+| `i` | Caseless compilation. |
+| `m` | Multiline anchors. |
+| `s` | Dot includes newlines. |
+| `p` | Multiline anchors and dot includes newlines. |
+| `x` | Extended pattern syntax. |
+| `n` | Suppress empty matches. |
+| `l` | Unsupported; a catchable language error. |
 
-Unicode properties are enabled, newline convention is LF, and duplicate capture
-names are accepted. The byte-splitting `\C` escape is forbidden to keep offsets
-and extracted strings on Unicode boundaries. Neither jq's literal interpretation
-of that escape nor its longest-match behavior is emulated. In particular, jq's
-`m`/`s`/`p` meanings differ from the mapping above.
-Invalid syntax and unsupported constructs remain catchable jq language errors.
+The `m`/`s`/`p` meanings differ from upstream jq. Invalid-modifier diagnostics retain
+jq's implicit `g`: prefixed for `scan`, appended for regex splitting and `gsub`.
 
-## Results and replacement filters
+## Qualification
 
-`test` uses the engine's boolean `IsMatch` primitive. `match`, `capture`, `scan`,
-regex splitting and substitutions use detailed captures. jq result fields,
-scalar-based offsets and lengths, unmatched capture nulls, and numbered capture
-order are retained. Duplicate names fold in numbered order, last wins, including
-nulls for non-participating groups.
-`JqRegexCapture` carries only participation and absolute UTF-8 byte bounds,
-including slot zero. Jq projects scalar positions lazily through one
-sparse index per operation; overlapping captures and lookbehind reuse it.
-Ranges must end on Unicode boundaries. ASCII prefixes need no index storage.
+Core contract tests cover ownership, admission and per-call cancellation separately
+from real-engine semantic tests. The latter currently use a development-only PCRE2
+0.4 bridge under `tools/RegexCompatibility/`, with CLR-to-UTF-8 name conversion,
+per-search result allocation and pinned reflection for actual compiled capture
+metadata. It enables Unicode properties, LF newlines and duplicate names, and forbids
+byte-splitting `\C`. It preserves provider execution settings and cancellation.
+Its provider storage lacks shared admission. It is not the application adapter.
 
-Detailed searches finish before their first result is emitted. `scan` and regex
-splitting build their result strings directly from captures without retaining
-match metadata. Whole-match scalar positions advance with the search.
-
-After an empty global match Jq advances one Unicode scalar; an empty
-match at the end is the last match. Detailed capture searches are separate
-engine operations. `sub`/`gsub` evaluate jq replacement filters and align
-their result streams.
-Invalid-modifier diagnostics retain jq's implicit `g`: a prefix for `scan`, a
-suffix for regex splitting and `gsub`.
-
-## Limits and cancellation
-
-The provider owns regex resource bounds. The example adapter uses Utf8Regex's
-execution settings and default match timeout.
-
-Providers own syntax validation and admission for compiled patterns, workspace
-and capture storage. Detailed searches return actual captures with an optional
-provider owner, disposed after consumption. Compiled handles outlive their active
-results. Two idle compiled patterns are reused; completed one-use patterns are
-retired. Native subject bytes stay borrowed and funded through matching. Jq admits
-its copied cache keys, result values, lists and UTF-8 substitution builders.
-Regex splitting advances through scalar
-boundaries. Retained Jq buffers stay charged; every refusal terminates the command.
-Reuse and structural ceilings are described in
-[runtime memory rules](RUNTIME.md#memory-admission).
-
-Provider resource exhaustion reports status 5 outside `try`/`?`. Syntax errors stay
-catchable; cancellation propagates as `OperationCanceledException`. The example
-adapter forwards the active token into eager compilation, boolean searches and
-detailed matching. Utf8Regex 0.4.0 observes cancellation during its controlled
-work. It exposes no shared-budget API, so provider storage remains outside the
-host's shared accounting.
+Final producer-package qualification remains pending for native metadata, prepared
+subjects/cursors, shared admission, borrowed-result behavior and current-call
+cancellation. Semantic coverage through the temporary bridge does not qualify
+those producer resource properties.

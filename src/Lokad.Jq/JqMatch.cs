@@ -17,7 +17,8 @@ internal static class JqMatch
         JqRegexOptions options = JqRegexOptions.ParseOrThrow(RequireModifiers(context, flagsNode), JqRegexGlobalFlag.None, context.Budget);
         using var patternLease = context.Regexes.Rent(pattern.Utf8, options.Pattern);
         var regex = patternLease.Value;
-        return context.Regexes.IsMatch(regex, text.Utf8, options.Match);
+        using var subject = context.Regexes.Prepare(regex, text.Utf8, null);
+        return subject.IsMatch(options.Match, context.Budget.CancellationToken);
     }
 
     internal static List<JqValue> Search(JqContext context, JqValue? input, JqValue? patternNode, JqValue? modifiersNode)
@@ -68,16 +69,17 @@ internal static class JqMatch
         using var patternLease = context.Regexes.Rent(pattern.Utf8, options.Pattern);
         var compiled = patternLease.Value;
         var names = projection == Projection.Match ? JqRegexCache.GetGroupNames(compiled) : null;
-        ReadOnlyMemory<byte> subject = text.Utf8;
+        int captureCount = JqRegexCache.GetCaptureCount(compiled);
+        using var ownedSubject = context.Regexes.Prepare(compiled, text.Utf8, null);
+        ReadOnlyMemory<byte> subject = ownedSubject.Bytes;
+        using var cursor = ownedSubject.CreateCursor(options.Match, context.Budget.CancellationToken);
         context.Budget.ReserveMetadata(32, 1);
         var results = new List<JqValue>();
         using var coordinates = new JqRegexCoordinates(subject, context.Budget);
         int previousSplitEnd = 0;
-        int start = 0;
-        while (true)
+        while (cursor.MoveNext(context.Budget.CancellationToken))
         {
-            using var match = context.Regexes.Match(compiled, subject, start, options.Match);
-            if (!match.Success) break;
+            var match = cursor.Current;
             context.Budget.CheckCancellation();
             int byteStart = coordinates.At(match.Value.StartOffsetInBytes).Byte;
             int byteEnd = coordinates.At(match.Value.EndOffsetInBytes).Byte;
@@ -86,7 +88,7 @@ internal static class JqMatch
                 case Projection.Match:
                     AddResult(BuildMatch(context, text, match,
                         names ?? throw new InvalidOperationException("Expected regex group metadata."),
-                        match.CaptureSlotCount - 1, coordinates));
+                        captureCount, coordinates));
                     break;
                 case Projection.Scan:
                     AddResult(ScanMatch(match));
@@ -97,13 +99,7 @@ internal static class JqMatch
                     break;
             }
             if (!options.Global) break;
-            if (byteEnd == byteStart)
-            {
-                if (byteEnd == text.ByteLength) break;
-                start = coordinates.AfterEmpty(match.Value.EndOffsetInBytes);
-            }
-            else start = match.Value.EndOffsetInBytes;
-            if (start > subject.Length) break;
+
         }
         if (projection == Projection.Split) AddResult(Slice(previousSplitEnd, text.ByteLength));
         return results;
@@ -123,7 +119,7 @@ internal static class JqMatch
 
         JqValue ScanMatch(JqRegexMatch match)
         {
-            int captures = match.CaptureSlotCount - 1;
+            int captures = captureCount;
             if (captures == 0) return Slice(coordinates.At(match.Value.StartOffsetInBytes).Byte, coordinates.At(match.Value.EndOffsetInBytes).Byte);
             context.Budget.ReserveMetadata(64 + 24L * captures, (int)Math.Min(32, 1L + captures));
             var row = new JqArray();
@@ -149,7 +145,7 @@ internal static class JqMatch
     // order with last-wins, including null for non-participating groups,
     // mirroring `def sub`'s reduce over .captures in builtin.jq. Duplicate
     // names (enabled via PCRE2_DUPNAMES) fold the same way.
-    internal static JqObject FoldNamedCaptures(JqContext context, JqString text, JqRegexMatch match, IReadOnlyDictionary<int, string> names, int captureCount, JqRegexCoordinates coordinates)
+    internal static JqObject FoldNamedCaptures(JqContext context, JqString text, JqRegexMatch match, IReadOnlyDictionary<int, ReadOnlyMemory<byte>> names, int captureCount, JqRegexCoordinates coordinates)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(names);
@@ -158,26 +154,27 @@ internal static class JqMatch
         context.Budget.CheckCancellation();
         for (int index = 1; index <= captureCount; index++)
         {
-            if (!names.TryGetValue(index, out string? name) || name is null)
+            if (!names.TryGetValue(index, out ReadOnlyMemory<byte> name))
                 continue;
             if (!match.TryGetGroup(index, out JqRegexCapture group))
                 break;
             context.Budget.CheckCancellation();
+            JqString key = JqString.FromUtf8(name.Span, context.Budget);
             if (group.Success)
             {
                 var from = coordinates.At(group.StartOffsetInBytes);
                 var to = coordinates.At(group.EndOffsetInBytes);
-                captures[name] = text.SliceBytes(from.Byte, to.Byte, context.Budget);
+                captures[key] = text.SliceBytes(from.Byte, to.Byte, context.Budget);
             }
             else
             {
-                captures[name] = null;
+                captures[key] = null;
             }
         }
         return captures;
     }
 
-    private static JqObject BuildMatch(JqContext context, JqString text, JqRegexMatch match, IReadOnlyDictionary<int, string> names, int captureCount, JqRegexCoordinates coordinates)
+    private static JqObject BuildMatch(JqContext context, JqString text, JqRegexMatch match, IReadOnlyDictionary<int, ReadOnlyMemory<byte>> names, int captureCount, JqRegexCoordinates coordinates)
     {
         // Retained DOM headers, dictionaries, scalar wrappers and capture slots;
         // payload copies are admitted separately below. Keep this construction
@@ -215,9 +212,9 @@ internal static class JqMatch
                 capture["length"] = JqScalar.Create(to.Scalar - from.Scalar);
                 capture["string"] = value;
             }
-            if (names.TryGetValue(index, out string? name))
+            if (names.TryGetValue(index, out ReadOnlyMemory<byte> name))
             {
-                capture["name"] = JqScalar.Create(name, context.Budget);
+                capture["name"] = JqString.FromUtf8(name.Span, context.Budget);
             }
             else
             {

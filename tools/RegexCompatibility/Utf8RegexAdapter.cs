@@ -1,15 +1,19 @@
 using System.Diagnostics.CodeAnalysis;
 using Lokad.Jq;
 using System.Text.RegularExpressions;
+using System.Reflection;
+using System.Text;
 using Lokad.Utf8Regex;
 using Lokad.Utf8Regex.Pcre2;
 
-namespace Lokad.Jq.Examples;
+namespace Lokad.Jq.Testing;
 
-/// <summary>Application-side source adapter for managed UTF-8 PCRE2 matching.</summary>
+/// <summary>Temporary development adapter for the published PCRE2 0.4 package.</summary>
 /// <remarks>
 /// Forwards cancellation into Utf8Regex compilation and matching.
-/// The provider exposes no shared memory-budget hook.
+/// The provider exposes no shared memory-budget hook or compiled capture count.
+/// Reflection below is pinned test/tooling compatibility, never part of the Jq package
+/// or the application example. This adapter qualifies semantics only.
 /// </remarks>
 internal sealed class Utf8RegexAdapter : IJqRegexEngine
 {
@@ -39,13 +43,13 @@ internal sealed class Utf8RegexAdapter : IJqRegexEngine
             cancellationToken.ThrowIfCancellationRequested();
             var entries = new Pcre2NameEntry[compiled.NameEntryCount];
             compiled.CopyNameEntries(entries, out _);
-            var names = new Dictionary<int, string>();
+            var names = new Dictionary<int, JqRegexGroupName>();
             foreach (var entry in entries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                names[entry.Number] = entry.Name;
+                names[entry.Number] = new(entry.Number, Encoding.UTF8.GetBytes(entry.Name));
             }
-            regex = new Compiled(compiled, names);
+            regex = new Compiled(compiled, names.Values.ToArray(), ReadCaptureCount(compiled));
             error = null;
             return true;
         }
@@ -75,15 +79,40 @@ internal sealed class Utf8RegexAdapter : IJqRegexEngine
         }
     }
 
+    // Read the actual compiled slot table, never infer it from a pattern or a match.
+    // Fail closed on any package layout change. Remove with producer qualification.
+    private static int ReadCaptureCount(Utf8Pcre2Regex regex)
+    {
+        if (typeof(Utf8Pcre2Regex).Assembly.GetName().Version != new Version(0, 4, 0, 0))
+            throw new InvalidOperationException("The temporary metadata bridge requires Pcre2 0.4.0.");
+        var program = Read(regex, "DebugCompiledProgram");
+        var direct = Read(Read(program, "Operations"), "Match");
+        object captures = direct.GetType().Name switch
+        {
+            "Pcre2BacktrackingDirectProgram" => Read(direct, "Program"),
+            "Pcre2SliceDirectProgram" => Read(direct, "Fallback"),
+            "Pcre2SingleTokenRepeatDirectProgram" => Read(Read(direct, "Program"), "Fallback"),
+            // These compiled forms are constructed only for capture-free grammar.
+            "Pcre2LiteralDirectProgram" or "Pcre2CharacterDirectProgram" => 1,
+            _ => throw new InvalidOperationException("Unqualified temporary capture metadata layout: " + direct.GetType().Name),
+        };
+        return (captures is int count ? count : (int)Read(captures, "CaptureSlotCount")) - 1;
+
+        static object Read(object instance, string name) =>
+            instance.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                ?.GetValue(instance) ?? throw new InvalidOperationException("Missing temporary metadata: " + name);
+    }
+
     private static bool IsResourceFailure(Pcre2ErrorKind kind) => kind is
         Pcre2ErrorKind.Timeout or Pcre2ErrorKind.MatchLimit or Pcre2ErrorKind.DepthLimit or Pcre2ErrorKind.HeapLimit or Pcre2ErrorKind.ResultLimit;
 
-    private sealed class Compiled(Utf8Pcre2Regex regex, IReadOnlyDictionary<int, string> names) : IJqCompiledRegex
+    private sealed class Compiled(Utf8Pcre2Regex regex, IReadOnlyList<JqRegexGroupName> names, int captureCount) : SpanRegexCompatibility
     {
         private bool _disposed;
-        public IReadOnlyDictionary<int, string> GroupNames => names;
+        public override IReadOnlyList<JqRegexGroupName> GroupNames => names;
+        public override int CaptureCount => captureCount;
 
-        public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
+        public override bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             cancellationToken.ThrowIfCancellationRequested();
@@ -92,7 +121,7 @@ internal sealed class Utf8RegexAdapter : IJqRegexEngine
             finally { cancellationToken.ThrowIfCancellationRequested(); }
         }
 
-        public JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+        public override JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
             CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -123,7 +152,7 @@ internal sealed class Utf8RegexAdapter : IJqRegexEngine
             ? new JqRegexResourceException("regex matching failed: " + exception.Message, false)
             : new NotSupportedException("regex matching failed: " + exception.Message);
 
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
             _disposed = true;

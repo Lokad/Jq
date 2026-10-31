@@ -5,8 +5,8 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../examples/Utf8RegexAdapter.cs" Link="Examples/Utf8RegexAdapter.cs" />
-    <Using Include="Lokad.Jq.Examples" />
+    <Compile Include="../../tools/RegexCompatibility/*.cs" Link="RegexCompatibility/%(Filename)%(Extension)" />
+    <Using Include="Lokad.Jq.Testing" />
     <PackageReference Include="Lokad.Utf8Regex.Pcre2" PrivateAssets="All" />
     <PackageReference Include="BenchmarkDotNet" />
     <ProjectReference Include="../../src/Lokad.Jq/Lokad.Jq.csproj" />

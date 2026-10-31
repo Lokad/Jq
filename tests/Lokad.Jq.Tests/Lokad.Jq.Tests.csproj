@@ -6,14 +6,14 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../examples/RegexAdapterExample.cs" Link="Examples/RegexAdapterExample.cs" />
-    <Compile Include="../../examples/Utf8RegexAdapter.cs" Link="Examples/Utf8RegexAdapter.cs" />
+    <Compile Include="../../tools/RegexCompatibility/*.cs" Link="RegexCompatibility/%(Filename)%(Extension)" />
     <Compile Include="../../benchmarks/Lokad.Jq.Benchmarks/BenchmarkMemoryBudget.cs;../../benchmarks/Lokad.Jq.Benchmarks/CountingMemoryBudget.cs"
              Link="Fixtures/%(Filename)%(Extension)" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="All" />
     <Using Include="Xunit" />
-    <Using Include="Lokad.Jq.Examples" />
+    <Using Include="Lokad.Jq.Testing" />
     <PackageReference Include="Lokad.Utf8Regex.Pcre2" PrivateAssets="All" />
     <ProjectReference Include="../../src/Lokad.Jq/Lokad.Jq.csproj" />
   </ItemGroup>

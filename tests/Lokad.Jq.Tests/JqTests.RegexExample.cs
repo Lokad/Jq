@@ -1,12 +1,13 @@
-using Lokad.Jq.Benchmarking;
 using Lokad.Jq.Examples;
+using Lokad.Jq.Benchmarking;
+using Lokad.Jq.Testing;
 
 namespace Lokad.Jq.Tests;
 
 public sealed partial class JqTests
 {
     [Fact]
-    public async Task Jq_RegexExampleUsesTheShippedAdapterAndRefundsItsInvocation()
+    public async Task Jq_RegexExampleUsesTheInjectedAdapterAndRefundsItsInvocation()
     {
         var memory = new BenchmarkMemoryBudget(128 * 1024);
         var host = new MockFileSystem();

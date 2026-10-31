@@ -1,8 +1,9 @@
 # Benchmarks
 
-Hosted jq execution on .NET 11: argument binding and compilation, UTF-8 parsing,
-evaluation, rendering and consumed output. `Lokad.Jq / jq` divides the mean times;
-lower is better.
+Warm embedded execution on .NET 11, including argument binding, compilation,
+UTF-8 parsing, evaluation and rendering, compared with jq CLI execution including
+process startup and pipes. `Lokad.Jq / jq` divides the mean times; lower is better.
+These command-level ratios do not establish that evaluation is universally faster.
 
 <!-- BEGIN GENERATED COMPARISON -->
 ## Timing

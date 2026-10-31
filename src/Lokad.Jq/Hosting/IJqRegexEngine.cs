@@ -8,7 +8,7 @@ namespace Lokad.Jq;
 /// an independent allowance. Refused admission must throw JqRegexResourceException with
 /// IsMemoryAdmission set. Cancellation must propagate as OperationCanceledException.
 /// The host owns this engine; each successful compilation transfers a handle to Jq.
-/// Jq owns the immutable supplied UTF-8 pattern bytes through the handle's lifetime. Its cache-key
+/// Jq owns immutable supplied pattern bytes through the handle's lifetime. Its cache-key
 /// storage is already charged. Providers own syntax validation, resource bounds,
 /// and admission for compilation, workspace and capture results.
 /// </remarks>
@@ -20,23 +20,53 @@ public interface IJqRegexEngine
 }
 
 /// <summary>A compiled handle owned by an execution until its last subject/result borrower finishes.</summary>
-/// <remarks>Dispose must be idempotent and non-throwing. Do not retain input spans after a call.</remarks>
+/// <remarks>Dispose must be idempotent and non-throwing. Active subjects/results finish before disposal.</remarks>
 public interface IJqCompiledRegex : IDisposable
 {
-    /// <summary>Names by capture number, stable until disposal.</summary>
-    IReadOnlyDictionary<int, string> GroupNames { get; }
+    /// <summary>Gets the actual number of numbered capture slots, excluding whole-match slot zero.</summary>
+    int CaptureCount { get; }
 
-    /// <summary>Tests the complete UTF-8 subject without materializing captures.</summary>
-    bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken);
+    /// <summary>Immutable UTF-8 names by capture number, borrowed through handle disposal.</summary>
+    IReadOnlyList<JqRegexGroupName> GroupNames { get; }
 
-    /// <summary>Searches from an absolute byte offset and transfers an owned capture result.</summary>
+    /// <summary>Prepares an owned operation over borrowed, immutable, already-funded UTF-8 bytes.</summary>
     /// <remarks>
-    /// Retain complete-input anchor/lookbehind context. Offsets are absolute in the original
-    /// UTF-8 subject; unmatched slots have Success=false. Include slot zero on success.
-    /// The provider owns capture storage and its admission until the result is disposed.
+    /// Keep the bytes and their owner valid through subject disposal and all active cursor/result
+    /// borrowers. Admit actual substantial operation storage against the supplied shared budget;
+    /// null selects execution without shared accounting. Do not retain the creation token as the
+    /// authority for later calls. Preserve complete-input anchors and lookbehind context.
     /// </remarks>
-    JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+    IJqRegexSubject Prepare(ReadOnlyMemory<byte> subject, IMemoryBudget? memoryBudget,
         CancellationToken cancellationToken);
+}
+
+/// <summary>An owned prepared subject. Disposal is idempotent and non-throwing.</summary>
+public interface IJqRegexSubject : IDisposable
+{
+    /// <summary>Tests existence without materializing captures, using the current call's token.</summary>
+    bool IsMatch(JqRegexMatchOptions options, CancellationToken cancellationToken);
+
+    /// <summary>Creates an owned forward cursor over the complete subject.</summary>
+    /// <remarks>
+    /// After an empty match, advance one Unicode scalar. An empty match at the end is final.
+    /// The cursor borrows this subject until cursor disposal. Each advance receives its current token.
+    /// </remarks>
+    IJqRegexCursor CreateCursor(JqRegexMatchOptions options, CancellationToken cancellationToken);
+}
+
+/// <summary>An owned incremental search, safe to retain across asynchronous suspension.</summary>
+public interface IJqRegexCursor : IDisposable
+{
+    /// <summary>Advances using this call's cancellation token, returning whether a match was found.</summary>
+    bool MoveNext(CancellationToken cancellationToken);
+
+    /// <summary>Gets borrowed capture ranges, valid only until the next advance or cursor disposal.</summary>
+    /// <remarks>Read after a successful advance. Include slot zero and nonparticipating slots.</remarks>
+    JqRegexMatch Current { get; }
+
+    /// <summary>Retains the current capture ranges independently of later advances or cursor disposal.</summary>
+    /// <remarks>The result owner keeps its storage and subject/program borrowers funded until disposal.</remarks>
+    JqRegexMatch RetainCurrent(CancellationToken cancellationToken);
 }
 
 /// <summary>Engine-neutral compilation flags used by jq modifiers.</summary>
@@ -68,6 +98,9 @@ public enum JqRegexMatchOptions
 /// <summary>A numbered capture's participation and absolute UTF-8 byte bounds.</summary>
 public readonly record struct JqRegexCapture(bool Success, int StartOffsetInBytes,
     int EndOffsetInBytes);
+
+/// <summary>An immutable UTF-8 capture name and its numbered slot, borrowed from the compiled handle.</summary>
+public readonly record struct JqRegexGroupName(int GroupNumber, ReadOnlyMemory<byte> NameUtf8);
 
 /// <summary>A terminal engine resource failure, distinct from unsupported syntax and cancellation.</summary>
 public sealed class JqRegexResourceException(string message, bool isMemoryAdmission) : Exception(message)

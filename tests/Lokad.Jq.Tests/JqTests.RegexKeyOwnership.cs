@@ -20,7 +20,7 @@ public sealed partial class JqTests
         using (var same = cache.Rent(text.ToArray(), JqRegexCompileOptions.None)) Assert.Same(pattern, same.Value);
         Assert.Equal(1, engine.Compilations);
         ReadOnlyMemory<byte> subject = "x"u8.ToArray();
-        Assert.True(cache.IsMatch(pattern, subject, JqRegexMatchOptions.None));
+        Assert.True(RegexTestOperations.IsMatch(cache, pattern, subject, JqRegexMatchOptions.None));
         cache.Dispose();
         Assert.Equal(10128, memory.ReservedBytes);
         Assert.Equal(0, engine.Disposals);
@@ -64,23 +64,24 @@ public sealed partial class JqTests
             return true;
         }
 
-        private sealed class Compiled(FixedRegexEngine owner) : IJqCompiledRegex
+        private sealed class Compiled(FixedRegexEngine owner) : SpanRegexCompatibility
         {
             private bool _disposed;
-            public IReadOnlyDictionary<int, string> GroupNames { get; } = new Dictionary<int, string>();
-            public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
+            public override int CaptureCount => 0;
+            public override IReadOnlyList<JqRegexGroupName> GroupNames => [];
+            public override bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 return input.StartsWith("x"u8);
             }
-            public JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
+            public override JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
                 CancellationToken cancellationToken)
             {
                 if (start != 0 || !IsMatch(input, options, cancellationToken)) return default;
                 JqRegexCapture[] captures = [new(true, 0, 1)];
                 return new JqRegexMatch(captures, null);
             }
-            public void Dispose()
+            public override void Dispose()
             {
                 if (_disposed) return;
                 _disposed = true;

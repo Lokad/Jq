@@ -10,7 +10,7 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="All" />
     <Using Include="Xunit" />
-    <Using Include="Lokad.Jq.Examples" />
+    <Using Include="Lokad.Jq.Testing" />
     <ProjectReference Include="../../benchmarks/Lokad.Jq.Benchmarks/Lokad.Jq.Benchmarks.csproj" />
   </ItemGroup>
 </Project>

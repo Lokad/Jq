@@ -39,12 +39,12 @@ public sealed partial class JqTests
         using var cache = new JqRegexCache(budget);
         using var outer = cache.Rent("outer"u8.ToArray(), JqRegexCompileOptions.None);
         ReadOnlyMemory<byte> subject = "x"u8.ToArray();
-        var match = cache.Match(outer.Value, subject, 0, JqRegexMatchOptions.None);
+        var match = RegexTestOperations.Match(cache, outer.Value, subject, 0, JqRegexMatchOptions.None);
         var copy = match;
         for (int index = 0; index < 1000; index++)
         {
             using var inner = cache.Rent(Encoding.UTF8.GetBytes($"p{index:D5}"), JqRegexCompileOptions.None);
-            Assert.True(cache.IsMatch(inner.Value, "x"u8.ToArray(), JqRegexMatchOptions.None));
+            Assert.True(RegexTestOperations.IsMatch(cache, inner.Value, "x"u8.ToArray(), JqRegexMatchOptions.None));
         }
         using (var same = cache.Rent("outer"u8.ToArray(), JqRegexCompileOptions.None))
             Assert.Same(outer.Value, same.Value);

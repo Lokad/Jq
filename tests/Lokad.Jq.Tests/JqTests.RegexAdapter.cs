@@ -91,7 +91,7 @@ public sealed partial class JqTests
         using var patternLease = cache.Rent("x"u8.ToArray(), JqRegexCompileOptions.None);
         var pattern = patternLease.Value;
         ReadOnlyMemory<byte> subject = "x"u8.ToArray();
-        var match = cache.Match(pattern, subject, 0, JqRegexMatchOptions.None);
+        var match = RegexTestOperations.Match(cache, pattern, subject, 0, JqRegexMatchOptions.None);
         cache.Dispose();
         patternLease.Dispose();
         Assert.Equal(0, engine.Disposed);
@@ -125,21 +125,14 @@ public sealed partial class JqTests
             ObservedRegexEngine owner, Action<string, IMemoryBudget?, CancellationToken> observe, CancellationToken compilationToken) : IJqCompiledRegex
         {
             private bool _disposed;
-            public IReadOnlyDictionary<int, string> GroupNames
+            public int CaptureCount => inner.CaptureCount;
+            public IReadOnlyList<JqRegexGroupName> GroupNames
             {
                 get { observe("names", budget, compilationToken); return inner.GroupNames; }
             }
-            public bool IsMatch(ReadOnlySpan<byte> input, JqRegexMatchOptions options, CancellationToken cancellationToken)
-            {
-                observe("boolean", budget, cancellationToken);
-                return inner.IsMatch(input, options, cancellationToken);
-            }
-            public JqRegexMatch Match(ReadOnlySpan<byte> input, int start, JqRegexMatchOptions options,
-                CancellationToken cancellationToken)
-            {
-                observe("detailed", budget, cancellationToken);
-                return inner.Match(input, start, options, cancellationToken);
-            }
+            public IJqRegexSubject Prepare(ReadOnlyMemory<byte> input, IMemoryBudget? memoryBudget,
+                CancellationToken cancellationToken) =>
+                new ObservedSubject(inner.Prepare(input, memoryBudget, cancellationToken), memoryBudget, observe);
             public void Dispose()
             {
                 if (_disposed) return;
@@ -147,6 +140,32 @@ public sealed partial class JqTests
                 inner.Dispose();
                 owner.Disposed++;
             }
+        }
+
+        private sealed class ObservedSubject(IJqRegexSubject inner, IMemoryBudget? budget,
+            Action<string, IMemoryBudget?, CancellationToken> observe) : IJqRegexSubject
+        {
+            public bool IsMatch(JqRegexMatchOptions options, CancellationToken cancellationToken)
+            {
+                observe("boolean", budget, cancellationToken);
+                return inner.IsMatch(options, cancellationToken);
+            }
+            public IJqRegexCursor CreateCursor(JqRegexMatchOptions options, CancellationToken cancellationToken) =>
+                new ObservedCursor(inner.CreateCursor(options, cancellationToken), budget, observe);
+            public void Dispose() => inner.Dispose();
+        }
+
+        private sealed class ObservedCursor(IJqRegexCursor inner, IMemoryBudget? budget,
+            Action<string, IMemoryBudget?, CancellationToken> observe) : IJqRegexCursor
+        {
+            public JqRegexMatch Current => inner.Current;
+            public bool MoveNext(CancellationToken cancellationToken)
+            {
+                observe("detailed", budget, cancellationToken);
+                return inner.MoveNext(cancellationToken);
+            }
+            public JqRegexMatch RetainCurrent(CancellationToken cancellationToken) => inner.RetainCurrent(cancellationToken);
+            public void Dispose() => inner.Dispose();
         }
     }
 }

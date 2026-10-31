@@ -22,7 +22,7 @@ public sealed partial class JqTests
         MemoryCallCounts before = counted.Counts;
         for (int index = 0; index < 1000; index++)
         {
-            using var match = regexes.Match(pattern, subject, 0, JqRegexMatchOptions.None);
+            using var match = RegexTestOperations.Match(regexes, pattern, subject, 0, JqRegexMatchOptions.None);
             Assert.True(match.Success);
             Assert.Equal(1, match.CaptureSlotCount);
             Assert.Equal(new JqRegexCapture(true, 0, length), match.Value);
@@ -65,16 +65,16 @@ public sealed partial class JqTests
         long compiled = memory.ReservedBytes;
         ReadOnlyMemory<byte> parent = "x"u8.ToArray();
         Assert.Equal(compiled, memory.ReservedBytes);
-        var first = regexes.Match(pattern, parent, 0, JqRegexMatchOptions.None);
+        var first = RegexTestOperations.Match(regexes, pattern, parent, 0, JqRegexMatchOptions.None);
         var stale = first;
         first.Dispose();
-        var current = regexes.Match(pattern, parent, 0, JqRegexMatchOptions.None);
+        var current = RegexTestOperations.Match(regexes, pattern, parent, 0, JqRegexMatchOptions.None);
         Assert.True(current.Value.Success);
         stale.Dispose(); // A copied old result must not release the new lease.
         regexes.Dispose();
         patternLease.Dispose();
         Assert.Equal(compiled, memory.ReservedBytes);
-        Assert.Throws<ObjectDisposedException>(() => regexes.Match(pattern, parent, 0, JqRegexMatchOptions.None));
+        Assert.Throws<ObjectDisposedException>(() => RegexTestOperations.Match(regexes, pattern, parent, 0, JqRegexMatchOptions.None));
         current.Dispose();
         Assert.Equal(0, memory.ReservedBytes);
         current.Dispose();
