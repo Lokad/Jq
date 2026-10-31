@@ -213,6 +213,9 @@ internal sealed class AsFilter(
 {
     internal override bool ConstructsFreshContainer => body.ConstructsFreshContainer;
     private readonly HashSet<string> _allNames = CollectAll(alternatives);
+    private JqFilter Source => source;
+    private IReadOnlyList<BindingPattern> Alternatives => alternatives;
+    private JqFilter Body => body;
 
     internal static HashSet<string> CollectAll(IReadOnlyList<BindingPattern> alternatives)
     {
@@ -224,6 +227,25 @@ internal sealed class AsFilter(
 
     protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
+        if (source is SingleValueFilter && alternatives is [VariablePattern])
+        {
+            // A pure source produces exactly one binding. Batch a contiguous
+            // prefix rather than keeping an As/Match/alternative iterator per
+            // binding around every output of the eventual asynchronous body.
+            using var storage = new JqScopeStorage(context.Budget);
+            JqEnvironment scope = environment;
+            JqFilter continuation = this;
+            while (continuation is AsFilter { Source: SingleValueFilter single, Alternatives: [VariablePattern variable] } binding)
+            {
+                JqValue? value = single.ReadValue(input, context, scope);
+                storage.Reserve(128, 1);
+                scope = scope.Extend(variable.Name, value);
+                continuation = binding.Body;
+            }
+            await foreach (JqValue? output in continuation.Evaluate(input, context, scope).ConfigureAwait(false))
+                yield return output;
+            yield break;
+        }
         await foreach (JqValue? bound in source.Evaluate(input, context, environment).ConfigureAwait(false))
             await foreach (var (_, output) in DriveAlternatives(alternatives, _allNames, bound, environment, context, scope => body.Evaluate(input, context, scope)).ConfigureAwait(false))
                 yield return output;
