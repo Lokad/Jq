@@ -2,6 +2,8 @@
 
 ## 0.3.0 — Unreleased
 
+- Read pure single-value pipeline leaves directly through their existing guards,
+  avoiding per-record cursors while preserving asynchronous host operations.
 - Resolve object-pattern key expressions in the enclosing lexical scope, preserving
   outer bindings when the pattern reuses their names, including nested patterns.
 - Copy only containers on a modified path, preserving unchanged branch identity

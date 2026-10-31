@@ -7,6 +7,9 @@ public sealed partial class JqTests
 {
     [Theory]
     [InlineData("input", "1\n")]
+    [InlineData(". | input | .", "1\n")]
+    [InlineData("0 | input | 7", "7\n")]
+    [InlineData("input | .+1", "2\n")]
     [InlineData("first(inputs)", "1\n")]
     [InlineData("[inputs]", "[1,2,3]\n")]
     [InlineData("reduce inputs as $x (0; .+$x)", "6\n")]
@@ -65,6 +68,7 @@ public sealed partial class JqTests
 
     [Theory]
     [InlineData("try input catch .")]
+    [InlineData("try (. | input | .) catch .")]
     [InlineData("first(inputs)")]
     [InlineData("\"m\" | modulemeta")]
     [InlineData("try bsearch(input) catch .")]

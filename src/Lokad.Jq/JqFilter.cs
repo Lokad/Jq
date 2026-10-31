@@ -972,6 +972,25 @@ internal sealed class PipeFilter(JqFilter left, JqFilter right) : JqFilter
         && right.IsSingleValued(environment, depth + 1);
     protected override async IAsyncEnumerable<JqValue?> EvaluateCore(JqValue? input, JqContext context, JqEnvironment environment)
     {
+        // Pure single-value leaves already expose guarded synchronous reads.
+        // Use those inside this same async pipeline instead of allocating a
+        // one-element cursor for every record. Host-capable filters still await.
+        if (left is SingleValueFilter first)
+        {
+            JqValue? value = first.ReadValue(input, context, environment);
+            if (right is SingleValueFilter last)
+                yield return last.ReadValue(value, context, environment);
+            else
+                await foreach (var output in right.Evaluate(value, context, environment).ConfigureAwait(false))
+                    yield return output;
+            yield break;
+        }
+        if (right is SingleValueFilter single)
+        {
+            await foreach (var value in left.Evaluate(input, context, environment).ConfigureAwait(false))
+                yield return single.ReadValue(value, context, environment);
+            yield break;
+        }
         await foreach (var value in left.Evaluate(input, context, environment).ConfigureAwait(false))
             await foreach (var output in right.Evaluate(value, context, environment).ConfigureAwait(false))
                 yield return output;
